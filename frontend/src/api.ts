@@ -21,7 +21,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+export async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
     ...options,
     credentials: 'same-origin',
@@ -29,6 +29,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     cache: 'no-store',
   })
   if (!response.ok) {
+    if (response.status === 401 && path.startsWith('/api/manage/')) {
+      window.dispatchEvent(new Event('seekbell:session-expired'))
+    }
     const body: unknown = await response.json().catch(() => null)
     const detail =
       typeof body === 'object' &&

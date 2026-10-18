@@ -1,25 +1,25 @@
 # 当前状态
 
-更新时间：2026-10-19 00:32（Asia/Shanghai）。M1/M2已实现；M3进行中，初始化/认证小阶段已实现并通过本机自动验证，六页管理尚未接入。用户验收统一延后至Web完成。
+更新时间：2026-10-19 04:20（Asia/Shanghai）。M1/M2已实现；M3认证及目标/任务/规则管理检查点已实现并自动验证，完整六页和调度未完成。用户验收等Web完成统一进行。
 
 ## 环境与代码
 
-仅在WSL2 SeekBell-Dev的/home/dev/projects/seekbell开发。Ubuntu24.04.5/amd64、dev用户；当前聊天从原Ubuntu通过wsl.exe -d SeekBell-Dev派发。D盘副本及原环境不改。[环境入口](DEVELOPMENT_ENVIRONMENT.md)。
+仅在WSL2 SeekBell-Dev的/home/dev/projects/seekbell开发，Ubuntu24.04.5/amd64、dev用户。当前聊天从原Ubuntu通过wsl.exe -d SeekBell-Dev --cd正式目录派发；版本取值传已核对的完整SHA。D盘交接副本及原环境不改。[环境入口](DEVELOPMENT_ENVIRONMENT.md)。
 
-私有origin为Aspeternity/seekbell，main已推送M3认证实现1dc83749a2b1d936117ef51f62fbbcefac13f3ea。恢复HEAD为3fc110c，起始工作区干净。提交/推送noreply身份与历史隐私检查通过；实现之后仅补交接/证据文档，不改变代码基准，无未提交代码。M2基准1fdec56。
+私有origin为Aspeternity/seekbell；main恢复HEAD a60962c，起始工作区干净。此前认证实现1dc8374已推送，CI/镜像证据见[认证记录](history/2026-10-19-M3认证.md)。本次待提交M3配置路径：api/management、services/management及configuration/main，前端management/三个组件/App/api/style与e2e，tests/test_management/browser_server，镜像探测及文档。沿用noreply及隐私hooks，不改写历史。
 
 ## 实现与证据
 
-M3新增原子唯一管理员、Argon2id、持久服务端会话/轮换/撤销、CSRF、登录限速、显式可信代理和初始化/登录/退出页面。账号及会话重启保持；直接HTTP与可信反代HTTPS Cookie已自动验证；未认证管理保护依赖已验证。契约见ARCHITECTURE，命令见README。
+管理API均需管理员，写操作/POST试匹配需CSRF。四渠道schema表单、加密目标增改启停/敏感字段省略与保留/重复提示、任务增改复制启停软删除、条件组/规则说明/两类试匹配已接入。事务内expected版本拒绝陈旧编辑；试匹配不修改账本。启动独占创建/加载0600密钥，有密文缺钥或坏钥不自动替换，失败停止。管理401合并恢复至登录，表单卸载清空。无SourceRunner/Worker/目标测试发送生命周期，来源仍关闭。
 
-SeekBell-Dev Python3.12.3完整pytest263项通过（9.10秒，含A01八路并发唯一及A02/迁移回滚）；前端类型/构建/格式、Ruff/锁/wheel通过。Chromium 156/Playwright1.64.1三项通过（6.6秒），覆盖1280/390宽度创建/刷新/退出/错误密码/重登、会话失效和CSRF；修复了表单标签关联问题。全部为临时数据/合成凭据，后端禁止外连；不是用户验收。Rootless Docker禁外网临时容器通过：UID10001、0004、初始化/会话重启、锁及离线闭环；镜像ID见M3记录，未发布。[CI39145207652](https://github.com/Aspeternity/seekbell/actions/runs/39145207652)全通过：263项pytest（11.91秒）、3项Chromium（7.8秒）、迁移/镜像及禁外网检查。[M3记录](history/2026-10-19-M3认证.md)持续收口证据。
+本机完整pytest299项通过（12.79秒，新增36项），覆盖受保护API、四渠道、并发编辑/版本、贡献撤销、纯试匹配/缺摘要/账本不变及密钥失败安全。Chromium4项通过（9.9秒），含390宽度四渠道和任务编辑/短语/三值/历史样本/复制暂停/删除/敏感值不回传/HTML文本展示与会话恢复；Ruff/锁/wheel/前端类型构建格式通过。均为合成凭据/临时数据、禁外连，不是用户验收。新镜像/CI待实现提交后收口。[配置管理记录](history/2026-10-19-M3配置管理.md)保存细节和后续证据。
 
-[M2记录](history/2026-10-19-M2通知渠道.md)保留四渠道模拟、加密/重启及既有CI/镜像证据；[M1记录](history/2026-10-18-M1核心闭环.md)按需查阅，不冒用旧镜像为本次证据。
+[M2记录](history/2026-10-19-M2通知渠道.md)与[M1记录](history/2026-10-18-M1核心闭环.md)按需查，不冒用旧镜像为本次证据。
 
 ## 下一步与读取清单
 
-下一步继续M3受保护管理API、六页及调度生命周期，完成条件组/两类试匹配/暂停语义/D07独立手动重发。密钥初始化仍待生命周期接入，当前不启用真实采集/通知。下一工作段读取SPEC第3～6节、ARCHITECTURE模块/调度契约、Configuration/SourceRunner/DeliveryWorker/TargetTesting及相关测试；不要全仓扫描或重读M1/M2。认证变更才补读api/auth、services/auth和认证测试。真实RSS/四渠道、PVE/arm64、完整备份恢复与用户验收均未做；无开发阻塞。
+先提交并核对本次镜像/CI，然后继续M3调度生命周期、概览/网站/内容命中、目标测试与投递记录、D07独立手动重发及系统设置。下一段读取SPEC第4～6节、架构调度/凭据契约、SourceRunner/DeliveryWorker/TargetTesting及对应模型/测试；管理接口改动才补读本次管理服务与组件，不全仓扫描。真实RSS/四渠道、PVE/arm64、完整备份恢复及用户验收未做；无开发阻塞。FastAPI客户端上游弃用提示仍在，Rootless Docker无cgroup资源限额。
 
 ## 授权
 
-沿用独立WSL、noreply身份、继续M3本地开发和既有私有仓库推送；用户验收等Web完成一起进行。无GHCR发布、部署、真实发送、原环境清理或全局WSL调整授权；不扩大范围、不组织多代理。FastAPI客户端上游弃用提示仍在；Rootless Docker无cgroup资源限额。
+沿用独立WSL、noreply、继续M3本地开发和既有私有仓库推送；用户验收等Web完成一起进行。无GHCR发布、部署、真实发送、原环境清理或全局WSL调整授权；不扩大范围、不组织多代理。

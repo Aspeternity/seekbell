@@ -35,6 +35,10 @@ def target_snapshot(target: NotificationTarget) -> dict:
     }
 
 
+class ConfigurationConflict(ValueError):
+    pass
+
+
 class Configuration:
     def __init__(self, engine: Engine, vault: CredentialVault | None = None):
         self.engine = engine
@@ -85,11 +89,15 @@ class Configuration:
             )
         return key
 
-    def update_target(self, key: str, *, name: str, config: dict) -> int:
+    def update_target(
+        self, key: str, *, name: str, config: dict, expected_revision: int | None = None
+    ) -> int:
         with write_session(self.engine) as session:
             target = session.get(NotificationTarget, key)
             if target is None or target.kind == "mock":
                 raise ValueError("Unknown configured target")
+            if expected_revision is not None and target.revision != expected_revision:
+                raise ConfigurationConflict
             vault = self._vault()
             current = vault.unseal(key, target.kind, target.config_ciphertext)
             values = validate_config(target.kind, {**current, **config})
@@ -105,19 +113,33 @@ class Configuration:
             target = session.get(NotificationTarget, key)
             if target is None:
                 raise ValueError("Unknown target")
-            config, configured = {}, []
-            if target.kind != "mock":
-                values = self._vault().unseal(key, target.kind, target.config_ciphertext)
-                config, configured = public_config(target.kind, values)
-            return {
-                "id": target.id,
-                "kind": target.kind,
-                "name": target.name,
-                "revision": target.revision,
-                "enabled": target.enabled,
-                "config": config,
-                "configured_secrets": configured,
-            }
+            return self._target_view(target)
+
+    def _target_view(self, target: NotificationTarget) -> dict:
+        config, configured = {}, []
+        if target.kind != "mock":
+            values = self._vault().unseal(target.id, target.kind, target.config_ciphertext)
+            config, configured = public_config(target.kind, values)
+        return {
+            "id": target.id,
+            "kind": target.kind,
+            "name": target.name,
+            "revision": target.revision,
+            "enabled": target.enabled,
+            "config": config,
+            "configured_secrets": configured,
+        }
+
+    def list_targets(self) -> list[dict]:
+        with Session(self.engine) as session:
+            return [
+                self._target_view(target)
+                for target in session.scalars(
+                    select(NotificationTarget).order_by(
+                        NotificationTarget.name, NotificationTarget.id
+                    )
+                )
+            ]
 
     def duplicate_targets(self, key: str) -> list[str]:
         """Warn only for exactly recognizable endpoints; never merge identities."""
@@ -181,11 +203,22 @@ class Configuration:
             )
         return key
 
-    def update_task(self, key: str, name: str, rule: Rule, target_ids, *, at: float) -> int:
+    def update_task(
+        self,
+        key: str,
+        name: str,
+        rule: Rule,
+        target_ids,
+        *,
+        at: float,
+        expected_version: int | None = None,
+    ) -> int:
         with write_session(self.engine) as session:
             task = session.get(Task, key)
             if task is None or task.deleted_at is not None:
                 raise ValueError("Unknown active task")
+            if expected_version is not None and task.current_version != expected_version:
+                raise ConfigurationConflict
             targets = self._targets(session, target_ids)
             task.current_version += 1
             version = task.current_version

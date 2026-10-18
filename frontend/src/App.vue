@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref } from 'vue'
 import {
   NAlert,
   NButton,
@@ -17,7 +17,11 @@ import {
 import { ApiError, authenticate, loadAuth, loadSystemInfo, logout } from './api'
 import type { AuthState, VersionInfo } from './api'
 
+const TargetsPanel = defineAsyncComponent(() => import('./components/TargetsPanel.vue'))
+const TasksPanel = defineAsyncComponent(() => import('./components/TasksPanel.vue'))
+
 const auth = ref<AuthState | null>(null)
+const activePage = ref('tasks')
 const info = ref<VersionInfo | null>(null)
 const loading = ref(true)
 const submitting = ref(false)
@@ -105,7 +109,21 @@ async function signOut() {
   }
 }
 
-onMounted(refresh)
+let recoveringSession = false
+async function sessionExpired() {
+  if (recoveringSession) return
+  recoveringSession = true
+  auth.value = null
+  info.value = null
+  await refresh()
+  error.value = '会话已过期，请重新登录。'
+  recoveringSession = false
+}
+onMounted(() => {
+  window.addEventListener('seekbell:session-expired', sessionExpired)
+  void refresh()
+})
+onUnmounted(() => window.removeEventListener('seekbell:session-expired', sessionExpired))
 </script>
 
 <template>
@@ -118,7 +136,12 @@ onMounted(refresh)
         <a class="brand" href="/" aria-label="SeekBell 首页"><span class="bell">S</span>SeekBell</a>
         <div v-if="auth?.authenticated" class="account">
           <span>{{ auth.username }}</span>
-          <NButton secondary :loading="submitting" :disabled="loading" @click="signOut">
+          <NButton
+            secondary
+            :loading="submitting"
+            :disabled="loading || submitting"
+            @click="signOut"
+          >
             退出登录
           </NButton>
         </div>
@@ -203,26 +226,51 @@ onMounted(refresh)
             </NForm>
           </NCard>
 
-          <NCard v-else-if="auth?.authenticated" title="运行信息" class="status-card">
-            <template #header-extra>
-              <NButton secondary :loading="loading" :disabled="submitting" @click="refresh">
-                刷新状态
-              </NButton>
-            </template>
-            <NDescriptions v-if="info" :column="1" label-placement="left" bordered>
-              <NDescriptionsItem label="服务状态">
-                <NTag type="success" size="small" :bordered="false">已就绪</NTag>
-              </NDescriptionsItem>
-              <NDescriptionsItem label="应用版本">{{ info.version }}</NDescriptionsItem>
-              <NDescriptionsItem label="代码版本">
-                <code>{{ info.build_revision }}</code>
-              </NDescriptionsItem>
-              <NDescriptionsItem label="数据库迁移">
-                <code>{{ info.database_revision ?? '尚未初始化' }}</code>
-              </NDescriptionsItem>
-            </NDescriptions>
-            <p v-else>暂时无法读取运行信息，请刷新重试。</p>
-          </NCard>
+          <section v-else-if="auth?.authenticated">
+            <nav aria-label="管理导航" class="management-nav">
+              <NButton
+                :type="activePage === 'tasks' ? 'primary' : 'default'"
+                @click="activePage = 'tasks'"
+                >监控任务</NButton
+              >
+              <NButton
+                :type="activePage === 'targets' ? 'primary' : 'default'"
+                @click="activePage = 'targets'"
+                >通知目标</NButton
+              >
+              <NButton
+                :type="activePage === 'status' ? 'primary' : 'default'"
+                @click="activePage = 'status'"
+                >运行信息</NButton
+              >
+            </nav>
+            <TasksPanel
+              v-if="activePage === 'tasks'"
+              :csrf="auth.csrf_token"
+              @targets="activePage = 'targets'"
+            />
+            <TargetsPanel v-else-if="activePage === 'targets'" :csrf="auth.csrf_token" />
+            <NCard v-else title="运行信息" class="status-card">
+              <template #header-extra>
+                <NButton secondary :loading="loading" :disabled="submitting" @click="refresh">
+                  刷新状态
+                </NButton>
+              </template>
+              <NDescriptions v-if="info" :column="1" label-placement="left" bordered>
+                <NDescriptionsItem label="服务状态">
+                  <NTag type="success" size="small" :bordered="false">已就绪</NTag>
+                </NDescriptionsItem>
+                <NDescriptionsItem label="应用版本">{{ info.version }}</NDescriptionsItem>
+                <NDescriptionsItem label="代码版本">
+                  <code>{{ info.build_revision }}</code>
+                </NDescriptionsItem>
+                <NDescriptionsItem label="数据库迁移">
+                  <code>{{ info.database_revision ?? '尚未初始化' }}</code>
+                </NDescriptionsItem>
+              </NDescriptions>
+              <p v-else>暂时无法读取运行信息，请刷新重试。</p>
+            </NCard>
+          </section>
           <NCard v-else title="连接服务">
             <p>正在读取服务信息。若持续无法连接，请重试。</p>
             <NButton :loading="loading" @click="refresh">重试</NButton>
@@ -237,7 +285,7 @@ onMounted(refresh)
         :bordered="false"
         class="phase-note"
       >
-        管理员登录已接入。监控配置页面仍在开发，后台采集和通知调度尚未启动。
+        通知目标、监控任务和两类规则试匹配已接入，后台采集与通知调度尚未启动。
       </NAlert>
       <footer>SeekBell · 自托管的新帖监控与通知</footer>
     </main>

@@ -62,7 +62,7 @@ SourceRunner接受长生命周期HTTPX客户端，固定周期、不重叠；失
 
 通知schema位于notifiers/configs.py，schema的writeOnly字段在读取目标时省略，只返回configured_secrets字段名；更新省略字段保留原值。Webhook URL/Header、Telegram/Bark服务URL与凭据、SMTP登录/发收地址均不回传。自定义HTTP(S)地址允许内网，由管理员明确配置；拒绝userinfo/fragment、Header注入和危险转发Header。不跟随任何重定向、不使用环境代理或服务端Cookie，TLS验证保持开启。HTTPX/httpcore限制至WARNING，避免请求URL/报文调试日志泄密；不存远端错误文本。
 
-0003_notifications增加目标密文及独立目标测试记录。使用cryptography Fernet认证加密整个配置，密文绑定目标ID和渠道；outbox与目标测试保存同样的加密快照和revision。修改目标不回写旧快照，发送边界解密并重新校验；坏钥/坏密文作为永久配置错误。credentials.key在持久化目录，显式创建使用O_EXCL/0600/fsync，加载缺钥不生成。M3负责在受保护生命周期中初始化/加载，M4负责含原密钥的备份封装。
+0003_notifications增加目标密文及独立目标测试记录。使用cryptography Fernet认证加密整个配置，密文绑定目标ID和渠道；outbox与目标测试保存同样的加密快照和revision。修改目标不回写旧快照，发送边界解密并重新校验；坏钥/坏密文作为永久配置错误。credentials.key在持久化目录，显式创建使用O_EXCL/0600/fsync，加载缺钥不生成。M3已在启动生命周期中独占初始化/加载并校验现有目标；有密文缺钥停止而不生成替代密钥。M4负责含原密钥的备份封装。
 
 HTTP请求有连接3秒/单次I/O 8秒限制，Worker外层10秒；业务响应限64KiB并拒绝压缩。Telegram检查ok及message_id，默认纯文本/不展开链接；Bark使用POST /push并检查code=200。Webhook固定schema_version=1/event_id/post/matched_tasks，默认json_ok要求ok为true，status模式由管理员显式选择以2xx确认接受；未知响应不伪称成功。事件ID及Idempotency-Key在自动重试保持不变。429/5xx可有限重试，其他明确拒绝永久失败，读写超时/不完整响应为未知；业务Retry-After与HTTP头均可延长等待。
 
@@ -94,11 +94,21 @@ SMTP使用标准库smtplib在线程执行，默认隐式TLS，也可选STARTTLS�
 
 会话为32随机字节的opaque令牌，数据库只存SHA-256摘要、管理员引用、到期时间和Secure绑定。匿名30分钟、认证7天绝对有效期，登录轮换并撤销旧会话，退出删除服务端记录；重启不丢会话。新建时清理到期记录，并将匿名/认证会话分别限制为128/32个。Cookie为HttpOnly/SameSite=Strict、Path=/、无Domain；HTTPS设置Secure，HTTPS会话拒绝HTTP回放。
 
-GET /api/auth/state返回会话派生的HMAC-CSRF值及认证状态；setup/login/logout与后续管理写操作要求X-CSRF-Token，另检查出现的Origin与Sec-Fetch-Site。无跨域CORS授权；错误不回显输入，API设置no-store。所有管理路由复用require_administrator依赖，当前除认证外尚未开放管理接口。初始化/登录共用持久全局预算10次/60秒（含成功），错误用户名也执行密码校验，不保留客户端IP或密码样本。
+GET /api/auth/state返回会话派生的HMAC-CSRF值及认证状态；setup/login/logout与后续管理写操作要求X-CSRF-Token，另检查出现的Origin与Sec-Fetch-Site。无跨域CORS授权；错误不回显输入，API设置no-store。管理路由统一复用require_administrator依赖；已接入目标、任务和纯规则试匹配API。初始化/登录共用持久全局预算10次/60秒（含成功），错误用户名也执行密码校验，不保留客户端IP或密码样本。
 
 Uvicorn入口不解析代理头；应用ProxyHeadersMiddleware只信任SEEKBELL_TRUSTED_PROXIES显式IP/CIDR，默认空，拒绝通配符/全网段。代理须保留Host并覆盖协议头，不信任Forwarded/X-Forwarded-Host。通过直接HTTP、真实ASGI HTTPS和模拟可信反代测试Cookie及CSRF；PVE真实反代验证仍待M5。
 
 选型依据：[OWASP密码存储](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)、[CSRF](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)、[会话](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)、[Uvicorn代理](https://www.uvicorn.org/deployment/)。
+
+## M3配置管理契约
+
+/api/manage在路由层统一要求管理员，所有写方法与POST预览/历史试匹配均校验CSRF。通知配置只允许四个内置渠道，任务只允许nodeseek，不开放mock/自定义网站。请求校验不回显输入；返回值使用明确的安全投影，不返回目标密文、秘密值或底层异常。
+
+Configuration复用原短写事务，目标update在事务内校验expected_revision，任务update校验expected_version，失配返回409；启停与规则编辑分开，避免陈旧规则编辑重新启用已暂停任务。原规则版本、命中和outbox快照不可变，暂停/删除继续使用既有贡献撤销语义。复制是一个默认暂停的新草稿，保存后生成独立ID。
+
+服务端返回规范化规则及同一explain/evaluate结果。历史试匹配仅读取nodeseek本地Post最近1～100条，给出实际样本数、总数及样本时间边界；不写规则、SeenPost/DeliveredPost/RuleHit/outbox，也不访问网络。摘要None与空字符串保持区别；帖子链接重新构造为固定NodeSeek HTTPS路径，外部字段按文本呈现。
+
+启动在数据目录进程锁内加载/独占创建credentials.key，检查目标与outbox/目标测试的加密快照；有密文缺钥、坏钥/权限/配置时停止并释放锁。当前仅接入Configuration，尚未创建通知网络客户端或运行采集/投递/目标测试。网页管理401统一恢复会话入口，多请求合并恢复，组件卸载清空敏感草稿；无浏览器持久凭据。
 
 ## 私有开发与实机验证（建议路线）
 

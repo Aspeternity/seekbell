@@ -34,7 +34,6 @@ for module in ('pytest', 'ruff'):
 with sqlite3.connect('/data/seekbell.sqlite3') as connection:
     marker = connection.execute('SELECT * FROM installation').fetchall()
     assert connection.execute('SELECT enabled FROM sources').fetchall() == [(0,)]
-    assert connection.execute('SELECT COUNT(*) FROM notification_targets').fetchone() == (0,)
 # Verify the installed wheel includes channel schemas and working encryption.
 import tempfile
 from pathlib import Path
@@ -89,6 +88,20 @@ if sys.argv[1] == 'setup':
     assert not state['initialized'] and not state['authenticated']
     status, state = call('/api/auth/setup', credentials, state['csrf_token'])
     assert status == 201 and state['authenticated']
+    assert call('/api/manage/targets')[1] == []
+    assert call('/api/manage/tasks')[1] == []
+    status, target = call('/api/manage/targets', {
+        'name': 'synthetic packaged Bark', 'kind': 'bark', 'enabled': False,
+        'config': {'device_key': 'synthetic-packaged-secret'},
+    }, state['csrf_token'])
+    assert status == 201 and 'device_key' not in target['config']
+    status, task = call('/api/manage/tasks', {
+        'name': 'synthetic packaged task', 'rule': {}, 'enabled': False,
+        'target_ids': [target['id']],
+    }, state['csrf_token'])
+    assert status == 201 and task['version'] == 1
+    with open('/data/.synthetic-management-state', 'w') as stream:
+        json.dump({'target': target['id'], 'task': task['id']}, stream)
     jar.save(ignore_discard=True, ignore_expires=True)
 else:
     assert state['initialized'] and state['authenticated']
@@ -97,7 +110,21 @@ else:
     assert status == 409
     status, state = call('/api/auth/login', credentials, state['csrf_token'])
     assert status == 200 and state['authenticated']
-print(json.dumps({'administrator_session': 'passed', 'mode': sys.argv[1]}))
+    with open('/data/.synthetic-management-state') as stream:
+        saved = json.load(stream)
+    targets = call('/api/manage/targets')[1]
+    tasks = call('/api/manage/tasks')[1]
+    assert len(targets) == len(tasks) == 1
+    assert targets[0]['id'] == saved['target'] and 'device_key' not in targets[0]['config']
+    assert tasks[0]['id'] == saved['task'] and tasks[0]['target_ids'] == [saved['target']]
+    assert not targets[0]['enabled'] and not tasks[0]['enabled']
+    status, preview = call('/api/manage/rules/preview', {
+        'rule': {'groups': [{'all_of': ['VPS']}]}, 'sample': {'title': 'VPS synthetic'},
+    }, state['csrf_token'])
+    assert status == 200 and preview['result']['status'] == 'match'
+print(json.dumps({
+    'administrator_session': 'passed', 'configuration': 'passed', 'mode': sys.argv[1]
+}))
 """
 
 
@@ -166,6 +193,7 @@ def main() -> None:
                     "healthcheck": "passed before restart",
                     "restart_persistence": "passed",
                     "administrator_session_restart": auth["administrator_session"],
+                    "management_restart": auth["configuration"],
                     "instance_lock": "passed",
                     "network": "none",
                     "offline_core_demo": demo,

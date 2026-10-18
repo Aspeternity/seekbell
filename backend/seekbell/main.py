@@ -8,10 +8,12 @@ from starlette.concurrency import run_in_threadpool
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from seekbell.api.auth import router as auth_router
+from seekbell.api.management import router as management_router
 from seekbell.api.system import router
 from seekbell.config import Settings
 from seekbell.db.runtime import create_database_engine, instance_lock, migrate
 from seekbell.services.auth import Authentication, AuthError
+from seekbell.services.management import application_configuration
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -26,6 +28,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 await run_in_threadpool(migrate, engine)
                 app.state.engine = engine
                 app.state.authentication = await run_in_threadpool(Authentication, engine)
+                app.state.configuration = await run_in_threadpool(
+                    application_configuration, engine, settings.data_dir.resolve()
+                )
                 yield
             finally:
                 engine.dispose()
@@ -54,6 +59,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.state.settings = settings
     app.include_router(auth_router)
+    app.include_router(management_router)
     app.include_router(router)
     # No SPA catch-all: unknown API endpoints and missing assets keep their real 404 status.
     if (settings.static_dir / "index.html").is_file():
