@@ -1,0 +1,12 @@
+# Local manual review only; pair with compose.yaml and .env.acceptance.
+# Process-level outbound guard, not a container firewall. Never use for production.
+services:
+  seekbell:
+    restart: "no"
+    pull_policy: never
+    environment:
+      SEEKBELL_BACKGROUND_ENABLED: "false"
+      SEEKBELL_TRUSTED_PROXIES: "[]"
+    command: [python, /acceptance/server.py]
+    volumes:
+      - ../scripts/local_acceptance_server.py:/acceptance/server.py:ro

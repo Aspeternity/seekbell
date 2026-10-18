@@ -1,27 +1,27 @@
 # 当前状态
 
-更新时间：2026-10-19 07:18（Asia/Shanghai）。M1/M2、M3核心六页与M4本地部署恢复已实现并自动验证；用户验收尚未进行，统一安排。M4本地交付无开发阻塞，下一阶段为M5实机/用户验收准备。
+更新时间：2026-10-19 07:24（Asia/Shanghai）。M1～M4本地开发及自动验证已完成；M5统一用户验收准备中。用户选择先在本机验收六页与离线功能，尚无用户通过结论。
 
-## 环境与代码
+## 环境与基准
 
-只在WSL2 SeekBell-Dev的/home/dev/projects/seekbell开发；当前从原Ubuntu经wsl.exe显式派发，D盘交接副本与原环境未改。[环境入口](DEVELOPMENT_ENVIRONMENT.md)。私有origin Aspeternity/seekbell，main；实现a8dc7e41a64d94e06cbb7bc1eb6efd639631b78f，测试脚本修正后HEAD/origin/main为965238ce847fb433575f003f91587c68db52320d，工作区干净。本次仅证据文档提交可使HEAD变化，不改实现基准。
+仅SeekBell-Dev的/home/dev/projects/seekbell开发；当前聊天从原Ubuntu经wsl.exe显式派发，D盘交接副本不改。[环境入口](DEVELOPMENT_ENVIRONMENT.md)。私有origin Aspeternity/seekbell，main；本轮开始HEAD/origin/main为56be582（证据文档），固定应用镜像/自动验证基准965238ce847fb433575f003f91587c68db52320d。noreply及.githooks沿用。
 
-## 实现与证据
+## 当前验收实例
 
-M4停服实例锁内SQLite一致性备份，含账号/规则/历史/去重/队列及原密钥，用独立口令scrypt+AES-GCM流式认证加密。恢复验证备份管理员，只写空目录，暂存迁移/校验全部密文后安装并撤销会话。全过程持久中断标记，SIGKILL残留阻止误初始化。Compose默认独立测试项目、回环端口、后台关闭、UID10001/只读根FS及日志轮换；GHCR仅main手动、默认不发布，未执行。[操作手册](DEPLOYMENT.md)。
+用户已确认本机路线。入口http://127.0.0.1:18080/，Docker项目seekbell-acceptance、卷seekbell-acceptance_data，仅此验收卷，无演示帖子/预置管理员/真实凭据。镜像seekbell:965238ce847fb433575f003f91587c68db52320d，本机ID sha256:d9d574975f13762499410d06d24d3b23fc9a75db1d3657e954486e8e8049021f。
 
-SeekBell-Dev/amd64：18项新增备份与11项基础测试共29项通过（8.68秒），含已提交WAL、身份去重、0006→0007、破损/错钥/路径拒绝、异常清理及真实子进程SIGKILL；Ruff、前端类型/构建/文案格式、wheel、noreply隐私通过。原前端仅说明文案，沿用有效浏览器证据，本机未重跑旧全套。
+挂载专用local_acceptance_server.py，强制关闭后台/代理信任，应用进程拒绝IPv4/IPv6出站连接、UDP及外部DNS；这不是容器防火墙，其他exec进程不受守卫保护，不输入真实渠道凭据。WSL健康/版本/静态入口与Windows健康检查通过；守卫新增8项测试通过（0.17秒），Ruff/格式通过。未重复本机旧全套。浏览器打开请求返回queued，可直接访问上述地址。用户自行初始化，六页结果均待确认。
 
-a8dc7e4固定SHA镜像用修正脚本通过Compose禁外网恢复/回退演练，临时项目/卷已清理；首轮脚本遗漏Bark敏感base_url，965238c按schema修正，应用未变。965238c镜像亦已本机构建（未重复本地演练）。[CI39175581516](https://github.com/Aspeternity/seekbell/actions/runs/39175581516)全部通过：pytest387项62.70秒、Chromium7项32.4秒、迁移/镜像、禁外网服务重启及Compose原密钥恢复/会话撤销/迁移失败停止/备份回退。CI镜像ID及本机镜像ID见[M4记录](history/2026-10-19-M4部署恢复.md)；均合成凭据/临时数据，无真实发送，不是用户验收。
+Rootless internal网络曾导致无端口映射，已移除无效配置。后台派发结束后观察到容器255与Docker服务重启，现通过前台Compose保持服务（工具会话10057）；不要结束该会话。若服务失联，按[M5用户清单](M5_USER_ACCEPTANCE.md)在正式WSL前台up重启，保留卷，不改全局WSL或重置数据。该本机验收实例需保留供用户操作，不作临时检查资源清理。
 
-前阶段证据见[系统设置记录](history/2026-10-19-M3系统设置.md)，无需重读/重跑。无遗留未提交实现、检查进程或临时部署；本地固定SHA镜像保留未发布。客户端弃用、CI动作Node20兼容提示及Rootless无cgroup限额仍在，不影响本次通过。
+## 证据与改动
 
-## 下一步与读取清单
+M4 [CI39175581516](https://github.com/Aspeternity/seekbell/actions/runs/39175581516)全通过：387项pytest、7项Chromium、迁移/镜像、禁外网重启及Compose备份/恢复/回退。详见[M4记录](history/2026-10-19-M4部署恢复.md)，M3证据沿链接复用。均自动证据，不是用户验收。
 
-按[验收矩阵](ACCEPTANCE.md)统一安排六页Web、PVE/真实反代、RSS及四渠道实际接收、恢复切换；原生arm64也未验证，双架构工作流未执行。先落实相应环境/目标及授权，再执行实机动作，不把自动通过记为用户通过。
+本次准备文件：deploy/compose.acceptance.yaml、acceptance.env.example、scripts/local_acceptance_server.py、tests/test_local_acceptance.py、M5_USER_ACCEPTANCE.md及ACCEPTANCE/DECISIONS/本状态；不改产品代码/镜像。deploy/.env.acceptance为忽略的本机配置，无密码。提交/推送及CI状态本轮结束前补齐。
 
-读取本状态、ACCEPTANCE待执行项、DEPLOYMENT及DECISIONS授权；只有相关代码变化后再补针对性检查，无需全仓扫描或重复有效验证。
+## 下一步及授权
 
-## 授权
+先由用户按U01～U09查看六页、规则试匹配和账号设置；反馈按页/操作/现象登记，再做针对性修复。U10备份恢复按需协助，不能覆盖当前卷。PVE/真实HTTPS、RSS/四渠道接收及原生arm64仍待统一实机验证。[操作手册](DEPLOYMENT.md)。读取本状态、M5用户清单及相关问题代码，不默认全仓扫描或重跑有效验证。
 
-沿用独立WSL、noreply、已确认范围本地开发及私有main推送；推送前python3 scripts/check_privacy.py --identity。用户验收统一安排。无GHCR发布、远端部署、真实发送、原环境清理或全局WSL调整授权；不扩大范围、不组织多代理。
+沿用本地开发、noreply、私有main推送及本机验收授权；推送前隐私身份检查。不发布GHCR、不远端部署、不真实发送，不改原环境/全局WSL，不组织多代理。客户端/CI弃用提示及Rootless资源限额限制仍在。
