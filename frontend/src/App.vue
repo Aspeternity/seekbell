@@ -20,8 +20,12 @@ import type { AuthState, VersionInfo } from './api'
 const TargetsPanel = defineAsyncComponent(() => import('./components/TargetsPanel.vue'))
 const TasksPanel = defineAsyncComponent(() => import('./components/TasksPanel.vue'))
 
+const OverviewPanel = defineAsyncComponent(() => import('./components/OverviewPanel.vue'))
+const SitePanel = defineAsyncComponent(() => import('./components/SitePanel.vue'))
+const ContentPanel = defineAsyncComponent(() => import('./components/ContentPanel.vue'))
+
 const auth = ref<AuthState | null>(null)
-const activePage = ref('tasks')
+const activePage = ref('overview')
 const info = ref<VersionInfo | null>(null)
 const loading = ref(true)
 const submitting = ref(false)
@@ -229,6 +233,21 @@ onUnmounted(() => window.removeEventListener('seekbell:session-expired', session
           <section v-else-if="auth?.authenticated">
             <nav aria-label="管理导航" class="management-nav">
               <NButton
+                :type="activePage === 'overview' ? 'primary' : 'default'"
+                @click="activePage = 'overview'"
+                >概览</NButton
+              >
+              <NButton
+                :type="activePage === 'site' ? 'primary' : 'default'"
+                @click="activePage = 'site'"
+                >监控网站</NButton
+              >
+              <NButton
+                :type="activePage === 'content' ? 'primary' : 'default'"
+                @click="activePage = 'content'"
+                >内容与命中</NButton
+              >
+              <NButton
                 :type="activePage === 'tasks' ? 'primary' : 'default'"
                 @click="activePage = 'tasks'"
                 >监控任务</NButton
@@ -244,8 +263,11 @@ onUnmounted(() => window.removeEventListener('seekbell:session-expired', session
                 >运行信息</NButton
               >
             </nav>
+            <OverviewPanel v-if="activePage === 'overview'" />
+            <SitePanel v-else-if="activePage === 'site'" :csrf="auth.csrf_token" />
+            <ContentPanel v-else-if="activePage === 'content'" />
             <TasksPanel
-              v-if="activePage === 'tasks'"
+              v-else-if="activePage === 'tasks'"
               :csrf="auth.csrf_token"
               @targets="activePage = 'targets'"
             />
@@ -285,7 +307,7 @@ onUnmounted(() => window.removeEventListener('seekbell:session-expired', session
         :bordered="false"
         class="phase-note"
       >
-        通知目标、监控任务和两类规则试匹配已接入，后台采集与通知调度尚未启动。
+        后台采集与自动投递已接入；新安装默认暂停来源。目标发送测试、投递记录与手动重发仍在开发。
       </NAlert>
       <footer>SeekBell · 自托管的新帖监控与通知</footer>
     </main>

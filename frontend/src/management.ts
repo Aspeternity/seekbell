@@ -169,3 +169,115 @@ export function write<T>(
     body: body === undefined ? undefined : JSON.stringify(body),
   })
 }
+
+export interface SchedulerState {
+  enabled: boolean
+  healthy: boolean
+  stopping: boolean
+  components: Record<string, string>
+}
+export interface SiteState {
+  website_id: string
+  name: string
+  enabled: boolean
+  revision: number
+  interval_seconds: number
+  url: string
+  configuration_valid: boolean
+  capabilities: string[]
+  initialized: boolean
+  needs_baseline: boolean
+  last_attempt_at: number | null
+  last_success_at: number | null
+  last_error_code: string | null
+  failures: number
+  next_attempt_at: number
+  window_count: number
+  possible_gap: boolean
+  last_gap_at: number | null
+  scheduler: SchedulerState
+}
+export interface Overview {
+  site: Omit<SiteState, 'scheduler'>
+  scheduler: SchedulerState
+  counts: {
+    tasks: number
+    enabled_tasks: number
+    targets: number
+    posts: number
+    hits: number
+    deliveries: Record<string, number>
+    uncertain: number
+  }
+}
+export interface ProbeResult {
+  status: 'success' | 'failure' | 'backoff'
+  code: string | null
+  at: number
+  next_attempt_at?: number
+  raw_count?: number
+  valid_count?: number
+  diagnostics?: string[]
+}
+export interface ContentItem {
+  external_post_id: string
+  title: string
+  summary: string | null
+  author: string | null
+  category: string | null
+  url: string | null
+  display_truncated: boolean
+  first_seen_at: number
+  published_at: number | null
+  hits: {
+    task_id: string
+    name: string
+    version: number
+    deleted: boolean
+    matched_at: number
+    reason: MatchResult
+  }[]
+}
+export interface ContentPage {
+  total: number
+  offset: number
+  limit: number
+  items: ContentItem[]
+}
+export interface HistoricalTask {
+  id: string
+  name: string
+  deleted: boolean
+}
+export function getSite(): Promise<SiteState> {
+  return request('/api/manage/site')
+}
+export function getOverview(): Promise<Overview> {
+  return request('/api/manage/overview')
+}
+export function getContent(params: URLSearchParams): Promise<ContentPage> {
+  return request('/api/manage/content?' + params.toString())
+}
+export function getHistoricalTasks(): Promise<HistoricalTask[]> {
+  return request('/api/manage/content/options')
+}
+export function localDate(value: number | null | undefined): string {
+  return value == null || value === 0 ? '尚无记录' : new Date(value * 1000).toLocaleString()
+}
+export function sourceError(code: string | null): string {
+  if (!code) return '无'
+  if (/^http_[0-9]+$/.test(code)) return 'HTTP ' + code.slice(5)
+  const labels: Record<string, string> = {
+    timeout: '请求超时',
+    transport_error: '连接失败',
+    invalid_or_unsafe_xml: 'XML 无效或不安全',
+    unexpected_content_type: '响应不是 RSS/XML',
+    unsupported_content_encoding: '响应编码不受支持',
+    response_too_large: '响应超过大小限制',
+    unsupported_source: '来源配置不匹配',
+    not_rss: '响应不是 RSS',
+    feed_parse_error: 'RSS 解析失败',
+    no_valid_entries: '没有合法条目',
+  }
+  return labels[code] ?? code
+}

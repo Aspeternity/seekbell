@@ -30,16 +30,6 @@ from tests.notifier_helpers import CONFIGS
 from tests.test_authentication import setup, state
 
 
-@pytest.fixture
-def managed(tmp_path):
-    settings = Settings(data_dir=tmp_path, static_dir=tmp_path / "static")
-    app = create_app(settings)
-    with TestClient(app) as client:
-        auth = setup(client)
-        client.headers["X-CSRF-Token"] = auth["csrf_token"]
-        yield client, app, settings
-
-
 def target(client, kind="webhook", enabled=True):
     response = client.post(
         "/api/manage/targets",

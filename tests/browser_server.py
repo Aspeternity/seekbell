@@ -5,12 +5,15 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import httpx
 import uvicorn
 from seekbell.config import Settings
 from seekbell.main import create_app
 from seekbell.services.ingestion import Ingestion
+from seekbell.services.runtime import ApplicationRuntime
 
 from tests.core_helpers import batch
+from tests.rss_samples import Chunks, rss
 
 
 def main() -> None:
@@ -23,13 +26,52 @@ def main() -> None:
 
     socket.socket.connect = deny_outbound
     with TemporaryDirectory(prefix="seekbell-browser-") as directory:
+        calls = 0
+
+        def fake_rss(request):
+            nonlocal calls
+            assert str(request.url) == "https://rss.nodeseek.com/"
+            calls += 1
+            ids = [9001, 9002] if calls <= 2 else [9001, 9002, 9003]
+            return httpx.Response(
+                200,
+                headers={"content-type": "application/xml"},
+                stream=Chunks(
+                    rss(
+                        [
+                            {
+                                "id": key,
+                                "title": f"VPS synthetic offer {key}",
+                                "summary": "Synthetic known summary",
+                                "author": "fixture-user",
+                                "category": "fixture-section",
+                            }
+                            for key in ids
+                        ]
+                    )
+                ),
+            )
+
+        def runtime_factory(engine, vault, *, enabled):
+            return ApplicationRuntime(
+                engine,
+                vault,
+                enabled=enabled,
+                rss_transport=httpx.MockTransport(fake_rss),
+                notification_transport=httpx.MockTransport(
+                    lambda request: httpx.Response(200, json={"ok": True, "code": 200})
+                ),
+            )
+
         app = create_app(
             Settings(
                 data_dir=Path(directory),
                 static_dir=Path("frontend/dist"),
                 build_revision="browser-synthetic",
                 trusted_proxies=[],
-            )
+                background_enabled=True,
+            ),
+            runtime_factory=runtime_factory,
         )
         original_lifespan = app.router.lifespan_context
 

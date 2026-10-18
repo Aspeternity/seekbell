@@ -72,6 +72,7 @@ test('会话失效时回到登录入口并给出提示', async ({ page, context 
   await page.getByLabel('用户名', { exact: true }).fill(username)
   await page.getByLabel('密码', { exact: true }).fill(password)
   await page.getByRole('button', { name: '登录', exact: true }).click()
+  await page.getByRole('button', { name: '监控任务', exact: true }).click()
   await expect(page.getByRole('button', { name: '刷新任务', exact: true })).toBeVisible()
   await expect(page.locator('[aria-busy="true"]')).toHaveCount(0)
   await expect(page.getByRole('button', { name: '退出登录' })).toBeEnabled()
@@ -227,4 +228,74 @@ test('四渠道配置和任务编辑、复制、暂停、两类试匹配在浏�
   expect(responses.join('')).not.toContain('synthetic-private-header')
   expect(responses.join('')).not.toContain('synthetic-private-token')
   expect(pageErrors).toEqual([])
+})
+
+test('网站连接、后台启停、概览和本地内容命中在手机中可用', async ({ page, context }, testInfo) => {
+  test.setTimeout(60000)
+  const external: string[] = []
+  const errors: string[] = []
+  await context.route('**/*', (route) => {
+    if (new URL(route.request().url()).origin !== origin) {
+      external.push(route.request().url())
+      return route.abort()
+    }
+    return route.continue()
+  })
+  page.on('pageerror', (error) => errors.push(error.message))
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+  await page.getByLabel('用户名', { exact: true }).fill(username)
+  await page.getByLabel('密码', { exact: true }).fill(password)
+  await page.getByRole('button', { name: '登录', exact: true }).click()
+  await expect(page.getByText('后台调度运行中', { exact: true })).toBeVisible()
+  await expect(page.getByText('来源已暂停', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '监控网站', exact: true }).click()
+  await expect(page.getByText('尚未建立基线', { exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: '测试 RSS 连接', exact: true }).click()
+  await expect(page.getByText('连接测试成功：返回 2 条', { exact: false })).toBeVisible()
+  const before = await (await context.request.get('/api/manage/overview')).json()
+  expect(before.counts.posts).toBe(2)
+  expect(before.site.needs_baseline).toBe(true)
+  await page.getByLabel('采集间隔（秒）', { exact: true }).fill('1')
+  await page.getByRole('switch', { name: '启用网站采集', exact: true }).click()
+  await page.getByRole('button', { name: '保存网站设置', exact: true }).click()
+  await expect(page.getByText('网站设置已保存。', { exact: false })).toBeVisible()
+  await expect
+    .poll(
+      async () => {
+        const info = await (await context.request.get('/api/manage/overview')).json()
+        return [info.counts.posts, info.counts.hits, info.counts.deliveries.sent]
+      },
+      { timeout: 15000 },
+    )
+    .toEqual([3, 1, 1])
+  await page.getByRole('button', { name: '重新读取设置', exact: true }).click()
+  await expect(page.getByText('基线已建立', { exact: true })).toBeVisible()
+  await expect(page.getByText('最近 RSS 窗口：3 条 · 连续失败 0 次', { exact: true })).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('site-mobile.png'), fullPage: true })
+  await page.getByRole('switch', { name: '启用网站采集', exact: true }).click()
+  await page.getByRole('button', { name: '保存网站设置', exact: true }).click()
+  await expect(page.getByText('来源已暂停', { exact: true })).toBeVisible()
+  await expect(page.getByText('恢复时需要重建基线', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '内容与命中', exact: true }).click()
+  await expect(page.getByText('符合筛选 3 条 · 当前显示 3 条', { exact: true })).toBeVisible()
+  await page.getByRole('switch', { name: '仅显示有命中的帖子', exact: true }).click()
+  await page.getByLabel('命中任务', { exact: true }).selectOption({ label: '更新监控' })
+  await page.getByRole('button', { name: '筛选内容', exact: true }).click()
+  await expect(page.getByText('符合筛选 1 条 · 当前显示 1 条', { exact: true })).toBeVisible()
+  await expect(
+    page.getByRole('link', { name: 'VPS synthetic offer 9003', exact: true }),
+  ).toHaveAttribute('href', 'https://www.nodeseek.com/post-9003-1')
+  await expect(page.getByText('更新监控 · 规则版本 2', { exact: true })).toBeVisible()
+  await expect(page.getByText('Synthetic known summary', { exact: true })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+  await page.screenshot({ path: testInfo.outputPath('content-mobile.png'), fullPage: true })
+  await page.getByLabel('作者精确匹配', { exact: true }).fill('missing-author')
+  await page.getByRole('button', { name: '筛选内容', exact: true }).click()
+  await expect(page.getByText('没有符合筛选的本地帖子。', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '概览', exact: true }).click()
+  await expect(page.getByText('最近窗口：3 条 · 连续失败 0 次', { exact: true })).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('overview-mobile.png'), fullPage: true })
+  expect(errors).toEqual([])
+  expect(external).toEqual([])
 })

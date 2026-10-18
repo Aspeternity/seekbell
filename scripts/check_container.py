@@ -122,6 +122,13 @@ else:
         'rule': {'groups': [{'all_of': ['VPS']}]}, 'sample': {'title': 'VPS synthetic'},
     }, state['csrf_token'])
     assert status == 200 and preview['result']['status'] == 'match'
+site_status, site = call('/api/manage/site')
+assert site_status == 200 and not site['enabled']
+assert site['scheduler']['enabled'] and site['scheduler']['healthy']
+assert site['scheduler']['components'] == {'collector': 'running', 'delivery': 'running'}
+assert call('/api/manage/content')[1]['total'] == 0
+assert call('/api/manage/overview')[1]['counts']['posts'] == 0
+assert len(call('/api/manage/content/options')[1]) == 1
 print(json.dumps({
     'administrator_session': 'passed', 'configuration': 'passed', 'mode': sys.argv[1]
 }))

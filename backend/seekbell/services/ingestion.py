@@ -70,12 +70,21 @@ class Ingestion:
             session.add(SourceRun(source_id=source_id, at=at, status="failure", code=code))
             return state.next_attempt_at
 
-    def ingest(self, source_id: str, batch: PostBatch, *, at: float) -> IngestReport:
+    def ingest(
+        self,
+        source_id: str,
+        batch: PostBatch,
+        *,
+        at: float,
+        expected_source_revision: int | None = None,
+    ) -> IngestReport:
         with write_session(self.engine) as session:
             source = session.get(Source, source_id)
             state = session.get(SourceState, source_id)
             if source is None or state is None:
                 raise ValueError("Unknown source")
+            if expected_source_revision is not None and source.revision != expected_source_revision:
+                return IngestReport("configuration_changed")
             website = session.get(Website, source.website_id)
             if not source.enabled or not website.enabled:
                 return IngestReport("paused")

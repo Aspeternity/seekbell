@@ -76,6 +76,7 @@ class Source(Base):
     url: Mapped[str] = mapped_column(String(2048))
     enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     interval_seconds: Mapped[int] = mapped_column(Integer, default=10)
+    revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
 
 
 class SourceState(Base):

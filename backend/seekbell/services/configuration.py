@@ -310,6 +310,8 @@ class Configuration:
                 raise ValueError("Unknown source")
             if source.enabled and not enabled:
                 state.needs_baseline = True
+            if source.enabled != enabled:
+                source.revision += 1
             source.enabled = enabled
             if enabled:
                 state.next_attempt_at = max(at, state.next_attempt_at)
@@ -323,7 +325,49 @@ class Configuration:
             website.enabled = enabled
             for source in session.scalars(select(Source).where(Source.website_id == key)):
                 state = session.get(SourceState, source.id)
+                if was_enabled != enabled:
+                    source.revision += 1
                 if was_enabled and not enabled:
                     state.needs_baseline = True
                 if enabled:
                     state.next_attempt_at = max(at, state.next_attempt_at)
+
+    def configure_site(
+        self,
+        *,
+        enabled: bool,
+        interval_seconds: int,
+        at: float,
+        expected_revision: int | None = None,
+    ) -> None:
+        if not 1 <= interval_seconds <= 86400:
+            raise ValueError("Source interval out of range")
+        with write_session(self.engine) as session:
+            source = session.get(Source, "nodeseek-rss")
+            website = session.get(Website, "nodeseek")
+            state = session.get(SourceState, source.id)
+            if expected_revision is not None and source.revision != expected_revision:
+                raise ConfigurationConflict
+            if (
+                source.enabled != enabled
+                or website.enabled != enabled
+                or source.interval_seconds != interval_seconds
+            ):
+                source.revision += 1
+            was_active = source.enabled and website.enabled
+            if was_active and not enabled:
+                state.needs_baseline = True
+            source.enabled = website.enabled = enabled
+            source.interval_seconds = interval_seconds
+            if enabled:
+                if state.last_error_code:
+                    # Frequency changes or pause/resume cannot bypass Retry-After.
+                    state.next_attempt_at = max(at, state.next_attempt_at)
+                elif not was_active:
+                    state.next_attempt_at = at
+                else:
+                    state.next_attempt_at = max(
+                        at,
+                        (state.last_attempt_at if state.last_attempt_at is not None else at)
+                        + interval_seconds,
+                    )

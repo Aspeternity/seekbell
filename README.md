@@ -2,7 +2,7 @@
 
 自托管的 NodeSeek 新帖监控与通知工具。范围与技术栈见 [SPEC](docs/SPEC.md) 和 [ARCHITECTURE](docs/ARCHITECTURE.md)。
 
-当前已实现 **M1核心闭环与M2四渠道通知**：RSS解析、规则、基线/身份账本、事务outbox、可恢复投递，以及Telegram Bot/Bark/SMTP/Webhook适配、加密目标配置和独立目标测试记录。M2通过模拟验证；M3已接入管理员认证、四渠道目标/任务配置及模拟/历史规则试匹配，其余管理页面和自动调度仍待实现，当前不能作为监控服务投入使用。真实通知与用户验收待Web完成后统一组织，当前证据以[PROJECT_STATE](docs/PROJECT_STATE.md)为准。
+当前已实现 **M1核心闭环与M2四渠道通知**：RSS解析、规则、基线/身份账本、事务outbox、可恢复投递，以及Telegram Bot/Bark/SMTP/Webhook适配、加密目标配置和独立目标测试记录。M2通过模拟验证；M3已接入管理员认证、四渠道目标/任务配置及模拟/历史规则试匹配，后台采集/投递生命周期及概览、网站与本地内容命中页面也已接入。目标发送测试、投递记录、手动重发和系统设置仍待完成，尚未完成M3。真实通知与用户验收待Web完成后统一组织，当前证据以[PROJECT_STATE](docs/PROJECT_STATE.md)为准。
 
 ## 环境
 
@@ -41,7 +41,7 @@ uv run --frozen python -m seekbell.services.demo
 
 演示创建临时SQLite，使用HTTPX MockTransport和模拟通知，退出后清理临时数据。依次验证首次成功基线、新帖、两任务合并、认领后租约过期、退避重试和重复摄取。预期为2次规则命中、1条合并投递意图、3次尝试（含过期租约）、1条成功回执、重复摄取新增0条投递；历史不确定性仍保留。不会读取正式数据库或通知凭据。
 
-核心服务仍由离线入口验证；默认内置来源关闭、通知目标为空，页面提供认证、通知目标/任务管理、两类试匹配及运行状态。
+应用默认启动单一采集循环和投递循环，内置来源仍默认关闭、通知目标为空。管理员显式启用网站后才自动采集；关闭浏览器不会停止后台。离线演示使用独立临时数据，不会启用应用的真实来源。
 
 ## M2通知故障矩阵
 
@@ -55,7 +55,7 @@ uv run --frozen pytest -q tests/test_notification_config.py tests/test_notificat
 
 内部`Configuration(engine, vault)`负责创建/修改目标，`get_target`返回普通配置和已配置敏感字段名，不返回秘密；更新时省略字段即保留旧值。`NotifierRegistry`供DeliveryWorker使用，`TargetTesting`显式测试单目标并单独记录，不改变自动去重；这些服务均未暴露未认证API。
 
-Fernet密钥位于数据目录的`credentials.key`（0600），目标完整配置和outbox/测试快照均加密，发送时才解密。显式首次创建不会覆盖旧密钥，正常加载缺钥/坏钥直接报错，不自动替换。恢复加密配置必须同时恢复原密钥。M3启动生命周期已接入密钥加载/独占创建，并校验现有目标；已有密文而缺钥时停止启动，不生成替代密钥。当前开发数据库未写入真实凭据，调度和渠道发送生命周期仍未接入。
+Fernet密钥位于数据目录的`credentials.key`（0600），目标完整配置和outbox/测试快照均加密，发送时才解密。显式首次创建不会覆盖旧密钥，正常加载缺钥/坏钥直接报错，不自动替换。恢复加密配置必须同时恢复原密钥。M3启动生命周期已接入密钥加载/独占创建，并校验现有目标；已有密文而缺钥时停止启动，不生成替代密钥。应用生命周期已接入采集与渠道发送；自动验证只使用合成配置和模拟服务。
 
 ## 本地运行
 
@@ -77,11 +77,12 @@ uv run --frozen python -m seekbell
 |`SEEKBELL_DATA_DIR`|`data`|SQLite 和进程锁目录；容器内为 `/data`|
 |`SEEKBELL_STATIC_DIR`|`frontend/dist`|构建后的前端目录|
 |`SEEKBELL_BUILD_REVISION`|`development`|显示的代码版本；镜像通过 `VCS_REF` 写入完整提交 SHA|
+|`SEEKBELL_BACKGROUND_ENABLED`|`true`|启动采集与投递循环；离线检查可设`false`，不会禁用管理员显式RSS连接测试|
 |`SEEKBELL_TRUSTED_PROXIES`|`[]`|明确可信的反代IP/CIDR数组；仅这些连接可影响协议/客户端信息|
 
-只读的 `/api/version`、`/health/live`、`/health/ready` 保持公开；存活检查不依赖外部服务，就绪检查验证数据库和迁移。管理员入口为 `/api/auth/state`、`setup`、`login`、`logout`；先GET state取得CSRF，再用Cookie和 `X-CSRF-Token` 提交。创建唯一管理员后初始化关闭，没有初始化令牌。用户名1～64字符，密码15～128字符，支持空格和中文。页面不持久保存密码或会话令牌。
+只读的 `/api/version`、`/health/live`、`/health/ready` 保持公开；存活检查不依赖外部服务，就绪检查验证数据库、迁移及后台循环是否异常退出；普通RSS网络失败只记录退避，不使就绪失败。管理员入口为 `/api/auth/state`、`setup`、`login`、`logout`；先GET state取得CSRF，再用Cookie和 `X-CSRF-Token` 提交。创建唯一管理员后初始化关闭，没有初始化令牌。用户名1～64字符，密码15～128字符，支持空格和中文。页面不持久保存密码或会话令牌。
 
-认证会话最长7天、登录前会话30分钟，重启保持有效；登录轮换令牌，退出服务端撤销。创建/登录共用每分钟10次的持久预算，超限返回429及Retry-After。认证API不缓存，校验错误不回显凭据。当前仍不启动采集/通知调度。
+认证会话最长7天、登录前会话30分钟，重启保持有效；登录轮换令牌，退出服务端撤销。创建/登录共用每分钟10次的持久预算，超限返回429及Retry-After。认证API不缓存，校验错误不回显凭据。后台组件启动失败会降低就绪状态；来源仍须管理员显式启用。
 
 反代HTTPS时，设置 `SEEKBELL_TRUSTED_PROXIES` 为明确代理IP/CIDR的JSON数组，例如 `'["172.20.0.2"]'`（替换为实际地址）。默认 `[]`，不允许 `*` 或全网段。代理必须保留原始Host并覆盖X-Forwarded-Proto；应用只从可信连接读取协议和客户端转发信息，不读取X-Forwarded-Host。可信HTTPS请求设置Secure Cookie，直接HTTP可登录。保持Uvicorn的 `--no-proxy-headers`，由应用统一处理信任边界，避免两层解析。
 
@@ -102,7 +103,7 @@ pnpm --dir frontend test:e2e
 
 任务支持创建、编辑、复制草稿（默认暂停）、启停和软删除。条件标签按Enter保存，短语内部空格保留；空组由后端忽略，全空规则明确提示匹配全部新帖。模拟摘要可选择缺失或已知空文本；本地历史只读取最近1～100条并展示实际样本数量/时间，不访问论坛、不发通知、不改变去重账本。
 
-所有/api/manage接口受管理员与CSRF保护；目标编辑需要expected_revision，任务编辑需要expected_version，陈旧编辑返回409并要求重新打开。API错误不回显凭据。模拟/历史测试虽为POST，也需要CSRF。当前尚未提供目标发送测试、投递记录或后台采集开关。
+所有/api/manage接口受管理员与CSRF保护；目标编辑需要expected_revision，任务编辑需要expected_version，陈旧编辑返回409并要求重新打开。API错误不回显凭据。模拟/历史测试虽为POST，也需要CSRF。网站页面已提供后台采集开关；目标发送测试与投递记录仍待接入。
 
 ~~~bash
 uv run --frozen pytest -q tests/test_management.py
@@ -110,7 +111,21 @@ pnpm --dir frontend build
 pnpm --dir frontend test:e2e
 ~~~
 
-浏览器测试在临时数据库中预置两条合成RSS帖子，然后关闭来源；不使用开发数据库，不联系论坛或真实目标。
+浏览器测试使用临时数据库和MockTransport；预置合成帖子并验证显式启用后的自动基线、新帖命中和模拟投递，不使用开发数据库，不联系论坛或真实目标。
+
+## M3调度与运行页面
+
+概览显示采集状态、实际窗口数量、可能缺口、任务/命中/投递统计与结果未知提醒。网站页面固定为NodeSeek官方RSS，不能修改URL或添加其他来源。默认10秒只是候选频率，失败退避并遵守Retry-After；修改频率或启停不能绕过已有退避。网站编辑需要expected_revision，陈旧草稿返回409。
+
+“测试RSS连接”与自动采集共用请求锁，成功仅返回条目数量，不存帖、不建基线或发通知；失败会保存错误和退避。首次启用和主动暂停后恢复只建立当前基线；意外重启保留已见状态。配置变更期间返回的旧响应被丢弃。正常退出先停止新一轮工作，给予在途操作15秒宽限，之后取消网络等待并保留可恢复租约；SQLite线程会等待完成，SMTP线程仍须等待socket关闭，因此宽限不是整个进程退出的硬时限。
+
+内容页只读本地帖子，可按标题子串、作者/版块精确匹配、命中任务筛选；显示原规则版本及原因，已删除任务的历史仍可查询。摘要缺失与空值区分，过长展示有截断提示；外部字段作为文本显示，原帖链接从固定身份重建。所有时间目前使用浏览器本地时区。
+
+~~~bash
+uv run --frozen pytest -q tests/test_runtime.py tests/test_collection.py tests/test_management.py
+pnpm --dir frontend build
+pnpm --dir frontend test:e2e
+~~~
 
 ## 本地镜像
 

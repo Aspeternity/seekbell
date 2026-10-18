@@ -20,6 +20,7 @@ from seekbell.db.models import (
 from seekbell.db.transactions import write_session
 from seekbell.domain.delivery import DeliveryPolicy, SendResult
 from seekbell.notifiers.base import Notifier
+from seekbell.services.async_tools import storage_call
 from seekbell.services.configuration import identifier
 
 
@@ -213,7 +214,7 @@ class DeliveryWorker:
             return True
 
     async def run_once(self) -> str | None:
-        claim = await asyncio.to_thread(self.claim, at=self.clock())
+        claim = await storage_call(self.claim, at=self.clock())
         if claim is None:
             return None
         notifier = self.notifiers.get(claim.target_snapshot["kind"])
@@ -231,7 +232,7 @@ class DeliveryWorker:
                 result = SendResult(status="unknown", code="send_timeout")
             except Exception:
                 result = SendResult(status="unknown", code="send_exception")
-        await asyncio.to_thread(self.finish, claim, result, at=self.clock())
+        await storage_call(self.finish, claim, result, at=self.clock())
         return claim.event_id
 
     async def run(self, stop: asyncio.Event) -> None:

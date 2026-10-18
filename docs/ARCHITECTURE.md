@@ -56,7 +56,7 @@ M1实现边界：0002_core迁移仅播种NodeSeek网站、默认关闭的官方R
 
 Outbox按帖子和目标唯一；每次原子认领有新token和递增尝试号。过期租约记为结果未知，再按上限恢复；旧token不能覆盖新租约。迟到成功留下独立回执与尝试证据，无新租约时修正终态。默认最多5次，退避5～300秒，Retry-After可延长等待；发送超时10秒、租约30秒。未知状态留下持久uncertain标记，即使后续成功也保留。渠道实现在事务外运行。
 
-SourceRunner接受长生命周期HTTPX客户端，固定周期、不重叠；失败退避10～300秒并尊重Retry-After，状态持久化。当前只有显式离线演示构造Runner/Worker，FastAPI生命周期尚不启动业务调度；M3接入认证、管理和生命周期后再启用，不暴露未认证配置接口。
+SourceRunner接受长生命周期HTTPX客户端，固定周期、不重叠；失败退避10～300秒并尊重Retry-After，状态持久化。M3已在FastAPI生命周期中创建单一Runner/Worker及长生命周期HTTP客户端；默认循环运行但来源关闭，管理接口要求认证。
 
 ## M2通知实现契约
 
@@ -108,7 +108,15 @@ Configuration复用原短写事务，目标update在事务内校验expected_revi
 
 服务端返回规范化规则及同一explain/evaluate结果。历史试匹配仅读取nodeseek本地Post最近1～100条，给出实际样本数、总数及样本时间边界；不写规则、SeenPost/DeliveredPost/RuleHit/outbox，也不访问网络。摘要None与空字符串保持区别；帖子链接重新构造为固定NodeSeek HTTPS路径，外部字段按文本呈现。
 
-启动在数据目录进程锁内加载/独占创建credentials.key，检查目标与outbox/目标测试的加密快照；有密文缺钥、坏钥/权限/配置时停止并释放锁。当前仅接入Configuration，尚未创建通知网络客户端或运行采集/投递/目标测试。网页管理401统一恢复会话入口，多请求合并恢复，组件卸载清空敏感草稿；无浏览器持久凭据。
+启动在数据目录进程锁内加载/独占创建credentials.key，检查目标与outbox/目标测试的加密快照；有密文缺钥、坏钥/权限/配置时停止并释放锁。当前已接入Configuration与采集/投递生命周期，目标测试仍未暴露为Web操作。网页管理401统一恢复会话入口，多请求合并恢复，组件卸载清空敏感草稿；无浏览器持久凭据。
+
+## M3调度与运行页契约
+
+ApplicationRuntime在迁移、认证与密钥检查完成后构造一套RSS客户端、NotifierRegistry、SourceRunner和DeliveryWorker。SEEKBELL_BACKGROUND_ENABLED默认true，false仅关闭循环，不禁止管理员显式连接测试。所有工作都在数据目录实例锁生命周期内；退出置stop/wake，给予循环15秒宽限，取消剩余网络等待并保留租约恢复证据，然后关闭客户端、数据库并释放锁。短SQLite线程任务取消时排空；SMTP沿用socket关闭前持锁语义，不能宣称整个退出过程有15秒硬上限。
+
+意外循环退出只记录固定错误码，不输出异常字符串/参数，降低readiness但不改变liveness；普通采集失败只改变来源状态和退避。网站设置提交后唤醒Runner，仍检查持久化next_attempt_at，不回放错过的tick。0005_source_revision为来源新增配置版本，网站与来源启停及频率修改在同一短事务内更新；expected_revision拒绝旧页面，摄取时核对抓取前版本，防止在途响应跨越暂停/恢复边界。
+
+POST /api/manage/site/test要求管理员/CSRF并共用SourceRunner锁；重叠返回409，遵守已有失败退避，15秒请求预算。成功只返回合法数/原始数/安全诊断，不建基线或写帖子；失败保存SourceRun、错误码与退避。URL和适配器固定，不能通过此入口访问其他来源。GET site/overview/content/options均受认证；内容筛选分页及命中原因只读本地表，保留任务原规则版本与软删除证据。链接从正数字ID重建，文本展示限长不改变后端匹配字段。
 
 ## 私有开发与实机验证（建议路线）
 

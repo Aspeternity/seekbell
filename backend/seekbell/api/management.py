@@ -1,14 +1,16 @@
 import time
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.concurrency import run_in_threadpool
 
 from seekbell.api.auth import require_administrator
 from seekbell.domain.posts import PostFields
 from seekbell.domain.rules import Rule, evaluate, explain
 from seekbell.notifiers.configs import channel_schemas
 from seekbell.notifiers.credentials import CredentialError
+from seekbell.services.collection import SourceBusy
 from seekbell.services.configuration import Configuration, ConfigurationConflict
 from seekbell.services.management import Management
 
@@ -221,3 +223,72 @@ def preview(body: PreviewInput):
 @router.post("/rules/history")
 def history(request: Request, body: HistoryInput):
     return management(request).history(body.rule, body.limit)
+
+
+class SiteInput(Input):
+    expected_revision: int = Field(ge=1)
+    enabled: bool
+    interval_seconds: int = Field(ge=1, le=86400)
+
+
+@router.get("/site")
+def site(request: Request):
+    return {**management(request).site(), "scheduler": request.app.state.runtime.snapshot()}
+
+
+@router.put("/site")
+async def configure_site(request: Request, body: SiteInput):
+    await run_in_threadpool(
+        mutate,
+        configuration(request).configure_site,
+        enabled=body.enabled,
+        interval_seconds=body.interval_seconds,
+        expected_revision=body.expected_revision,
+        at=time.time(),
+    )
+    request.app.state.runtime.notify_configuration()
+    return await run_in_threadpool(site, request)
+
+
+@router.post("/site/test")
+async def test_site(request: Request, _body: Input):
+    try:
+        return await request.app.state.runtime.check_source()
+    except SourceBusy:
+        raise HTTPException(409, "来源请求正在进行，请稍后重试。") from None
+
+
+@router.get("/overview")
+def overview(request: Request):
+    return {
+        "site": management(request).site(),
+        "counts": management(request).overview(),
+        "scheduler": request.app.state.runtime.snapshot(),
+    }
+
+
+@router.get("/content/options")
+def content_options(request: Request):
+    return management(request).content_options()
+
+
+@router.get("/content")
+def content(
+    request: Request,
+    offset: int = Query(default=0, ge=0, le=1000000),
+    limit: int = Query(default=20, ge=1, le=100),
+    query: str = Query(default="", max_length=200),
+    author: str = Query(default="", max_length=500),
+    category: str = Query(default="", max_length=500),
+    task_id: str | None = Query(default=None, max_length=36),
+    matched_only: bool = False,
+):
+    return management(request).content(
+        offset=offset,
+        limit=limit,
+        query=query,
+        author=author,
+        category=category,
+        task_id=task_id,
+        matched_only=matched_only,
+    )

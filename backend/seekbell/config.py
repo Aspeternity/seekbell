@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     static_dir: Path = Path("frontend/dist")
     build_revision: str = Field(default="development", min_length=1, max_length=80)
 
+    background_enabled: bool = True
     trusted_proxies: list[str] = Field(default_factory=list)
 
     @field_validator("trusted_proxies")

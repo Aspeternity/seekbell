@@ -14,9 +14,10 @@ from seekbell.config import Settings
 from seekbell.db.runtime import create_database_engine, instance_lock, migrate
 from seekbell.services.auth import Authentication, AuthError
 from seekbell.services.management import application_configuration
+from seekbell.services.runtime import ApplicationRuntime
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, *, runtime_factory=ApplicationRuntime) -> FastAPI:
     settings = settings or Settings()
 
     @asynccontextmanager
@@ -31,7 +32,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 app.state.configuration = await run_in_threadpool(
                     application_configuration, engine, settings.data_dir.resolve()
                 )
-                yield
+                runtime = runtime_factory(
+                    engine, app.state.configuration.vault, enabled=settings.background_enabled
+                )
+                app.state.runtime = runtime
+                try:
+                    await runtime.start()
+                    yield
+                finally:
+                    await runtime.aclose()
             finally:
                 engine.dispose()
 

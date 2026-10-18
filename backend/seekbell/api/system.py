@@ -35,7 +35,10 @@ def live() -> dict[str, str]:
 @router.get("/health/ready")
 def ready(request: Request) -> JSONResponse:
     try:
-        healthy = database_ready(request.app.state.engine)
+        healthy = (
+            database_ready(request.app.state.engine)
+            and request.app.state.runtime.snapshot()["healthy"]
+        )
     except SQLAlchemyError:
         healthy = False
     return JSONResponse(
