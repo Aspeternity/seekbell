@@ -113,7 +113,8 @@ engine = create_database_engine(restored)
 try:
     vault = CredentialVault.open(restored.data_dir)
     configuration = Configuration(engine, vault)
-    assert configuration.get_target(target['id'])['configured_secrets'] == ['device_key']
+    public = configuration.get_target(target['id'])
+    assert public['configured_secrets'] == target['configured_secrets']
 finally:
     engine.dispose()
 process = start(restored.data_dir)
@@ -125,7 +126,7 @@ try:
     assert call('/api/manage/tasks')[1] == [task]
     restored_target = call('/api/manage/targets')[1][0]
     assert restored_target['id'] == target['id']
-    assert restored_target['configured_secrets'] == ['device_key']
+    assert restored_target['configured_secrets'] == target['configured_secrets']
 finally:
     stop(process)
 # A migration version the image cannot handle must stop, not serve half-started.
