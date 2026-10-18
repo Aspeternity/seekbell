@@ -20,7 +20,9 @@ Windows PowerShell/终端：
 wsl.exe -d SeekBell-Dev --cd /home/dev/projects/seekbell
 ```
 
-进入后先确认`echo "$WSL_DISTRO_NAME"`为`SeekBell-Dev`、`pwd`为上述正式目录。当前聊天仍可能从原Ubuntu执行工具；此时所有开发/构建/测试均显式通过`wsl.exe -d SeekBell-Dev`派发，不能误用原Ubuntu或D盘源码。Windows编辑器打开上述UNC目录或连接指定发行版，不需改变Windows默认WSL。
+进入后先确认`echo "$WSL_DISTRO_NAME"`为`SeekBell-Dev`、`pwd`为上述正式目录。当前聊天仍可能从原Ubuntu执行工具；此时所有开发/构建/测试均显式通过`wsl.exe -d SeekBell-Dev`派发，不能误用原Ubuntu或D盘源码。桥接命令优先使用wsl.exe -d SeekBell-Dev --cd /home/dev/projects/seekbell；构建版本先在该目录核对git rev-parse HEAD，再传完整字面SHA，避免嵌套命令替换取到交接目录的HEAD。
+
+Windows编辑器打开上述UNC目录或连接指定发行版，不需改变Windows默认WSL。
 
 ## 工具链
 
