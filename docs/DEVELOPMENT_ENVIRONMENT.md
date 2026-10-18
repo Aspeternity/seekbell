@@ -1,6 +1,6 @@
 # 本机开发环境
 
-用户于2026-10-18确认新建独立WSL，安装位置`D:\WSL\SeekBell-Dev`。本文件描述实际本机配置，不改变产品技术栈或PVE部署目标。M0源码保留待审，尚未开展M1。
+用户于2026-10-18确认新建独立WSL，安装位置`D:\WSL\SeekBell-Dev`。本文件描述实际本机配置，不改变产品技术栈或PVE部署目标。当前实现与验证基准见PROJECT_STATE；本文件只记录开发工具和进入方式。
 
 ## 位置与进入方式
 
@@ -29,6 +29,16 @@ Python 3.12.3、uv 0.13.1、Node 24.22.0、pnpm 10.34.7。项目依赖分别位�
 uv及命令链接位于`/home/dev/.local/bin`；Node/pnpm本体位于`/home/dev/.local/share/seekbell-tools`，Node通过官方SHASUMS256校验。`.profile`和`.bashrc`加载`~/.config/seekbell/environment.sh`，只在这个新发行版设置用户PATH和`DOCKER_CONTEXT=rootless`。`/etc/wsl.conf`开启systemd、默认用户dev、`appendWindowsPath=false`，避免混用Windows Node。
 
 dev没有设置密码或免密sudo。需要维护新发行版系统配置时，Windows用户显式进入`wsl.exe -d SeekBell-Dev -u root`；没有创建应用管理员。
+
+## 浏览器自动验证
+
+2026-10-19在本发行版安装Playwright 1.64.1及Chromium Headless Shell v1248，缓存位于dev的~/.cache/ms-playwright。以SeekBell-Dev的root执行该项目Playwright的install-deps chromium，补齐libnspr4/libnss3、字体等官方运行依赖；未修改原Ubuntu、Windows浏览器或全局WSL配置。项目锁文件固定工具版本；测试入口和临时数据说明见README的M3认证自动验证。安装浏览器不属于运行镜像依赖。
+
+首次补齐浏览器系统依赖，在Windows或当前桥接终端执行：
+
+~~~bash
+wsl.exe -d SeekBell-Dev -u root -- /home/dev/.local/bin/node /home/dev/projects/seekbell/frontend/node_modules/@playwright/test/cli.js install-deps chromium
+~~~
 
 ## 独立Docker
 

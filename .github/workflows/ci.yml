@@ -41,6 +41,8 @@ jobs:
       - run: pnpm --dir frontend install --frozen-lockfile
       - run: pnpm --dir frontend format:check
       - run: pnpm --dir frontend build
+      - run: pnpm --dir frontend exec playwright install --with-deps chromium --only-shell
+      - run: pnpm --dir frontend test:e2e
       - name: Verify migration commands
         env:
           SEEKBELL_DATA_DIR: ${{ runner.temp }}/seekbell-data

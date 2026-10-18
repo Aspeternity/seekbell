@@ -32,8 +32,8 @@ def test_upgrade_from_m1_preserves_rows_and_migration_is_idempotent(tmp_path):
                     """'{"kind":"mock"}','{"event_id":"synthetic-event"}','pending',0,1,0,0,1)"""
                 )
             )
-        migrate(engine)
-        migrate(engine)
+        migrate(engine, "0003_notifications")
+        migrate(engine, "0003_notifications")
         with Session(engine) as session:
             target = session.get(NotificationTarget, "synthetic-target")
             assert target.name == "old target" and target.config_ciphertext is None
@@ -56,14 +56,14 @@ def test_failed_notification_migration_rolls_back_tables_columns_and_revision(tm
 
         event.listen(engine, "before_cursor_execute", fail)
         with pytest.raises(RuntimeError, match="notification migration failure"):
-            migrate(engine)
+            migrate(engine, "0003_notifications")
         event.remove(engine, "before_cursor_execute", fail)
         assert schema_revision(engine) == "0002_core"
         assert "target_test_attempts" not in inspect(engine).get_table_names()
         assert "config_ciphertext" not in {
             col["name"] for col in inspect(engine).get_columns("notification_targets")
         }
-        migrate(engine)
+        migrate(engine, "0003_notifications")
         assert schema_revision(engine) == "0003_notifications"
     finally:
         engine.dispose()

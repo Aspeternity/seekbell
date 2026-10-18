@@ -15,3 +15,5 @@ frontend/dist/
 **/*.sqlite*
 **/*.key
 **/*.pem
+frontend/test-results/
+frontend/playwright-report/

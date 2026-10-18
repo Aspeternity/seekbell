@@ -2,7 +2,7 @@
 
 自托管的 NodeSeek 新帖监控与通知工具。范围与技术栈见 [SPEC](docs/SPEC.md) 和 [ARCHITECTURE](docs/ARCHITECTURE.md)。
 
-当前已实现 **M1核心闭环与M2四渠道通知**：RSS解析、规则、基线/身份账本、事务outbox、可恢复投递，以及Telegram Bot/Bark/SMTP/Webhook适配、加密目标配置和独立目标测试记录。M2通过模拟验证；管理员、Web管理和自动调度接入尚未实现，不能作为监控服务投入使用。真实通知与用户验收待Web完成后统一组织，当前证据以[PROJECT_STATE](docs/PROJECT_STATE.md)为准。
+当前已实现 **M1核心闭环与M2四渠道通知**：RSS解析、规则、基线/身份账本、事务outbox、可恢复投递，以及Telegram Bot/Bark/SMTP/Webhook适配、加密目标配置和独立目标测试记录。M2通过模拟验证；M3已接入唯一管理员初始化、登录/退出与持久会话，六页Web管理和自动调度仍待实现，当前不能作为监控服务投入使用。真实通知与用户验收待Web完成后统一组织，当前证据以[PROJECT_STATE](docs/PROJECT_STATE.md)为准。
 
 ## 环境
 
@@ -41,7 +41,7 @@ uv run --frozen python -m seekbell.services.demo
 
 演示创建临时SQLite，使用HTTPX MockTransport和模拟通知，退出后清理临时数据。依次验证首次成功基线、新帖、两任务合并、认领后租约过期、退避重试和重复摄取。预期为2次规则命中、1条合并投递意图、3次尝试（含过期租约）、1条成功回执、重复摄取新增0条投递；历史不确定性仍保留。不会读取正式数据库或通知凭据。
 
-目前只提供内部服务与离线入口；默认内置来源关闭、通知目标为空，页面只展示运行状态。
+核心服务仍由离线入口验证；默认内置来源关闭、通知目标为空，页面提供管理员初始化/登录及登录后的运行状态。
 
 ## M2通知故障矩阵
 
@@ -77,8 +77,24 @@ uv run --frozen python -m seekbell
 |`SEEKBELL_DATA_DIR`|`data`|SQLite 和进程锁目录；容器内为 `/data`|
 |`SEEKBELL_STATIC_DIR`|`frontend/dist`|构建后的前端目录|
 |`SEEKBELL_BUILD_REVISION`|`development`|显示的代码版本；镜像通过 `VCS_REF` 写入完整提交 SHA|
+|`SEEKBELL_TRUSTED_PROXIES`|`[]`|明确可信的反代IP/CIDR数组；仅这些连接可影响协议/客户端信息|
 
-只开放只读的 `/api/version`、`/health/live`、`/health/ready`。存活检查不依赖外部服务；就绪检查验证数据库和迁移。当前应用不自动启用采集/通知调度，也没有管理员初始化入口或初始化令牌。反代头默认不信任，HTTPS/认证将在后续阶段验证。
+只读的 `/api/version`、`/health/live`、`/health/ready` 保持公开；存活检查不依赖外部服务，就绪检查验证数据库和迁移。管理员入口为 `/api/auth/state`、`setup`、`login`、`logout`；先GET state取得CSRF，再用Cookie和 `X-CSRF-Token` 提交。创建唯一管理员后初始化关闭，没有初始化令牌。用户名1～64字符，密码15～128字符，支持空格和中文。页面不持久保存密码或会话令牌。
+
+认证会话最长7天、登录前会话30分钟，重启保持有效；登录轮换令牌，退出服务端撤销。创建/登录共用每分钟10次的持久预算，超限返回429及Retry-After。认证API不缓存，校验错误不回显凭据。当前仍不启动采集/通知调度。
+
+反代HTTPS时，设置 `SEEKBELL_TRUSTED_PROXIES` 为明确代理IP/CIDR的JSON数组，例如 `'["172.20.0.2"]'`（替换为实际地址）。默认 `[]`，不允许 `*` 或全网段。代理必须保留原始Host并覆盖X-Forwarded-Proto；应用只从可信连接读取协议和客户端转发信息，不读取X-Forwarded-Host。可信HTTPS请求设置Secure Cookie，直接HTTP可登录。保持Uvicorn的 `--no-proxy-headers`，由应用统一处理信任边界，避免两层解析。
+
+## M3认证自动验证
+
+~~~bash
+uv run --frozen pytest -q tests/test_authentication.py tests/test_baseline.py
+pnpm --dir frontend exec playwright install chromium --only-shell
+pnpm --dir frontend build
+pnpm --dir frontend test:e2e
+~~~
+
+首次安装Chromium系统依赖需在SeekBell-Dev内以root执行[依赖安装命令](docs/DEVELOPMENT_ENVIRONMENT.md#浏览器自动验证)；日常测试使用dev。浏览器测试自动启动127.0.0.1:18765的临时服务与数据库，拒绝复用现有服务；后端禁止外连，浏览器只允许该本地来源。验证桌面/手机宽度下初始化、刷新、退出、错误密码、重新登录、过期恢复及CSRF，不代表用户验收。截图/失败trace仅写入忽略的test-results，可能含测试会话，不上传为发布材料。
 
 ## 本地镜像
 
@@ -94,7 +110,7 @@ docker run --rm --name seekbell-dev -p 127.0.0.1:8000:8000 \
 
 镜像使用 UID/GID 10001，数据持久化在命名卷；绑定已有宿主目录时需预先配置正确所有权。只运行一个容器实例/一个 Uvicorn worker。Compose、备份封装、升级回退与实机部署在 M4；双架构和 PVE 验证尚未完成。
 
-`check_container.py`只使用已构建的本地镜像，创建禁用外网的临时容器和数据卷，检查API、构建资源、非root身份、进程锁、健康检查、重启持久化和镜像内离线闭环，结束后删除本次创建的临时资源，不触碰日常数据卷。
+`check_container.py`只使用已构建的本地镜像，创建禁用外网的临时容器和数据卷，检查API、构建资源、非root身份、进程锁、健康检查、账号/会话重启持久化和镜像内离线闭环，结束后删除本次创建的临时资源，不触碰日常数据卷。
 
 ## 开发与交接
 

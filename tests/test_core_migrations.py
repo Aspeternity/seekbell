@@ -1,7 +1,8 @@
 import pytest
+from alembic.script import ScriptDirectory
 from seekbell.config import Settings
 from seekbell.db.models import NotificationTarget, Source, SourceState
-from seekbell.db.runtime import create_database_engine, migrate, schema_revision
+from seekbell.db.runtime import create_database_engine, migrate, migration_config, schema_revision
 from sqlalchemy import event, inspect, text
 from sqlalchemy.orm import Session
 
@@ -40,6 +41,9 @@ def test_failed_core_schema_migration_rolls_back_ddl_and_revision(tmp_path):
         assert schema_revision(engine) == "0001_installation"
         assert set(inspect(engine).get_table_names()) == {"installation", "alembic_version"}
         migrate(engine)
-        assert schema_revision(engine) == "0003_notifications"
+        assert (
+            schema_revision(engine)
+            == ScriptDirectory.from_config(migration_config()).get_current_head()
+        )
     finally:
         engine.dispose()

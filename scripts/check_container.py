@@ -52,6 +52,55 @@ print(json.dumps({'version': info, 'uid': os.getuid(), 'assets': assets, 'marker
 """
 
 
+AUTH_CHECK = """
+import http.cookiejar
+import json
+import sys
+import urllib.error
+import urllib.request
+
+jar = http.cookiejar.MozillaCookieJar('/data/.synthetic-auth-cookie')
+if sys.argv[1] == 'restart':
+    jar.load(ignore_discard=True, ignore_expires=True)
+opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+base = 'http://127.0.0.1:8000'
+
+def call(path, payload=None, csrf=None):
+    headers = {'Content-Type': 'application/json'}
+    if csrf:
+        headers['X-CSRF-Token'] = csrf
+    request = urllib.request.Request(
+        base + path,
+        data=json.dumps(payload).encode() if payload is not None else None,
+        headers=headers,
+    )
+    try:
+        with opener.open(request, timeout=5) as response:
+            return response.status, json.loads(response.read())
+    except urllib.error.HTTPError as error:
+        return error.code, json.loads(error.read())
+
+credentials = {
+    'username': 'synthetic-container-admin', 'password': 'synthetic container passphrase'
+}
+status, state = call('/api/auth/state')
+assert status == 200
+if sys.argv[1] == 'setup':
+    assert not state['initialized'] and not state['authenticated']
+    status, state = call('/api/auth/setup', credentials, state['csrf_token'])
+    assert status == 201 and state['authenticated']
+    jar.save(ignore_discard=True, ignore_expires=True)
+else:
+    assert state['initialized'] and state['authenticated']
+    assert state['username'] == credentials['username']
+    status, _ = call('/api/auth/setup', credentials, state['csrf_token'])
+    assert status == 409
+    status, state = call('/api/auth/login', credentials, state['csrf_token'])
+    assert status == 200 and state['authenticated']
+print(json.dumps({'administrator_session': 'passed', 'mode': sys.argv[1]}))
+"""
+
+
 def docker(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["docker", *args], check=check, text=True, capture_output=True, timeout=30
@@ -97,10 +146,12 @@ def main() -> None:
         assert first["version"]["build_revision"] == args.revision
         locked = docker("exec", container, "python", "-m", "seekbell.db", "current", check=False)
         assert locked.returncode != 0 and "Another SeekBell process" in locked.stderr
+        docker("exec", container, "python", "-c", AUTH_CHECK, "setup")
         docker("restart", container)
         wait_ready(container)
         second = json.loads(docker("exec", container, "python", "-c", PROBE).stdout)
         assert first == second, "Installation or API changed across restart"
+        auth = json.loads(docker("exec", container, "python", "-c", AUTH_CHECK, "restart").stdout)
         demo = json.loads(
             docker("exec", container, "python", "-m", "seekbell.services.demo").stdout
         )
@@ -114,6 +165,7 @@ def main() -> None:
                     **second,
                     "healthcheck": "passed before restart",
                     "restart_persistence": "passed",
+                    "administrator_session_restart": auth["administrator_session"],
                     "instance_lock": "passed",
                     "network": "none",
                     "offline_core_demo": demo,

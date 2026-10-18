@@ -88,6 +88,18 @@ SMTP使用标准库smtplib在线程执行，默认隐式TLS，也可选STARTTLS�
 
 备份使用 SQLite 一致性备份机制；包含凭据时连同所需密钥安全封装并明确提示。普通配置导出默认不含凭据。恢复需要管理员重新验证，停止后台写入并先校验版本；迁移失败不得继续运行。
 
+## M3认证实现契约
+
+0004_authentication新增administrators、browser_sessions和auth_throttle。管理员固定id=1且有CHECK约束；在BEGIN IMMEDIATE中检查并创建，账号存在即关闭初始化，不维护可能失配的独立开关。密码使用Argon2id（19MiB、2轮、并行度1，随机盐）；哈希在线程池中执行，不占数据库写事务。用户名修剪首尾空白，密码不修剪/截断，默认15～128字符。
+
+会话为32随机字节的opaque令牌，数据库只存SHA-256摘要、管理员引用、到期时间和Secure绑定。匿名30分钟、认证7天绝对有效期，登录轮换并撤销旧会话，退出删除服务端记录；重启不丢会话。新建时清理到期记录，并将匿名/认证会话分别限制为128/32个。Cookie为HttpOnly/SameSite=Strict、Path=/、无Domain；HTTPS设置Secure，HTTPS会话拒绝HTTP回放。
+
+GET /api/auth/state返回会话派生的HMAC-CSRF值及认证状态；setup/login/logout与后续管理写操作要求X-CSRF-Token，另检查出现的Origin与Sec-Fetch-Site。无跨域CORS授权；错误不回显输入，API设置no-store。所有管理路由复用require_administrator依赖，当前除认证外尚未开放管理接口。初始化/登录共用持久全局预算10次/60秒（含成功），错误用户名也执行密码校验，不保留客户端IP或密码样本。
+
+Uvicorn入口不解析代理头；应用ProxyHeadersMiddleware只信任SEEKBELL_TRUSTED_PROXIES显式IP/CIDR，默认空，拒绝通配符/全网段。代理须保留Host并覆盖协议头，不信任Forwarded/X-Forwarded-Host。通过直接HTTP、真实ASGI HTTPS和模拟可信反代测试Cookie及CSRF；PVE真实反代验证仍待M5。
+
+选型依据：[OWASP密码存储](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)、[CSRF](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)、[会话](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)、[Uvicorn代理](https://www.uvicorn.org/deployment/)。
+
 ## 私有开发与实机验证（建议路线）
 
 已接入用户创建的私有 GitHub 仓库，实际地址和授权见 DECISIONS。私有 GHCR 镜像仍是建议路线，命名空间及发布权限尚未提供，不能假定公开或发布权限。

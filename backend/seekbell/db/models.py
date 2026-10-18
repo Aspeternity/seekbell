@@ -32,6 +32,34 @@ class Installation(Base):
     )
 
 
+class Administrator(Base):
+    __tablename__ = "administrators"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_administrator_singleton"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    username: Mapped[str] = mapped_column(String(64))
+    password_hash: Mapped[str] = mapped_column(Text)
+
+
+class BrowserSession(Base):
+    __tablename__ = "browser_sessions"
+
+    digest: Mapped[str] = mapped_column(String(64), primary_key=True)
+    administrator_id: Mapped[int | None] = mapped_column(ForeignKey("administrators.id"))
+    created_at: Mapped[float] = mapped_column(Float)
+    expires_at: Mapped[float] = mapped_column(Float)
+    secure: Mapped[bool] = mapped_column(Boolean)
+
+
+class AuthThrottle(Base):
+    __tablename__ = "auth_throttle"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_auth_throttle_singleton"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    window_started: Mapped[float] = mapped_column(Float)
+    attempts: Mapped[int] = mapped_column(Integer)
+
+
 class Website(Base):
     __tablename__ = "websites"
     id: Mapped[str] = mapped_column(String(80), primary_key=True)

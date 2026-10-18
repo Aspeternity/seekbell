@@ -97,3 +97,18 @@ footer {
     gap: 8px;
   }
 }
+
+.account {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  overflow-wrap: anywhere;
+}
+.error-note {
+  margin-bottom: 20px;
+}
+@media (max-width: 540px) {
+  .header {
+    flex-wrap: wrap;
+  }
+}
