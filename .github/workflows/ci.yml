@@ -13,7 +13,6 @@ jobs:
     timeout-minutes: 15
     env:
       UV_PYTHON_DOWNLOADS: never
-      SEEKBELL_DATA_DIR: ${{ runner.temp }}/seekbell-data
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -39,6 +38,8 @@ jobs:
       - run: pnpm --dir frontend format:check
       - run: pnpm --dir frontend build
       - name: Verify migration commands
+        env:
+          SEEKBELL_DATA_DIR: ${{ runner.temp }}/seekbell-data
         run: |
           uv run --frozen python -m seekbell.db upgrade
           uv run --frozen python -m seekbell.db current

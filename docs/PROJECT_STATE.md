@@ -6,7 +6,7 @@
 
 正式开发环境改为`SeekBell-Dev`（WSL2 Ubuntu24.04.5/amd64），目录`/home/dev/projects/seekbell`。虚拟磁盘位于`D:\WSL\SeekBell-Dev`；默认用户dev。原`D:\Projects\SeekBell`保留交接副本，后续不在原Ubuntu构建。进入方式及配置见[开发环境](DEVELOPMENT_ENVIRONMENT.md)。
 
-M0实现基准`1ddea580bbfc314a9e9df97bd2e95e375a2d0202`；交接基准`4f0d8d5`，分支main；现已连接私有远程`https://github.com/Aspeternity/seekbell.git`（origin），首次推送准备中。源码/Git历史已复制，依赖在新环境按锁文件重建。本轮未修改业务代码；待提交仅README、DECISIONS、开发环境文档和本状态，用于远程仓库及授权记录。正式开发与Git操作均在SeekBell-Dev，D盘交接副本不再同步新提交。
+M0实现基准`1ddea580bbfc314a9e9df97bd2e95e375a2d0202`；交接基准`4f0d8d5`，分支main；现已连接私有远程`https://github.com/Aspeternity/seekbell.git`（origin），现有main已首次推送至6729d0f82e7c3ab070bee6efc11750c1c94f2787。源码/Git历史已复制，依赖在新环境按锁文件重建。本轮未修改业务代码；仓库连接文档已提交；当前未提交为本状态与.github/workflows/ci.yml，用于首次CI失败记录及runner上下文位置修复。正式开发与Git操作均在SeekBell-Dev，D盘交接副本不再同步新提交。
 
 ## 实现与自动证据
 
@@ -22,7 +22,7 @@ M0：FastAPI/Vue骨架、SQLite迁移、版本/健康API、数据目录锁、CI�
 
 ## 下一步与读取
 
-本轮先上传现有main完整历史至用户创建的私有GitHub仓库并验证现有CI；不强推、不发布镜像、不推进M1。已确认远程为空，当前账号有push权限，推送前检查54个已跟踪文件及历史对象，无运行数据或已检测凭据签名。
+现有main完整历史已上传。首轮CI 39138225336（6729d0f）因job.env不允许runner上下文而失败；已将runner.temp移至迁移步骤的env，等待修复提交的远程验证；不强推、不发布镜像、不推进M1。已确认远程为空，当前账号有push权限，推送前检查54个已跟踪文件及历史对象，无运行数据或已检测凭据签名。
 
 本轮只需环境文档、M0检查命令和受影响配置。同会话已读规格复用；未来获准进入M1时读SPEC第3～5节、ARCHITECTURE模块契约/一致性/恢复、RESEARCH的RSS字段/身份结论、ACCEPTANCE R01～R05/F01～F05/D01/D04/P01及实际影响代码。
 
