@@ -1,5 +1,9 @@
 # SeekBell — Codex 工作规则
 
+## 已确认的本机开发环境
+
+本机开发使用用户确认的新WSL2发行版`SeekBell-Dev`，正式工作目录为`/home/dev/projects/seekbell`。先核对`WSL_DISTRO_NAME`和实际目录；当前聊天若仍连接原Ubuntu，须显式通过`wsl.exe -d SeekBell-Dev`执行开发命令，不能在原Ubuntu继续安装工具、构建或运行SeekBell。环境配置、Docker上下文和进入命令见`docs/DEVELOPMENT_ENVIRONMENT.md`。原`D:\Projects\SeekBell`保留为交接副本；全局WSL设置、原发行版工具/容器的变更和清理需另获授权。此限制不影响既定CI或另行授权的部署环境。
+
 ## 恢复入口
 
 每次新对话先读本文件和 docs/PROJECT_STATE.md，核对工作目录、系统、分支、HEAD、工作区。若平台已加载本文件且未变化，不重复读取。首次初始化按状态中的M0阅读清单了解基础规格；以后只读“本任务需要读取”的相关章节及影响范围内代码。实际状态与记录不一致先核实，不覆盖用户工作。

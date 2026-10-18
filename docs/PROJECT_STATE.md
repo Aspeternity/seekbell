@@ -1,39 +1,31 @@
 # 当前状态
 
-更新时间：2026-10-18（Asia/Shanghai）。阶段：M0工程基线完成且本地验证通过；下一阶段M1，尚未开始。
+更新时间：2026-10-18（Asia/Shanghai）。阶段：M0实现保留待审；用户确认的新WSL开发环境已配置并验证，M1未开始。
 
-## 代码与环境
+## 代码与工作目录
 
-目录`/mnt/d/Projects/SeekBell`；WSL2/Linux x86_64；分支`main`，无远程。原规格保存于`b9df967`；M0实现提交`1ddea580bbfc314a9e9df97bd2e95e375a2d0202`。此后仅提交文档证据，不改变代码基准；无在途实现或需保留的未提交用户改动。
+正式开发环境改为`SeekBell-Dev`（WSL2 Ubuntu24.04.5/amd64），目录`/home/dev/projects/seekbell`。虚拟磁盘位于`D:\WSL\SeekBell-Dev`；默认用户dev。原`D:\Projects\SeekBell`保留交接副本，后续不在原Ubuntu构建。进入方式及配置见[开发环境](DEVELOPMENT_ENVIRONMENT.md)。
 
-Python 3.12.3、Node 24.22.0、uv 0.13.1、pnpm 10.34.7、Docker 29.5.2。Linux工具位于用户目录；新shell需设置PATH，命令见[阶段记录](history/2026-10-18-M0.md)。忽略的依赖/构建产物不入Git。
+M0实现基准`1ddea580bbfc314a9e9df97bd2e95e375a2d0202`；交接基准`4f0d8d5`，分支main，无远程。源码/Git历史已复制，依赖在新环境按锁文件重建。本轮仅提交AGENTS、README、状态、新环境文档和迁移记录，记录环境边界与证据；无业务代码变更，文档同步后两处代码一致。
 
-## 实现与证据
+## 实现与自动证据
 
-已实现：模块骨架、SQLite/Alembic初始迁移、单实例锁、版本/存活/就绪API、Vue/Naive UI版本页、锁文件、基础CI和非root单容器构建。无管理员/采集/通知业务，不代表M1～M4完成。
+M0：FastAPI/Vue骨架、SQLite迁移、版本/健康API、数据目录锁、CI与非root镜像，业务采集/通知/管理员尚未实现。原证据见[阶段记录](history/2026-10-18-M0.md)。
 
-自动验证（实现`1ddea58`/WSL2 amd64）：11项pytest、Ruff、锁校验、wheel、前端类型/格式/构建、迁移维护命令通过。本地CLI约5.3秒启动，API/编译首页与SIGTERM完整关闭通过。禁用外网的临时Docker容器通过API/编译资源/UID10001/进程锁/healthcheck/同卷重启检查，临时容器与卷已清理。命令、范围、上游弃用警告见阶段记录；原RSS研究证据仍见RESEARCH。
+新环境（同一M0代码）：Python3.12.3、uv0.13.1、Node24.22.0、pnpm10.34.7；11项pytest、Ruff、锁校验、wheel、前端类型/格式/构建、迁移upgrade/current/check通过。Docker29.9.1 Rootless已独立启动，新发行版定向重启后可恢复；amd64镜像构建与离线容器API/资源/UID/锁/healthcheck/重启持久化均通过，临时容器和卷已清理。
 
-## 部署与待验证
+## 环境与部署
 
-本地amd64镜像`seekbell:m0-local`已固定上述完整SHA并复核通过；image ID：`sha256:716a7c0cbcf95084f931f979c3726e82ddb15b29e7e765df907a0629fb84f265`，非远程manifest digest。迁移`0001_installation`。PVE/SSH未提供，未部署；临时容器和卷已清理。
+新Docker上下文rootless，socket`/home/dev/.local/run/docker.sock`，数据`/home/dev/.local/share/docker`，服务以dev身份运行。系统级Docker服务已禁用。WSLg覆盖运行目录导致常规用户服务不可用，已改独立运行目录和专用服务；当前无容器级cgroup限额，未改全局资源设置。
 
-浏览器/手机体验、远程CI、arm64、真实RSS/通知、Compose/备份恢复、用户验收均未执行。RSS频率无官方限频数字，10秒仍是候选默认，不能保证摘要和窗口完整覆盖。
+新镜像`seekbell:m0-local`的本地inspect标识为`sha256:354cae141dd1ed0a2ba9df5001dc5eab70c8436fce52ac65cc5d0071651e3d55`，版本为上述完整M0代码SHA。详见[迁移记录](history/2026-10-18-开发环境迁移.md)。原Ubuntu工具/镜像/缓存保留，未授权清理。无PVE/SSH部署、远程发布或manifest digest。浏览器/手机、arm64、真实RSS/通知、远程CI、备份恢复与用户验收均未完成。
 
-## 已排除与下一步
+## 下一步与读取
 
-外部迁移资源映射导致editable安装失败，已移除；迁移随Python包安装，源码/容器均通过，不保留回退补丁。未扩大范围，不组织多代理。
+下一步请用户在新发行版目录打开项目，审阅环境与M0；不自动推进M1。环境无阻塞；原Ubuntu后续只用于其既有项目。
 
-M1先做NodeSeek合成样本解析/首次成功基线/稳定身份与纯三值规则，再接持久化outbox及模拟通知；没有阻塞本地M1的外部依赖。
+本轮只需环境文档、M0检查命令和受影响配置。同会话已读规格复用；未来获准进入M1时读SPEC第3～5节、ARCHITECTURE模块契约/一致性/恢复、RESEARCH的RSS字段/身份结论、ACCEPTANCE R01～R05/F01～F05/D01/D04/P01及实际影响代码。
 
-## 本任务需要读取
+## 授权与限制
 
-M0已读内容同会话复用。进入M1时按需读取：
-- SPEC第3～5节；ARCHITECTURE模块契约、数据一致性、调度恢复。
-- RESEARCH中NodeSeek RSS字段/身份/原始样本结论。
-- ACCEPTANCE：R01～R05、F01～F05、D01/D04/P01；ROADMAP的M1行。
-- 当前`backend/seekbell/db`、`migrations`、`main.py`及`tests/test_baseline.py`，扩展到实际受影响模块。
-
-## 授权
-
-已授权本地开发、Git初始化和模拟验证。未提供/授权远程创建推送、GHCR发布、SSH部署、真实通知目标或许可证；不阻塞M1。具体远程动作准备可审阅后再询问。用户验收尚无，不能以自动检查替代。
+用户指出原开发跳过环境确认，要求先确定环境；随后明确同意新建独立WSL及`D:\WSL\SeekBell-Dev`位置。授权新环境工具、独立Docker、源码复制与模拟验证。未授权原Ubuntu清理、全局WSL调整、远程推送/发布/部署或真实发送；M0尚无用户验收。不组织多代理，不扩大首版范围。
