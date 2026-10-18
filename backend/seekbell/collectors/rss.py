@@ -1,10 +1,8 @@
 import asyncio
 import calendar
 import io
-import math
 import time
 from datetime import UTC, datetime
-from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 from xml.etree.ElementTree import ParseError
 
@@ -14,6 +12,7 @@ from defusedxml import ElementTree
 from defusedxml.common import DefusedXmlException
 
 from seekbell.domain.errors import SourceFailure
+from seekbell.domain.http import retry_after_seconds
 from seekbell.domain.posts import Diagnostic, ParsedFeed, SourceEntry
 
 MAX_RESPONSE_BYTES = 1024 * 1024
@@ -111,26 +110,6 @@ def parse_rss(data: bytes, *, max_bytes: int = MAX_RESPONSE_BYTES) -> ParsedFeed
             )
         )
     return ParsedFeed(tuple(entries), tuple(diagnostics))
-
-
-def retry_after_seconds(value: str | None, now: float) -> float | None:
-    if not value:
-        return None
-    try:
-        result = float(value)
-    except ValueError:
-        try:
-            date = parsedate_to_datetime(value)
-            result = (
-                date.replace(tzinfo=UTC).timestamp() - now
-                if date.tzinfo is None
-                else (date.timestamp() - now)
-            )
-        except (TypeError, ValueError, OverflowError):
-            return None
-    if not math.isfinite(result):
-        return None
-    return max(0, result)
 
 
 class RssCollector:

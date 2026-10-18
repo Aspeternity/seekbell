@@ -5,6 +5,7 @@ description = "Self-hosted NodeSeek RSS monitoring and notifications"
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "alembic>=1.20,<2",
+  "cryptography>=46,<47",
   "defusedxml>=0.7.1,<0.8",
   "fastapi>=0.143.5,<0.144",
   "feedparser>=6.0.14,<7",

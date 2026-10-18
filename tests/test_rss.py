@@ -3,8 +3,9 @@ from datetime import UTC, datetime
 
 import httpx
 import pytest
-from seekbell.collectors.rss import RssCollector, parse_rss, retry_after_seconds
+from seekbell.collectors.rss import RssCollector, parse_rss
 from seekbell.domain.errors import SourceFailure
+from seekbell.domain.http import retry_after_seconds
 from seekbell.sites.nodeseek import NODESEEK_RSS_URL, NodeSeekAdapter
 
 from tests.rss_samples import Chunks, rss

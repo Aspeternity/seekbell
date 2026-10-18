@@ -87,6 +87,7 @@ class NotificationTarget(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     name: Mapped[str] = mapped_column(String(200))
     kind: Mapped[str] = mapped_column(String(32))
+    config_ciphertext: Mapped[str | None] = mapped_column(Text)
     revision: Mapped[int] = mapped_column(Integer, default=1)
     enabled: Mapped[bool] = mapped_column(Boolean, default=False)
 
@@ -255,3 +256,14 @@ class DeliveredPost(Base):
     target_id: Mapped[str] = mapped_column(ForeignKey("notification_targets.id"), primary_key=True)
     event_id: Mapped[str] = mapped_column(String(36))
     delivered_at: Mapped[float] = mapped_column(Float)
+
+
+class TargetTestAttempt(Base):
+    __tablename__ = "target_test_attempts"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    target_id: Mapped[str] = mapped_column(ForeignKey("notification_targets.id"), index=True)
+    target_snapshot: Mapped[dict] = mapped_column(JSON)
+    started_at: Mapped[float] = mapped_column(Float)
+    finished_at: Mapped[float | None] = mapped_column(Float)
+    result: Mapped[str] = mapped_column(String(32))
+    error_code: Mapped[str | None] = mapped_column(String(80))

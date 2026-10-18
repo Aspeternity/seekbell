@@ -2,7 +2,7 @@
 
 自托管的 NodeSeek 新帖监控与通知工具。范围与技术栈见 [SPEC](docs/SPEC.md) 和 [ARCHITECTURE](docs/ARCHITECTURE.md)。
 
-当前为 **M1 核心闭环开发中**：可运行的 FastAPI / Vue 3 / Naive UI 骨架、SQLite 迁移、版本页和基础 CI。已实现RSS安全解析、NodeSeek规范化、纯三值规则、基线/身份账本、事务outbox、租约恢复与模拟通知闭环。管理员、管理页面和真实通知尚未实现，不能作为监控服务投入使用。当前进度和证据以 [PROJECT_STATE](docs/PROJECT_STATE.md) 为准。
+当前已实现 **M1核心闭环与M2四渠道通知**：RSS解析、规则、基线/身份账本、事务outbox、可恢复投递，以及Telegram Bot/Bark/SMTP/Webhook适配、加密目标配置和独立目标测试记录。M2通过模拟验证；管理员、Web管理和自动调度接入尚未实现，不能作为监控服务投入使用。真实通知与用户验收待Web完成后统一组织，当前证据以[PROJECT_STATE](docs/PROJECT_STATE.md)为准。
 
 ## 环境
 
@@ -41,7 +41,21 @@ uv run --frozen python -m seekbell.services.demo
 
 演示创建临时SQLite，使用HTTPX MockTransport和模拟通知，退出后清理临时数据。依次验证首次成功基线、新帖、两任务合并、认领后租约过期、退避重试和重复摄取。预期为2次规则命中、1条合并投递意图、3次尝试（含过期租约）、1条成功回执、重复摄取新增0条投递；历史不确定性仍保留。不会读取正式数据库或通知凭据。
 
-M1只有内部服务与离线入口；默认内置来源关闭、通知目标为空。管理页面/认证与四种真实渠道将在后续阶段接入，当前页面只展示运行状态。
+目前只提供内部服务与离线入口；默认内置来源关闭、通知目标为空，页面只展示运行状态。
+
+## M2通知故障矩阵
+
+以下检查使用临时SQLite、HTTPX MockTransport和模拟SMTP，测试进程禁止外网，不会向真实目标发送：
+
+~~~bash
+uv run --frozen pytest -q tests/test_notification_config.py tests/test_notification_migration.py tests/test_notifier_http.py tests/test_notifier_smtp.py tests/test_notification_integration.py
+~~~
+
+渠道配置通过Pydantic schema校验；Telegram/Bark检查业务结果，Webhook默认要求JSON的`ok: true`，也可显式选择HTTP 2xx接受模式。HTTP限流遵循Retry-After；SMTP支持TLS/STARTTLS，明文模式必须显式允许，成功仅代表邮件服务器接受。结果未知可能产生重复，Webhook重试保留相同事件ID和Idempotency-Key。
+
+内部`Configuration(engine, vault)`负责创建/修改目标，`get_target`返回普通配置和已配置敏感字段名，不返回秘密；更新时省略字段即保留旧值。`NotifierRegistry`供DeliveryWorker使用，`TargetTesting`显式测试单目标并单独记录，不改变自动去重；这些服务均未暴露未认证API。
+
+Fernet密钥位于数据目录的`credentials.key`（0600），目标完整配置和outbox/测试快照均加密，发送时才解密。显式首次创建不会覆盖旧密钥，正常加载缺钥/坏钥直接报错，不自动替换。恢复加密配置必须同时恢复原密钥。密钥初始化及渠道服务将在M3认证与应用生命周期中接入，当前开发数据库未写入真实凭据。
 
 ## 本地运行
 
@@ -78,7 +92,7 @@ docker run --rm --name seekbell-dev -p 127.0.0.1:8000:8000 \
   -v seekbell-dev-data:/data seekbell:local
 ```
 
-镜像使用 UID/GID 10001，数据持久化在命名卷；绑定已有宿主目录时需预先配置正确所有权。只运行一个容器实例/一个 Uvicorn worker。Compose、备份、凭据加密、升级回退与实机部署在 M4；双架构和 PVE 验证尚未完成。
+镜像使用 UID/GID 10001，数据持久化在命名卷；绑定已有宿主目录时需预先配置正确所有权。只运行一个容器实例/一个 Uvicorn worker。Compose、备份封装、升级回退与实机部署在 M4；双架构和 PVE 验证尚未完成。
 
 `check_container.py`只使用已构建的本地镜像，创建禁用外网的临时容器和数据卷，检查API、构建资源、非root身份、进程锁、健康检查、重启持久化和镜像内离线闭环，结束后删除本次创建的临时资源，不触碰日常数据卷。
 

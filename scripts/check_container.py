@@ -35,6 +35,19 @@ with sqlite3.connect('/data/seekbell.sqlite3') as connection:
     marker = connection.execute('SELECT * FROM installation').fetchall()
     assert connection.execute('SELECT enabled FROM sources').fetchall() == [(0,)]
     assert connection.execute('SELECT COUNT(*) FROM notification_targets').fetchone() == (0,)
+# Verify the installed wheel includes channel schemas and working encryption.
+import tempfile
+from pathlib import Path
+from seekbell.notifiers.configs import channel_schemas
+from seekbell.notifiers.credentials import CredentialVault
+from seekbell.notifiers.registry import NotifierRegistry
+assert set(channel_schemas()) == {'telegram', 'bark', 'smtp', 'webhook'}
+with tempfile.TemporaryDirectory(prefix='seekbell-crypto-check-') as directory:
+    keyring = CredentialVault.open(Path(directory), create=True)
+    sealed = keyring.seal('synthetic', 'bark', {'device_key': 'synthetic-secret'})
+    assert 'synthetic-secret' not in sealed
+    restored = CredentialVault.open(Path(directory))
+    assert restored.unseal('synthetic', 'bark', sealed) == {'device_key': 'synthetic-secret'}
 print(json.dumps({'version': info, 'uid': os.getuid(), 'assets': assets, 'marker': marker}))
 """
 

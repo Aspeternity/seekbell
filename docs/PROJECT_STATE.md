@@ -1,31 +1,25 @@
 # 当前状态
 
-更新时间：2026-10-18 23:49（Asia/Shanghai）。阶段：M1已实现并通过自动验证；用户已授权继续M2，验收延后至Web管理完成后统一进行。
+更新时间：2026-10-19 00:05（Asia/Shanghai）。M1已实现；M2四渠道实现与模拟验证完成，正在提交/镜像/CI检查。用户验收延后至Web完成。
 
 ## 环境与代码
 
-仅在独立WSL2发行版SeekBell-Dev开发：Ubuntu24.04.5/amd64、用户dev、/home/dev/projects/seekbell，磁盘D:\WSL\SeekBell-Dev。原Ubuntu及D盘交接副本不继续开发、不清理。[环境入口及限制](DEVELOPMENT_ENVIRONMENT.md)。
+仅在WSL2 SeekBell-Dev的/home/dev/projects/seekbell开发，Ubuntu24.04.5/amd64、dev用户。当前聊天仍从原Ubuntu派发，全部开发命令通过wsl.exe -d SeekBell-Dev；D盘交接副本及原环境不改。[环境入口](DEVELOPMENT_ENVIRONMENT.md)。
 
-私有[origin](https://github.com/Aspeternity/seekbell)的main已推送实现2bda6128dc1fdf9120d24dd642f53d3d9513807f；前置解析/规则dfd7435、隐私431cc6d。恢复核对HEAD为6b568eeb70ef7967fa54ba3a2daae251d2fc7daf，main工作区干净；本次交接仅更新状态与决策，不改变实现基准。M0旧证据见[GitHub接入](history/2026-10-18-GitHub接入.md)。
+私有origin为Aspeternity/seekbell，main。恢复HEAD d9e5e9fc5b47cb78853b6977dcb4b268204114fd（授权交接文档），工作区原本干净，M1实现基准2bda612。当前M2未提交：notifiers/、services/configuration.py及target_testing.py、db/models.py、0003_notifications迁移、domain/http.py及RSS复用、依赖锁、相关测试、容器检查及README/架构/状态，均为本阶段改动。
 
 ## 实现与证据
 
-M1实现安全RSS解析/NodeSeek归一化、纯三值规则、首次成功基线、永久身份账本、版本快照、事务outbox、按目标合并、租约恢复/有限重试/不确定结果和暂停语义。默认来源关闭、目标为空；内部服务和离线CLI可运行，尚未自动接入应用生命周期，无未认证管理接口。
+M2新增TG Bot/Bark/SMTP/Webhook、配置schema与敏感字段省略、Fernet加密目标/快照、编辑/启停/重复提示、独立目标测试记录。业务响应/限流/永久错误/未知分开；复用M1合并与有限重试，Webhook事件ID稳定。SMTP只承诺服务器接受。默认来源关闭、目标为空；尚未接入应用调度及认证API。
 
-本地Python3.12.3：95项pytest通过（7.56秒）；Ruff/格式、锁校验、wheel、前端格式/类型/构建通过。离线演示2次命中合并1意图，含过期租约共3次尝试、1回执，重复摄取0新增，保留不确定标记。覆盖强制进程退出、回滚、并发、重启、迟到响应、去重与迁移故障。
+本机Python3.12.3完整pytest223项通过（9.70秒）；随后新增重启解密，针对性40项通过。Ruff/格式、锁、wheel、离线演示通过。故障矩阵含两个任务四目标合并、只重试失败目标、未知持久化、密文/日志/迁移故障，全部模拟且禁外网。详细证据与可运行命令见[M2记录](history/2026-10-19-M2通知渠道.md)及README。[M1历史](history/2026-10-18-M1核心闭环.md)保留原CI和镜像证据，不冒用作M2镜像结果。
 
-Rootless Docker29.9.1/amd64的禁外网临时容器检查通过：UID10001、0002迁移、来源默认关闭、健康/进程锁/重启持久化与镜像内演示。应用SHA同实现；本地inspect ID为sha256:952827bef637be88d43f9c3b61dbb6d515755d05cf4a0209accbaddc33ede1ae，未发布。映射与命令见[M1记录](history/2026-10-18-M1核心闭环.md)。
+## 下一步与限制
 
-## 限制与下一步
+完成noreply隐私检查、提交私有main、检查新镜像及CI后记录精确SHA/标识。随后M3：管理员初始化/认证、六页管理、生命周期与手动重发D07。真实RSS/四渠道/PVE/arm64/完整备份恢复/用户验收未做，真实凭据缺失不阻塞模拟开发。FastAPI客户端一条上游弃用提示仍在；Rootless Docker无cgroup资源限额。
 
-真实RSS/四渠道、管理员/管理页面、PVE部署、arm64、备份恢复、手机及用户验收未做。测试均为合成样本/模拟服务。FastAPI测试客户端有一条上游弃用提示。Rootless Docker无容器cgroup资源限额，WSL共享宿主资源；未改全局配置或原Ubuntu工具。
+## 读取清单与授权
 
-[实现提交CI](https://github.com/Aspeternity/seekbell/actions/runs/39141695500)全通过：Ubuntu24.04/amd64，95项测试7.17秒，含邮箱历史检查、演示、迁移、前端、镜像和禁外网验证；CI临时镜像标识见M1记录，未发布。M2已获用户明确授权：开发TG Bot/Bark/SMTP/Webhook、目标配置和模拟故障矩阵。刚开始恢复核对即按用户要求交接，M2规格清单尚未读取、未修改M2代码。无本地开发阻塞；缺少真实凭据不阻塞模拟验证，真实发送须另获授权。用户选择等Web管理开发完成后一起验收，M1/M2均不能提前标为用户验收通过。
+M2已读SPEC通知/目标、ARCHITECTURE Notifier/凭据及ACCEPTANCE D02/D03/D05/D06，相关代码和测试无需无变化重读。继续M3前读取SPEC第2/6节、ARCHITECTURE认证/生命周期、ACCEPTANCE A01/A02/F05/D07及main/config/api/frontend结构，按需补上下文。
 
-## 本任务需要读取
-
-M1已读SPEC第3～5节、ARCHITECTURE模块/一致性/恢复、RESEARCH RSS结论、ACCEPTANCE相关矩阵。新对话先通过wsl.exe -d SeekBell-Dev读取正式目录的AGENTS.md和本状态，核对环境/Git；不要按原D盘交接副本恢复。随后读SPEC通知/目标语义、ARCHITECTURE Notifier/凭据、ACCEPTANCE D02/D03/D05/D06及目标/队列代码，开始M2；不全量重读或重跑未受影响测试。
-
-## 授权
-
-用户已授权独立WSL/D盘位置、私有GitHub接入、继续M2本地开发与私有仓库推送，并将用户验收延后至Web完成，要求不暴露真实邮箱。历史与新身份均为noreply，本地钩子/CI检查历史内容与身份，不打印被拒地址。未授权原环境清理、全局WSL调整、GHCR发布、部署或真实发送；不扩大范围、不组织多代理。
+授权沿用独立WSL、noreply身份、M2本地开发及私有仓库推送；用户验收等Web完成后一起进行。尚无GHCR发布、部署、真实发送、原环境清理或全局WSL调整授权；不扩大范围、不组织多代理。无开发阻塞。

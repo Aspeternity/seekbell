@@ -1,6 +1,7 @@
 from uuid import uuid4
 
 from sqlalchemy import Engine, select
+from sqlalchemy.orm import Session
 
 from seekbell.db.models import (
     NotificationTarget,
@@ -15,6 +16,8 @@ from seekbell.db.models import (
 )
 from seekbell.db.transactions import write_session
 from seekbell.domain.rules import Rule
+from seekbell.notifiers.configs import public_config, validate_config
+from seekbell.notifiers.credentials import CredentialVault
 from seekbell.sites.nodeseek import BUILTIN_ADAPTERS
 
 
@@ -23,18 +26,19 @@ def identifier() -> str:
 
 
 def target_snapshot(target: NotificationTarget) -> dict:
-    # M1 has no credential/config column. Real encrypted channel configs belong to M2.
     return {
         "id": target.id,
         "name": target.name,
         "kind": target.kind,
         "revision": target.revision,
+        **({"config_ciphertext": target.config_ciphertext} if target.config_ciphertext else {}),
     }
 
 
 class Configuration:
-    def __init__(self, engine: Engine):
+    def __init__(self, engine: Engine, vault: CredentialVault | None = None):
         self.engine = engine
+        self.vault = vault
 
     @staticmethod
     def _name(name: str) -> str:
@@ -52,10 +56,22 @@ class Configuration:
             raise ValueError("Unknown notification target")
         return target_ids
 
-    def create_target(self, name: str, *, kind: str = "mock", enabled: bool = True) -> str:
-        if kind != "mock":
-            raise ValueError("Only explicitly injected mock transport is implemented in M1")
+    def _vault(self) -> CredentialVault:
+        if self.vault is None:
+            raise ValueError("Credential vault required for configured targets")
+        return self.vault
+
+    def create_target(
+        self, name: str, *, kind: str = "mock", enabled: bool = True, config: dict | None = None
+    ) -> str:
         key = identifier()
+        ciphertext = None
+        if kind == "mock":
+            if config:
+                raise ValueError("Mock targets cannot store configuration")
+        else:
+            values = validate_config(kind, config or {})
+            ciphertext = self._vault().seal(key, kind, values)
         with write_session(self.engine) as session:
             session.add(
                 NotificationTarget(
@@ -64,9 +80,69 @@ class Configuration:
                     kind=kind,
                     revision=1,
                     enabled=enabled,
+                    config_ciphertext=ciphertext,
                 )
             )
         return key
+
+    def update_target(self, key: str, *, name: str, config: dict) -> int:
+        with write_session(self.engine) as session:
+            target = session.get(NotificationTarget, key)
+            if target is None or target.kind == "mock":
+                raise ValueError("Unknown configured target")
+            vault = self._vault()
+            current = vault.unseal(key, target.kind, target.config_ciphertext)
+            values = validate_config(target.kind, {**current, **config})
+            target.config_ciphertext = vault.seal(key, target.kind, values)
+            target.name = self._name(name)
+            target.revision += 1
+            # Already queued notifications retain their original encrypted snapshot.
+            return target.revision
+
+    def get_target(self, key: str) -> dict:
+        """Safe presentation contract: secret values are never returned."""
+        with Session(self.engine) as session:
+            target = session.get(NotificationTarget, key)
+            if target is None:
+                raise ValueError("Unknown target")
+            config, configured = {}, []
+            if target.kind != "mock":
+                values = self._vault().unseal(key, target.kind, target.config_ciphertext)
+                config, configured = public_config(target.kind, values)
+            return {
+                "id": target.id,
+                "kind": target.kind,
+                "name": target.name,
+                "revision": target.revision,
+                "enabled": target.enabled,
+                "config": config,
+                "configured_secrets": configured,
+            }
+
+    def duplicate_targets(self, key: str) -> list[str]:
+        """Warn only for exactly recognizable endpoints; never merge identities."""
+        fields = {
+            "telegram": ("base_url", "bot_token", "chat_id", "message_thread_id"),
+            "bark": ("base_url", "device_key"),
+            "smtp": ("host", "port", "security", "username", "from_address", "to_address"),
+            "webhook": ("url", "headers"),
+        }
+        with Session(self.engine) as session:
+            target = session.get(NotificationTarget, key)
+            if target is None or target.kind not in fields:
+                return []
+            vault = self._vault()
+            original = vault.unseal(key, target.kind, target.config_ciphertext)
+            duplicates = []
+            for other in session.scalars(
+                select(NotificationTarget).where(
+                    NotificationTarget.kind == target.kind, NotificationTarget.id != key
+                )
+            ):
+                values = vault.unseal(other.id, other.kind, other.config_ciphertext)
+                if all(values[field] == original[field] for field in fields[target.kind]):
+                    duplicates.append(other.id)
+            return sorted(duplicates)
 
     def create_task(
         self,
