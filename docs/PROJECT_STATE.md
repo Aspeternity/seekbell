@@ -1,6 +1,6 @@
 # 当前状态
 
-更新时间：2026-10-18（Asia/Shanghai）。阶段：M0实现保留待审；用户确认的新WSL开发环境已配置并验证，M1未开始。
+更新时间：2026-10-18（Asia/Shanghai）。阶段：M0实现保留待审；新WSL开发环境已配置，冷启动和容器复核通过；M1未开始。
 
 ## 代码与工作目录
 
@@ -16,7 +16,7 @@ M0：FastAPI/Vue骨架、SQLite迁移、版本/健康API、数据目录锁、CI�
 
 ## 环境与部署
 
-新Docker上下文rootless，socket`/home/dev/.local/run/docker.sock`，数据`/home/dev/.local/share/docker`，服务以dev身份运行。系统级Docker服务已禁用。WSLg覆盖运行目录导致常规用户服务不可用，已改独立运行目录和专用服务；当前无容器级cgroup限额，未改全局资源设置。
+新Docker上下文rootless，数据`/home/dev/.local/share/docker`，服务以dev身份运行。系统级Docker服务已禁用。持久化运行目录曾因残留PID阻止冷启动，现由systemd RuntimeDirectory管理`/run/seekbell-docker`及socket；修复后新发行版冷启动和离线容器复核通过，旧运行目录已删除，不保留回退补丁。当前无容器级cgroup限额，未改全局资源设置。
 
 新镜像`seekbell:m0-local`的本地inspect标识为`sha256:354cae141dd1ed0a2ba9df5001dc5eab70c8436fce52ac65cc5d0071651e3d55`，版本为上述完整M0代码SHA。详见[迁移记录](history/2026-10-18-开发环境迁移.md)。原Ubuntu工具/镜像/缓存保留，未授权清理。无PVE/SSH部署、远程发布或manifest digest。浏览器/手机、arm64、真实RSS/通知、远程CI、备份恢复与用户验收均未完成。
 

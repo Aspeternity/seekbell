@@ -34,11 +34,11 @@ dev没有设置密码或免密sudo。需要维护新发行版系统配置时，W
 
 Docker Engine 29.9.1（官方Ubuntu仓库）、Buildx 0.38.0、Compose 5.6.0。使用普通用户dev的Rootless模式：
 
-- 上下文：`rootless`；socket：`unix:///home/dev/.local/run/docker.sock`。
+- 上下文：`rootless`；socket：`unix:///run/seekbell-docker/docker.sock`。
 - 镜像/卷数据：`/home/dev/.local/share/docker`，属于新发行版。
 - 服务：新发行版的`/etc/systemd/system/seekbell-docker.service`，启用自启动，`User=dev`，执行`dockerd-rootless.sh`。
 - 新发行版的系统级`docker.service`、`docker.socket`、`containerd.service`已mask，防止意外启动第二套rootful服务。
-- WSLg会覆盖`/run/user/1000`，使首次常规Rootless用户服务看不到D-Bus。实际采用systemd系统单元以dev身份运行，将`XDG_RUNTIME_DIR`固定到用户私有目录；不修改全局WSLg/WSL配置。旧的用户服务自动安装路线未继续使用。
+- WSLg会覆盖`/run/user/1000`，使首次常规Rootless用户服务看不到D-Bus。实际采用systemd系统单元以dev身份运行，由systemd `RuntimeDirectory`管理`/run/seekbell-docker`作为`XDG_RUNTIME_DIR`，避免WSLg覆盖和冷启动残留PID；不修改全局WSLg/WSL配置。旧的用户服务自动安装路线未继续使用。
 - 当前Rootless cgroup driver为none，容器级CPU/内存限额不可用；不是宿主机资源隔离方案。未来需要限额时单独评估，不能擅改全局WSL参数。
 
 新发行版内核对：
