@@ -2,7 +2,7 @@
 
 自托管的 NodeSeek 新帖监控与通知工具。范围与技术栈见 [SPEC](docs/SPEC.md) 和 [ARCHITECTURE](docs/ARCHITECTURE.md)。
 
-当前为 **M1 核心闭环开发中**：可运行的 FastAPI / Vue 3 / Naive UI 骨架、SQLite 迁移、版本页和基础 CI。RSS安全解析、NodeSeek规范化与纯三值规则已实现；持久化闭环正在开发。管理员、管理页面和真实通知尚未实现，不能作为监控服务投入使用。当前进度和证据以 [PROJECT_STATE](docs/PROJECT_STATE.md) 为准。
+当前为 **M1 核心闭环开发中**：可运行的 FastAPI / Vue 3 / Naive UI 骨架、SQLite 迁移、版本页和基础 CI。已实现RSS安全解析、NodeSeek规范化、纯三值规则、基线/身份账本、事务outbox、租约恢复与模拟通知闭环。管理员、管理页面和真实通知尚未实现，不能作为监控服务投入使用。当前进度和证据以 [PROJECT_STATE](docs/PROJECT_STATE.md) 为准。
 
 ## 环境
 
@@ -31,6 +31,18 @@ pnpm --dir frontend build
 
 Python 测试使用临时 SQLite 和进程内 HTTP 客户端，并拒绝测试进程的外网连接。CI 执行这些检查及迁移命令、镜像构建；没有发布、远程部署或真实发送步骤。远程 Actions 的执行结果和对应提交见 [PROJECT_STATE](docs/PROJECT_STATE.md)。
 
+## M1 离线闭环演示
+
+在独立开发WSL内执行：
+
+~~~bash
+uv run --frozen python -m seekbell.services.demo
+~~~
+
+演示创建临时SQLite，使用HTTPX MockTransport和模拟通知，退出后清理临时数据。依次验证首次成功基线、新帖、两任务合并、认领后租约过期、退避重试和重复摄取。预期为2次规则命中、1条合并投递意图、3次尝试（含过期租约）、1条成功回执、重复摄取新增0条投递；历史不确定性仍保留。不会读取正式数据库或通知凭据。
+
+M1只有内部服务与离线入口；默认内置来源关闭、通知目标为空。管理页面/认证与四种真实渠道将在后续阶段接入，当前页面只展示运行状态。
+
 ## 本地运行
 
 ```bash
@@ -52,23 +64,23 @@ uv run --frozen python -m seekbell
 |`SEEKBELL_STATIC_DIR`|`frontend/dist`|构建后的前端目录|
 |`SEEKBELL_BUILD_REVISION`|`development`|显示的代码版本；镜像通过 `VCS_REF` 写入完整提交 SHA|
 
-只开放只读的 `/api/version`、`/health/live`、`/health/ready`。存活检查不依赖外部服务；就绪检查验证数据库和迁移。M0 不启用采集/通知调度，也没有管理员初始化入口或初始化令牌。反代头默认不信任，HTTPS/认证将在后续阶段验证。
+只开放只读的 `/api/version`、`/health/live`、`/health/ready`。存活检查不依赖外部服务；就绪检查验证数据库和迁移。当前应用不自动启用采集/通知调度，也没有管理员初始化入口或初始化令牌。反代头默认不信任，HTTPS/认证将在后续阶段验证。
 
 ## 本地镜像
 
-仅用于 M0 冒烟检查，不代表已完成 M4/M5 部署验收。Docker daemon 需要可用；端口只绑定本机。构建前确认代码已提交，以保证版本对应镜像内容。
+用于当前阶段的打包与离线闭环检查，不代表已完成 M4/M5 部署验收。Docker daemon 需要可用；端口只绑定本机。构建前确认代码已提交，以保证版本对应镜像内容。
 
 ```bash
 docker build --build-arg VCS_REF="$(git rev-parse HEAD)" -t seekbell:local .
 python3 scripts/check_container.py seekbell:local --revision "$(git rev-parse HEAD)"
-docker volume create seekbell-m0-data
-docker run --rm --name seekbell-m0 -p 127.0.0.1:8000:8000 \
-  -v seekbell-m0-data:/data seekbell:local
+docker volume create seekbell-dev-data
+docker run --rm --name seekbell-dev -p 127.0.0.1:8000:8000 \
+  -v seekbell-dev-data:/data seekbell:local
 ```
 
 镜像使用 UID/GID 10001，数据持久化在命名卷；绑定已有宿主目录时需预先配置正确所有权。只运行一个容器实例/一个 Uvicorn worker。Compose、备份、凭据加密、升级回退与实机部署在 M4；双架构和 PVE 验证尚未完成。
 
-`check_container.py`只使用已构建的本地镜像，创建禁用外网的临时容器和数据卷，检查API、构建资源、非root身份、进程锁、健康检查与重启持久化，结束后删除本次创建的临时资源，不触碰日常数据卷。
+`check_container.py`只使用已构建的本地镜像，创建禁用外网的临时容器和数据卷，检查API、构建资源、非root身份、进程锁、健康检查、重启持久化和镜像内离线闭环，结束后删除本次创建的临时资源，不触碰日常数据卷。
 
 ## 开发与交接
 

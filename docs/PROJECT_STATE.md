@@ -1,35 +1,33 @@
 # 当前状态
 
-更新时间：2026-10-18（Asia/Shanghai）。阶段：用户授权进入M1核心闭环；隐私保护已提交；M1解析与纯规则模块已实现并通过针对性测试，下一步持久化闭环。
+更新时间：2026-10-18（Asia/Shanghai）。阶段：M1核心闭环已实现，本地95项自动测试及离线演示通过；最终打包/CI待验证，未用户验收。
 
-## 代码与环境
+## 环境与基准
 
-正式目录为SeekBell-Dev发行版的`/home/dev/projects/seekbell`（Ubuntu24.04.5/WSL2/amd64，用户dev）；虚拟磁盘`D:\WSL\SeekBell-Dev`。原D盘项目仅交接副本，不再同步新提交或继续构建。入口及隔离边界见[开发环境](DEVELOPMENT_ENVIRONMENT.md)。
+正式开发仅在独立WSL2发行版SeekBell-Dev，Ubuntu24.04.5/amd64，用户dev，目录/home/dev/projects/seekbell；磁盘D:\WSL\SeekBell-Dev。原Ubuntu和D盘交接副本不继续开发、不清理。工具与隔离限制见[开发环境](DEVELOPMENT_ENVIRONMENT.md)，M0环境证据见[迁移记录](history/2026-10-18-开发环境迁移.md)。
 
-origin为私有仓库[本项目](https://github.com/Aspeternity/seekbell)，main跟踪origin/main。M0应用实现基准`1ddea580bbfc314a9e9df97bd2e95e375a2d0202`；CI修复基准`69d71cef3470966ab21601a1c569417c0584d549`。之后仅提交文档证据，不改变代码基准。隐私提交431cc6d已推送。当前未提交为domain/posts/rules/errors、collectors/rss、sites/nodeseek、合成样本/测试、pyproject/uv.lock及状态；用途为M1解析与三值规则。历史身份均为noreply，无需重写历史。
+私有origin为[本仓库](https://github.com/Aspeternity/seekbell)，main跟踪origin/main。当前已推送解析/规则代码dfd743535f3b8fae62cef4e668f95ebd97cd156a；隐私保护431cc6d。M0工程基准1ddea58，CI修复69d71ce，原CI结果见[GitHub接入](history/2026-10-18-GitHub接入.md)。
 
-## 实现与证据
+## 实现与验证
 
-隐私检查：现有全部作者/提交者为noreply；本地提交/推送钩子已启用，6项隔离Git仓库测试通过，历史与索引邮箱检查通过，不打印被拒地址。
+已实现M0骨架；M1已实现安全RSS解析、NodeSeek身份归一化、纯三值规则。解析/规则41项针对性测试通过；隐私6项测试通过。邮箱检查覆盖历史作者/提交者、提交消息和文件及暂存区，本地提交/推送钩子与CI已启用，身份均为GitHub noreply，不打印被拒地址。
 
-M0已实现FastAPI/Vue骨架、SQLite迁移、版本/健康API、数据目录锁、基础CI和非root镜像；管理员/采集/规则/通知业务尚未实现，不代表M1～M4完成。
+待提交改动：db模型/事务与0002迁移、domain/delivery、services配置/摄取/共享采集/租约投递/离线演示、Notifier协议、相关测试、README/架构/前端阶段文字、CI/容器检查。首次成功基线、持久身份账本、事务outbox、按目标合并、版本快照、有限重试、未知结果和暂停语义均已实现；未自动接入应用生命周期。
 
-新WSL：Python3.12.3、uv0.13.1、Node24.22.0、pnpm10.34.7；11项pytest、静态检查、wheel、前端构建、迁移检查及离线容器验证通过，见[迁移记录](history/2026-10-18-开发环境迁移.md)。
+本地Python3.12.3：95项pytest通过（7.56秒），含强制子进程退出前事务回滚、重启保留意图、并发认领、租约过期/迟到响应、暂停/去重/只读预览、迁移DDL失败回滚。Ruff、锁校验、wheel、前端格式/类型/构建通过；FastAPI测试客户端有一条上游弃用提示，未为此更换HTTP栈。离线演示结果：2命中合并1意图，3次尝试含过期租约，1回执，重复摄取0新投递，保留不确定标记。
 
-远程CI：上述69d71ce，在GitHub-hosted Ubuntu24.04/amd64、镜像版本20261012.334.1上[运行39138356106](https://github.com/Aspeternity/seekbell/actions/runs/39138356106)成功。锁校验、Ruff、11项测试、wheel、前端、迁移、Docker构建及禁用外网的容器检查均通过。首轮job.env引用runner失败，已移至step.env，旧配置已移除；详情和CI镜像ID见[接入记录](history/2026-10-18-GitHub接入.md)。
+## 限制与证据边界
 
-## 部署与限制
+测试均为合成样本、临时SQLite、HTTPX模拟服务。无真实RSS轮询、真实通知、管理员或管理页面；M2四渠道、M3管理仍未实现。没有PVE/SSH部署、arm64、手机/浏览器业务验收、备份恢复及用户验收。M0本地镜像与远程CI仅证明当时版本；M1须针对最终代码重建并验证。
 
-本地Rootless Docker29.9.1，数据`/home/dev/.local/share/docker`，socket`/run/seekbell-docker/docker.sock`；冷启动残留PID已通过systemd RuntimeDirectory修复。无容器级cgroup限额，未改全局WSL设置，原Ubuntu工具/镜像未清理。
-
-本地M0镜像inspect ID为`sha256:354cae141dd1ed0a2ba9df5001dc5eab70c8436fce52ac65cc5d0071651e3d55`，应用版本为1ddea58；CI镜像仅临时构建，未发布。PVE/SSH、浏览器/手机、arm64、真实RSS/通知、备份恢复与用户验收均未完成。
+新WSL独立Rootless Docker29.9.1，socket /run/seekbell-docker/docker.sock。没有容器cgroup资源限额，与其他发行版共享宿主资源；未改全局WSL配置或原Ubuntu的Docker。
 
 ## 下一步与读取
 
-解析/规则41项针对性测试通过，覆盖缺/空摘要、异常ID、HTML/坏XML/XXE/UTF16实体、HTTP限流/超时/大小限制及三值规则。接着实现首次成功基线、事务outbox、租约恢复与模拟通知；不启用真实轮询、真实发送或未认证管理API。
+提交推送并等待CI；重建精确代码SHA镜像，在禁用外网的容器内运行演示与重启检查。随后归档证据，进入M2前报告范围与验证边界。
 
-M1本轮按需阅读SPEC第3～5节、ARCHITECTURE模块契约/一致性/恢复、RESEARCH RSS字段/身份结论、ACCEPTANCE R01～R05/F01～F05/D01/D04/P01及受影响代码，不重复全读。
+本任务已读SPEC第3～5节、ARCHITECTURE模块/一致性/恢复、RESEARCH RSS结论、ACCEPTANCE R01～R05/F01～F05/D01/D04/P01；继续只读受影响章节与代码，不全量重读。
 
 ## 授权
 
-用户已确认新WSL与D盘位置及私有仓库，现明确授权进入M1并继续推送，要求不暴露真实邮箱。用户新增授权进入下一步M1，要求后续推送不暴露真实邮箱；未授权原Ubuntu清理、全局WSL调整、GHCR发布、部署或真实发送；M0尚无用户验收。不组织多代理，不扩大范围。
+用户明确授权独立WSL及D盘位置、私有GitHub接入、进入M1和继续推送，要求不暴露真实邮箱。未授权原环境清理、全局WSL调整、GHCR发布、部署或真实发送。保持既定范围与技术栈，不组织多代理。

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from alembic import command
+from alembic.script import ScriptDirectory
 from alembic.util.exc import CommandError
 from fastapi.testclient import TestClient
 from seekbell.config import Settings
@@ -42,7 +43,9 @@ def test_health_version_and_restart(tmp_path):
                 "name": "SeekBell",
                 "version": version("seekbell"),
                 "build_revision": "test-revision",
-                "database_revision": "0001_installation",
+                "database_revision": ScriptDirectory.from_config(
+                    migration_config()
+                ).get_current_head(),
             }
     assert settings.database_path.is_file()
 
@@ -80,7 +83,10 @@ def test_migrations_are_idempotent_and_match_models(tmp_path):
                 assert connection.scalar(text("PRAGMA foreign_keys")) == 1
                 assert connection.scalar(text("PRAGMA busy_timeout")) == 5000
             migrate(engine)
-            assert schema_revision(engine) == "0001_installation"
+            assert (
+                schema_revision(engine)
+                == ScriptDirectory.from_config(migration_config()).get_current_head()
+            )
             with engine.begin() as connection:
                 assert connection.execute(text("SELECT * FROM installation")).all() == installed
                 config = migration_config()
@@ -163,4 +169,7 @@ def test_database_maintenance_commands(tmp_path, action):
     )
     assert result.returncode == 0, result.stderr
     if action == "current":
-        assert result.stdout.strip() == "0001_installation"
+        assert (
+            result.stdout.strip()
+            == ScriptDirectory.from_config(migration_config()).get_current_head()
+        )

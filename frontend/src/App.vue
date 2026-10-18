@@ -43,7 +43,7 @@ onMounted(refresh)
     <main class="shell">
       <header class="header">
         <a class="brand" href="/" aria-label="SeekBell 首页"><span class="bell">S</span>SeekBell</a>
-        <NTag :bordered="false">M0 · 工程基线</NTag>
+        <NTag :bordered="false">M1 · 核心验证</NTag>
       </header>
 
       <section class="intro" aria-labelledby="page-title">

@@ -20,7 +20,10 @@ def get(path):
 assert json.loads(get('/health/live'))['status'] == 'ok'
 assert json.loads(get('/health/ready'))['status'] == 'ok'
 info = json.loads(get('/api/version'))
-assert info['database_revision'] == '0001_installation'
+from alembic.script import ScriptDirectory
+from seekbell.db.runtime import migration_config
+expected = ScriptDirectory.from_config(migration_config()).get_current_head()
+assert info['database_revision'] == expected
 assets = re.findall(r'(?:src|href)="(/assets/[^\"]+)"', get('/'))
 assert len(assets) >= 2
 for asset in assets:
@@ -30,6 +33,8 @@ for module in ('pytest', 'ruff'):
     assert importlib.util.find_spec(module) is None
 with sqlite3.connect('/data/seekbell.sqlite3') as connection:
     marker = connection.execute('SELECT * FROM installation').fetchall()
+    assert connection.execute('SELECT enabled FROM sources').fetchall() == [(0,)]
+    assert connection.execute('SELECT COUNT(*) FROM notification_targets').fetchone() == (0,)
 print(json.dumps({'version': info, 'uid': os.getuid(), 'assets': assets, 'marker': marker}))
 """
 
@@ -57,7 +62,7 @@ def main() -> None:
     parser.add_argument("image")
     parser.add_argument("--revision", required=True)
     args = parser.parse_args()
-    container = "seekbell-m0-check-" + uuid.uuid4().hex[:12]
+    container = "seekbell-check-" + uuid.uuid4().hex[:12]
     volume = container + "-data"
     try:
         docker("volume", "create", volume)
@@ -83,6 +88,11 @@ def main() -> None:
         wait_ready(container)
         second = json.loads(docker("exec", container, "python", "-c", PROBE).stdout)
         assert first == second, "Installation or API changed across restart"
+        demo = json.loads(
+            docker("exec", container, "python", "-m", "seekbell.services.demo").stdout
+        )
+        assert demo["mode"] == "offline_synthetic"
+        assert demo["final_status"] == "sent" and demo["duplicate_poll_queued"] == 0
         image_id = docker("image", "inspect", args.image, "--format", "{{.Id}}").stdout.strip()
         print(
             json.dumps(
@@ -93,6 +103,7 @@ def main() -> None:
                     "restart_persistence": "passed",
                     "instance_lock": "passed",
                     "network": "none",
+                    "offline_core_demo": demo,
                 },
                 ensure_ascii=False,
                 indent=2,

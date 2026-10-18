@@ -2,6 +2,8 @@ import socket
 
 import pytest
 
+from tests.core_helpers import core  # noqa: F401
+
 
 @pytest.fixture(autouse=True)
 def forbid_external_network(monkeypatch):

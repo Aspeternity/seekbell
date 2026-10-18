@@ -38,9 +38,15 @@ def create_database_engine(settings: Settings) -> Engine:
 
 def migrate(engine: Engine, revision: str = "head") -> None:
     config = migration_config()
-    with engine.begin() as connection:
+    with engine.connect() as connection:
+        connection.exec_driver_sql("BEGIN IMMEDIATE")
         config.attributes["connection"] = connection
-        command.upgrade(config, revision)
+        try:
+            command.upgrade(config, revision)
+            connection.commit()
+        except BaseException:
+            connection.rollback()
+            raise
 
 
 def schema_revision(engine: Engine) -> str | None:

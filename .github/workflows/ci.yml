@@ -36,6 +36,7 @@ jobs:
       - run: uv run --frozen ruff check .
       - run: uv run --frozen ruff format --check .
       - run: uv run --frozen pytest -q
+      - run: uv run --frozen python -m seekbell.services.demo
       - run: uv build --wheel
       - run: pnpm --dir frontend install --frozen-lockfile
       - run: pnpm --dir frontend format:check
