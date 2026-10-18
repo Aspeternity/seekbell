@@ -62,4 +62,4 @@ wsl.exe -d SeekBell-Dev -u root -- systemctl restart seekbell-docker.service
 
 新环境使用M0实现代码`1ddea580bbfc314a9e9df97bd2e95e375a2d0202`，仅额外更新文档。11项pytest、Ruff、锁校验、wheel、前端类型/格式/构建、数据库维护检查已通过；独立Docker在新发行版重启后已恢复，镜像构建和容器复核结果见PROJECT_STATE及[迁移记录](history/2026-10-18-开发环境迁移.md)。日常检查命令继续使用README。
 
-未更改默认发行版、全局`.wslconfig`或原Ubuntu系统配置；多个WSL仍共享宿主机CPU/内存及部分网络环境，不承诺完全不影响其他项目。临时容器使用`--network none`；不访问真实论坛或通知服务。PVE/arm64/远程CI/页面体验及用户验收未完成。已实现、自动验证与用户验收分别记录。
+未更改默认发行版、全局`.wslconfig`或原Ubuntu系统配置；多个WSL仍共享宿主机CPU/内存及部分网络环境，不承诺完全不影响其他项目。临时容器使用`--network none`；不访问真实论坛或通知服务。远程CI接入后的证据见PROJECT_STATE；PVE/arm64/页面体验及用户验收未完成。已实现、自动验证与用户验收分别记录。

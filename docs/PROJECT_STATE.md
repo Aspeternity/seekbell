@@ -1,31 +1,33 @@
 # 当前状态
 
-更新时间：2026-10-18（Asia/Shanghai）。阶段：M0实现保留待审；新WSL开发环境已配置，冷启动和容器复核通过；M1未开始。
+更新时间：2026-10-18（Asia/Shanghai）。阶段：M0实现保留待审；独立WSL及私有GitHub已接通，远程CI通过。M1未开始。
 
-## 代码与工作目录
+## 代码与环境
 
-正式开发环境改为`SeekBell-Dev`（WSL2 Ubuntu24.04.5/amd64），目录`/home/dev/projects/seekbell`。虚拟磁盘位于`D:\WSL\SeekBell-Dev`；默认用户dev。原`D:\Projects\SeekBell`保留交接副本，后续不在原Ubuntu构建。进入方式及配置见[开发环境](DEVELOPMENT_ENVIRONMENT.md)。
+正式目录为SeekBell-Dev发行版的`/home/dev/projects/seekbell`（Ubuntu24.04.5/WSL2/amd64，用户dev）；虚拟磁盘`D:\WSL\SeekBell-Dev`。原D盘项目仅交接副本，不再同步新提交或继续构建。入口及隔离边界见[开发环境](DEVELOPMENT_ENVIRONMENT.md)。
 
-M0实现基准`1ddea580bbfc314a9e9df97bd2e95e375a2d0202`；交接基准`4f0d8d5`，分支main；现已连接私有远程`https://github.com/Aspeternity/seekbell.git`（origin），现有main已首次推送至6729d0f82e7c3ab070bee6efc11750c1c94f2787。源码/Git历史已复制，依赖在新环境按锁文件重建。本轮未修改业务代码；仓库连接文档已提交；当前未提交为本状态与.github/workflows/ci.yml，用于首次CI失败记录及runner上下文位置修复。正式开发与Git操作均在SeekBell-Dev，D盘交接副本不再同步新提交。
+origin为私有仓库[本项目](https://github.com/Aspeternity/seekbell)，main跟踪origin/main。M0应用实现基准`1ddea580bbfc314a9e9df97bd2e95e375a2d0202`；CI修复基准`69d71cef3470966ab21601a1c569417c0584d549`。之后仅提交文档证据，不改变代码基准。当前无在途业务修改；本轮收尾提交README、架构/环境说明、状态与GitHub接入记录。
 
-## 实现与自动证据
+## 实现与证据
 
-M0：FastAPI/Vue骨架、SQLite迁移、版本/健康API、数据目录锁、CI与非root镜像，业务采集/通知/管理员尚未实现。原证据见[阶段记录](history/2026-10-18-M0.md)。
+M0已实现FastAPI/Vue骨架、SQLite迁移、版本/健康API、数据目录锁、基础CI和非root镜像；管理员/采集/规则/通知业务尚未实现，不代表M1～M4完成。
 
-新环境（同一M0代码）：Python3.12.3、uv0.13.1、Node24.22.0、pnpm10.34.7；11项pytest、Ruff、锁校验、wheel、前端类型/格式/构建、迁移upgrade/current/check通过。Docker29.9.1 Rootless已独立启动，新发行版定向重启后可恢复；amd64镜像构建与离线容器API/资源/UID/锁/healthcheck/重启持久化均通过，临时容器和卷已清理。
+新WSL：Python3.12.3、uv0.13.1、Node24.22.0、pnpm10.34.7；11项pytest、静态检查、wheel、前端构建、迁移检查及离线容器验证通过，见[迁移记录](history/2026-10-18-开发环境迁移.md)。
 
-## 环境与部署
+远程CI：上述69d71ce，在GitHub-hosted Ubuntu24.04/amd64、镜像版本20261012.334.1上[运行39138356106](https://github.com/Aspeternity/seekbell/actions/runs/39138356106)成功。锁校验、Ruff、11项测试、wheel、前端、迁移、Docker构建及禁用外网的容器检查均通过。首轮job.env引用runner失败，已移至step.env，旧配置已移除；详情和CI镜像ID见[接入记录](history/2026-10-18-GitHub接入.md)。
 
-新Docker上下文rootless，数据`/home/dev/.local/share/docker`，服务以dev身份运行。系统级Docker服务已禁用。持久化运行目录曾因残留PID阻止冷启动，现由systemd RuntimeDirectory管理`/run/seekbell-docker`及socket；修复后新发行版冷启动和离线容器复核通过，旧运行目录已删除，不保留回退补丁。当前无容器级cgroup限额，未改全局资源设置。
+## 部署与限制
 
-新镜像`seekbell:m0-local`的本地inspect标识为`sha256:354cae141dd1ed0a2ba9df5001dc5eab70c8436fce52ac65cc5d0071651e3d55`，版本为上述完整M0代码SHA。详见[迁移记录](history/2026-10-18-开发环境迁移.md)。原Ubuntu工具/镜像/缓存保留，未授权清理。无PVE/SSH部署、远程发布或manifest digest。浏览器/手机、arm64、真实RSS/通知、远程CI、备份恢复与用户验收均未完成。
+本地Rootless Docker29.9.1，数据`/home/dev/.local/share/docker`，socket`/run/seekbell-docker/docker.sock`；冷启动残留PID已通过systemd RuntimeDirectory修复。无容器级cgroup限额，未改全局WSL设置，原Ubuntu工具/镜像未清理。
+
+本地M0镜像inspect ID为`sha256:354cae141dd1ed0a2ba9df5001dc5eab70c8436fce52ac65cc5d0071651e3d55`，应用版本为1ddea58；CI镜像仅临时构建，未发布。PVE/SSH、浏览器/手机、arm64、真实RSS/通知、备份恢复与用户验收均未完成。
 
 ## 下一步与读取
 
-现有main完整历史已上传。首轮CI 39138225336（6729d0f）因job.env不允许runner上下文而失败；已将runner.temp移至迁移步骤的env，等待修复提交的远程验证；不强推、不发布镜像、不推进M1。已确认远程为空，当前账号有push权限，推送前检查54个已跟踪文件及历史对象，无运行数据或已检测凭据签名。
+请用户审阅环境与M0，再决定是否进入M1；当前无GitHub或环境阻塞。CI已具备可运行命令，README可复现。
 
-本轮只需环境文档、M0检查命令和受影响配置。同会话已读规格复用；未来获准进入M1时读SPEC第3～5节、ARCHITECTURE模块契约/一致性/恢复、RESEARCH的RSS字段/身份结论、ACCEPTANCE R01～R05/F01～F05/D01/D04/P01及实际影响代码。
+本轮只需CI文件、状态和接入记录。未来进入M1时按需读SPEC第3～5节、ARCHITECTURE模块契约/一致性/恢复、RESEARCH RSS字段/身份结论、ACCEPTANCE R01～R05/F01～F05/D01/D04/P01及受影响代码，不重复全读。
 
-## 授权与限制
+## 授权
 
-用户指出原开发跳过环境确认，要求先确定环境；随后明确同意新建独立WSL及`D:\WSL\SeekBell-Dev`位置。授权新环境工具、独立Docker、源码复制与模拟验证。用户提供已创建的Aspeternity/seekbell，承接创建并推送请求，现授权连接并首次推送现有main及验证CI。未授权原Ubuntu清理、全局WSL调整、镜像发布/部署或真实发送；M0尚无用户验收。不组织多代理，不扩大首版范围。
+用户已确认新WSL与D盘位置，提供已建私有仓库，授权连接及首次上传现有main、接通CI。本轮没有新业务开发。未授权原Ubuntu清理、全局WSL调整、GHCR发布、部署或真实发送；M0尚无用户验收。不组织多代理，不扩大范围。
