@@ -39,6 +39,7 @@ def disable_outbound() -> None:
     def resolve(host, *args, **kwargs):
         # Numeric bind/listen addresses remain valid, without querying external DNS.
         try:
+            host = host.decode("ascii") if isinstance(host, bytes) else host
             ipaddress.ip_address(host)
         except (ValueError, TypeError):
             raise AcceptanceNetworkDisabled("External DNS disabled for local acceptance") from None

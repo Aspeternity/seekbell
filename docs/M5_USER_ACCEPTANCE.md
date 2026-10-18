@@ -63,7 +63,9 @@ PVE连接/路径与部署授权、HTTPS代理入口、通知目标及每渠道�
 ## 本轮准备证据（不是用户验收）
 
 - 固定镜像应用版本965238ce847fb433575f003f91587c68db52320d，单独挂载scripts/local_acceptance_server.py作为开发入口；产品镜像内容未修改。
-- Compose配置检查通过；应用进程启动自检拒绝外部IP连接及DNS，后台关闭。新增守卫8项针对性测试通过（0.17秒）：IPv4/IPv6 connect/connect_ex/UDP、外部DNS、数字监听地址与Unix socketpair。
+- Compose配置检查通过；应用进程启动自检拒绝外部IP连接及DNS，后台关闭。新增守卫10项针对性测试通过（0.16秒）：IPv4/IPv6 connect/connect_ex/UDP、外部DNS、数字监听地址与Unix socketpair。
 - 正式WSL内/health/ready、/api/version和首页编译资源引用通过；Windows侧127.0.0.1:18080健康检查返回ok。未创建管理员、未执行用户操作或真实发送。
 - 曾尝试internal网络，但此Rootless实例没有端口映射，已移除该无效配置。后台派发后也观察到容器退出255与Docker服务重新启动；改用保持运行的前台Compose会话后入口可达，不修改全局WSL设置。
 - Ruff检查/格式通过；M4旧全套结果复用，不在本机重跑387项或7项浏览器。
+
+- 准备期间补齐字节域名回归：先转为文本再判断数字IP，拒绝将4字节域名误作打包IP；针对性10项通过后重建验收容器，数据卷保留。

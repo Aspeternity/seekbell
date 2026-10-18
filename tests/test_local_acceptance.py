@@ -34,9 +34,10 @@ def test_guard_blocks_ip_connections_and_udp_without_packets(guard, family, oper
             getattr(client, operation)(address)
 
 
-def test_guard_rejects_external_dns_but_keeps_numeric_listener_resolution(guard):
+@pytest.mark.parametrize("hostname", ["example.com", b"example.com", b"a.co"])
+def test_guard_rejects_external_dns_but_keeps_numeric_listener_resolution(guard, hostname):
     with pytest.raises(guard):
-        socket.getaddrinfo("example.com", 443)
+        socket.getaddrinfo(hostname, 443)
     assert socket.getaddrinfo("127.0.0.1", 8000, type=socket.SOCK_STREAM)
 
 
