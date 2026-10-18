@@ -6,7 +6,7 @@
 
 正式开发环境改为`SeekBell-Dev`（WSL2 Ubuntu24.04.5/amd64），目录`/home/dev/projects/seekbell`。虚拟磁盘位于`D:\WSL\SeekBell-Dev`；默认用户dev。原`D:\Projects\SeekBell`保留交接副本，后续不在原Ubuntu构建。进入方式及配置见[开发环境](DEVELOPMENT_ENVIRONMENT.md)。
 
-M0实现基准`1ddea580bbfc314a9e9df97bd2e95e375a2d0202`；交接基准`4f0d8d5`，分支main，无远程。源码/Git历史已复制，依赖在新环境按锁文件重建。本轮仅提交AGENTS、README、状态、新环境文档和迁移记录，记录环境边界与证据；无业务代码变更，文档同步后两处代码一致。
+M0实现基准`1ddea580bbfc314a9e9df97bd2e95e375a2d0202`；交接基准`4f0d8d5`，分支main；现已连接私有远程`https://github.com/Aspeternity/seekbell.git`（origin），首次推送准备中。源码/Git历史已复制，依赖在新环境按锁文件重建。本轮未修改业务代码；待提交仅README、DECISIONS、开发环境文档和本状态，用于远程仓库及授权记录。正式开发与Git操作均在SeekBell-Dev，D盘交接副本不再同步新提交。
 
 ## 实现与自动证据
 
@@ -22,10 +22,10 @@ M0：FastAPI/Vue骨架、SQLite迁移、版本/健康API、数据目录锁、CI�
 
 ## 下一步与读取
 
-下一步请用户在新发行版目录打开项目，审阅环境与M0；不自动推进M1。环境无阻塞；原Ubuntu后续只用于其既有项目。
+本轮先上传现有main完整历史至用户创建的私有GitHub仓库并验证现有CI；不强推、不发布镜像、不推进M1。已确认远程为空，当前账号有push权限，推送前检查54个已跟踪文件及历史对象，无运行数据或已检测凭据签名。
 
 本轮只需环境文档、M0检查命令和受影响配置。同会话已读规格复用；未来获准进入M1时读SPEC第3～5节、ARCHITECTURE模块契约/一致性/恢复、RESEARCH的RSS字段/身份结论、ACCEPTANCE R01～R05/F01～F05/D01/D04/P01及实际影响代码。
 
 ## 授权与限制
 
-用户指出原开发跳过环境确认，要求先确定环境；随后明确同意新建独立WSL及`D:\WSL\SeekBell-Dev`位置。授权新环境工具、独立Docker、源码复制与模拟验证。未授权原Ubuntu清理、全局WSL调整、远程推送/发布/部署或真实发送；M0尚无用户验收。不组织多代理，不扩大首版范围。
+用户指出原开发跳过环境确认，要求先确定环境；随后明确同意新建独立WSL及`D:\WSL\SeekBell-Dev`位置。授权新环境工具、独立Docker、源码复制与模拟验证。用户提供已创建的Aspeternity/seekbell，承接创建并推送请求，现授权连接并首次推送现有main及验证CI。未授权原Ubuntu清理、全局WSL调整、镜像发布/部署或真实发送；M0尚无用户验收。不组织多代理，不扩大首版范围。

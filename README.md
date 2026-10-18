@@ -73,4 +73,4 @@ docker run --rm --name seekbell-m0 -p 127.0.0.1:8000:8000 \
 
 每次从 [AGENTS.md](AGENTS.md) 和 [PROJECT_STATE](docs/PROJECT_STATE.md) 进入，再按当前阅读清单补读。阶段见 [ROADMAP](docs/ROADMAP.md)，验收边界见 [ACCEPTANCE](docs/ACCEPTANCE.md)，外部待办见 [DECISIONS](docs/DECISIONS.md)。首版只支持官方 RSS，不扩展全文、回帖、自定义网站或 TG 频道采集。
 
-远程仓库、镜像发布、SSH、真实通知目标和许可证尚未提供；本地开发继续，远程动作按明确授权执行。原始规格文件保存在初始 Git 提交中。
+远程仓库为私有的 [Aspeternity/seekbell](https://github.com/Aspeternity/seekbell)。镜像发布、SSH、真实通知目标和许可证尚未提供；相关动作按明确授权执行。原始规格文件保存在初始 Git 提交中。
