@@ -20,7 +20,7 @@
 
 ## 新Codex对话继续
 
-> 继续SeekBell开发。先读AGENTS.md和docs/PROJECT_STATE.md，核对实际分支、提交及工作区，按状态文件清单补读相关章节。不要默认重读所有文档或重跑全部测试。区分实现、测试与用户验收，沿用已记录且适用的授权，从下一具体步骤继续；状态不一致先核实，不覆盖已有工作。
+> 继续SeekBell开发。仅在WSL2 SeekBell-Dev的/home/dev/projects/seekbell开发；若聊天连接原Ubuntu，显式通过wsl.exe -d SeekBell-Dev派发命令，D盘目录仅为交接副本。先读正式目录的AGENTS.md和docs/PROJECT_STATE.md，核对发行版、实际目录、分支、HEAD及工作区，按状态清单补读相关章节。沿用noreply与已记录且适用的授权，从下一具体步骤继续；不重复全仓阅读或无变化的全量验证，不覆盖用户工作，不组织多代理。真实环境验证与用户验收分别记录，不默认获得发布、部署或真实发送权限。
 
 ## 顾问新对话继续
 

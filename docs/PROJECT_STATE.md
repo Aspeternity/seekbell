@@ -1,12 +1,12 @@
 # 当前状态
 
-更新时间：2026-10-19 06:51（Asia/Shanghai）。M1/M2及M3核心六页已实现并本机自动验证；系统设置检查点已提交推送，固定SHA容器和CI均通过，尚未用户验收。备份恢复按计划在M4，用户验收仍统一进行。
+更新时间：2026-10-19 06:58（Asia/Shanghai）。M1/M2及M3核心六页已实现并本机自动验证；系统设置检查点已提交推送，固定SHA容器和CI均通过，尚未用户验收。备份恢复按计划在M4，用户验收仍统一进行。
 
 ## 环境与代码
 
 仅在WSL2 SeekBell-Dev的/home/dev/projects/seekbell开发，Ubuntu24.04.5/amd64、dev用户。当前从原Ubuntu通过wsl.exe -d SeekBell-Dev --cd正式目录派发，构建传已核对完整SHA；D盘交接副本及原环境不改。[环境入口](DEVELOPMENT_ENVIRONMENT.md)。
 
-私有origin为Aspeternity/seekbell，main；起始HEAD 7f796a9且工作区干净，前一实现4ccff0d与CI39168186352见[通知记录](history/2026-10-19-M3通知管理.md)。本次实现ee97cb92fcbd59ad9d743b05cb4940ad9782c948已按noreply推送，隐私身份检查通过。本状态及系统设置记录已补齐容器/CI证据；后续仅文档提交不改变代码基准。
+私有origin为Aspeternity/seekbell，main；换对话前核对HEAD/origin/main均为3c0a21ae003558eb85394b4f7ccecc1241febab1（证据文档提交），工作区干净。前一通知阶段见[通知记录](history/2026-10-19-M3通知管理.md)。本次实现ee97cb92fcbd59ad9d743b05cb4940ad9782c948已按noreply推送，隐私身份检查通过。本状态及系统设置记录已补齐容器/CI证据；交接仅文档提交不改变实现基准，不为写入自身SHA循环提交。
 
 ## 实现与证据
 
@@ -19,6 +19,8 @@
 ## 下一步与读取清单
 
 下一步进入M4本地部署恢复交付：Compose、一致性备份/密钥封装、恢复校验及迁移/回退演练。读取ROADMAP M4、SPEC/架构备份恢复/部署边界、DECISIONS授权与deploy/容器入口；仅补读影响代码。真实RSS/四渠道、PVE/arm64、完整备份恢复及用户验收未做，无开发阻塞；客户端弃用提示与Rootless无cgroup资源限额仍在。
+
+交接：本次没有遗留未提交实现、运行中的开发检查或部署；最近CI已完成，临时检查容器/卷已清理。本地镜像seekbell:m3-settings可复用，未发布；没有正式运行实例或远端部署证据。新对话先核对Git状态，只在代码相关变化后执行针对性验证，不重复全套。原Ubuntu中pnpm/uv不作为开发入口，需通过正式WSL的bash -lc加载工具PATH；复杂写入可用wsl.exe派发Python stdin，避免嵌套shell替换误用D盘路径。
 
 ## 授权
 
