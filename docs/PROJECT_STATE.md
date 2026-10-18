@@ -1,12 +1,12 @@
 # 当前状态
 
-更新时间：2026-10-18（Asia/Shanghai）。阶段：用户授权进入M1核心闭环；先落实提交邮箱隐私检查，M1业务实现正在开始。
+更新时间：2026-10-18（Asia/Shanghai）。阶段：用户授权进入M1核心闭环；隐私保护已提交；M1解析与纯规则模块已实现并通过针对性测试，下一步持久化闭环。
 
 ## 代码与环境
 
 正式目录为SeekBell-Dev发行版的`/home/dev/projects/seekbell`（Ubuntu24.04.5/WSL2/amd64，用户dev）；虚拟磁盘`D:\WSL\SeekBell-Dev`。原D盘项目仅交接副本，不再同步新提交或继续构建。入口及隔离边界见[开发环境](DEVELOPMENT_ENVIRONMENT.md)。
 
-origin为私有仓库[本项目](https://github.com/Aspeternity/seekbell)，main跟踪origin/main。M0应用实现基准`1ddea580bbfc314a9e9df97bd2e95e375a2d0202`；CI修复基准`69d71cef3470966ab21601a1c569417c0584d549`。之后仅提交文档证据，不改变代码基准。本轮未提交：scripts/check_privacy.py、.githooks、隐私测试、CI及相关文档，防止真实邮箱进入提交身份/历史内容；后续追加M1模块与测试。历史作者/提交者已核实均为noreply，无需重写历史。
+origin为私有仓库[本项目](https://github.com/Aspeternity/seekbell)，main跟踪origin/main。M0应用实现基准`1ddea580bbfc314a9e9df97bd2e95e375a2d0202`；CI修复基准`69d71cef3470966ab21601a1c569417c0584d549`。之后仅提交文档证据，不改变代码基准。隐私提交431cc6d已推送。当前未提交为domain/posts/rules/errors、collectors/rss、sites/nodeseek、合成样本/测试、pyproject/uv.lock及状态；用途为M1解析与三值规则。历史身份均为noreply，无需重写历史。
 
 ## 实现与证据
 
@@ -26,7 +26,7 @@ M0已实现FastAPI/Vue骨架、SQLite迁移、版本/健康API、数据目录锁
 
 ## 下一步与读取
 
-隐私检查通过后实施M1：合成RSS解析/身份、纯三值规则、首次成功基线、持久化outbox及模拟通知恢复；不启用真实轮询、真实发送或未认证管理API。
+解析/规则41项针对性测试通过，覆盖缺/空摘要、异常ID、HTML/坏XML/XXE/UTF16实体、HTTP限流/超时/大小限制及三值规则。接着实现首次成功基线、事务outbox、租约恢复与模拟通知；不启用真实轮询、真实发送或未认证管理API。
 
 M1本轮按需阅读SPEC第3～5节、ARCHITECTURE模块契约/一致性/恢复、RESEARCH RSS字段/身份结论、ACCEPTANCE R01～R05/F01～F05/D01/D04/P01及受影响代码，不重复全读。
 

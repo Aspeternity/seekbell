@@ -2,7 +2,7 @@
 
 自托管的 NodeSeek 新帖监控与通知工具。范围与技术栈见 [SPEC](docs/SPEC.md) 和 [ARCHITECTURE](docs/ARCHITECTURE.md)。
 
-当前为 **M0 工程基线**：可运行的 FastAPI / Vue 3 / Naive UI 骨架、SQLite 迁移、版本页和基础 CI。管理员、采集、规则与通知尚未实现，不能作为监控服务投入使用。当前进度和证据以 [PROJECT_STATE](docs/PROJECT_STATE.md) 为准。
+当前为 **M1 核心闭环开发中**：可运行的 FastAPI / Vue 3 / Naive UI 骨架、SQLite 迁移、版本页和基础 CI。RSS安全解析、NodeSeek规范化与纯三值规则已实现；持久化闭环正在开发。管理员、管理页面和真实通知尚未实现，不能作为监控服务投入使用。当前进度和证据以 [PROJECT_STATE](docs/PROJECT_STATE.md) 为准。
 
 ## 环境
 

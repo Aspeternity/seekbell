@@ -27,7 +27,7 @@ M0目录调整：Alembic实际位于`backend/seekbell/migrations`，随Python包
 
 SiteAdapter 声明标识、能力、采集配置、规范链接、帖子 ID 提取、分类映射。首版只注册 NodeSeek RSS；未来可以接入其他网站，但不提前实现主备、TG 会话或网页抓取。
 
-Collector 返回来源条目及采集状态。只处理连接/解析，不运行关键词规则。RSS 使用异步 HTTP 获取；同步解析、大型备份及同步 SMTP 不阻塞事件循环。显式超时、响应大小限制、禁用 XML 外部实体/网络展开、并发上限。
+Collector 返回来源条目及采集状态。只处理连接/解析，不运行关键词规则。RSS 使用异步 HTTP 获取；同步解析、大型备份及同步 SMTP 不阻塞事件循环。显式超时、响应大小限制、禁用 XML 外部实体/网络展开、并发上限。M1采用defusedxml先拒绝DTD/实体，再以内存流交给feedparser，避免把输入当URL/文件；解析在线程中执行。RSS请求要求identity编码，限1MiB并拒绝未协商的压缩响应。NodeSeek保留原始版块文字，不虚构稳定分类编号。
 
 RuleEngine 为无网络纯逻辑，输入规范化字段和规则快照，输出 match/no_match/insufficient_data 及结构化原因。前端试匹配与后台执行共用同一后端逻辑。
 
