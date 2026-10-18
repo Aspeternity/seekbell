@@ -73,6 +73,10 @@ def instance_lock(data_dir: Path):
         except BlockingIOError:
             raise RuntimeError("Another SeekBell process owns this data directory") from None
         try:
+            if (data_dir / ".restore-in-progress").exists():
+                raise RuntimeError(
+                    "Incomplete restore; keep this directory and restore to a new one"
+                )
             yield
         finally:
             fcntl.flock(handle, fcntl.LOCK_UN)

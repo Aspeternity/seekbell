@@ -1,27 +1,27 @@
 # 当前状态
 
-更新时间：2026-10-19 06:58（Asia/Shanghai）。M1/M2及M3核心六页已实现并本机自动验证；系统设置检查点已提交推送，固定SHA容器和CI均通过，尚未用户验收。备份恢复按计划在M4，用户验收仍统一进行。
+更新时间：2026-10-19 07:11（Asia/Shanghai）。M1/M2及M3核心六页已实现、自动验证，尚未用户验收；M4本地部署恢复实现完成，正在打包演练，未宣称阶段验收。
 
 ## 环境与代码
 
-仅在WSL2 SeekBell-Dev的/home/dev/projects/seekbell开发，Ubuntu24.04.5/amd64、dev用户。当前从原Ubuntu通过wsl.exe -d SeekBell-Dev --cd正式目录派发，构建传已核对完整SHA；D盘交接副本及原环境不改。[环境入口](DEVELOPMENT_ENVIRONMENT.md)。
+仅WSL2 SeekBell-Dev的/home/dev/projects/seekbell开发；当前聊天从原Ubuntu经wsl.exe显式派发。main及origin/main恢复入口为ac79c9f（仅交接文档）；此前实现基准ee97cb9。进入时工作区干净，代码未失配。[环境入口](DEVELOPMENT_ENVIRONMENT.md)。私有origin Aspeternity/seekbell，noreply及.githooks检查沿用。
 
-私有origin为Aspeternity/seekbell，main；换对话前核对HEAD/origin/main均为3c0a21ae003558eb85394b4f7ccecc1241febab1（证据文档提交），工作区干净。前一通知阶段见[通知记录](history/2026-10-19-M3通知管理.md)。本次实现ee97cb92fcbd59ad9d743b05cb4940ad9782c948已按noreply推送，隐私身份检查通过。本状态及系统设置记录已补齐容器/CI证据；交接仅文档提交不改变实现基准，不为写入自身SHA循环提交。
+本次待提交：backend/seekbell/backup.py、db/runtime.py、tests/test_backup.py为加密备份/恢复及中断保护；deploy/为Compose/环境/反代示例，scripts/check_m4_container.py及ci.yml增加隔离恢复演练，image.yml提供仅main手动、默认不发布的双架构工作流；SettingsPanel.vue仅修改维护说明；README/ARCHITECTURE/DEPLOYMENT及本状态、.gitignore同步。无正式数据或凭据。
 
 ## 实现与证据
 
-系统设置持久化时区、保留天数和统计，版本防陈旧编辑。账号修改重新验证当前密码，提交时复核会话/账号，撤销全部认证会话；独立限速与并发旧登录保护。UTC存储不变，未设置时使用浏览器显示时区，保存后共享。备份恢复仅状态说明，无不可用按钮。
+M4停服实例锁内SQLite一致性快照，含原密钥、全部账号/规则/历史/去重/队列，以独立口令scrypt+AES-GCM流式认证加密；检查密文快照，拒绝覆盖归档。恢复验证备份管理员密码，只写空目录，暂存迁移及校验后安装，撤销会话。全过程持久中断标记；SIGKILL残留阻止服务误初始化。Compose默认测试项目、回环端口、后台关闭、UID10001、只读根FS与日志轮换。操作命令见[部署恢复手册](DEPLOYMENT.md)。
 
-维护启动及每60秒分批清理；每类主记录最多200，相关尝试/贡献一并删除，手动清理需确认及当前策略版本。保留等待/重试/在途、不确定或近期/未完成尝试、重发引用及关联内容。已见/已发/来源身份账本、来源状态及任务版本永久保留；清理后同帖不重复入队。不会VACUUM或保证文件即刻缩小。
+SeekBell-Dev未提交实现：新增18项备份测试及11项基础/锁测试共29项通过（8.68秒），含WAL、0006→0007、损坏归档/错钥/路径拒绝、失败重试及真实子进程SIGKILL；Ruff、前端类型/构建、wheel、隐私身份通过。前端仅文案，复用M3浏览器证据；未重跑369项旧套件。下一步提交后固定SHA镜像/Compose禁外网恢复演练及CI，结果待补。
 
-完整pytest369项通过（32.99秒，新增27）；Chromium7项通过（15.9秒），含390宽度保存刷新、确认清理、改密退出/旧Cookie失效/新密码登录，无横向溢出/外部请求/pageerror，截图已查看。Ruff/前端格式类型构建、锁/wheel/隐私身份均通过；固定SHA镜像已构建，禁外网容器通过：0007、UID10001、三循环/健康锁、会话/任务/目标与时区/保留策略重启、手动清理及离线闭环均成功，镜像ID见阶段记录；[CI39173808999](https://github.com/Aspeternity/seekbell/actions/runs/39173808999)全部成功：369项pytest（52.06秒）、7项Chromium（31.0秒）、迁移/镜像及禁外网服务重启检查。均临时数据/合成凭据/模拟服务，未用真实用户库，不是用户验收。详见[系统设置记录](history/2026-10-19-M3系统设置.md)。
+前阶段完整pytest369、Chromium7及固定镜像/CI39173808999全部成功，均临时数据和模拟服务；细节见[系统设置记录](history/2026-10-19-M3系统设置.md)，通知及更早记录按链接读取。不是用户验收。
 
 ## 下一步与读取清单
 
-下一步进入M4本地部署恢复交付：Compose、一致性备份/密钥封装、恢复校验及迁移/回退演练。读取ROADMAP M4、SPEC/架构备份恢复/部署边界、DECISIONS授权与deploy/容器入口；仅补读影响代码。真实RSS/四渠道、PVE/arm64、完整备份恢复及用户验收未做，无开发阻塞；客户端弃用提示与Rootless无cgroup资源限额仍在。
+先完成M4镜像演练，记录SHA/镜像ID与结果；有代码修正只补相关检查。之后统一安排用户验收材料，不自动运行真实RSS/四渠道，不部署。PVE、原生arm64、真实反代及通知接收均未验证；客户端弃用提示、Rootless无cgroup限额仍在。
 
-交接：本次没有遗留未提交实现、运行中的开发检查或部署；最近CI已完成，临时检查容器/卷已清理。本地镜像seekbell:m3-settings可复用，未发布；没有正式运行实例或远端部署证据。新对话先核对Git状态，只在代码相关变化后执行针对性验证，不重复全套。原Ubuntu中pnpm/uv不作为开发入口，需通过正式WSL的bash -lc加载工具PATH；复杂写入可用wsl.exe派发Python stdin，避免嵌套shell替换误用D盘路径。
+本任务读取：ROADMAP M4、ARCHITECTURE备份/部署、DEPLOYMENT、受影响backup/db/凭据与容器检查代码。无需重读全仓或重复旧验证。尚无运行中的正式实例；本机旧镜像seekbell:m3-settings可复用，未发布。
 
 ## 授权
 
-沿用独立WSL、noreply、已确认范围本地开发与私有main推送，推送前隐私身份检查；验收统一安排。无GHCR发布、部署、真实发送、原环境清理或全局WSL调整授权；不扩大范围、不组织多代理。
+沿用独立WSL、noreply、已确认范围本地开发及私有main推送；推送前python3 scripts/check_privacy.py --identity。用户验收尚未进行，统一安排。无GHCR发布、远端部署、真实发送、原环境清理或全局WSL调整授权；不扩大范围、不组织多代理。

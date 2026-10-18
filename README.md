@@ -2,7 +2,7 @@
 
 自托管的 NodeSeek 新帖监控与通知工具。范围与技术栈见 [SPEC](docs/SPEC.md) 和 [ARCHITECTURE](docs/ARCHITECTURE.md)。
 
-当前已实现 **M1核心闭环与M2四渠道通知**：RSS解析、规则、基线/身份账本、事务outbox、可恢复投递，以及Telegram Bot/Bark/SMTP/Webhook适配、加密目标配置和独立目标测试记录。M2通过模拟验证；M3已接入管理员认证、四渠道目标/任务配置及模拟/历史规则试匹配，后台采集/投递生命周期及概览、网站与本地内容命中页面也已接入。通知管理已接入目标发送测试、投递记录和独立手动重发，系统设置已接入管理员、显示时区、历史保留及版本信息，六页核心流程已具备；备份恢复在M4接入。真实通知与用户验收待Web完成后统一组织，当前证据以[PROJECT_STATE](docs/PROJECT_STATE.md)为准。
+当前已实现 **M1核心闭环与M2四渠道通知**：RSS解析、规则、基线/身份账本、事务outbox、可恢复投递，以及Telegram Bot/Bark/SMTP/Webhook适配、加密目标配置和独立目标测试记录。M2通过模拟验证；M3已接入管理员认证、四渠道目标/任务配置及模拟/历史规则试匹配，后台采集/投递生命周期及概览、网站与本地内容命中页面也已接入。通知管理已接入目标发送测试、投递记录和独立手动重发，系统设置已接入管理员、显示时区、历史保留及版本信息，六页核心流程已具备；M4已接入停服加密备份/空目录恢复与部署模板，见[部署恢复手册](docs/DEPLOYMENT.md)。真实通知与用户验收待Web完成后统一组织，当前证据以[PROJECT_STATE](docs/PROJECT_STATE.md)为准。
 
 ## 环境
 
@@ -153,7 +153,7 @@ pnpm --dir frontend test:e2e
 
 精简SeenPost/DeliveredPost/SourceItem身份账本、当前来源状态和任务配置/版本不随普通历史清理；P01验证清理后的同帖仍不会重新自动推送。清理会永久删除普通历史，不运行VACUUM，也不保证文件立即变小。不提供清空去重或自动遗忘身份的开关。
 
-备份与恢复区域说明当前边界，不提供不可用按钮；一致性备份与原credentials.key封装、恢复校验和重新验证在M4实现。
+备份与恢复区域说明停服维护流程。完整加密备份包含原credentials.key；恢复到空数据目录、验证备份管理员密码并撤销旧会话，具体命令见[部署恢复手册](docs/DEPLOYMENT.md)。
 
 ~~~bash
 uv run --frozen pytest -q tests/test_settings.py tests/test_authentication.py
@@ -173,7 +173,7 @@ docker run --rm --name seekbell-dev -p 127.0.0.1:8000:8000 \
   -v seekbell-dev-data:/data seekbell:local
 ```
 
-镜像使用 UID/GID 10001，数据持久化在命名卷；绑定已有宿主目录时需预先配置正确所有权。只运行一个容器实例/一个 Uvicorn worker。Compose、备份封装、升级回退与实机部署在 M4；双架构和 PVE 验证尚未完成。
+镜像使用 UID/GID 10001，数据持久化在命名卷；绑定已有宿主目录时需预先配置正确所有权。只运行一个容器实例/一个 Uvicorn worker。Compose、备份封装和升级回退命令见[部署恢复手册](docs/DEPLOYMENT.md)；双架构和 PVE 验证尚未完成。
 
 `check_container.py`只使用已构建的本地镜像，创建禁用外网的临时容器和数据卷，检查API、构建资源、非root身份、进程锁、健康检查、账号/会话/目标与任务重启持久化、纯规则试匹配和镜像内离线闭环，结束后删除本次创建的临时资源，不触碰日常数据卷。
 
@@ -184,3 +184,12 @@ docker run --rm --name seekbell-dev -p 127.0.0.1:8000:8000 \
 远程仓库为私有的 [Aspeternity/seekbell](https://github.com/Aspeternity/seekbell)。镜像发布、SSH、真实通知目标和许可证尚未提供；相关动作按明确授权执行。原始规格文件保存在初始 Git 提交中。
 
 提交身份使用GitHub noreply地址。首次克隆后执行`git config --local core.hooksPath .githooks`启用提交/推送前邮箱检查；CI也检查全部提交身份及Git历史/索引中的非示例邮箱，失败日志不输出被拒地址。真实通知凭据只保存在运行配置，不写入Git。
+
+## M4 自动检查
+
+```bash
+uv run --frozen pytest -q tests/test_backup.py tests/test_baseline.py
+python3 scripts/check_m4_container.py "seekbell:$(git rev-parse HEAD)" --revision "$(git rev-parse HEAD)"
+```
+
+第二条要求先构建相应提交镜像，仅创建临时Compose项目/卷、禁外网容器，验证只读文件系统、UID10001、停服锁、数据库与原密钥恢复、会话撤销、迁移失败安全停止和从升级前归档恢复。结束删除本次临时资源。GHCR仅提供手动且默认不发布的流程，未获授权不触发发布。

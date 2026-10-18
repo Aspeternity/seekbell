@@ -1,0 +1,26 @@
+name: ${SEEKBELL_PROJECT_NAME:-seekbell-test}
+services:
+  seekbell:
+    image: ${SEEKBELL_IMAGE:?Set a verified full-SHA image tag or digest}
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 60s
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    ports:
+      - "${SEEKBELL_BIND_ADDRESS:-127.0.0.1}:${SEEKBELL_PORT:-8000}:8000"
+    environment:
+      SEEKBELL_BACKGROUND_ENABLED: ${SEEKBELL_BACKGROUND_ENABLED:-false}
+      SEEKBELL_TRUSTED_PROXIES: ${SEEKBELL_TRUSTED_PROXIES:-[]}
+    volumes:
+      - data:/data
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m,mode=1777
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "3"
+volumes:
+  data:

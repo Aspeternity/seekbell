@@ -22,3 +22,6 @@ data/
 .vscode/
 playwright-report/
 test-results/
+
+# Encrypted operational backups are never repository artifacts.
+*.sbb

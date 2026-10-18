@@ -54,3 +54,5 @@ jobs:
         run: docker build --build-arg VCS_REF="$GITHUB_SHA" -t seekbell:ci .
       - name: Check packaged service without external networking
         run: python scripts/check_container.py seekbell:ci --revision "$GITHUB_SHA"
+      - name: Check Compose backup restore and rollback without external networking
+        run: python scripts/check_m4_container.py seekbell:ci --revision "$GITHUB_SHA"

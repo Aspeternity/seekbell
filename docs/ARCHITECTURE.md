@@ -134,7 +134,7 @@ ApplicationRuntime全局互斥一个显式发送，复用NotifierRegistry，纳�
 
 SystemSettings.cleanup使用BEGIN IMMEDIATE和有上限的批次，ApplicationRuntime维护循环启动及每60秒调用，每类主记录最多200条，关联尝试/贡献一并清理；手动POST需管理员/CSRF/confirmed=true与当前策略版本。按过期完成的显式记录→确定结束自动outbox及其尝试/贡献→无贡献引用的命中→无outbox保护的Post→SourceRun顺序清理。自动事件只清理sent/failed/cancelled且uncertain=false、无未完成/近期尝试或迟到证据、无剩余手动引用的记录。未知显式结果、未完成自动投递及依赖内容保留。整个批次与统计一同提交，出错回滚，不在网络事务内执行。
 
-SeenPost、DeliveredPost、SourceItem及SourceState与任务版本不参与普通清理；DeliveredPost.event_id是精简回执信息，允许其可读outbox已过期。清理不重新摄取、匹配或发送，不能重置去重。SQLite文件不自动VACUUM，数据大小不宣称同步缩小。备份恢复仍属M4，系统页只有状态说明，无假按钮。
+SeenPost、DeliveredPost、SourceItem及SourceState与任务版本不参与普通清理；DeliveredPost.event_id是精简回执信息，允许其可读outbox已过期。清理不重新摄取、匹配或发送，不能重置去重。SQLite文件不自动VACUUM，数据大小不宣称同步缩小。系统页说明停服备份恢复维护流程，具体契约见下文M4。
 
 ## 私有开发与实机验证（建议路线）
 
@@ -147,3 +147,11 @@ PR进行代码检查和容器构建；只有受信任、获授权的流水线发
 Codex 可在授权 SSH 范围内部署测试环境；没有 SSH 则提供含固定镜像版本的更新命令。不要把 docker socket 暴露给应用用于自更新。
 
 发布 amd64/arm64 镜像；架构构建成功不等于两种架构均已原生实机验证。正式环境不自动升级。回退需结合数据库版本和备份，不能仅更换旧镜像。
+
+## M4 停服备份与恢复契约
+
+`python -m seekbell.backup create|restore ARCHIVE` 是交互维护入口，不提供在线文件覆盖API。全量备份必须重新验证当前管理员密码，持有实例锁，用SQLite backup API快照并校验完整性/外键、当前schema和全部加密目标/历史快照，包含原credentials.key。固定清单/数据库/密钥由scrypt派生的AES-256-GCM整体认证加密，流式I/O，归档0600、临时目录0700；密码不接受命令行/环境变量，非终端输入拒绝。无普通配置导出功能。
+
+恢复验证备份中的管理员密码，要求目标空目录，认证解密后只接受三个固定普通成员；先校验已知数据库版本，再在私有暂存目录迁移及验证全部凭据，撤销浏览器会话后安装。迁移失败不修改现用卷/备份。安装前持久化.restore-in-progress，成功fsync完整数据库/密钥后移除；异常中断保留标记时统一实例锁拒绝服务与维护启动。恢复不会自动停用队列或重建基线，恢复到旧时间可能再次发送，演练须隔离网络。
+
+Compose默认独立测试项目、回环端口、后台关闭，非root只读根文件系统、唯一可写数据卷及临时tmpfs，日志轮换，保留旧卷进行升级回退。备份为匹配的数据库与密钥对；旧镜像不能直接打开升级后的卷，不自动downgrade。GHCR流程只在main手动触发，默认只构建；发布授权与环境审核设置独立于代码。操作命令和限制见DEPLOYMENT。

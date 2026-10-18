@@ -257,8 +257,7 @@ onUnmounted(clearPasswords)
     </NCard>
     <NCard title="备份与恢复" class="record-card"
       ><p>
-        备份恢复将在 M4 部署恢复阶段接入，目前没有 Web 备份或恢复操作。加密通知配置必须连同原
-        credentials.key 保存；复制正在写入的 SQLite 文件不能代替一致性备份。
+        完整备份通过停服维护命令生成，包含账号、历史、去重账本、通知凭据及原密钥，并用独立口令加密。恢复时验证备份中的管理员密码，只能写入空数据目录，完成后须重新登录。部署操作见随版本提供的备份恢复文档；请先在独立环境验证，再切换日常数据卷。
       </p></NCard
     >
     <NCard v-if="version" title="版本与运行状态" class="record-card">
