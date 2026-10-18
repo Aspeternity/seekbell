@@ -1,0 +1,17 @@
+**
+!Dockerfile
+!pyproject.toml
+!uv.lock
+!backend/
+!backend/**
+!frontend/
+!frontend/**
+**/__pycache__/
+frontend/node_modules/
+frontend/dist/
+**/.env
+**/.env.*
+**/*.db
+**/*.sqlite*
+**/*.key
+**/*.pem

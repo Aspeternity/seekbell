@@ -1,0 +1,1 @@
+"""SeekBell modular monolith."""

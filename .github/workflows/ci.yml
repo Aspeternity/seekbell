@@ -1,0 +1,49 @@
+name: Local baseline checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      UV_PYTHON_DOWNLOADS: never
+      SEEKBELL_DATA_DIR: ${{ runner.temp }}/seekbell-data
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.13.1'
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+      - run: uv lock --check
+      - run: uv sync --frozen
+      - run: uv run --frozen ruff check .
+      - run: uv run --frozen ruff format --check .
+      - run: uv run --frozen pytest -q
+      - run: uv build --wheel
+      - run: pnpm --dir frontend install --frozen-lockfile
+      - run: pnpm --dir frontend format:check
+      - run: pnpm --dir frontend build
+      - name: Verify migration commands
+        run: |
+          uv run --frozen python -m seekbell.db upgrade
+          uv run --frozen python -m seekbell.db current
+          uv run --frozen python -m seekbell.db check
+      - name: Build container without publishing
+        run: docker build --build-arg VCS_REF="$GITHUB_SHA" -t seekbell:ci .
+      - name: Check packaged service without external networking
+        run: python scripts/check_container.py seekbell:ci --revision "$GITHUB_SHA"

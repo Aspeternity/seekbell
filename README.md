@@ -1,34 +1,74 @@
-# SeekBell — Codex 开发规格包
+# SeekBell
 
-规格版本：v1.1；整理日期：2026-10-18（Asia/Shanghai）。
+自托管的 NodeSeek 新帖监控与通知工具。范围与技术栈见 [SPEC](docs/SPEC.md) 和 [ARCHITECTURE](docs/ARCHITECTURE.md)。
 
-这是开发交接文档，不是可运行应用。当前尚未创建项目仓库、编写业务代码、配置 Actions 或部署服务。文件可放入未来 seekbell 仓库根目录；如已有文件，先比较再合并，不覆盖已有工作。
+当前为 **M0 工程基线**：可运行的 FastAPI / Vue 3 / Naive UI 骨架、SQLite 迁移、版本页和基础 CI。管理员、采集、规则与通知尚未实现，不能作为监控服务投入使用。当前进度和证据以 [PROJECT_STATE](docs/PROJECT_STATE.md) 为准。
 
-## 定位
+## 环境
 
-自托管的网站新内容监控与关键词通知工具。项目名称 SeekBell，仓库/镜像/Compose 服务建议使用 seekbell，中文名称不固定。
+服务运行于 Linux，Python 3.12、Node 24.22.0（`.node-version`）、uv 0.13.1、pnpm 10.34.7。精确依赖见 `uv.lock` 和 `frontend/pnpm-lock.yaml`。工具安装参考 [uv](https://docs.astral.sh/uv/getting-started/installation/)、[Node](https://nodejs.org/en/download)、[pnpm](https://pnpm.io/installation)。
 
-项目维护网站适配，用户从已适配网站中选择并创建监控任务。首版仅 NodeSeek 官方 RSS，四种通知：Telegram Bot、Bark、SMTP、通用 Webhook。
+WSL 请使用 Linux Node/pnpm，避免误用 Windows 的可执行文件。数据目录放在 Linux 本地文件系统，正式部署不能直接使用 `/mnt/c`、`/mnt/d`、NFS 或 SMB 数据卷。跨文件系统安装 uv 依赖时可设置 `UV_LINK_MODE=copy`。
 
-## 使用与阅读入口
+## 安装与检查
 
-这是仓库文档包，不是可运行应用，无需“部署”。将AGENTS.md、README.md和docs目录放入开发项目根目录；已有同名文件先比较合并。
+在仓库根目录执行；以下命令不联系论坛或真实通知目标。
 
-每次新对话先读AGENTS.md和docs/PROJECT_STATE.md，再按状态中的文件/章节清单补读。首次开发需要了解基础规格；后续不重复全读。
+```bash
+uv lock --check
+uv sync --frozen
+pnpm --dir frontend install --frozen-lockfile
+uv run --frozen ruff check .
+uv run --frozen ruff format --check .
+uv run --frozen pytest -q
+uv build --wheel
+pnpm --dir frontend format:check
+pnpm --dir frontend build
+```
 
-- SPEC：需求；ARCHITECTURE：架构；ROADMAP：阶段。
-- ACCEPTANCE：验收；RESEARCH：数据源依据；DECISIONS：决策及待办。
-- PROJECT_STATE：唯一当前进度入口，含代码/部署基准、证据、无效路线、下一步与授权。
-- CODEX_START：首次指令、换对话前交接、新Codex与顾问对话提示词。
+Python 测试使用临时 SQLite 和进程内 HTTP 客户端，并拒绝测试进程的外网连接。CI 执行这些检查及迁移命令、镜像构建；没有发布、远程部署或真实发送步骤。远程 Actions 是否通过需在仓库配置后单独确认。
 
-## v1.1变更
+## 本地运行
 
-只完善工作衔接，不改变产品范围和技术栈。改为两文件入口＋按需章节；增加检查点更新、证据版本、未提交工作、失败路线、旧阶段按需归档和顾问协作流程。状态由Codex维护，用户不必手写交接报告。版本v1.1替代此前v1.0用于首次开发。
+```bash
+export SEEKBELL_DATA_DIR="$HOME/.local/share/seekbell-dev"
+uv run --frozen python -m seekbell.db upgrade
+uv run --frozen python -m seekbell.db current
+uv run --frozen python -m seekbell.db check
+pnpm --dir frontend build
+uv run --frozen python -m seekbell
+```
 
-## 状态约定
+打开 [本地页面](http://127.0.0.1:8000/)。后端以一个进程提供 API 与构建后的静态文件，启动自动迁移；迁移失败直接停止。同一数据目录只允许一个服务/维护进程，停止服务后才能运行维护命令。
 
-- **已确认**：用户明确同意的范围，开发不得自行扩大或逆转。
-- **实施默认建议**：尚未单独逐项确认，可按合理默认实现并记录，不冒充用户明确决定。
-- **待提供/核实**：缺少外部信息；不阻塞无关的本地开发。
+开发前端时，保持后端运行，在另一终端执行 `pnpm --dir frontend dev`，打开终端显示的地址。Vite 将 `/api` 和 `/health` 代理到本地 8000 端口；仅用于开发。后端单独运行且尚未构建前端时，API 可用，首页返回 404。
 
-后续如用户修改决定，以最新明确指令为准，同步更新文档。避免只更新聊天、不更新仓库。
+|环境变量|默认|用途|
+|---|---|---|
+|`SEEKBELL_DATA_DIR`|`data`|SQLite 和进程锁目录；容器内为 `/data`|
+|`SEEKBELL_STATIC_DIR`|`frontend/dist`|构建后的前端目录|
+|`SEEKBELL_BUILD_REVISION`|`development`|显示的代码版本；镜像通过 `VCS_REF` 写入完整提交 SHA|
+
+只开放只读的 `/api/version`、`/health/live`、`/health/ready`。存活检查不依赖外部服务；就绪检查验证数据库和迁移。M0 不启用采集/通知调度，也没有管理员初始化入口或初始化令牌。反代头默认不信任，HTTPS/认证将在后续阶段验证。
+
+## 本地镜像
+
+仅用于 M0 冒烟检查，不代表已完成 M4/M5 部署验收。Docker daemon 需要可用；端口只绑定本机。构建前确认代码已提交，以保证版本对应镜像内容。
+
+```bash
+docker build --build-arg VCS_REF="$(git rev-parse HEAD)" -t seekbell:local .
+python3 scripts/check_container.py seekbell:local --revision "$(git rev-parse HEAD)"
+docker volume create seekbell-m0-data
+docker run --rm --name seekbell-m0 -p 127.0.0.1:8000:8000 \
+  -v seekbell-m0-data:/data seekbell:local
+```
+
+镜像使用 UID/GID 10001，数据持久化在命名卷；绑定已有宿主目录时需预先配置正确所有权。只运行一个容器实例/一个 Uvicorn worker。Compose、备份、凭据加密、升级回退与实机部署在 M4；双架构和 PVE 验证尚未完成。
+
+`check_container.py`只使用已构建的本地镜像，创建禁用外网的临时容器和数据卷，检查API、构建资源、非root身份、进程锁、健康检查与重启持久化，结束后删除本次创建的临时资源，不触碰日常数据卷。
+
+## 开发与交接
+
+每次从 [AGENTS.md](AGENTS.md) 和 [PROJECT_STATE](docs/PROJECT_STATE.md) 进入，再按当前阅读清单补读。阶段见 [ROADMAP](docs/ROADMAP.md)，验收边界见 [ACCEPTANCE](docs/ACCEPTANCE.md)，外部待办见 [DECISIONS](docs/DECISIONS.md)。首版只支持官方 RSS，不扩展全文、回帖、自定义网站或 TG 频道采集。
+
+远程仓库、镜像发布、SSH、真实通知目标和许可证尚未提供；本地开发继续，远程动作按明确授权执行。原始规格文件保存在初始 Git 提交中。
