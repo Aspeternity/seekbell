@@ -7,6 +7,7 @@ from sqlalchemy import Engine, func, or_, select
 from sqlalchemy.orm import Session
 
 from seekbell.db.models import (
+    ManualDeliveryAttempt,
     NotificationTarget,
     Outbox,
     Post,
@@ -39,7 +40,7 @@ def application_configuration(engine: Engine, data_dir: Path) -> Configuration:
             )
             .limit(1)
         )
-        for model in (Outbox, TargetTestAttempt):
+        for model in (Outbox, TargetTestAttempt, ManualDeliveryAttempt):
             encrypted = encrypted or session.scalar(
                 select(model.id)
                 .where(model.target_snapshot["config_ciphertext"].as_string().is_not(None))

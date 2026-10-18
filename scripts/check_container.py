@@ -129,6 +129,9 @@ assert site['scheduler']['components'] == {'collector': 'running', 'delivery': '
 assert call('/api/manage/content')[1]['total'] == 0
 assert call('/api/manage/overview')[1]['counts']['posts'] == 0
 assert len(call('/api/manage/content/options')[1]) == 1
+for kind in ('automatic', 'manual', 'test'):
+    status, records = call('/api/manage/deliveries?kind=' + kind)
+    assert status == 200 and records['items'] == [] and records['total'] == 0
 print(json.dumps({
     'administrator_session': 'passed', 'configuration': 'passed', 'mode': sys.argv[1]
 }))

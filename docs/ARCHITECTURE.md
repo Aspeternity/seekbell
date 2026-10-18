@@ -68,7 +68,7 @@ HTTP请求有连接3秒/单次I/O 8秒限制，Worker外层10秒；业务响应�
 
 SMTP使用标准库smtplib在线程执行，默认隐式TLS，也可选STARTTLS，plain须allow_insecure明确允许；不降级TLS校验。每目标单一收件人避免部分接受，4xx临时/5xx永久，DATA阶段断连为未知。已接受后关闭连接失败不撤销成功；线程取消后仍持发送锁直到socket关闭，避免同时重试。邮件Message-ID稳定，但不承诺接收端去重或进入收件箱。
 
-统一纯文本模板含标题/原帖链接/作者/版块/UTC时间/命中任务；摘要默认关，可限长。Telegram最多4000个UTF-16单位、Bark短文本1800；过长字段带省略号，Webhook保留完整任务列表。`TargetTesting`仅显式调用，禁用目标亦可手动测试；每次新事件和独立记录，不进入自动帖子账本；超时/中断保留未知，不自动重试。手动重发自动消息属于M3（D07），不能用目标测试冒充。
+统一纯文本模板含标题/原帖链接/作者/版块/UTC时间/命中任务；摘要默认关，可限长。Telegram最多4000个UTF-16单位、Bark短文本1800；过长字段带省略号，Webhook保留完整任务列表。`TargetTesting`仅显式调用，禁用目标亦可手动测试；每次新事件和独立记录，不进入自动帖子账本；超时/中断保留未知，不自动重试。M3的D07使用独立ManualDeliveryAttempt，不能用目标测试冒充。
 
 协议依据：[Telegram Bot API](https://core.telegram.org/bots/api#sendmessage)、[Bark服务端API](https://github.com/Finb/bark-server/blob/master/docs/API_V2.md)、[Python SMTP](https://docs.python.org/3.12/library/smtplib.html)、[Fernet](https://cryptography.io/en/latest/fernet/)。M2只用合成样本验证，不作真实接收承诺。
 
@@ -108,7 +108,7 @@ Configuration复用原短写事务，目标update在事务内校验expected_revi
 
 服务端返回规范化规则及同一explain/evaluate结果。历史试匹配仅读取nodeseek本地Post最近1～100条，给出实际样本数、总数及样本时间边界；不写规则、SeenPost/DeliveredPost/RuleHit/outbox，也不访问网络。摘要None与空字符串保持区别；帖子链接重新构造为固定NodeSeek HTTPS路径，外部字段按文本呈现。
 
-启动在数据目录进程锁内加载/独占创建credentials.key，检查目标与outbox/目标测试的加密快照；有密文缺钥、坏钥/权限/配置时停止并释放锁。当前已接入Configuration与采集/投递生命周期，目标测试仍未暴露为Web操作。网页管理401统一恢复会话入口，多请求合并恢复，组件卸载清空敏感草稿；无浏览器持久凭据。
+启动在数据目录进程锁内加载/独占创建credentials.key，检查目标与outbox/目标测试的加密快照；有密文缺钥、坏钥/权限/配置时停止并释放锁。当前已接入Configuration与采集/投递生命周期，目标测试及D07已接入受保护的显式Web操作。网页管理401统一恢复会话入口，多请求合并恢复，组件卸载清空敏感草稿；无浏览器持久凭据。
 
 ## M3调度与运行页契约
 
@@ -117,6 +117,14 @@ ApplicationRuntime在迁移、认证与密钥检查完成后构造一套RSS客�
 意外循环退出只记录固定错误码，不输出异常字符串/参数，降低readiness但不改变liveness；普通采集失败只改变来源状态和退避。网站设置提交后唤醒Runner，仍检查持久化next_attempt_at，不回放错过的tick。0005_source_revision为来源新增配置版本，网站与来源启停及频率修改在同一短事务内更新；expected_revision拒绝旧页面，摄取时核对抓取前版本，防止在途响应跨越暂停/恢复边界。
 
 POST /api/manage/site/test要求管理员/CSRF并共用SourceRunner锁；重叠返回409，遵守已有失败退避，15秒请求预算。成功只返回合法数/原始数/安全诊断，不建基线或写帖子；失败保存SourceRun、错误码与退避。URL和适配器固定，不能通过此入口访问其他来源。GET site/overview/content/options均受认证；内容筛选分页及命中原因只读本地表，保留任务原规则版本与软删除证据。链接从正数字ID重建，文本展示限长不改变后端匹配字段。
+
+## M3显式通知与D07契约
+
+0006_manual_deliveries增加manual_delivery_attempts，保存原outbox引用、当前目标加密快照、独立payload/event_id和单次结果。原通知内容保留，标题加“【手动重发】”；不写自动Outbox/DeliveryAttempt/DeliveredPost/SeenPost/RuleHit。只有已结束的自动事件（sent/failed/cancelled）可手动重发，当前目标须启用；事务内核对expected_revision。任务停用/删除不抹去历史，管理员明确重发历史消息不恢复任务贡献。重发成功不修正原自动终态。
+
+目标测试沿用独立TargetTestAttempt，允许测试已停用目标。两个写入口统一要求管理员/CSRF、confirmed严格布尔true与UUID v4 request_id。每个请求ID在短事务中先保存未知结果和加密配置，再在事务外发送，最后写结果。相同ID/资源/快照版本重放只读原结果；跨资源/跨显式类型或与自动事件ID冲突返回409。完成、中断与结果未知都不自动重试；新确认才创建新事件，Webhook Idempotency-Key使用该事件ID。端到端重复仍可能发生。
+
+ApplicationRuntime全局互斥一个显式发送，复用NotifierRegistry，纳入退出宽限/取消与SQLite工作排空，拒绝关闭后新发送。HTTPX/SMTP超时及脱敏沿用M2。GET deliveries/detail按明确安全投影返回原目标名称/渠道/版本、状态、自动尝试及迟到证据；不返回目标密文、秘密、完整wire快照或异常文本。UI目标配置/投递记录双标签，发送前显示接收目标与使用的配置版本并明确确认；过期配置或在途事件拒绝，保留同一确认请求ID用于响应丢失恢复。
 
 ## 私有开发与实机验证（建议路线）
 

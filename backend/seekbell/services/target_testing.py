@@ -1,17 +1,18 @@
 """Explicit target tests have separate history and never change automatic deduplication."""
 
-import asyncio
 import time
 from collections.abc import Callable
 
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
-from seekbell.db.models import NotificationTarget, TargetTestAttempt
+from seekbell.db.models import ManualDeliveryAttempt, NotificationTarget, Outbox, TargetTestAttempt
 from seekbell.db.transactions import write_session
 from seekbell.domain.delivery import SendResult
 from seekbell.notifiers.base import Notifier
+from seekbell.services.async_tools import storage_call
 from seekbell.services.configuration import identifier, target_snapshot
+from seekbell.services.explicit_sending import SendConflict, SendNotFound, send_once
 
 
 class TargetTesting:
@@ -28,12 +29,24 @@ class TargetTesting:
             raise ValueError("Target test timeout must be between 0 and 10 seconds")
         self.timeout = timeout
 
-    def _start(self, target_id: str):
-        key, at = identifier(), self.clock()
+    def _start(self, target_id: str, key: str | None = None, expected_revision: int | None = None):
+        key, at = key or identifier(), self.clock()
         with write_session(self.engine) as session:
+            existing = session.get(TargetTestAttempt, key)
+            if existing is not None:
+                if existing.target_id != target_id or (
+                    expected_revision is not None
+                    and existing.target_snapshot["revision"] != expected_revision
+                ):
+                    raise SendConflict
+                return key, None, None
+            if session.get(ManualDeliveryAttempt, key) or session.get(Outbox, key):
+                raise SendConflict
             target = session.get(NotificationTarget, target_id)
             if target is None:
-                raise ValueError("Unknown target")
+                raise SendNotFound
+            if expected_revision is not None and target.revision != expected_revision:
+                raise SendConflict
             snapshot = target_snapshot(target)
             session.add(
                 TargetTestAttempt(
@@ -69,22 +82,13 @@ class TargetTesting:
             attempt.result, attempt.error_code = result.status, result.code
             attempt.finished_at = self.clock()
 
-    async def run(self, target_id: str) -> str:
-        key, snapshot, payload = await asyncio.to_thread(self._start, target_id)
-        notifier = self.notifiers.get(snapshot["kind"])
-        result = SendResult(status="permanent_error", code="unsupported_notifier")
-        if notifier:
-            try:
-                result = await asyncio.wait_for(
-                    notifier.send(snapshot, payload), timeout=self.timeout
-                )
-                if not isinstance(result, SendResult):
-                    result = SendResult(status="unknown", code="invalid_notifier_result")
-            except TimeoutError:
-                result = SendResult(status="unknown", code="send_timeout")
-            except Exception:
-                result = SendResult(status="unknown", code="send_exception")
-        await asyncio.to_thread(self._finish, key, result)
+    async def run(
+        self, target_id: str, *, key: str | None = None, expected_revision: int | None = None
+    ) -> str:
+        key, snapshot, payload = await storage_call(self._start, target_id, key, expected_revision)
+        if payload is not None:
+            result = await send_once(self.notifiers, snapshot, payload, timeout=self.timeout)
+            await storage_call(self._finish, key, result)
         return key
 
     def get_result(self, key: str) -> dict:

@@ -113,7 +113,7 @@ test('四渠道配置和任务编辑、复制、暂停、两类试匹配在浏�
   await page.getByLabel('密码', { exact: true }).fill(password)
   await page.getByRole('button', { name: '登录', exact: true }).click()
   await expect(page.locator('[aria-busy="true"]')).toHaveCount(0)
-  await page.getByRole('button', { name: '通知目标', exact: true }).click()
+  await page.getByRole('button', { name: '通知管理', exact: true }).click()
   await page.setViewportSize({ width: 390, height: 844 })
   await page.getByRole('button', { name: '新建通知目标', exact: true }).click()
   await page.getByLabel('目标名称', { exact: true }).fill('手机 Bark')
@@ -296,6 +296,90 @@ test('网站连接、后台启停、概览和本地内容命中在手机中可�
   await page.getByRole('button', { name: '概览', exact: true }).click()
   await expect(page.getByText('最近窗口：3 条 · 连续失败 0 次', { exact: true })).toBeVisible()
   await page.screenshot({ path: testInfo.outputPath('overview-mobile.png'), fullPage: true })
+  expect(errors).toEqual([])
+  expect(external).toEqual([])
+})
+
+test('通知管理确认测试发送、查询尝试和独立手动重发', async ({ page, context }, testInfo) => {
+  test.setTimeout(60000)
+  const external: string[] = []
+  const errors: string[] = []
+  const responses: string[] = []
+  await context.route('**/*', (route) => {
+    if (new URL(route.request().url()).origin !== origin) {
+      external.push(route.request().url())
+      return route.abort()
+    }
+    return route.continue()
+  })
+  page.on('pageerror', (error) => errors.push(error.message))
+  page.on('response', (response) => {
+    if (response.url().includes('/api/manage/'))
+      void response
+        .text()
+        .then((value) => responses.push(value))
+        .catch(() => {})
+  })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+  await page.getByLabel('用户名', { exact: true }).fill(username)
+  await page.getByLabel('密码', { exact: true }).fill(password)
+  await page.getByRole('button', { name: '登录', exact: true }).click()
+  await page.getByRole('button', { name: '通知管理', exact: true }).click()
+  await page.getByRole('button', { name: '测试通知 编辑过的 Bark', exact: true }).click()
+  await expect(page.getByText('确认发送测试通知', { exact: true })).toBeVisible()
+  expect((await (await context.request.get('/api/manage/deliveries?kind=test')).json()).total).toBe(
+    0,
+  )
+  await page.getByRole('button', { name: '取消发送', exact: true }).click()
+  await page.getByRole('button', { name: '测试通知 编辑过的 Bark', exact: true }).click()
+  const bodyPromise = page.waitForRequest(
+    (request) => request.url().endsWith('/test') && request.method() === 'POST',
+  )
+  await page.getByRole('button', { name: '确认发送测试', exact: true }).click()
+  const posted = await bodyPromise
+  await expect(
+    page.getByText('渠道接受（bark_accepted）。成功仅代表渠道接受，不代表已阅读。', {
+      exact: true,
+    }),
+  ).toBeVisible()
+  const session = await (await context.request.get('/api/auth/state')).json()
+  const repeated = await context.request.post(posted.url(), {
+    headers: { 'X-CSRF-Token': session.csrf_token },
+    data: posted.postDataJSON(),
+  })
+  expect(repeated.status()).toBe(200)
+  await page.getByRole('tab', { name: '投递记录', exact: true }).click()
+  await expect(page.getByText('符合筛选 1 条', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '查看详情', exact: true }).click()
+  await expect(page.getByText('尝试 1：渠道接受', { exact: false })).toBeVisible()
+  const before = await (await context.request.get('/api/manage/deliveries')).json()
+  expect(before.items[0].status).toBe('sent')
+  await page.getByRole('button', { name: '手动重发 编辑过的 Bark', exact: true }).click()
+  await expect(page.getByText('确认手动重发', { exact: true })).toBeVisible()
+  expect(
+    (await (await context.request.get('/api/manage/deliveries?kind=manual')).json()).total,
+  ).toBe(0)
+  await page.getByRole('button', { name: '确认重发一次', exact: true }).click()
+  await expect(page.getByLabel('记录类别', { exact: true })).toHaveValue('manual')
+  await expect(
+    page.getByText('【手动重发】VPS synthetic offer 9003', { exact: true }),
+  ).toBeVisible()
+  const after = await (await context.request.get('/api/manage/deliveries')).json()
+  expect(after.items).toEqual(before.items)
+  await page.getByRole('button', { name: '查看详情', exact: true }).click()
+  await expect(page.getByRole('button', { name: '查看原自动记录', exact: true })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+  await page.screenshot({ path: testInfo.outputPath('manual-delivery-mobile.png'), fullPage: true })
+  await page.getByRole('button', { name: '查看原自动记录', exact: true }).click()
+  await expect(page.getByText('尝试 1：渠道接受', { exact: false })).toBeVisible()
+  await page.getByLabel('记录类别', { exact: true }).selectOption('test')
+  await expect(page.getByText('符合筛选 1 条', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '查看详情', exact: true }).click()
+  await expect(page.getByText('SeekBell 通知测试', { exact: true })).toHaveCount(2)
+  await page.screenshot({ path: testInfo.outputPath('target-test-mobile.png'), fullPage: true })
+  expect(responses.join('')).not.toContain('synthetic-device-private')
+  expect(responses.join('')).not.toContain('config_ciphertext')
   expect(errors).toEqual([])
   expect(external).toEqual([])
 })

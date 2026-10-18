@@ -281,3 +281,95 @@ export function sourceError(code: string | null): string {
   }
   return labels[code] ?? code
 }
+
+export type DeliveryKind = 'automatic' | 'manual' | 'test'
+export interface ExplicitResult {
+  id: string
+  result: string
+  code: string | null
+  started_at: number
+  finished_at: number | null
+}
+export interface DeliveryRecord {
+  id: string
+  kind: DeliveryKind
+  target_id: string
+  target_name: string
+  channel: Channel
+  target_revision: number
+  status: string
+  result: string | null
+  code: string | null
+  uncertain: boolean
+  started_at: number
+  finished_at: number | null
+  attempt_count: number
+  next_attempt_at: number | null
+  lease_until: number | null
+  original_event_id: string | null
+  title: string
+  url: string | null
+}
+export interface DeliveryDetail extends DeliveryRecord {
+  current_target: Pick<Target, 'id' | 'name' | 'kind' | 'revision' | 'enabled'>
+  matched_tasks: { id: string; version: number; name: string }[]
+  attempts: {
+    sequence: number
+    started_at: number
+    finished_at: number | null
+    result: string
+    code: string | null
+    late_result: string | null
+    late_finished_at: number | null
+  }[]
+}
+export interface DeliveryPage {
+  items: DeliveryRecord[]
+  total: number
+  offset: number
+  limit: number
+}
+export function getDeliveries(params: URLSearchParams): Promise<DeliveryPage> {
+  return request('/api/manage/deliveries?' + params.toString())
+}
+export function getDelivery(id: string, kind: DeliveryKind): Promise<DeliveryDetail> {
+  return request('/api/manage/deliveries/' + id + '?kind=' + kind)
+}
+export function deliveryStatus(value: string | null): string {
+  const labels: Record<string, string> = {
+    pending: '等待发送',
+    retry: '等待自动重试',
+    leased: '发送在途',
+    sent: '渠道接受',
+    failed: '最终失败',
+    cancelled: '已取消',
+    in_progress: '进行中',
+    success: '渠道接受',
+    transient_error: '临时失败',
+    permanent_error: '永久失败',
+    unknown: '结果未知',
+  }
+  return value ? (labels[value] ?? value) : '尚无结果'
+}
+export function explicitResultText(value: ExplicitResult): string {
+  return (
+    deliveryStatus(value.result) +
+    (value.code ? '（' + value.code + '）' : '') +
+    (value.result === 'unknown'
+      ? '。请检查记录和接收端，再次发送可能重复。'
+      : '。成功仅代表渠道接受，不代表已阅读。')
+  )
+}
+export function newRequestId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  bytes[6] = (bytes[6]! & 15) | 64
+  bytes[8] = (bytes[8]! & 63) | 128
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20),
+  ].join('-')
+}

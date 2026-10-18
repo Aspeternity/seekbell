@@ -2,7 +2,7 @@
 
 自托管的 NodeSeek 新帖监控与通知工具。范围与技术栈见 [SPEC](docs/SPEC.md) 和 [ARCHITECTURE](docs/ARCHITECTURE.md)。
 
-当前已实现 **M1核心闭环与M2四渠道通知**：RSS解析、规则、基线/身份账本、事务outbox、可恢复投递，以及Telegram Bot/Bark/SMTP/Webhook适配、加密目标配置和独立目标测试记录。M2通过模拟验证；M3已接入管理员认证、四渠道目标/任务配置及模拟/历史规则试匹配，后台采集/投递生命周期及概览、网站与本地内容命中页面也已接入。目标发送测试、投递记录、手动重发和系统设置仍待完成，尚未完成M3。真实通知与用户验收待Web完成后统一组织，当前证据以[PROJECT_STATE](docs/PROJECT_STATE.md)为准。
+当前已实现 **M1核心闭环与M2四渠道通知**：RSS解析、规则、基线/身份账本、事务outbox、可恢复投递，以及Telegram Bot/Bark/SMTP/Webhook适配、加密目标配置和独立目标测试记录。M2通过模拟验证；M3已接入管理员认证、四渠道目标/任务配置及模拟/历史规则试匹配，后台采集/投递生命周期及概览、网站与本地内容命中页面也已接入。通知管理已接入目标发送测试、投递记录和独立手动重发，系统设置仍待完成，尚未完成M3。真实通知与用户验收待Web完成后统一组织，当前证据以[PROJECT_STATE](docs/PROJECT_STATE.md)为准。
 
 ## 环境
 
@@ -103,7 +103,7 @@ pnpm --dir frontend test:e2e
 
 任务支持创建、编辑、复制草稿（默认暂停）、启停和软删除。条件标签按Enter保存，短语内部空格保留；空组由后端忽略，全空规则明确提示匹配全部新帖。模拟摘要可选择缺失或已知空文本；本地历史只读取最近1～100条并展示实际样本数量/时间，不访问论坛、不发通知、不改变去重账本。
 
-所有/api/manage接口受管理员与CSRF保护；目标编辑需要expected_revision，任务编辑需要expected_version，陈旧编辑返回409并要求重新打开。API错误不回显凭据。模拟/历史测试虽为POST，也需要CSRF。网站页面已提供后台采集开关；目标发送测试与投递记录仍待接入。
+所有/api/manage接口受管理员与CSRF保护；目标编辑需要expected_revision，任务编辑需要expected_version，陈旧编辑返回409并要求重新打开。API错误不回显凭据。模拟/历史测试虽为POST，也需要CSRF。网站页面提供后台采集开关；通知管理提供目标测试与投递记录双标签。
 
 ~~~bash
 uv run --frozen pytest -q tests/test_management.py
@@ -123,6 +123,22 @@ pnpm --dir frontend test:e2e
 
 ~~~bash
 uv run --frozen pytest -q tests/test_runtime.py tests/test_collection.py tests/test_management.py
+pnpm --dir frontend build
+pnpm --dir frontend test:e2e
+~~~
+
+## M3通知管理与独立重发
+
+“通知管理”包含目标配置与投递记录。每个目标均可显式发送测试，停用目标也允许测试；确认页使用已保存的配置并显示目标/渠道/版本，不发送未保存草稿。目标测试与手动重发均只尝试一次，不自动重试。响应丢失时可重试同一确认请求；相同request_id与相同资源/配置版本只返回原结果。取消后重新确认使用新请求ID，可能产生一次重复通知，应先检查记录与接收端。
+
+投递记录区分自动投递、手动重发与目标测试，支持目标/状态筛选和分页；详情显示原目标配置版本、规则版本、每次自动尝试、租约/退避及迟到结果。记录不包含秘密、密文或远端错误正文，结果未知持续提示可能重复。显式发送中断后保留未知结果，不在重启时重新发送。
+
+D07手动重发只允许已经结束（渠道接受、最终失败、已取消）的自动事件，当前目标必须启用；等待/自动重试/在途消息继续由自动队列处理。重发使用原通知内容和当前目标配置，标题添加“【手动重发】”，生成新事件ID及独立记录。不会修改原自动事件、重试次数、已见或已发账本，不能用重发成功冒充原自动投递成功。0006_manual_deliveries保存其加密目标快照和原事件引用；备份必须包含原密钥。
+
+POST /api/manage/targets/{id}/test 与 /deliveries/{id}/resend 都要求管理员、CSRF及请求体request_id（UUID v4）、expected_revision和confirmed=true。配置过期、原事件未结束、目标停用或已有显式发送在进行时返回409；客户端应刷新查看状态，不能盲目生成新请求重试。此版本只允许一个显式发送同时进行，退出与应用网络客户端生命周期统一管理。
+
+~~~bash
+uv run --frozen pytest -q tests/test_delivery_management.py tests/test_notification_integration.py
 pnpm --dir frontend build
 pnpm --dir frontend test:e2e
 ~~~

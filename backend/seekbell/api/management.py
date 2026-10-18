@@ -2,7 +2,7 @@ import time
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.concurrency import run_in_threadpool
 
 from seekbell.api.auth import require_administrator
@@ -12,6 +12,8 @@ from seekbell.notifiers.configs import channel_schemas
 from seekbell.notifiers.credentials import CredentialError
 from seekbell.services.collection import SourceBusy
 from seekbell.services.configuration import Configuration, ConfigurationConflict
+from seekbell.services.delivery_records import DeliveryRecords
+from seekbell.services.explicit_sending import SendConflict, SendNotFound
 from seekbell.services.management import Management
 
 router = APIRouter(prefix="/api/manage", dependencies=[Depends(require_administrator)])
@@ -292,3 +294,66 @@ def content(
         task_id=task_id,
         matched_only=matched_only,
     )
+
+
+class SendInput(Input):
+    request_id: str = Field(
+        pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    )
+    expected_revision: int = Field(ge=1)
+    confirmed: bool
+
+    @field_validator("confirmed")
+    @classmethod
+    def confirmed_action(cls, value: bool):
+        if not value:
+            raise ValueError("Explicit confirmation required")
+        return value
+
+
+async def explicit_send(request: Request, kind: str, key: str, body: SendInput):
+    try:
+        return await request.app.state.runtime.send_explicit(
+            kind, key, key=body.request_id, expected_revision=body.expected_revision
+        )
+    except SendNotFound:
+        raise HTTPException(404, "通知目标或投递记录不存在。") from None
+    except SendConflict:
+        raise HTTPException(
+            409,
+            "发送条件已变化或正在发送，请刷新记录；原事件须已结束，重发目标须启用，配置版本须一致。",
+        ) from None
+
+
+@router.post("/targets/{key}/test")
+async def test_target(request: Request, key: str, body: SendInput):
+    return await explicit_send(request, "test", key, body)
+
+
+@router.post("/deliveries/{key}/resend")
+async def resend_delivery(request: Request, key: str, body: SendInput):
+    return await explicit_send(request, "manual", key, body)
+
+
+@router.get("/deliveries")
+def deliveries(
+    request: Request,
+    kind: Literal["automatic", "manual", "test"] = "automatic",
+    target_id: str | None = Query(default=None, max_length=36),
+    status: str | None = Query(default=None, max_length=32),
+    offset: int = Query(default=0, ge=0, le=1000000),
+    limit: int = Query(default=20, ge=1, le=100),
+):
+    return DeliveryRecords(request.app.state.engine).list(
+        kind=kind, target_id=target_id, status=status, offset=offset, limit=limit
+    )
+
+
+@router.get("/deliveries/{key}")
+def delivery_detail(
+    request: Request, key: str, kind: Literal["automatic", "manual", "test"] = "automatic"
+):
+    try:
+        return DeliveryRecords(request.app.state.engine).detail(key, kind)
+    except SendNotFound:
+        raise HTTPException(404, "投递记录不存在。") from None

@@ -296,3 +296,18 @@ class TargetTestAttempt(Base):
     finished_at: Mapped[float | None] = mapped_column(Float)
     result: Mapped[str] = mapped_column(String(32))
     error_code: Mapped[str | None] = mapped_column(String(80))
+
+
+class ManualDeliveryAttempt(Base):
+    """An explicit resend is independent of the automatic outbox and receipt ledger."""
+
+    __tablename__ = "manual_delivery_attempts"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    original_event_id: Mapped[str] = mapped_column(ForeignKey("outbox.id"), index=True)
+    target_id: Mapped[str] = mapped_column(ForeignKey("notification_targets.id"), index=True)
+    target_snapshot: Mapped[dict] = mapped_column(JSON)
+    payload: Mapped[dict] = mapped_column(JSON)
+    started_at: Mapped[float] = mapped_column(Float)
+    finished_at: Mapped[float | None] = mapped_column(Float)
+    result: Mapped[str] = mapped_column(String(32))
+    error_code: Mapped[str | None] = mapped_column(String(80))

@@ -21,9 +21,23 @@ import {
   message,
   write,
 } from '../management'
+import SendConfirmation from './SendConfirmation.vue'
+import { explicitResultText } from '../management'
 import type { Channel, FieldSchema, Schemas, Target } from '../management'
 
 const props = defineProps<{ csrf: string }>()
+const testTarget = ref<Target | null>(null)
+async function prepareTest(value: Target) {
+  busy.value = true
+  error.value = notice.value = ''
+  try {
+    testTarget.value = await getTarget(value.id)
+  } catch (cause) {
+    error.value = message(cause)
+  } finally {
+    busy.value = false
+  }
+}
 const targets = ref<Target[]>([])
 const schemas = ref<Schemas | null>(null)
 const loading = ref(false)
@@ -190,8 +204,12 @@ onMounted(load)
     <div class="panel-heading">
       <h2>通知目标</h2>
       <div class="actions">
-        <NButton :loading="loading" :disabled="busy" @click="load">刷新目标</NButton>
-        <NButton type="primary" :disabled="busy || !schemas" @click="start()">新建通知目标</NButton>
+        <NButton :loading="loading" :disabled="busy || !!testTarget" @click="load"
+          >刷新目标</NButton
+        >
+        <NButton type="primary" :disabled="busy || !schemas || !!testTarget" @click="start()"
+          >新建通知目标</NButton
+        >
       </div>
     </div>
     <p class="muted">支持四种渠道。目标停用后停止发送与重试；重新启用不会补发已取消的消息。</p>
@@ -307,6 +325,22 @@ onMounted(load)
         </div>
       </NForm>
     </NCard>
+    <SendConfirmation
+      v-if="testTarget"
+      :key="testTarget.id"
+      :csrf="csrf"
+      mode="test"
+      :resource-id="testTarget.id"
+      :target="testTarget"
+      @cancel="testTarget = null"
+      @busy="busy = $event"
+      @done="
+        (value) => {
+          notice = explicitResultText(value)
+          testTarget = null
+        }
+      "
+    />
     <p v-if="!loading && !targets.length" class="empty">
       还没有通知目标。先创建一个目标，再为监控任务选择接收端。
     </p>
@@ -325,12 +359,17 @@ onMounted(load)
         }}
       </p>
       <div class="actions">
-        <NButton :disabled="busy || formOpen" @click="edit(target)">编辑 {{ target.name }}</NButton>
-        <NButton :disabled="busy || formOpen" @click="toggle(target)"
+        <NButton :disabled="busy || formOpen || !!testTarget" @click="edit(target)"
+          >编辑 {{ target.name }}</NButton
+        >
+        <NButton :disabled="busy || formOpen || !!testTarget" @click="toggle(target)"
           >{{ target.enabled ? '停用' : '启用' }} {{ target.name }}</NButton
+        >
+        <NButton :disabled="busy || formOpen || !!testTarget" @click="prepareTest(target)"
+          >测试通知 {{ target.name }}</NButton
         >
       </div>
     </NCard>
-    <p class="muted">本检查点提供配置管理；目标发送测试与投递记录将在后续接入。</p>
+    <p class="muted">测试结果单独保存在投递记录的“目标测试”类别，不改变自动去重。</p>
   </section>
 </template>

@@ -17,7 +17,7 @@ import {
 import { ApiError, authenticate, loadAuth, loadSystemInfo, logout } from './api'
 import type { AuthState, VersionInfo } from './api'
 
-const TargetsPanel = defineAsyncComponent(() => import('./components/TargetsPanel.vue'))
+const NotificationsPanel = defineAsyncComponent(() => import('./components/NotificationsPanel.vue'))
 const TasksPanel = defineAsyncComponent(() => import('./components/TasksPanel.vue'))
 
 const OverviewPanel = defineAsyncComponent(() => import('./components/OverviewPanel.vue'))
@@ -255,7 +255,7 @@ onUnmounted(() => window.removeEventListener('seekbell:session-expired', session
               <NButton
                 :type="activePage === 'targets' ? 'primary' : 'default'"
                 @click="activePage = 'targets'"
-                >通知目标</NButton
+                >通知管理</NButton
               >
               <NButton
                 :type="activePage === 'status' ? 'primary' : 'default'"
@@ -271,7 +271,7 @@ onUnmounted(() => window.removeEventListener('seekbell:session-expired', session
               :csrf="auth.csrf_token"
               @targets="activePage = 'targets'"
             />
-            <TargetsPanel v-else-if="activePage === 'targets'" :csrf="auth.csrf_token" />
+            <NotificationsPanel v-else-if="activePage === 'targets'" :csrf="auth.csrf_token" />
             <NCard v-else title="运行信息" class="status-card">
               <template #header-extra>
                 <NButton secondary :loading="loading" :disabled="submitting" @click="refresh">
@@ -307,7 +307,7 @@ onUnmounted(() => window.removeEventListener('seekbell:session-expired', session
         :bordered="false"
         class="phase-note"
       >
-        后台采集与自动投递已接入；新安装默认暂停来源。目标发送测试、投递记录与手动重发仍在开发。
+        后台采集与自动投递已接入；新安装默认暂停来源。通知测试、投递记录与独立手动重发已接入，系统设置仍在开发。
       </NAlert>
       <footer>SeekBell · 自托管的新帖监控与通知</footer>
     </main>
