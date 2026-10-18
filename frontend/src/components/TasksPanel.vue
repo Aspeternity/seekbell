@@ -17,6 +17,7 @@ import {
   freshRule,
   getTargets,
   getTasks,
+  getTask,
   matchLabels,
   message,
   reasonText,
@@ -94,6 +95,20 @@ function start(task: MonitorTask | null = null, copy = false) {
   error.value = notice.value = ''
   formOpen.value = true
 }
+async function edit(task: MonitorTask, copy = false) {
+  busy.value = true
+  error.value = ''
+  try {
+    const [current, currentTargets] = await Promise.all([getTask(task.id), getTargets()])
+    targets.value = currentTargets
+    start(current, copy)
+  } catch (cause) {
+    error.value = message(cause)
+  } finally {
+    busy.value = false
+  }
+}
+
 function cancel() {
   formOpen.value = false
   editing.value = null
@@ -361,8 +376,8 @@ onMounted(load)
         NodeSeek · 规则版本 {{ task.version }} · {{ task.target_ids.length }} 个通知目标
       </p>
       <div class="actions">
-        <NButton :disabled="busy || formOpen" @click="start(task)">编辑 {{ task.name }}</NButton>
-        <NButton :disabled="busy || formOpen" @click="start(task, true)"
+        <NButton :disabled="busy || formOpen" @click="edit(task)">编辑 {{ task.name }}</NButton>
+        <NButton :disabled="busy || formOpen" @click="edit(task, true)"
           >复制 {{ task.name }}</NButton
         >
         <NButton :disabled="busy || formOpen" @click="toggle(task)"

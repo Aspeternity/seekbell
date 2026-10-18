@@ -12,7 +12,15 @@ import {
   NSwitch,
   NTag,
 } from 'naive-ui'
-import { channelNames, fieldLabels, getSchemas, getTargets, message, write } from '../management'
+import {
+  channelNames,
+  fieldLabels,
+  getSchemas,
+  getTargets,
+  getTarget,
+  message,
+  write,
+} from '../management'
 import type { Channel, FieldSchema, Schemas, Target } from '../management'
 
 const props = defineProps<{ csrf: string }>()
@@ -87,6 +95,18 @@ function cancel() {
   clearSecrets()
   formOpen.value = false
   editing.value = null
+}
+
+async function edit(target: Target) {
+  busy.value = true
+  error.value = ''
+  try {
+    start(await getTarget(target.id))
+  } catch (cause) {
+    error.value = message(cause)
+  } finally {
+    busy.value = false
+  }
 }
 
 async function load() {
@@ -305,9 +325,7 @@ onMounted(load)
         }}
       </p>
       <div class="actions">
-        <NButton :disabled="busy || formOpen" @click="start(target)"
-          >编辑 {{ target.name }}</NButton
-        >
+        <NButton :disabled="busy || formOpen" @click="edit(target)">编辑 {{ target.name }}</NButton>
         <NButton :disabled="busy || formOpen" @click="toggle(target)"
           >{{ target.enabled ? '停用' : '启用' }} {{ target.name }}</NButton
         >

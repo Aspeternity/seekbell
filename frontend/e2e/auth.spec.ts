@@ -122,6 +122,21 @@ test('四渠道配置和任务编辑、复制、暂停、两类试匹配在浏�
   await expect(page.getByRole('button', { name: '编辑 手机 Bark', exact: true })).toBeVisible()
   await page.getByRole('button', { name: '编辑 手机 Bark', exact: true }).click()
   await expect(page.getByLabel('设备密钥', { exact: true })).toHaveValue('')
+  const session = await (await context.request.get('/api/auth/state')).json()
+  const targetList = await (await context.request.get('/api/manage/targets')).json()
+  const competing = await context.request.put('/api/manage/targets/' + targetList[0].id, {
+    headers: { 'X-CSRF-Token': session.csrf_token },
+    data: { name: '另一个页面修改', config: {}, expected_revision: targetList[0].revision },
+  })
+  expect(competing.status()).toBe(200)
+  await page.getByLabel('目标名称', { exact: true }).fill('过时草稿')
+  await page.getByRole('button', { name: '保存通知目标', exact: true }).click()
+  await expect(
+    page.getByText('配置已被修改，请重新打开编辑后重试。', { exact: true }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: '取消编辑', exact: true }).click()
+  await page.getByRole('button', { name: '编辑 手机 Bark', exact: true }).click()
+  await expect(page.getByLabel('目标名称', { exact: true })).toHaveValue('另一个页面修改')
   await page.getByLabel('目标名称', { exact: true }).fill('编辑过的 Bark')
   await page.getByRole('button', { name: '保存通知目标', exact: true }).click()
   await page.getByRole('button', { name: '停用 编辑过的 Bark', exact: true }).click()

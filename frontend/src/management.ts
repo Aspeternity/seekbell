@@ -143,6 +143,13 @@ export function message(cause: unknown): string {
 export function getTargets(): Promise<Target[]> {
   return request('/api/manage/targets')
 }
+export function getTarget(id: string): Promise<Target> {
+  return request('/api/manage/targets/' + id)
+}
+export function getTask(id: string): Promise<MonitorTask> {
+  return request('/api/manage/tasks/' + id)
+}
+
 export function getSchemas(): Promise<Schemas> {
   return request('/api/manage/channels')
 }

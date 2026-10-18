@@ -6,13 +6,13 @@
 
 仅在WSL2 SeekBell-Dev的/home/dev/projects/seekbell开发，Ubuntu24.04.5/amd64、dev用户。当前聊天从原Ubuntu通过wsl.exe -d SeekBell-Dev --cd正式目录派发；版本取值传已核对的完整SHA。D盘交接副本及原环境不改。[环境入口](DEVELOPMENT_ENVIRONMENT.md)。
 
-私有origin为Aspeternity/seekbell；main恢复HEAD a60962c，起始工作区干净。此前认证实现1dc8374已推送，CI/镜像证据见[认证记录](history/2026-10-19-M3认证.md)。本次待提交M3配置路径：api/management、services/management及configuration/main，前端management/三个组件/App/api/style与e2e，tests/test_management/browser_server，镜像探测及文档。沿用noreply及隐私hooks，不改写历史。
+私有origin为Aspeternity/seekbell；main恢复HEAD a60962c，起始工作区干净。此前认证实现1dc8374已推送，CI/镜像证据见[认证记录](history/2026-10-19-M3认证.md)。M3配置实现d9be066已推送；其禁外网镜像/重启验证通过，CI39162945961已通过。当前补充前端management/TargetsPanel/TasksPanel/e2e的最新版本与目标选项读取、冲突恢复检查，已补齐并通过浏览器流程，待提交；证据文档随后收口。沿用noreply及隐私hooks，不改写历史。
 
 ## 实现与证据
 
 管理API均需管理员，写操作/POST试匹配需CSRF。四渠道schema表单、加密目标增改启停/敏感字段省略与保留/重复提示、任务增改复制启停软删除、条件组/规则说明/两类试匹配已接入。事务内expected版本拒绝陈旧编辑；试匹配不修改账本。启动独占创建/加载0600密钥，有密文缺钥或坏钥不自动替换，失败停止。管理401合并恢复至登录，表单卸载清空。无SourceRunner/Worker/目标测试发送生命周期，来源仍关闭。
 
-本机完整pytest299项通过（12.79秒，新增36项），覆盖受保护API、四渠道、并发编辑/版本、贡献撤销、纯试匹配/缺摘要/账本不变及密钥失败安全。Chromium4项通过（9.9秒），含390宽度四渠道和任务编辑/短语/三值/历史样本/复制暂停/删除/敏感值不回传/HTML文本展示与会话恢复；Ruff/锁/wheel/前端类型构建格式通过。均为合成凭据/临时数据、禁外连，不是用户验收。新镜像/CI待实现提交后收口。[配置管理记录](history/2026-10-19-M3配置管理.md)保存细节和后续证据。
+本机完整pytest299项通过（12.79秒，新增36项），覆盖受保护API、四渠道、并发编辑/版本、贡献撤销、纯试匹配/缺摘要/账本不变及密钥失败安全。Chromium4项通过（10.7秒），含390宽度四渠道和任务编辑/短语/三值/历史样本/复制暂停/删除/敏感值不回传/HTML文本展示与会话恢复；Ruff/锁/wheel/前端类型构建格式通过。均为合成凭据/临时数据、禁外连，不是用户验收。新镜像/CI待实现提交后收口。[配置管理记录](history/2026-10-19-M3配置管理.md)保存细节和后续证据。
 
 [M2记录](history/2026-10-19-M2通知渠道.md)与[M1记录](history/2026-10-18-M1核心闭环.md)按需查，不冒用旧镜像为本次证据。
 
