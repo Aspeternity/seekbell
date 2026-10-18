@@ -1,14 +1,16 @@
 # 当前状态
 
-更新时间：2026-10-18（Asia/Shanghai）。阶段：M0实现保留待审；独立WSL及私有GitHub已接通，远程CI通过。M1未开始。
+更新时间：2026-10-18（Asia/Shanghai）。阶段：用户授权进入M1核心闭环；先落实提交邮箱隐私检查，M1业务实现正在开始。
 
 ## 代码与环境
 
 正式目录为SeekBell-Dev发行版的`/home/dev/projects/seekbell`（Ubuntu24.04.5/WSL2/amd64，用户dev）；虚拟磁盘`D:\WSL\SeekBell-Dev`。原D盘项目仅交接副本，不再同步新提交或继续构建。入口及隔离边界见[开发环境](DEVELOPMENT_ENVIRONMENT.md)。
 
-origin为私有仓库[本项目](https://github.com/Aspeternity/seekbell)，main跟踪origin/main。M0应用实现基准`1ddea580bbfc314a9e9df97bd2e95e375a2d0202`；CI修复基准`69d71cef3470966ab21601a1c569417c0584d549`。之后仅提交文档证据，不改变代码基准。当前无在途业务修改；本轮收尾提交README、架构/环境说明、状态与GitHub接入记录。
+origin为私有仓库[本项目](https://github.com/Aspeternity/seekbell)，main跟踪origin/main。M0应用实现基准`1ddea580bbfc314a9e9df97bd2e95e375a2d0202`；CI修复基准`69d71cef3470966ab21601a1c569417c0584d549`。之后仅提交文档证据，不改变代码基准。本轮未提交：scripts/check_privacy.py、.githooks、隐私测试、CI及相关文档，防止真实邮箱进入提交身份/历史内容；后续追加M1模块与测试。历史作者/提交者已核实均为noreply，无需重写历史。
 
 ## 实现与证据
+
+隐私检查：现有全部作者/提交者为noreply；本地提交/推送钩子已启用，6项隔离Git仓库测试通过，历史与索引邮箱检查通过，不打印被拒地址。
 
 M0已实现FastAPI/Vue骨架、SQLite迁移、版本/健康API、数据目录锁、基础CI和非root镜像；管理员/采集/规则/通知业务尚未实现，不代表M1～M4完成。
 
@@ -24,10 +26,10 @@ M0已实现FastAPI/Vue骨架、SQLite迁移、版本/健康API、数据目录锁
 
 ## 下一步与读取
 
-请用户审阅环境与M0，再决定是否进入M1；当前无GitHub或环境阻塞。CI已具备可运行命令，README可复现。
+隐私检查通过后实施M1：合成RSS解析/身份、纯三值规则、首次成功基线、持久化outbox及模拟通知恢复；不启用真实轮询、真实发送或未认证管理API。
 
-本轮只需CI文件、状态和接入记录。未来进入M1时按需读SPEC第3～5节、ARCHITECTURE模块契约/一致性/恢复、RESEARCH RSS字段/身份结论、ACCEPTANCE R01～R05/F01～F05/D01/D04/P01及受影响代码，不重复全读。
+M1本轮按需阅读SPEC第3～5节、ARCHITECTURE模块契约/一致性/恢复、RESEARCH RSS字段/身份结论、ACCEPTANCE R01～R05/F01～F05/D01/D04/P01及受影响代码，不重复全读。
 
 ## 授权
 
-用户已确认新WSL与D盘位置，提供已建私有仓库，授权连接及首次上传现有main、接通CI。本轮没有新业务开发。未授权原Ubuntu清理、全局WSL调整、GHCR发布、部署或真实发送；M0尚无用户验收。不组织多代理，不扩大范围。
+用户已确认新WSL与D盘位置及私有仓库，现明确授权进入M1并继续推送，要求不暴露真实邮箱。用户新增授权进入下一步M1，要求后续推送不暴露真实邮箱；未授权原Ubuntu清理、全局WSL调整、GHCR发布、部署或真实发送；M0尚无用户验收。不组织多代理，不扩大范围。
