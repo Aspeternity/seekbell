@@ -95,7 +95,7 @@ onUnmounted(() => clearInterval(timer))
       >
       <p class="muted">
         统计基于本地保留记录，不代表收件人已阅读。SMTP 成功只表示邮件服务器接受。状态每 5
-        秒刷新；时间按浏览器本地时区显示。
+        秒刷新；时间按系统显示时区显示。
       </p>
     </template>
   </section>

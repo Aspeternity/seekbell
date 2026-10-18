@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 from collections.abc import Awaitable
 
 import httpx
@@ -10,11 +11,12 @@ from sqlalchemy import Engine
 from seekbell.collectors.rss import RssCollector
 from seekbell.notifiers.credentials import CredentialVault
 from seekbell.notifiers.registry import NotifierRegistry
-from seekbell.services.async_tools import storage_call
+from seekbell.services.async_tools import storage_call, wait_for_signal
 from seekbell.services.collection import SourceRunner
 from seekbell.services.delivery import DeliveryWorker
 from seekbell.services.explicit_sending import SendConflict
 from seekbell.services.manual_delivery import ManualDelivery
+from seekbell.services.settings import SystemSettings
 from seekbell.services.target_testing import TargetTesting
 
 logger = logging.getLogger(__name__)
@@ -38,7 +40,11 @@ class ApplicationRuntime:
         self._tasks: list[asyncio.Task] = []
         self._explicit_tasks: set[asyncio.Task] = set()
         self._explicit_lock = asyncio.Lock()
-        self._components = {"collector": "disabled", "delivery": "disabled"}
+        self._components = {
+            "collector": "disabled",
+            "delivery": "disabled",
+            "maintenance": "disabled",
+        }
         self._closed = False
         self._started = False
         self.rss_client = httpx.AsyncClient(
@@ -51,6 +57,7 @@ class ApplicationRuntime:
         self.collector = RssCollector(self.rss_client)
         self.source = SourceRunner(engine, self.collector)
         self.worker = DeliveryWorker(engine, self.registry.notifiers)
+        self.settings = SystemSettings(engine)
         self.target_testing = TargetTesting(engine, self.registry.notifiers)
         self.manual_delivery = ManualDelivery(engine, self.registry.notifiers)
 
@@ -83,6 +90,9 @@ class ApplicationRuntime:
                 asyncio.create_task(
                     self._guard("delivery", self.worker.run(self.stop)),
                     name="seekbell-delivery",
+                ),
+                asyncio.create_task(
+                    self._guard("maintenance", self._maintenance()), name="seekbell-maintenance"
                 ),
             ]
             await asyncio.sleep(0)
@@ -140,3 +150,8 @@ class ApplicationRuntime:
                 return await running
             finally:
                 self._explicit_tasks.discard(running)
+
+    async def _maintenance(self):
+        while not self.stop.is_set():
+            await storage_call(self.settings.cleanup, at=time.time())
+            await wait_for_signal(self.stop, None, 60)

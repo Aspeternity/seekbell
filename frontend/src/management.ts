@@ -1,3 +1,4 @@
+import { ref } from 'vue'
 import { request } from './api'
 
 export type Channel = 'telegram' | 'bark' | 'smtp' | 'webhook'
@@ -262,7 +263,11 @@ export function getHistoricalTasks(): Promise<HistoricalTask[]> {
   return request('/api/manage/content/options')
 }
 export function localDate(value: number | null | undefined): string {
-  return value == null || value === 0 ? '尚无记录' : new Date(value * 1000).toLocaleString()
+  return value == null || value === 0
+    ? '尚无记录'
+    : new Date(value * 1000).toLocaleString(undefined, {
+        timeZone: displayTimezone.value ?? undefined,
+      })
 }
 export function sourceError(code: string | null): string {
   if (!code) return '无'
@@ -372,4 +377,30 @@ export function newRequestId(): string {
     hex.slice(16, 20),
     hex.slice(20),
   ].join('-')
+}
+
+export const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+export const displayTimezone = ref<string | null>(null)
+export function setDisplayTimezone(value: string | null) {
+  try {
+    new Intl.DateTimeFormat(undefined, { timeZone: value ?? browserTimezone })
+    displayTimezone.value = value
+  } catch {
+    displayTimezone.value = 'UTC'
+  }
+}
+export interface SystemSettings {
+  revision: number
+  username: string
+  timezone: string | null
+  retention_days: number
+  last_cleanup_at: number | null
+  last_cleanup_counts: Record<string, number>
+  scheduler: SchedulerState
+}
+export function getSettings(): Promise<SystemSettings> {
+  return request('/api/manage/settings')
+}
+export function getTimezones(): Promise<string[]> {
+  return request('/api/manage/settings/timezones')
 }

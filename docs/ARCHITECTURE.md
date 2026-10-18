@@ -50,7 +50,7 @@ Notifier 声明配置 schema、敏感字段、校验与发送能力，返回成�
 7. 配置/任务变更和摄取并发须有明确事务边界，变更只影响之后发现的帖子。
 8. SQLite 设置合理 busy_timeout，可用 WAL；短事务、串行写入协调。单实例数据目录用 VM 本地文件系统，不默认放 NFS/SMB。
 
-M1实现边界：0002_core迁移仅播种NodeSeek网站、默认关闭的官方RSS来源和运行状态，不创建管理员或通知目标。内部Configuration/Ingestion与DeliveryWorker共用BEGIN IMMEDIATE短写事务；迁移也显式开启事务，失败时DDL与迁移号一同回滚。TaskVersion不可变，Post内容首次见到时固定；SeenPost与DeliveredPost独立于可读历史，当前没有自动清理策略。
+M1实现边界：0002_core迁移仅播种NodeSeek网站、默认关闭的官方RSS来源和运行状态，不创建管理员或通知目标。内部Configuration/Ingestion与DeliveryWorker共用BEGIN IMMEDIATE短写事务；迁移也显式开启事务，失败时DDL与迁移号一同回滚。TaskVersion不可变，Post内容首次见到时固定；SeenPost与DeliveredPost独立于可读历史，M3保留策略按下文分批清理普通历史，精简身份账本不随之删除。
 
 任务停用/删除撤销尚未发送的贡献，其他任务仍可合并发送；在途请求保留租约并记录实际结果。目标重新启用不恢复已取消消息。主动停用网站/来源后重建当前基线，进程重启则保留已见状态并处理仍在RSS窗口内的未见帖子；不相交窗口只记“可能缺口”。
 
@@ -112,7 +112,7 @@ Configuration复用原短写事务，目标update在事务内校验expected_revi
 
 ## M3调度与运行页契约
 
-ApplicationRuntime在迁移、认证与密钥检查完成后构造一套RSS客户端、NotifierRegistry、SourceRunner和DeliveryWorker。SEEKBELL_BACKGROUND_ENABLED默认true，false仅关闭循环，不禁止管理员显式连接测试。所有工作都在数据目录实例锁生命周期内；退出置stop/wake，给予循环15秒宽限，取消剩余网络等待并保留租约恢复证据，然后关闭客户端、数据库并释放锁。短SQLite线程任务取消时排空；SMTP沿用socket关闭前持锁语义，不能宣称整个退出过程有15秒硬上限。
+ApplicationRuntime在迁移、认证与密钥检查完成后构造一套RSS客户端、NotifierRegistry、SourceRunner、DeliveryWorker和历史维护循环。SEEKBELL_BACKGROUND_ENABLED默认true，false关闭采集/投递/维护循环，不禁止管理员显式连接测试。所有工作都在数据目录实例锁生命周期内；退出置stop/wake，给予循环15秒宽限，取消剩余网络等待并保留租约恢复证据，然后关闭客户端、数据库并释放锁。短SQLite线程任务取消时排空；SMTP沿用socket关闭前持锁语义，不能宣称整个退出过程有15秒硬上限。
 
 意外循环退出只记录固定错误码，不输出异常字符串/参数，降低readiness但不改变liveness；普通采集失败只改变来源状态和退避。网站设置提交后唤醒Runner，仍检查持久化next_attempt_at，不回放错过的tick。0005_source_revision为来源新增配置版本，网站与来源启停及频率修改在同一短事务内更新；expected_revision拒绝旧页面，摄取时核对抓取前版本，防止在途响应跨越暂停/恢复边界。
 
@@ -125,6 +125,16 @@ POST /api/manage/site/test要求管理员/CSRF并共用SourceRunner锁；重叠�
 目标测试沿用独立TargetTestAttempt，允许测试已停用目标。两个写入口统一要求管理员/CSRF、confirmed严格布尔true与UUID v4 request_id。每个请求ID在短事务中先保存未知结果和加密配置，再在事务外发送，最后写结果。相同ID/资源/快照版本重放只读原结果；跨资源/跨显式类型或与自动事件ID冲突返回409。完成、中断与结果未知都不自动重试；新确认才创建新事件，Webhook Idempotency-Key使用该事件ID。端到端重复仍可能发生。
 
 ApplicationRuntime全局互斥一个显式发送，复用NotifierRegistry，纳入退出宽限/取消与SQLite工作排空，拒绝关闭后新发送。HTTPX/SMTP超时及脱敏沿用M2。GET deliveries/detail按明确安全投影返回原目标名称/渠道/版本、状态、自动尝试及迟到证据；不返回目标密文、秘密、完整wire快照或异常文本。UI目标配置/投递记录双标签，发送前显示接收目标与使用的配置版本并明确确认；过期配置或在途事件拒绝，保留同一确认请求ID用于响应丢失恢复。
+
+## M3系统设置、账号更新与保留契约
+
+0007_settings创建唯一ApplicationSettings（时区初始null、保留期30天、revision=1、清理统计）及独立AccountThrottle，并为历史时间字段加索引。设置在短事务中核对expected_revision，时区用系统zoneinfo/IANA集合验证、保留天数1～3650；显示值不改变UTC存储或通知快照。前端未设置时取浏览器时区，实例偏好在登录/刷新/设置页读取，所有页面共用格式化函数。
+
+管理员修改必须提供当前密码，新密码可省略且不修剪；用户名沿用可打印1～64字符校验。重新验证使用独立持久每分钟10次预算，不通过登出/刷新重置。Argon2工作在事务外完成，提交时核对原哈希/用户名和会话仍有效，再原子修改并撤销全部认证会话，HTTP删除当前Cookie。login签发前也再次核对已验证的账号和原会话，防止旧校验跨越改密或退出。失败不写账号、错误不回显输入。
+
+SystemSettings.cleanup使用BEGIN IMMEDIATE和有上限的批次，ApplicationRuntime维护循环启动及每60秒调用，每类主记录最多200条，关联尝试/贡献一并清理；手动POST需管理员/CSRF/confirmed=true与当前策略版本。按过期完成的显式记录→确定结束自动outbox及其尝试/贡献→无贡献引用的命中→无outbox保护的Post→SourceRun顺序清理。自动事件只清理sent/failed/cancelled且uncertain=false、无未完成/近期尝试或迟到证据、无剩余手动引用的记录。未知显式结果、未完成自动投递及依赖内容保留。整个批次与统计一同提交，出错回滚，不在网络事务内执行。
+
+SeenPost、DeliveredPost、SourceItem及SourceState与任务版本不参与普通清理；DeliveredPost.event_id是精简回执信息，允许其可读outbox已过期。清理不重新摄取、匹配或发送，不能重置去重。SQLite文件不自动VACUUM，数据大小不宣称同步缩小。备份恢复仍属M4，系统页只有状态说明，无假按钮。
 
 ## 私有开发与实机验证（建议路线）
 

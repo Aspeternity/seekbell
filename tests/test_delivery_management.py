@@ -339,12 +339,12 @@ def test_manual_migration_rolls_back_and_preserves_previous_data(tmp_path):
 
         event.listen(engine, "before_cursor_execute", fail)
         with pytest.raises(RuntimeError, match="synthetic migration"):
-            migrate(engine)
+            migrate(engine, "0006_manual_deliveries")
         event.remove(engine, "before_cursor_execute", fail)
         assert schema_revision(engine) == "0005_source_revision"
         assert "manual_delivery_attempts" not in inspect(engine).get_table_names()
-        migrate(engine)
-        migrate(engine)
+        migrate(engine, "0006_manual_deliveries")
+        migrate(engine, "0006_manual_deliveries")
         with engine.connect() as connection:
             assert connection.scalar(text("SELECT revision FROM sources")) == 1
         assert schema_revision(engine) == "0006_manual_deliveries"

@@ -9,6 +9,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from seekbell.api.auth import router as auth_router
 from seekbell.api.management import router as management_router
+from seekbell.api.settings import router as settings_router
 from seekbell.api.system import router
 from seekbell.config import Settings
 from seekbell.db.runtime import create_database_engine, instance_lock, migrate
@@ -69,6 +70,7 @@ def create_app(settings: Settings | None = None, *, runtime_factory=ApplicationR
     app.state.settings = settings
     app.include_router(auth_router)
     app.include_router(management_router)
+    app.include_router(settings_router)
     app.include_router(router)
     # No SPA catch-all: unknown API endpoints and missing assets keep their real 404 status.
     if (settings.static_dir / "index.html").is_file():

@@ -11,7 +11,7 @@ from argon2.exceptions import VerificationError
 from sqlalchemy import Engine, delete, select
 from sqlalchemy.orm import Session
 
-from seekbell.db.models import Administrator, AuthThrottle, BrowserSession
+from seekbell.db.models import AccountThrottle, Administrator, AuthThrottle, BrowserSession
 from seekbell.db.transactions import write_session
 
 PASSWORD_HASHER = PasswordHasher(time_cost=2, memory_cost=19456, parallelism=1, type=Type.ID)
@@ -98,13 +98,13 @@ class Authentication:
         with write_session(self.engine) as session:
             return self._issue(session, None, secure)
 
-    def _reserve_attempt(self) -> None:
+    def _reserve_attempt(self, model=AuthThrottle) -> None:
         # Persistent global budget also limits distributed guesses and password-hash work.
         now = time.time()
         with write_session(self.engine) as session:
-            row = session.get(AuthThrottle, 1)
+            row = session.get(model, 1)
             if row is None:
-                row = AuthThrottle(id=1, window_started=now, attempts=0)
+                row = model(id=1, window_started=now, attempts=0)
                 session.add(row)
             if now - row.window_started >= 60:
                 row.window_started, row.attempts = now, 0
@@ -140,8 +140,49 @@ class Authentication:
         if not valid_username or not valid_password:
             raise AuthError(401, "用户名或密码不正确。")
         with write_session(self.engine) as session:
-            session.execute(delete(BrowserSession).where(BrowserSession.digest == previous.digest))
+            current = session.get(Administrator, 1)
+            previous_row = session.get(BrowserSession, previous.digest)
+            if (
+                current is None
+                or current.password_hash != stored_hash
+                or current.username != username
+                or previous_row is None
+                or previous_row.expires_at <= time.time()
+            ):
+                raise AuthError(401, "账号或会话已变化，请刷新后重新登录。")
+            session.delete(previous_row)
             return self._issue(session, 1, secure)
+
+    def change_account(
+        self, identity: Identity, *, current_password: str, username: str, new_password: str | None
+    ) -> None:
+        self._reserve_attempt(AccountThrottle)
+        with Session(self.engine) as session:
+            admin = session.get(Administrator, 1)
+            stored_hash = admin.password_hash
+            stored_username = admin.username
+        try:
+            valid = PASSWORD_HASHER.verify(stored_hash, current_password)
+        except VerificationError:
+            valid = False
+        if not valid:
+            raise AuthError(403, "当前密码不正确。")
+        replacement = (
+            PASSWORD_HASHER.hash(new_password) if new_password is not None else stored_hash
+        )
+        with write_session(self.engine) as session:
+            admin = session.get(Administrator, 1)
+            current_session = session.get(BrowserSession, identity.digest)
+            if (
+                admin.password_hash != stored_hash
+                or admin.username != stored_username
+                or current_session is None
+                or current_session.administrator_id != 1
+                or current_session.expires_at <= time.time()
+            ):
+                raise AuthError(409, "账号或会话已变化，请重新登录后再修改。")
+            admin.username, admin.password_hash = username, replacement
+            session.execute(delete(BrowserSession).where(BrowserSession.administrator_id == 1))
 
     def logout(self, identity: Identity) -> None:
         with write_session(self.engine) as session:

@@ -311,3 +311,35 @@ class ManualDeliveryAttempt(Base):
     finished_at: Mapped[float | None] = mapped_column(Float)
     result: Mapped[str] = mapped_column(String(32))
     error_code: Mapped[str | None] = mapped_column(String(80))
+
+
+class AccountThrottle(Base):
+    __tablename__ = "account_throttle"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_account_throttle_singleton"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    window_started: Mapped[float] = mapped_column(Float)
+    attempts: Mapped[int] = mapped_column(Integer)
+
+
+class ApplicationSettings(Base):
+    __tablename__ = "application_settings"
+    __table_args__ = (
+        CheckConstraint("id = 1", name="ck_application_settings_singleton"),
+        CheckConstraint("retention_days BETWEEN 1 AND 3650", name="ck_settings_retention"),
+    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    revision: Mapped[int] = mapped_column(Integer)
+    timezone: Mapped[str | None] = mapped_column(String(64))
+    retention_days: Mapped[int] = mapped_column(Integer)
+    last_cleanup_at: Mapped[float | None] = mapped_column(Float)
+    last_cleanup_counts: Mapped[dict] = mapped_column(JSON)
+
+
+for _model, _column in (
+    (Outbox, "created_at"),
+    (RuleHit, "matched_at"),
+    (SourceRun, "at"),
+    (TargetTestAttempt, "finished_at"),
+    (ManualDeliveryAttempt, "finished_at"),
+):
+    Index(f"ix_{_model.__tablename__}_retention", getattr(_model, _column))

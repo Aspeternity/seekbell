@@ -62,7 +62,7 @@ onMounted(async () => {
       <NButton :loading="loading" @click="load">刷新内容</NButton>
     </div>
     <p class="muted">
-      只查看本地保留帖子与历史命中，不访问论坛、不补发通知。时间按浏览器本地时区显示。
+      只查看本地保留帖子与历史命中，不访问论坛、不补发通知。时间按系统显示时区显示。
     </p>
     <NAlert v-if="error" type="error" role="alert" class="notice">{{ error }}</NAlert>
     <NForm @submit.prevent="search">

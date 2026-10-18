@@ -112,7 +112,11 @@ def test_paused_defaults_and_connection_probe_does_not_establish_baseline(tmp_pa
         client.headers["X-CSRF-Token"] = auth["csrf_token"]
         assert client.get("/health/ready").status_code == 200
         status = client.get("/api/manage/overview").json()
-        assert status["scheduler"]["components"] == {"collector": "running", "delivery": "running"}
+        assert status["scheduler"]["components"] == {
+            "collector": "running",
+            "delivery": "running",
+            "maintenance": "running",
+        }
         assert not status["site"]["enabled"] and simulated.rss_calls == []
         probe = client.post("/api/manage/site/test", json={})
         assert probe.status_code == 200 and probe.json()["valid_count"] == 1

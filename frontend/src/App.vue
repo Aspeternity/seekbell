@@ -5,8 +5,6 @@ import {
   NButton,
   NCard,
   NConfigProvider,
-  NDescriptions,
-  NDescriptionsItem,
   NForm,
   NFormItem,
   NInput,
@@ -15,21 +13,24 @@ import {
   zhCN,
 } from 'naive-ui'
 import { ApiError, authenticate, loadAuth, loadSystemInfo, logout } from './api'
-import type { AuthState, VersionInfo } from './api'
+import type { AuthState } from './api'
+import { browserTimezone, displayTimezone, getSettings, setDisplayTimezone } from './management'
 
 const NotificationsPanel = defineAsyncComponent(() => import('./components/NotificationsPanel.vue'))
 const TasksPanel = defineAsyncComponent(() => import('./components/TasksPanel.vue'))
 
 const OverviewPanel = defineAsyncComponent(() => import('./components/OverviewPanel.vue'))
 const SitePanel = defineAsyncComponent(() => import('./components/SitePanel.vue'))
+const SettingsPanel = defineAsyncComponent(() => import('./components/SettingsPanel.vue'))
+
 const ContentPanel = defineAsyncComponent(() => import('./components/ContentPanel.vue'))
 
 const auth = ref<AuthState | null>(null)
 const activePage = ref('overview')
-const info = ref<VersionInfo | null>(null)
 const loading = ref(true)
 const submitting = ref(false)
 const error = ref('')
+const notice = ref('')
 const username = ref('')
 const password = ref('')
 const confirmation = ref('')
@@ -47,12 +48,12 @@ function readableError(cause: unknown): string {
 async function refresh() {
   loading.value = true
   error.value = ''
-  info.value = null
   clearPasswords()
   try {
     auth.value = await loadAuth()
     if (auth.value.authenticated) {
-      info.value = await loadSystemInfo()
+      setDisplayTimezone((await getSettings()).timezone)
+      await loadSystemInfo()
     }
   } catch (cause) {
     error.value = readableError(cause)
@@ -63,7 +64,7 @@ async function refresh() {
 
 async function submit() {
   if (!auth.value || submitting.value) return
-  error.value = ''
+  error.value = notice.value = ''
   if (setup.value && password.value !== confirmation.value) {
     error.value = '两次输入的密码不一致。'
     return
@@ -76,7 +77,8 @@ async function submit() {
       auth.value.csrf_token,
     )
     clearPasswords()
-    info.value = await loadSystemInfo()
+    setDisplayTimezone((await getSettings()).timezone)
+    await loadSystemInfo()
   } catch (cause) {
     clearPasswords()
     if (cause instanceof ApiError && [401, 403, 409].includes(cause.status)) {
@@ -100,7 +102,6 @@ async function signOut() {
   try {
     await logout(auth.value.csrf_token)
     auth.value = null
-    info.value = null
     username.value = ''
     await refresh()
   } catch (cause) {
@@ -113,12 +114,20 @@ async function signOut() {
   }
 }
 
+async function accountUpdated() {
+  auth.value = null
+  activePage.value = 'overview'
+  username.value = ''
+  clearPasswords()
+  await refresh()
+  notice.value = '账号已更新，所有登录会话已退出。请使用更新后的账号登录。'
+}
+
 let recoveringSession = false
 async function sessionExpired() {
   if (recoveringSession) return
   recoveringSession = true
   auth.value = null
-  info.value = null
   await refresh()
   error.value = '会话已过期，请重新登录。'
   recoveringSession = false
@@ -173,6 +182,7 @@ onUnmounted(() => window.removeEventListener('seekbell:session-expired', session
       <NAlert v-if="error" title="操作未完成" type="error" class="error-note" role="alert">
         {{ error }}
       </NAlert>
+      <NAlert v-if="notice" type="success" class="notice">{{ notice }}</NAlert>
       <NSpin :show="loading">
         <div :aria-busy="loading">
           <NCard v-if="auth && !auth.authenticated" :title="setup ? '创建管理员' : '管理员登录'">
@@ -260,7 +270,7 @@ onUnmounted(() => window.removeEventListener('seekbell:session-expired', session
               <NButton
                 :type="activePage === 'status' ? 'primary' : 'default'"
                 @click="activePage = 'status'"
-                >运行信息</NButton
+                >系统设置</NButton
               >
             </nav>
             <OverviewPanel v-if="activePage === 'overview'" />
@@ -272,26 +282,7 @@ onUnmounted(() => window.removeEventListener('seekbell:session-expired', session
               @targets="activePage = 'targets'"
             />
             <NotificationsPanel v-else-if="activePage === 'targets'" :csrf="auth.csrf_token" />
-            <NCard v-else title="运行信息" class="status-card">
-              <template #header-extra>
-                <NButton secondary :loading="loading" :disabled="submitting" @click="refresh">
-                  刷新状态
-                </NButton>
-              </template>
-              <NDescriptions v-if="info" :column="1" label-placement="left" bordered>
-                <NDescriptionsItem label="服务状态">
-                  <NTag type="success" size="small" :bordered="false">已就绪</NTag>
-                </NDescriptionsItem>
-                <NDescriptionsItem label="应用版本">{{ info.version }}</NDescriptionsItem>
-                <NDescriptionsItem label="代码版本">
-                  <code>{{ info.build_revision }}</code>
-                </NDescriptionsItem>
-                <NDescriptionsItem label="数据库迁移">
-                  <code>{{ info.database_revision ?? '尚未初始化' }}</code>
-                </NDescriptionsItem>
-              </NDescriptions>
-              <p v-else>暂时无法读取运行信息，请刷新重试。</p>
-            </NCard>
+            <SettingsPanel v-else :csrf="auth.csrf_token" @account-updated="accountUpdated" />
           </section>
           <NCard v-else title="连接服务">
             <p>正在读取服务信息。若持续无法连接，请重试。</p>
@@ -307,9 +298,14 @@ onUnmounted(() => window.removeEventListener('seekbell:session-expired', session
         :bordered="false"
         class="phase-note"
       >
-        后台采集与自动投递已接入；新安装默认暂停来源。通知测试、投递记录与独立手动重发已接入，系统设置仍在开发。
+        后台采集与自动投递已接入；新安装默认暂停来源。系统设置已接入账号、时区与历史保留；备份恢复在
+        M4 接入，真实环境验证与用户验收尚未进行。
       </NAlert>
-      <footer>SeekBell · 自托管的新帖监控与通知</footer>
+      <footer>
+        SeekBell · 自托管的新帖监控与通知<span v-if="auth?.authenticated">
+          · 显示时区：{{ displayTimezone ?? browserTimezone }}</span
+        >
+      </footer>
     </main>
   </NConfigProvider>
 </template>

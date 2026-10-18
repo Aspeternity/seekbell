@@ -1,7 +1,7 @@
 """Disposable browser-test server: no persistent development data or outbound networking."""
 
 import socket
-from contextlib import asynccontextmanager
+import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -9,6 +9,7 @@ import httpx
 import uvicorn
 from seekbell.config import Settings
 from seekbell.main import create_app
+from seekbell.services.configuration import Configuration
 from seekbell.services.ingestion import Ingestion
 from seekbell.services.runtime import ApplicationRuntime
 
@@ -52,8 +53,20 @@ def main() -> None:
                 ),
             )
 
+        class BrowserRuntime(ApplicationRuntime):
+            async def start(self):
+                # Seed before loops start. Entries are retained at 30 days but expire at 1 day.
+                config = Configuration(self.engine)
+                old = time.time() - 2 * 86400
+                config.set_source_enabled("nodeseek-rss", True, at=old - 1)
+                ingestion = Ingestion(self.engine)
+                ingestion.ingest("nodeseek-rss", batch(9001), at=old)
+                ingestion.ingest("nodeseek-rss", batch(9001, 9002), at=old + 10)
+                config.set_source_enabled("nodeseek-rss", False, at=old + 11)
+                await super().start()
+
         def runtime_factory(engine, vault, *, enabled):
-            return ApplicationRuntime(
+            return BrowserRuntime(
                 engine,
                 vault,
                 enabled=enabled,
@@ -73,20 +86,6 @@ def main() -> None:
             ),
             runtime_factory=runtime_factory,
         )
-        original_lifespan = app.router.lifespan_context
-
-        @asynccontextmanager
-        async def synthetic_lifespan(application):
-            async with original_lifespan(application):
-                config = application.state.configuration
-                config.set_source_enabled("nodeseek-rss", True, at=1)
-                ingestion = Ingestion(application.state.engine)
-                ingestion.ingest("nodeseek-rss", batch(9001), at=10)
-                ingestion.ingest("nodeseek-rss", batch(9001, 9002), at=20)
-                config.set_source_enabled("nodeseek-rss", False, at=21)
-                yield
-
-        app.router.lifespan_context = synthetic_lifespan
         uvicorn.run(app, host="127.0.0.1", port=18765, proxy_headers=False, access_log=False)
 
 

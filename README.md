@@ -2,7 +2,7 @@
 
 自托管的 NodeSeek 新帖监控与通知工具。范围与技术栈见 [SPEC](docs/SPEC.md) 和 [ARCHITECTURE](docs/ARCHITECTURE.md)。
 
-当前已实现 **M1核心闭环与M2四渠道通知**：RSS解析、规则、基线/身份账本、事务outbox、可恢复投递，以及Telegram Bot/Bark/SMTP/Webhook适配、加密目标配置和独立目标测试记录。M2通过模拟验证；M3已接入管理员认证、四渠道目标/任务配置及模拟/历史规则试匹配，后台采集/投递生命周期及概览、网站与本地内容命中页面也已接入。通知管理已接入目标发送测试、投递记录和独立手动重发，系统设置仍待完成，尚未完成M3。真实通知与用户验收待Web完成后统一组织，当前证据以[PROJECT_STATE](docs/PROJECT_STATE.md)为准。
+当前已实现 **M1核心闭环与M2四渠道通知**：RSS解析、规则、基线/身份账本、事务outbox、可恢复投递，以及Telegram Bot/Bark/SMTP/Webhook适配、加密目标配置和独立目标测试记录。M2通过模拟验证；M3已接入管理员认证、四渠道目标/任务配置及模拟/历史规则试匹配，后台采集/投递生命周期及概览、网站与本地内容命中页面也已接入。通知管理已接入目标发送测试、投递记录和独立手动重发，系统设置已接入管理员、显示时区、历史保留及版本信息，六页核心流程已具备；备份恢复在M4接入。真实通知与用户验收待Web完成后统一组织，当前证据以[PROJECT_STATE](docs/PROJECT_STATE.md)为准。
 
 ## 环境
 
@@ -80,7 +80,7 @@ uv run --frozen python -m seekbell
 |`SEEKBELL_BACKGROUND_ENABLED`|`true`|启动采集与投递循环；离线检查可设`false`，不会禁用管理员显式RSS连接测试|
 |`SEEKBELL_TRUSTED_PROXIES`|`[]`|明确可信的反代IP/CIDR数组；仅这些连接可影响协议/客户端信息|
 
-只读的 `/api/version`、`/health/live`、`/health/ready` 保持公开；存活检查不依赖外部服务，就绪检查验证数据库、迁移及后台循环是否异常退出；普通RSS网络失败只记录退避，不使就绪失败。管理员入口为 `/api/auth/state`、`setup`、`login`、`logout`；先GET state取得CSRF，再用Cookie和 `X-CSRF-Token` 提交。创建唯一管理员后初始化关闭，没有初始化令牌。用户名1～64字符，密码15～128字符，支持空格和中文。页面不持久保存密码或会话令牌。
+只读的 `/api/version`、`/health/live`、`/health/ready` 保持公开；存活检查不依赖外部服务，就绪检查验证数据库、迁移及采集/投递/维护循环是否异常退出；普通RSS网络失败只记录退避，不使就绪失败。管理员入口为 `/api/auth/state`、`setup`、`login`、`logout`；先GET state取得CSRF，再用Cookie和 `X-CSRF-Token` 提交。创建唯一管理员后初始化关闭，没有初始化令牌。用户名1～64字符，密码15～128字符，支持空格和中文。页面不持久保存密码或会话令牌。
 
 认证会话最长7天、登录前会话30分钟，重启保持有效；登录轮换令牌，退出服务端撤销。创建/登录共用每分钟10次的持久预算，超限返回429及Retry-After。认证API不缓存，校验错误不回显凭据。后台组件启动失败会降低就绪状态；来源仍须管理员显式启用。
 
@@ -119,7 +119,7 @@ pnpm --dir frontend test:e2e
 
 “测试RSS连接”与自动采集共用请求锁，成功仅返回条目数量，不存帖、不建基线或发通知；失败会保存错误和退避。首次启用和主动暂停后恢复只建立当前基线；意外重启保留已见状态。配置变更期间返回的旧响应被丢弃。正常退出先停止新一轮工作，给予在途操作15秒宽限，之后取消网络等待并保留可恢复租约；SQLite线程会等待完成，SMTP线程仍须等待socket关闭，因此宽限不是整个进程退出的硬时限。
 
-内容页只读本地帖子，可按标题子串、作者/版块精确匹配、命中任务筛选；显示原规则版本及原因，已删除任务的历史仍可查询。摘要缺失与空值区分，过长展示有截断提示；外部字段作为文本显示，原帖链接从固定身份重建。所有时间目前使用浏览器本地时区。
+内容页只读本地帖子，可按标题子串、作者/版块精确匹配、命中任务筛选；显示原规则版本及原因，已删除任务的历史仍可查询。摘要缺失与空值区分，过长展示有截断提示；外部字段作为文本显示，原帖链接从固定身份重建。时间以UTC存储，所有页面遵守系统显示时区；未设置时采用浏览器时区。
 
 ~~~bash
 uv run --frozen pytest -q tests/test_runtime.py tests/test_collection.py tests/test_management.py
@@ -139,6 +139,24 @@ POST /api/manage/targets/{id}/test 与 /deliveries/{id}/resend 都要求管理�
 
 ~~~bash
 uv run --frozen pytest -q tests/test_delivery_management.py tests/test_notification_integration.py
+pnpm --dir frontend build
+pnpm --dir frontend test:e2e
+~~~
+
+## M3系统设置与历史保留
+
+系统设置提供管理员用户名/密码修改、显示时区、普通历史保留天数、最近清理统计与版本/后台健康信息。修改账号必须验证当前密码，新密码留空只改用户名；成功后撤销全部登录会话并重新登录。验证与登录各有独立的持久化每分钟10次预算。密码哈希在短数据库事务之外执行，提交前再次核对账号及当前会话；已验证但尚未提交的旧登录不能绕过改密或退出。密码输入和校验错误不回显，不持久存浏览器。
+
+显示时区未设置时取浏览器值，保存后为该实例共享偏好，其他浏览器刷新后生效；后端验证IANA时区。UTC存储、通知快照和采集周期不受显示设置影响。保留期默认30天，可设1～3650天，更新需要expected_revision防止陈旧页面覆盖。
+
+后台维护在启动时及之后每60秒执行一批，每类主记录最多200条，关联尝试/贡献一并清理；SEEKBELL_BACKGROUND_ENABLED=false同时关闭维护。页面可确认手动清理一批，始终使用已保存的策略。过期且确定结束的目标测试/重发、自动投递及尝试/贡献、命中、本地帖子和采集运行历史会按依赖顺序删除。等待/重试/在途、结果不确定、未完成尝试、近期迟到证据或仍有重发引用的自动记录及关联内容保留；显式未知结果也保留。
+
+精简SeenPost/DeliveredPost/SourceItem身份账本、当前来源状态和任务配置/版本不随普通历史清理；P01验证清理后的同帖仍不会重新自动推送。清理会永久删除普通历史，不运行VACUUM，也不保证文件立即变小。不提供清空去重或自动遗忘身份的开关。
+
+备份与恢复区域说明当前边界，不提供不可用按钮；一致性备份与原credentials.key封装、恢复校验和重新验证在M4实现。
+
+~~~bash
+uv run --frozen pytest -q tests/test_settings.py tests/test_authentication.py
 pnpm --dir frontend build
 pnpm --dir frontend test:e2e
 ~~~

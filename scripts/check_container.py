@@ -64,7 +64,7 @@ if sys.argv[1] == 'restart':
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
 base = 'http://127.0.0.1:8000'
 
-def call(path, payload=None, csrf=None):
+def call(path, payload=None, csrf=None, method=None):
     headers = {'Content-Type': 'application/json'}
     if csrf:
         headers['X-CSRF-Token'] = csrf
@@ -72,6 +72,7 @@ def call(path, payload=None, csrf=None):
         base + path,
         data=json.dumps(payload).encode() if payload is not None else None,
         headers=headers,
+        method=method,
     )
     try:
         with opener.open(request, timeout=5) as response:
@@ -102,6 +103,12 @@ if sys.argv[1] == 'setup':
     assert status == 201 and task['version'] == 1
     with open('/data/.synthetic-management-state', 'w') as stream:
         json.dump({'target': target['id'], 'task': task['id']}, stream)
+    initial = call('/api/manage/settings')[1]
+    assert initial['timezone'] is None and initial['retention_days'] == 30
+    status, preference = call('/api/manage/settings', {
+        'expected_revision': initial['revision'], 'timezone': 'Asia/Shanghai', 'retention_days': 7
+    }, state['csrf_token'], method='PUT')
+    assert status == 200 and preference['timezone'] == 'Asia/Shanghai'
     jar.save(ignore_discard=True, ignore_expires=True)
 else:
     assert state['initialized'] and state['authenticated']
@@ -122,10 +129,19 @@ else:
         'rule': {'groups': [{'all_of': ['VPS']}]}, 'sample': {'title': 'VPS synthetic'},
     }, state['csrf_token'])
     assert status == 200 and preview['result']['status'] == 'match'
+preference = call('/api/manage/settings')[1]
+assert preference['timezone'] == 'Asia/Shanghai' and preference['retention_days'] == 7
+assert 'Asia/Shanghai' in call('/api/manage/settings/timezones')[1]
+cleanup_status, cleanup = call('/api/manage/settings/cleanup', {
+    'expected_revision': preference['revision'], 'confirmed': True
+}, state['csrf_token'])
+assert cleanup_status == 200 and sum(cleanup['counts'].values()) == 0
 site_status, site = call('/api/manage/site')
 assert site_status == 200 and not site['enabled']
 assert site['scheduler']['enabled'] and site['scheduler']['healthy']
-assert site['scheduler']['components'] == {'collector': 'running', 'delivery': 'running'}
+assert site['scheduler']['components'] == {
+    'collector': 'running', 'delivery': 'running', 'maintenance': 'running'
+}
 assert call('/api/manage/content')[1]['total'] == 0
 assert call('/api/manage/overview')[1]['counts']['posts'] == 0
 assert len(call('/api/manage/content/options')[1]) == 1

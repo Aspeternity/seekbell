@@ -23,6 +23,7 @@ import {
   reasonText,
   write,
 } from '../management'
+import { localDate } from '../management'
 import type { HistoryPreview, MonitorTask, Preview, Target } from '../management'
 
 const props = defineProps<{ csrf: string }>()
@@ -213,7 +214,7 @@ async function trialHistory() {
   }
 }
 function date(value: number | null): string {
-  return value === null ? '无样本' : new Date(value * 1000).toLocaleString()
+  return value === null ? '无样本' : localDate(value)
 }
 onMounted(load)
 </script>

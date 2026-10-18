@@ -105,7 +105,7 @@ onUnmounted(() => clearInterval(timer))
     </div>
     <p class="muted">
       渠道接受不代表已阅读；SMTP
-      仅表示服务器接受。结果未知时重试可能重复。时间按浏览器本地时区显示，每 5 秒刷新。
+      仅表示服务器接受。结果未知时重试可能重复。时间按系统显示时区显示，每 5 秒刷新。
     </p>
     <NAlert v-if="error" type="error" class="notice">{{ error }}</NAlert
     ><NAlert v-if="notice" type="info" class="notice">{{ notice }}</NAlert>
