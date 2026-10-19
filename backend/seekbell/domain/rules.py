@@ -1,5 +1,7 @@
 import re
+import unicodedata
 from enum import StrEnum
+from functools import lru_cache
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -65,6 +67,7 @@ class Rule(BaseModel):
     categories: tuple[str, ...] = Field(default=(), max_length=64)
     case_sensitive: bool = False
     mode: Literal["contains", "english_word"] = "contains"
+    notify_on_insufficient: bool = False
 
     @field_validator("exclude", "authors_include", "authors_exclude", "categories", mode="before")
     @classmethod
@@ -92,15 +95,29 @@ class MatchResult(BaseModel):
     warnings: tuple[str, ...] = ()
 
 
+_ASCII_WORD = re.compile(r"[a-zA-Z0-9_]")
+
+
+def _normalize_text(value: str, *, case_sensitive: bool) -> str:
+    normalized = " ".join(unicodedata.normalize("NFKC", value).split())
+    return normalized if case_sensitive else normalized.casefold()
+
+
+@lru_cache(maxsize=1024)
+def _word_pattern(term: str) -> re.Pattern[str]:
+    prefix = r"(?<![a-zA-Z0-9_])" if _ASCII_WORD.fullmatch(term[0]) else ""
+    suffix = r"(?![a-zA-Z0-9_])" if _ASCII_WORD.fullmatch(term[-1]) else ""
+    return re.compile(prefix + re.escape(term) + suffix)
+
+
 def contains(text: str, term: str, rule: Rule) -> bool:
-    if not rule.case_sensitive:
-        text, term = text.casefold(), term.casefold()
+    text = _normalize_text(text, case_sensitive=rule.case_sensitive)
+    term = _normalize_text(term, case_sensitive=rule.case_sensitive)
+    if not term:
+        return False
     if rule.mode == "contains":
         return term in text
-    ascii_word = re.compile(r"[a-zA-Z0-9_]")
-    prefix = r"(?<![a-zA-Z0-9_])" if ascii_word.fullmatch(term[0]) else ""
-    suffix = r"(?![a-zA-Z0-9_])" if ascii_word.fullmatch(term[-1]) else ""
-    return re.search(prefix + re.escape(term) + suffix, text) is not None
+    return _word_pattern(term).search(text) is not None
 
 
 def evaluate(rule: Rule, post: PostFields) -> MatchResult:
@@ -186,6 +203,8 @@ def explain(rule: Rule) -> str:
         parts.append("标题与摘要分别匹配，各词可分布在两字段，不跨字段拼词。")
     if rule.mode == "english_word":
         parts.append("英文词边界使用英文字母、数字和下划线，中文按包含匹配。")
+    if rule.notify_on_insufficient:
+        parts.append("字段缺失导致信息不足时仍发送通知并标注。")
     if not any(
         (rule.groups, rule.exclude, rule.authors_include, rule.authors_exclude, rule.categories)
     ):

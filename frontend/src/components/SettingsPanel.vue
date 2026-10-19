@@ -6,20 +6,23 @@ import type { VersionInfo } from '../api'
 import {
   browserTimezone,
   getSettings,
+  getTargets,
   getTimezones,
   localDate,
   message,
   setDisplayTimezone,
   write,
 } from '../management'
-import type { SystemSettings } from '../management'
+import type { SystemSettings, Target } from '../management'
 const props = defineProps<{ csrf: string }>()
 const emit = defineEmits<{ accountUpdated: [] }>()
 const settings = ref<SystemSettings | null>(null)
+const targets = ref<Target[]>([])
 const version = ref<VersionInfo | null>(null)
 const zones = ref<string[]>([])
 const timezone = ref(browserTimezone)
 const days = ref<number | null>(30)
+const alertTargetId = ref<string>('')
 const name = ref('')
 const currentPassword = ref('')
 const newPassword = ref('')
@@ -48,16 +51,19 @@ async function load() {
   error.value = ''
   cleanupConfirm.value = false
   try {
-    const [value, options, info] = await Promise.all([
+    const [value, options, info, availableTargets] = await Promise.all([
       getSettings(),
       getTimezones(),
       request<VersionInfo>('/api/version'),
+      getTargets(),
     ])
     settings.value = value
     zones.value = options
     version.value = info
+    targets.value = availableTargets
     timezone.value = value.timezone ?? (options.includes(browserTimezone) ? browserTimezone : 'UTC')
     days.value = value.retention_days
+    alertTargetId.value = value.alert_target_id ?? ''
     name.value = value.username
     setDisplayTimezone(value.timezone)
   } catch (cause) {
@@ -79,9 +85,11 @@ async function save() {
         expected_revision: settings.value.revision,
         timezone: timezone.value,
         retention_days: days.value,
+        alert_target_id: alertTargetId.value || null,
       },
       props.csrf,
     )
+    alertTargetId.value = settings.value.alert_target_id ?? ''
     setDisplayTimezone(settings.value.timezone)
     notice.value = '显示与保留设置已保存。后台维护将按新天数分批清理。'
   } catch (cause) {
@@ -171,6 +179,19 @@ onUnmounted(clearPasswords)
               :disabled="busy"
               :input-props="{ id: 'settings-days', required: true }"
           /></NFormItem>
+          <NFormItem label="系统故障告警目标" :label-props="{ for: 'settings-alert-target' }"
+            ><select
+              id="settings-alert-target"
+              v-model="alertTargetId"
+              class="native-select"
+              :disabled="busy"
+            >
+              <option value="">无（仅网页提示）</option>
+              <option v-for="t in targets" :key="t.id" :value="t.id">
+                {{ t.name }}{{ t.enabled ? '' : '（已停用）' }}
+              </option>
+            </select></NFormItem
+          >
         </div>
         <p class="muted">
           未保存时区时使用浏览器时区，当前浏览器为 {{ browserTimezone }}。时间始终以 UTC

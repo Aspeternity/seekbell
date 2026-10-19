@@ -157,3 +157,17 @@ def test_author_only_rule_does_not_require_summary():
     answer = result({"scope": "title_summary", "authors_include": ["fixture"]})
     assert answer.status == "insufficient_data"
     assert {reason.code for reason in answer.reasons} == {"author_include", "missing_author"}
+
+
+def test_nfkc_whitespace_and_notify_on_insufficient():
+    rule = Rule(
+        groups=[{"all_of": ["DMIT", "Black Friday"]}],
+        notify_on_insufficient=True,
+    )
+    assert evaluate(rule, PostFields(title="ＤＭＩＴ   Black\t\nFriday 特惠")).status == "match"
+    word_rule = Rule(
+        mode="english_word",
+        groups=[{"all_of": ["VPS"]}],
+    )
+    assert evaluate(word_rule, PostFields(title="优惠 ＶＰＳ 促销")).status == "match"
+    assert "信息不足时仍发送通知" in explain(rule)

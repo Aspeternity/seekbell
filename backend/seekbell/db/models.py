@@ -331,6 +331,9 @@ class ApplicationSettings(Base):
     revision: Mapped[int] = mapped_column(Integer)
     timezone: Mapped[str | None] = mapped_column(String(64))
     retention_days: Mapped[int] = mapped_column(Integer)
+    alert_target_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("notification_targets.id")
+    )
     last_cleanup_at: Mapped[float | None] = mapped_column(Float)
     last_cleanup_counts: Mapped[dict] = mapped_column(JSON)
 

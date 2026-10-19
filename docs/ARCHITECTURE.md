@@ -27,13 +27,13 @@ M0目录调整：Alembic实际位于`backend/seekbell/migrations`，随Python包
 
 SiteAdapter 声明标识、能力、采集配置、规范链接、帖子 ID 提取、分类映射。首版只注册 NodeSeek RSS；未来可以接入其他网站，但不提前实现主备、TG 会话或网页抓取。
 
-Collector 返回来源条目及采集状态。只处理连接/解析，不运行关键词规则。RSS 使用异步 HTTP 获取；同步解析、大型备份及同步 SMTP 不阻塞事件循环。显式超时、响应大小限制、禁用 XML 外部实体/网络展开、并发上限。M1采用defusedxml先拒绝DTD/实体，再以内存流交给feedparser，避免把输入当URL/文件；解析在线程中执行。RSS请求要求identity编码，限1MiB并拒绝未协商的压缩响应。NodeSeek保留原始版块文字，不虚构稳定分类编号。
+Collector 返回来源条目及采集状态。只处理连接/解析，不运行关键词规则。RSS 使用异步 HTTP 获取；同步解析、大型备份及同步 SMTP 不阻塞事件循环。显式超时、响应大小限制、禁用 XML 外部实体/网络展开、并发上限。M1采用defusedxml先拒绝DTD/实体，再以内存流交给feedparser，避免把输入当URL/文件；解析在线程中执行。由于defusedxml已完成XML良构与安全校验，feedparser仅因轻微格式标记bozo且条目数与原始item一致时记录`feed_bozo_warning`诊断而不丢弃整批；条目数失配才按`feed_parse_error`失败。RSS请求要求identity编码，限1MiB并拒绝未协商的压缩响应。NodeSeek保留原始版块文字，不虚构稳定分类编号。
 
-RuleEngine 为无网络纯逻辑，输入规范化字段和规则快照，输出 match/no_match/insufficient_data 及结构化原因。前端试匹配与后台执行共用同一后端逻辑。
+RuleEngine 为无网络纯逻辑，输入规范化字段和规则快照，输出 match/no_match/insufficient_data 及结构化原因（含NFKC与空白折叠、整词正则缓存及可选`notify_on_insufficient`）。前端试匹配与后台执行共用同一后端逻辑。
 
 Notifier 声明配置 schema、敏感字段、校验与发送能力，返回成功/临时错误/永久错误/结果未知以及可用 Retry-After。重试由投递管理统一控制。各渠道不能仅以 HTTP 200 判断成功，还要解析业务响应；SMTP 成功仅表示服务器接受，不保证进入收件箱。
 
-普通配置表单由渠道 schema 生成；特殊交互可单独组件。目标可有自定义服务地址。Webhook 采用固定 JSON schema_version、event_id、post、matched_tasks；允许必要 URL/Header 配置，不执行任意脚本。URL 仅支持 HTTP(S)，禁止凭据泄漏到日志/跨域重定向；自托管内网服务需求通过明确配置处理，不能简单禁止所有内网目标。
+普通配置表单由渠道 schema 生成；特殊交互可单独组件。目标可有自定义服务地址。Webhook 采用固定 JSON schema_version、event_id、post、matched_tasks（`published_at`与`first_seen_at`统一为ISO 8601 UTC字符串）；允许必要 URL/Header 配置，不执行任意脚本。URL 仅支持 HTTP(S)，禁止凭据泄漏到日志/跨域重定向；自托管内网服务需求通过明确配置处理，不能简单禁止所有内网目标。
 
 ## 数据与一致性
 
@@ -43,7 +43,7 @@ Notifier 声明配置 schema、敏感字段、校验与发送能力，返回成�
 
 1. 唯一 website_id + external_post_id；来源记录另有 source_id + source_item_id。
 2. 首版一个网站单来源，但不把 RSS GUID 当全局唯一 ID。
-3. 在事务中完成新帖入库、任务命中、目标合并和 outbox 写入，然后提交；网络发送不在数据库事务内执行。
+3. 在事务中完成新帖入库、任务命中、目标合并和 outbox 写入，然后提交；网络发送不在数据库事务内执行。无新帖且无基线/缺口/诊断的空轮询仅更新`SourceState`，不重复写入`SourceRun`。
 4. 自动投递意图以帖子+目标唯一；命中记录按任务版本留证。任务规则/内容/目标配置变更的快照或版本可追踪。
 5. Worker 原子认领、记录租约；崩溃后租约过期可恢复。远端结果未知的重试可能重复，UI 不宣称绝对不重复。
 6. 已发送标识和已见标识独立于可读历史。清理正文不允许重建旧投递。
@@ -54,7 +54,7 @@ M1实现边界：0002_core迁移仅播种NodeSeek网站、默认关闭的官方R
 
 任务停用/删除撤销尚未发送的贡献，其他任务仍可合并发送；在途请求保留租约并记录实际结果。目标重新启用不恢复已取消消息。主动停用网站/来源后重建当前基线，进程重启则保留已见状态并处理仍在RSS窗口内的未见帖子；不相交窗口只记“可能缺口”。
 
-Outbox按帖子和目标唯一；每次原子认领有新token和递增尝试号。过期租约记为结果未知，再按上限恢复；旧token不能覆盖新租约。迟到成功留下独立回执与尝试证据，无新租约时修正终态。默认最多5次，退避5～300秒，Retry-After可延长等待；发送超时10秒、租约30秒。未知状态留下持久uncertain标记，即使后续成功也保留。渠道实现在事务外运行。
+Outbox按帖子和目标唯一；每次原子认领有新token和递增尝试号。认领查询使用有界扫描（`LIMIT 64`）并排除当前已有活跃租约的目标，Worker按目标并发派发（默认最多4个不同目标并发，同一目标严格串行），避免慢渠道阻塞其他渠道。过期租约记为结果未知，再按上限恢复；旧token不能覆盖新租约。迟到成功留下独立回执与尝试证据，无新租约时修正终态。默认最多5次，退避5～300秒，Retry-After可延长等待；发送超时10秒、租约30秒。未知状态留下持久uncertain标记，即使后续成功也保留。渠道实现在事务外运行。
 
 SourceRunner接受长生命周期HTTPX客户端，固定周期、不重叠；失败退避10～300秒并尊重Retry-After，状态持久化。M3已在FastAPI生命周期中创建单一Runner/Worker及长生命周期HTTP客户端；默认循环运行但来源关闭，管理接口要求认证。
 
@@ -114,7 +114,7 @@ Configuration复用原短写事务，目标update在事务内校验expected_revi
 
 ApplicationRuntime在迁移、认证与密钥检查完成后构造一套RSS客户端、NotifierRegistry、SourceRunner、DeliveryWorker和历史维护循环。SEEKBELL_BACKGROUND_ENABLED默认true，false关闭采集/投递/维护循环，不禁止管理员显式连接测试。所有工作都在数据目录实例锁生命周期内；退出置stop/wake，给予循环15秒宽限，取消剩余网络等待并保留租约恢复证据，然后关闭客户端、数据库并释放锁。短SQLite线程任务取消时排空；SMTP沿用socket关闭前持锁语义，不能宣称整个退出过程有15秒硬上限。
 
-意外循环退出只记录固定错误码，不输出异常字符串/参数，降低readiness但不改变liveness；普通采集失败只改变来源状态和退避。网站设置提交后唤醒Runner，仍检查持久化next_attempt_at，不回放错过的tick。0005_source_revision为来源新增配置版本，网站与来源启停及频率修改在同一短事务内更新；expected_revision拒绝旧页面，摄取时核对抓取前版本，防止在途响应跨越暂停/恢复边界。
+意外循环异常只记录固定错误码，不输出异常字符串/参数，退避期间降低readiness（503）但不改变liveness，并以指数退避（5～300秒）自动重启循环，成功完成下一周期后恢复readiness并累计`restarts`计数；普通采集失败只改变来源状态和退避。网站设置提交后唤醒Runner，仍检查持久化next_attempt_at，不回放错过的tick。0005_source_revision为来源新增配置版本，网站与来源启停及频率修改在同一短事务内更新；expected_revision拒绝旧页面，摄取时核对抓取前版本，防止在途响应跨越暂停/恢复边界。
 
 POST /api/manage/site/test要求管理员/CSRF并共用SourceRunner锁；重叠返回409，遵守已有失败退避，15秒请求预算。成功只返回合法数/原始数/安全诊断，不建基线或写帖子；失败保存SourceRun、错误码与退避。URL和适配器固定，不能通过此入口访问其他来源。GET site/overview/content/options均受认证；内容筛选分页及命中原因只读本地表，保留任务原规则版本与软删除证据。链接从正数字ID重建，文本展示限长不改变后端匹配字段。
 
@@ -128,7 +128,7 @@ ApplicationRuntime全局互斥一个显式发送，复用NotifierRegistry，纳�
 
 ## M3系统设置、账号更新与保留契约
 
-0007_settings创建唯一ApplicationSettings（时区初始null、保留期30天、revision=1、清理统计）及独立AccountThrottle，并为历史时间字段加索引。设置在短事务中核对expected_revision，时区用系统zoneinfo/IANA集合验证、保留天数1～3650；显示值不改变UTC存储或通知快照。前端未设置时取浏览器时区，实例偏好在登录/刷新/设置页读取，所有页面共用格式化函数。
+0007_settings创建唯一ApplicationSettings（时区初始null、保留期30天、告警目标`alert_target_id`初始null、revision=1、清理统计）及独立AccountThrottle，并为历史时间字段加索引。设置在短事务中核对expected_revision，时区用系统zoneinfo/IANA集合验证、保留天数1～3650、可选`alert_target_id`校验目标存在；配置`alert_target_id`后，后台组件异常、RSS连续失败达5次或发现可能窗口缺口时单次发送系统告警，恢复时单次发送恢复通知。显示值不改变UTC存储或通知快照。前端未设置时取浏览器时区，实例偏好在登录/刷新/设置页读取，所有页面共用格式化函数，导航顺序与URL hash（`#overview`/`#site`/`#tasks`/`#content`/`#targets`/`#status`）同步。
 
 管理员修改必须提供当前密码，新密码可省略且不修剪；用户名沿用可打印1～64字符校验。重新验证使用独立持久每分钟10次预算，不通过登出/刷新重置。Argon2工作在事务外完成，提交时核对原哈希/用户名和会话仍有效，再原子修改并撤销全部认证会话，HTTP删除当前Cookie。login签发前也再次核对已验证的账号和原会话，防止旧校验跨越改密或退出。失败不写账号、错误不回显输入。
 

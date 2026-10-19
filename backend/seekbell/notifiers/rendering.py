@@ -22,8 +22,13 @@ def line(value) -> str:
 def render(payload: dict, config: dict, *, limit: int = 4000) -> str:
     post = payload["post"]
     timestamp = post.get("published_at")
-    if not timestamp and post.get("first_seen_at") is not None:
-        timestamp = datetime.fromtimestamp(post["first_seen_at"], UTC).isoformat()
+    seen = post.get("first_seen_at")
+    if not timestamp and seen is not None:
+        timestamp = (
+            datetime.fromtimestamp(seen, UTC).isoformat()
+            if isinstance(seen, (int, float))
+            else str(seen)
+        )
     lines = [
         clip(line(post["title"]), 600),
         post["url"],

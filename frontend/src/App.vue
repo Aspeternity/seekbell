@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, onUnmounted, ref } from 'vue'
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   NAlert,
   NButton,
@@ -25,8 +25,14 @@ const SettingsPanel = defineAsyncComponent(() => import('./components/SettingsPa
 
 const ContentPanel = defineAsyncComponent(() => import('./components/ContentPanel.vue'))
 
+const validPages = new Set(['overview', 'site', 'tasks', 'content', 'targets', 'status'])
+function pageFromHash(): string {
+  const raw = window.location.hash.replace(/^#/, '')
+  return validPages.has(raw) ? raw : 'overview'
+}
+
 const auth = ref<AuthState | null>(null)
-const activePage = ref('overview')
+const activePage = ref(pageFromHash())
 const loading = ref(true)
 const submitting = ref(false)
 const error = ref('')
@@ -35,6 +41,21 @@ const username = ref('')
 const password = ref('')
 const confirmation = ref('')
 const setup = computed(() => auth.value !== null && !auth.value.initialized)
+
+function syncFromHash() {
+  activePage.value = pageFromHash()
+}
+
+watch(activePage, (page) => {
+  const nextHash = page === 'overview' ? '' : `#${page}`
+  if (window.location.hash !== nextHash) {
+    window.history.replaceState(
+      null,
+      '',
+      nextHash || window.location.pathname + window.location.search,
+    )
+  }
+})
 
 function clearPasswords() {
   password.value = ''
@@ -134,9 +155,13 @@ async function sessionExpired() {
 }
 onMounted(() => {
   window.addEventListener('seekbell:session-expired', sessionExpired)
+  window.addEventListener('hashchange', syncFromHash)
   void refresh()
 })
-onUnmounted(() => window.removeEventListener('seekbell:session-expired', sessionExpired))
+onUnmounted(() => {
+  window.removeEventListener('seekbell:session-expired', sessionExpired)
+  window.removeEventListener('hashchange', syncFromHash)
+})
 </script>
 
 <template>
@@ -161,7 +186,11 @@ onUnmounted(() => window.removeEventListener('seekbell:session-expired', session
         <NTag v-else :bordered="false">新帖监控与通知</NTag>
       </header>
 
-      <section class="intro" aria-labelledby="page-title">
+      <section
+        class="intro"
+        :class="{ 'intro-compact': auth?.authenticated }"
+        aria-labelledby="page-title"
+      >
         <p class="eyebrow">从新帖，到你关心的消息</p>
         <h1 id="page-title">
           {{
@@ -253,14 +282,14 @@ onUnmounted(() => window.removeEventListener('seekbell:session-expired', session
                 >监控网站</NButton
               >
               <NButton
-                :type="activePage === 'content' ? 'primary' : 'default'"
-                @click="activePage = 'content'"
-                >内容与命中</NButton
-              >
-              <NButton
                 :type="activePage === 'tasks' ? 'primary' : 'default'"
                 @click="activePage = 'tasks'"
                 >监控任务</NButton
+              >
+              <NButton
+                :type="activePage === 'content' ? 'primary' : 'default'"
+                @click="activePage = 'content'"
+                >内容与命中</NButton
               >
               <NButton
                 :type="activePage === 'targets' ? 'primary' : 'default'"
@@ -275,12 +304,12 @@ onUnmounted(() => window.removeEventListener('seekbell:session-expired', session
             </nav>
             <OverviewPanel v-if="activePage === 'overview'" />
             <SitePanel v-else-if="activePage === 'site'" :csrf="auth.csrf_token" />
-            <ContentPanel v-else-if="activePage === 'content'" />
             <TasksPanel
               v-else-if="activePage === 'tasks'"
               :csrf="auth.csrf_token"
               @targets="activePage = 'targets'"
             />
+            <ContentPanel v-else-if="activePage === 'content'" />
             <NotificationsPanel v-else-if="activePage === 'targets'" :csrf="auth.csrf_token" />
             <SettingsPanel v-else :csrf="auth.csrf_token" @account-updated="accountUpdated" />
           </section>
@@ -291,16 +320,6 @@ onUnmounted(() => window.removeEventListener('seekbell:session-expired', session
         </div>
       </NSpin>
 
-      <NAlert
-        v-if="auth?.authenticated"
-        title="当前开发进度"
-        type="info"
-        :bordered="false"
-        class="phase-note"
-      >
-        后台采集与自动投递已接入；新安装默认暂停来源。系统设置已接入账号、时区与历史保留；备份恢复在
-        M4 接入，真实环境验证与用户验收尚未进行。
-      </NAlert>
       <footer>
         SeekBell · 自托管的新帖监控与通知<span v-if="auth?.authenticated">
           · 显示时区：{{ displayTimezone ?? browserTimezone }}</span

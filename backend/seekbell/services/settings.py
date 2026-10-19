@@ -9,6 +9,7 @@ from seekbell.db.models import (
     ApplicationSettings,
     DeliveryAttempt,
     ManualDeliveryAttempt,
+    NotificationTarget,
     Outbox,
     OutboxContribution,
     Post,
@@ -31,6 +32,7 @@ class SystemSettings:
                 "revision": row.revision,
                 "timezone": row.timezone,
                 "retention_days": row.retention_days,
+                "alert_target_id": row.alert_target_id,
                 "last_cleanup_at": row.last_cleanup_at,
                 "last_cleanup_counts": row.last_cleanup_counts,
             }
@@ -39,7 +41,14 @@ class SystemSettings:
     def timezones():
         return sorted(available_timezones() - {"Factory", "localtime", "posixrules"})
 
-    def update(self, *, expected_revision: int, timezone: str, retention_days: int):
+    def update(
+        self,
+        *,
+        expected_revision: int,
+        timezone: str,
+        retention_days: int,
+        alert_target_id: str | None = None,
+    ):
         if timezone not in self.timezones() or not 1 <= retention_days <= 3650:
             raise ValueError("Invalid settings")
         try:
@@ -47,12 +56,23 @@ class SystemSettings:
         except (ZoneInfoNotFoundError, ValueError):
             raise ValueError("Invalid timezone") from None
         with write_session(self.engine) as session:
+            if (
+                alert_target_id is not None
+                and session.get(NotificationTarget, alert_target_id) is None
+            ):
+                raise ValueError("Unknown alert target")
             row = session.get(ApplicationSettings, 1)
             if row.revision != expected_revision:
                 raise ConfigurationConflict
-            if row.timezone != timezone or row.retention_days != retention_days:
+            if (
+                row.timezone != timezone
+                or row.retention_days != retention_days
+                or row.alert_target_id != alert_target_id
+            ):
                 row.revision += 1
-            row.timezone, row.retention_days = timezone, retention_days
+            row.timezone = timezone
+            row.retention_days = retention_days
+            row.alert_target_id = alert_target_id
 
     def cleanup(self, *, at: float, expected_revision: int | None = None, limit: int = 200) -> dict:
         if not 1 <= limit <= 1000:

@@ -219,3 +219,20 @@ def test_retry_after_seconds_and_http_date():
     assert retry_after_seconds("-1", now) == 0
     assert retry_after_seconds("not a date", now) is None
     assert retry_after_seconds("inf", now) is None
+
+
+def test_benign_bozo_flag_records_diagnostic_without_failing(monkeypatch):
+    import feedparser
+
+    real_parse = feedparser.parse
+
+    def bozo_parse(*args, **kwargs):
+        parsed = real_parse(*args, **kwargs)
+        parsed["bozo"] = 1
+        parsed["bozo_exception"] = Exception("CharacterEncodingOverride")
+        return parsed
+
+    monkeypatch.setattr("seekbell.collectors.rss.feedparser.parse", bozo_parse)
+    feed = parse_rss(rss([{"id": 9001}]))
+    assert len(feed.entries) == 1
+    assert any(d.code == "feed_bozo_warning" for d in feed.diagnostics)

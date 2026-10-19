@@ -28,6 +28,12 @@ def upgrade():
         sa.Column("revision", sa.Integer(), nullable=False),
         sa.Column("timezone", sa.String(64), nullable=True),
         sa.Column("retention_days", sa.Integer(), nullable=False),
+        sa.Column(
+            "alert_target_id",
+            sa.String(36),
+            sa.ForeignKey("notification_targets.id"),
+            nullable=True,
+        ),
         sa.Column("last_cleanup_at", sa.Float(), nullable=True),
         sa.Column("last_cleanup_counts", sa.JSON(), nullable=False),
         sa.CheckConstraint("id = 1", name="ck_application_settings_singleton"),
@@ -41,6 +47,7 @@ def upgrade():
                 "revision": 1,
                 "timezone": None,
                 "retention_days": 30,
+                "alert_target_id": None,
                 "last_cleanup_counts": {},
             }
         ],

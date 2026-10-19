@@ -1,6 +1,6 @@
 # M5 统一本机用户验收
 
-当前选择：先在本机验收六页与离线功能。用户尚未验收；下面各项初始均待执行，只有用户实际确认后才改为通过。PVE/真实反代、真实RSS与四渠道接收、原生arm64另列待执行，不用本机结果替代。
+当前选择：先在本机验收六页与离线功能。用户已确认创建管理员并进入管理页；U01其余步骤及U02～U10待执行，逐项记录实际确认。PVE/真实反代、真实RSS与四渠道接收、原生arm64另列待执行，不用本机结果替代。
 
 ## 固定入口与隔离范围
 
@@ -17,7 +17,7 @@
 
 |编号|用户操作与观察点|通过标准|用户结果|
 |---|---|---|---|
-|U01 入口/认证|创建唯一管理员；刷新、退出再登录|初始化只出现一次，刷新保持会话，退出后不能访问管理页|待执行|
+|U01 入口/认证|创建唯一管理员；刷新、退出再登录|初始化只出现一次，刷新保持会话，退出后不能访问管理页|创建/进入已确认；刷新/退出待执行|
 |U02 概览|查看统计、来源与后台状态|无数据时说明清晰；后台显示关闭，不误报已采集成功|待执行|
 |U03 网站|查看唯一NodeSeek官方RSS、频率和暂停说明|没有添加自定义网站入口；离线环境不启用采集，不点击真实连接测试|待执行|
 |U04 通知管理|创建一个停用的Webhook目标，URL填https://example.com/seekbell-acceptance；不发送测试|可保存/编辑/停用，秘密不明文回显，投递记录空态清楚|待执行|
@@ -52,6 +52,18 @@ docker compose --env-file deploy/.env.acceptance \
 
 不执行down -v、全局prune或清空卷。若要重置需另行明确选择。恢复也使用不同项目/新空卷，详见DEPLOYMENT。
 
+U10协助时，DEPLOYMENT中所有命令的配置文件须替换为本页的deploy/.env.acceptance，并同时加载两个Compose文件，不能误用默认测试项目。备份命令示例（用户在交互终端自行输入当前密码及新备份口令）：
+
+```bash
+docker compose --env-file deploy/.env.acceptance \
+  -f deploy/compose.yaml -f deploy/compose.acceptance.yaml stop seekbell
+docker compose --env-file deploy/.env.acceptance \
+  -f deploy/compose.yaml -f deploy/compose.acceptance.yaml run --rm --no-deps seekbell \
+  python -m seekbell.backup create /data/user-acceptance-checkpoint.sbb
+```
+
+命令不覆盖旧归档，重复备份需换文件名。停服会结束前台服务会话，完成后按本页前台up命令重开；恢复须另设项目名/端口/空卷，不能直接恢复到seekbell-acceptance_data。本轮尚未执行这项用户数据操作。
+
 ## 待统一补齐的实机项
 
 PVE连接/路径与部署授权、HTTPS代理入口、通知目标及每渠道发送授权、RSS频率和运行观察、镜像发布命名空间/可见性与权限。可按DEPLOYMENT传输本地镜像，不强制先发布GHCR。24小时观察仅为建议，不是已确认SLA。
@@ -64,8 +76,10 @@ PVE连接/路径与部署授权、HTTPS代理入口、通知目标及每渠道�
 
 - 固定镜像应用版本965238ce847fb433575f003f91587c68db52320d，单独挂载scripts/local_acceptance_server.py作为开发入口；产品镜像内容未修改。
 - Compose配置检查通过；应用进程启动自检拒绝外部IP连接及DNS，后台关闭。新增守卫10项针对性测试通过（0.16秒）：IPv4/IPv6 connect/connect_ex/UDP、外部DNS、数字监听地址与Unix socketpair。
-- 正式WSL内/health/ready、/api/version和首页编译资源引用通过；Windows侧127.0.0.1:18080健康检查返回ok。未创建管理员、未执行用户操作或真实发送。
+- 正式WSL内/health/ready、/api/version和首页编译资源引用通过；Windows侧127.0.0.1:18080健康检查返回ok。准备检查时未替用户创建管理员或执行用户操作；随后用户自行创建并确认进入管理页。本轮未执行真实发送。
 - 曾尝试internal网络，但此Rootless实例没有端口映射，已移除该无效配置。后台派发后也观察到容器退出255与Docker服务重新启动；改用保持运行的前台Compose会话后入口可达，不修改全局WSL设置。
 - Ruff检查/格式通过；M4旧全套结果复用，不在本机重跑387项或7项浏览器。
 
 - 准备期间补齐字节域名回归：先转为文本再判断数字IP，拒绝将4字节域名误作打包IP；针对性10项通过后重建验收容器，数据卷保留。
+
+用户确认（2026-10-19 07:30，本机固定镜像965238c + 验收入口0723532）：能正常创建管理员并进入管理页。仅确认这两步；未推定刷新/退出、六页或整体验收通过。

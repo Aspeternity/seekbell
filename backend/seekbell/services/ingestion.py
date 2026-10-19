@@ -117,6 +117,9 @@ class Ingestion:
                 )
                 .order_by(Task.id)
             ).all()
+            compiled = [
+                (task, version, Rule.model_validate(version.rule)) for task, version in versions
+            ]
             new_posts = hit_count = queued = insufficient = 0
             encountered = set()
             for post in batch.posts:
@@ -165,12 +168,15 @@ class Ingestion:
                 if baseline:
                     continue
 
-                target_hits: dict[str, list[tuple[RuleHit, TaskVersion]]] = {}
-                for task, version in versions:
-                    decision = evaluate(Rule.model_validate(version.rule), post)
+                target_hits: dict[str, list[tuple[RuleHit, TaskVersion, bool]]] = {}
+                for task, version, rule in compiled:
+                    decision = evaluate(rule, post)
                     if decision.status == "insufficient_data":
                         insufficient += 1
-                    if decision.status != "match":
+                    is_insufficient_hit = (
+                        decision.status == "insufficient_data" and rule.notify_on_insufficient
+                    )
+                    if decision.status != "match" and not is_insufficient_hit:
                         continue
                     hit = RuleHit(
                         id=identifier(),
@@ -186,7 +192,9 @@ class Ingestion:
                     for target_id in version.target_ids:
                         target = session.get(NotificationTarget, target_id)
                         if target is not None and target.enabled:
-                            target_hits.setdefault(target_id, []).append((hit, version))
+                            target_hits.setdefault(target_id, []).append(
+                                (hit, version, is_insufficient_hit)
+                            )
 
                 for target_id, hits in target_hits.items():
                     target = session.get(NotificationTarget, target_id)
@@ -205,11 +213,15 @@ class Ingestion:
                             "published_at": post.published_at.isoformat()
                             if post.published_at
                             else None,
-                            "first_seen_at": at,
+                            "first_seen_at": datetime.fromtimestamp(at, UTC).isoformat(),
                         },
                         "matched_tasks": [
-                            {"id": hit.task_id, "version": hit.task_version, "name": version.name}
-                            for hit, version in hits
+                            {
+                                "id": hit.task_id,
+                                "version": hit.task_version,
+                                "name": version.name + ("（信息不足）" if is_insufficient else ""),
+                            }
+                            for hit, version, is_insufficient in hits
                         ],
                     }
                     session.add(
@@ -225,7 +237,7 @@ class Ingestion:
                         )
                     )
                     session.flush()
-                    for hit, _ in hits:
+                    for hit, _, _ in hits:
                         session.add(OutboxContribution(event_id=event_id, hit_id=hit.id))
                     queued += 1
 
@@ -238,21 +250,22 @@ class Ingestion:
             if window:
                 state.previous_window = window
             state.window_count = batch.raw_count
-            session.add(
-                SourceRun(
-                    source_id=source_id,
-                    at=at,
-                    status="success",
-                    code="baseline" if baseline else None,
-                    raw_count=batch.raw_count,
-                    new_posts=new_posts,
-                    hit_count=hit_count,
-                    queued_count=queued,
-                    insufficient_count=insufficient,
-                    possible_gap=gap,
-                    diagnostics=[asdict(item) for item in diagnostics],
+            if baseline or new_posts or hit_count or queued or insufficient or gap or diagnostics:
+                session.add(
+                    SourceRun(
+                        source_id=source_id,
+                        at=at,
+                        status="success",
+                        code="baseline" if baseline else None,
+                        raw_count=batch.raw_count,
+                        new_posts=new_posts,
+                        hit_count=hit_count,
+                        queued_count=queued,
+                        insufficient_count=insufficient,
+                        possible_gap=gap,
+                        diagnostics=[asdict(item) for item in diagnostics],
+                    )
                 )
-            )
             return IngestReport(
                 "success",
                 baseline,

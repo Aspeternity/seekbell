@@ -69,11 +69,11 @@ def parse_rss(data: bytes, *, max_bytes: int = MAX_RESPONSE_BYTES) -> ParsedFeed
     raw_items = [item for item in channel if local_name(item.tag) == "item"]
     # Passing a stream prevents feedparser from treating input as a path or URL.
     feed = feedparser.parse(io.BytesIO(data))
-    if feed.get("bozo"):
-        raise SourceFailure("feed_parse_error")
     if len(feed.entries) != len(raw_items):
-        raise SourceFailure("entry_count_mismatch")
+        raise SourceFailure("feed_parse_error" if feed.get("bozo") else "entry_count_mismatch")
     entries, diagnostics = [], []
+    if feed.get("bozo"):
+        diagnostics.append(Diagnostic("feed_bozo_warning"))
     for index, (entry, raw) in enumerate(zip(feed.entries, raw_items, strict=True)):
         raw_fields = {local_name(child.tag): child for child in raw}
         summary = None

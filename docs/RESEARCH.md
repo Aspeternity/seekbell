@@ -16,6 +16,8 @@
 
 原始实测文件在当时临时环境生成，未作为本包稳定测试夹具分发；开发应构造无真实个人内容的合成夹具，并在获授权的运行验证中重新核实。
 
+2026-10-19 复核：通过 `RssCollector` + `NodeSeekAdapter` 对 `https://rss.nodeseek.com/` 执行单次只读探测，返回 HTTP 200（`application/xml; charset=utf-8`），原始 20 条全部规范化通过，其中 3 条摘要缺失（`summary=None`），0 条诊断错误。
+
 ## 依据与参考
 
 - 官方管理员推荐独立RSS域名而非主站抓取：

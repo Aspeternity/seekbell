@@ -423,3 +423,35 @@ def test_source_revision_migration_preserves_config_and_rolls_back_fault(tmp_pat
             assert source.enabled and source.interval_seconds == 17 and source.revision == 1
     finally:
         engine.dispose()
+
+
+def test_background_loop_auto_recovers_after_transient_fault(tmp_path):
+    simulated = SimulatedServices()
+    attempts = 0
+
+    def recovering_factory(engine, vault, *, enabled):
+        runtime = simulated.factory(engine, vault, enabled=enabled)
+        runtime.recovery_backoff = 0.02
+        real_run = runtime.source.run
+
+        async def flaky_run(stop, *, wake=None, on_cycle=None):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise RuntimeError("transient-collector-fault")
+            await real_run(stop, wake=wake, on_cycle=on_cycle)
+
+        runtime.source.run = flaky_run
+        return runtime
+
+    app = create_app(
+        Settings(data_dir=tmp_path, background_enabled=True),
+        runtime_factory=recovering_factory,
+    )
+    with TestClient(app) as client:
+        auth = setup(client)
+        client.headers["X-CSRF-Token"] = auth["csrf_token"]
+        wait_for(lambda: attempts >= 2 and client.get("/health/ready").status_code == 200)
+        overview = client.get("/api/manage/overview").json()
+        assert overview["scheduler"]["healthy"]
+        assert overview["scheduler"]["restarts"]["collector"] >= 1

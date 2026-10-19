@@ -104,6 +104,8 @@ def test_display_settings_validation_conflict_and_restart(managed):
     assert "UTC" in zones and "Asia/Shanghai" in zones
     saved = update(client, timezone="Asia/Shanghai", retention_days=7)
     assert saved.status_code == 200 and saved.json()["revision"] == initial["revision"] + 1
+    assert saved.json()["alert_target_id"] is None
+    assert update(client, alert_target_id="nonexistent-target").status_code == 422
     assert update(client, timezone="../../secret").status_code == 422
     for days in (0, 3651):
         assert update(client, retention_days=days).status_code == 422

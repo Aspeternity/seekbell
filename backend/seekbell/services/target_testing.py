@@ -2,6 +2,7 @@
 
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
@@ -70,7 +71,7 @@ class TargetTesting:
                 "author": "SeekBell",
                 "category": "通知测试",
                 "published_at": None,
-                "first_seen_at": at,
+                "first_seen_at": datetime.fromtimestamp(at, UTC).isoformat(),
             },
             "matched_tasks": [{"id": "test", "version": 1, "name": "手动通知测试"}],
         }

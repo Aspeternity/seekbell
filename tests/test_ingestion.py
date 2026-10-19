@@ -230,3 +230,30 @@ def test_pruning_readable_history_does_not_remove_dedupe_receipts(core):
     assert core.count(SeenPost) == 2 and core.count(DeliveredPost) == 1
     assert core.ingest(9002, 9001, at=40).queued == 0
     assert core.count(Post) == core.count(Outbox) == 0
+
+
+def test_notify_on_insufficient_and_iso_first_seen_at_and_noop_source_run(core):
+    from seekbell.db.models import SourceRun
+
+    core.config.update_task(
+        core.task,
+        "Alert even if missing summary",
+        Rule(
+            scope="title_summary",
+            groups=[ConditionGroup(all_of=["VPS"])],
+            exclude=["求购"],
+            notify_on_insufficient=True,
+        ),
+        [core.target],
+        at=1,
+    )
+    baseline = core.ingest(9001, at=10)
+    assert baseline.baseline and core.count(SourceRun) == 1
+    noop = core.ingest(9001, at=20)
+    assert noop.new_posts == 0 and core.count(SourceRun) == 1
+    report = core.ingest(9001, 9002, at=30, summary=None)
+    assert report.insufficient == 1 and report.hits == 1 and report.queued == 1
+    assert core.count(SourceRun) == 2
+    outbox = core.one(Outbox)
+    assert outbox.payload["post"]["first_seen_at"] == "1970-01-01T00:00:30+00:00"
+    assert outbox.payload["matched_tasks"][0]["name"].endswith("（信息不足）")

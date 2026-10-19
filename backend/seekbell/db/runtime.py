@@ -43,6 +43,22 @@ def migrate(engine: Engine, revision: str = "head") -> None:
         config.attributes["connection"] = connection
         try:
             command.upgrade(config, revision)
+            tables = {
+                row[0]
+                for row in connection.exec_driver_sql(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                )
+            }
+            if "application_settings" in tables:
+                columns = {
+                    row[1]
+                    for row in connection.exec_driver_sql("PRAGMA table_info(application_settings)")
+                }
+                if "alert_target_id" not in columns:
+                    connection.exec_driver_sql(
+                        "ALTER TABLE application_settings ADD COLUMN alert_target_id VARCHAR(36) "
+                        "REFERENCES notification_targets(id)"
+                    )
             connection.commit()
         except BaseException:
             connection.rollback()

@@ -76,17 +76,27 @@ class DeliveryWorker:
         event.lease_token = None
         event.lease_until = None
 
-    def claim(self, *, at: float) -> Claim | None:
+    def claim(self, *, at: float, exclude_targets: set[str] | None = None) -> Claim | None:
         with write_session(self.engine) as session:
-            events = session.scalars(
-                select(Outbox)
-                .where(
-                    or_(
-                        and_(Outbox.status.in_(("pending", "retry")), Outbox.available_at <= at),
-                        and_(Outbox.status == "leased", Outbox.lease_until <= at),
+            active_leases = set(
+                session.scalars(
+                    select(Outbox.target_id).where(
+                        Outbox.status == "leased", Outbox.lease_until > at
                     )
                 )
-                .order_by(Outbox.available_at, Outbox.created_at, Outbox.id)
+            )
+            if exclude_targets:
+                active_leases |= exclude_targets
+            statement = select(Outbox).where(
+                or_(
+                    and_(Outbox.status.in_(("pending", "retry")), Outbox.available_at <= at),
+                    and_(Outbox.status == "leased", Outbox.lease_until <= at),
+                )
+            )
+            if active_leases:
+                statement = statement.where(Outbox.target_id.not_in(active_leases))
+            events = session.scalars(
+                statement.order_by(Outbox.available_at, Outbox.created_at, Outbox.id).limit(64)
             ).all()
             for event in events:
                 if event.status == "leased":
@@ -213,10 +223,7 @@ class DeliveryWorker:
             self._release(event)
             return True
 
-    async def run_once(self) -> str | None:
-        claim = await storage_call(self.claim, at=self.clock())
-        if claim is None:
-            return None
+    async def _dispatch(self, claim: Claim) -> str:
         notifier = self.notifiers.get(claim.target_snapshot["kind"])
         if notifier is None:
             result = SendResult(status="permanent_error", code="unsupported_notifier")
@@ -235,9 +242,58 @@ class DeliveryWorker:
         await storage_call(self.finish, claim, result, at=self.clock())
         return claim.event_id
 
-    async def run(self, stop: asyncio.Event) -> None:
-        while not stop.is_set():
-            event_id = await self.run_once()
-            if event_id is None:
-                with suppress(TimeoutError):
-                    await asyncio.wait_for(stop.wait(), timeout=1)
+    async def run_once(self) -> str | None:
+        claim = await storage_call(self.claim, at=self.clock())
+        if claim is None:
+            return None
+        return await self._dispatch(claim)
+
+    async def run(
+        self,
+        stop: asyncio.Event,
+        *,
+        max_concurrency: int = 4,
+        on_cycle: Callable[[], None] | None = None,
+    ) -> None:
+        inflight: dict[asyncio.Task[str], str] = {}
+        try:
+            while not stop.is_set():
+                claimed_any = False
+                while not stop.is_set() and len(inflight) < max_concurrency:
+                    claim = await storage_call(
+                        self.claim, at=self.clock(), exclude_targets=set(inflight.values())
+                    )
+                    if on_cycle is not None:
+                        on_cycle()
+                    if claim is None:
+                        break
+                    claimed_any = True
+                    task = asyncio.create_task(self._dispatch(claim))
+                    inflight[task] = claim.target_snapshot["id"]
+                if not inflight:
+                    if not claimed_any:
+                        with suppress(TimeoutError):
+                            await asyncio.wait_for(stop.wait(), timeout=1)
+                    continue
+                stop_wait = asyncio.create_task(stop.wait())
+                try:
+                    done, _ = await asyncio.wait(
+                        [*inflight, stop_wait],
+                        timeout=1,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                finally:
+                    stop_wait.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await stop_wait
+                for task in list(done):
+                    if task in inflight:
+                        inflight.pop(task, None)
+                        await task
+                        if on_cycle is not None:
+                            on_cycle()
+        finally:
+            for task in inflight:
+                task.cancel()
+            if inflight:
+                await asyncio.gather(*inflight, return_exceptions=True)

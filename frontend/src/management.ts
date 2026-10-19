@@ -36,6 +36,7 @@ export interface Rule {
   categories: string[]
   case_sensitive: boolean
   mode: 'contains' | 'english_word'
+  notify_on_insufficient?: boolean
 }
 export interface MonitorTask {
   id: string
@@ -136,6 +137,7 @@ export function freshRule(): Rule {
     categories: [],
     case_sensitive: false,
     mode: 'contains',
+    notify_on_insufficient: false,
   }
 }
 export function message(cause: unknown): string {
@@ -176,6 +178,7 @@ export interface SchedulerState {
   healthy: boolean
   stopping: boolean
   components: Record<string, string>
+  restarts?: Record<string, number>
 }
 export interface SiteState {
   website_id: string
@@ -282,6 +285,7 @@ export function sourceError(code: string | null): string {
     unsupported_source: '来源配置不匹配',
     not_rss: '响应不是 RSS',
     feed_parse_error: 'RSS 解析失败',
+    feed_bozo_warning: 'RSS 格式轻微异常（已兼容解析）',
     no_valid_entries: '没有合法条目',
   }
   return labels[code] ?? code
@@ -394,6 +398,7 @@ export interface SystemSettings {
   username: string
   timezone: string | null
   retention_days: number
+  alert_target_id: string | null
   last_cleanup_at: number | null
   last_cleanup_counts: Record<string, number>
   scheduler: SchedulerState

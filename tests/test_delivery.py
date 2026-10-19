@@ -222,3 +222,45 @@ def test_async_recording_notifier_gets_one_merged_payload(core):
     assert asyncio.run(worker.run_once()) is None
     assert len(notifier.calls) == 1
     assert len(notifier.calls[0][1]["matched_tasks"]) == 2
+
+
+def test_per_target_concurrency_does_not_block_fast_target(core):
+    fast_target = core.config.create_target("Fast target")
+    core.config.update_task(core.task, "Both", Rule(), [core.target, fast_target], at=2)
+    core.queued()
+    slow_started = asyncio.Event()
+    release_slow = asyncio.Event()
+    fast_done = asyncio.Event()
+
+    class MixedNotifier:
+        async def send(self, target, payload):
+            if target["id"] == core.target:
+                slow_started.set()
+                await release_slow.wait()
+                return SendResult(status="success")
+            fast_done.set()
+            return SendResult(status="success")
+
+    async def exercise():
+        stop = asyncio.Event()
+        worker = DeliveryWorker(core.engine, {"mock": MixedNotifier()}, clock=lambda: 30)
+        runner = asyncio.create_task(worker.run(stop, max_concurrency=2))
+        try:
+            await asyncio.wait_for(slow_started.wait(), timeout=2)
+            await asyncio.wait_for(fast_done.wait(), timeout=2)
+            for _ in range(50):
+                with Session(core.engine) as session:
+                    statuses = {
+                        row.target_id: row.status for row in session.scalars(select(Outbox)).all()
+                    }
+                if statuses[fast_target] == "sent":
+                    break
+                await asyncio.sleep(0.01)
+            assert statuses[fast_target] == "sent"
+            assert statuses[core.target] == "leased"
+        finally:
+            release_slow.set()
+            stop.set()
+            await asyncio.wait_for(runner, timeout=2)
+
+    asyncio.run(exercise())

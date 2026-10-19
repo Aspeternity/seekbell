@@ -15,6 +15,7 @@ class SettingsInput(Input):
     expected_revision: int = Field(ge=1)
     timezone: str = Field(min_length=1, max_length=64)
     retention_days: int = Field(ge=1, le=3650)
+    alert_target_id: str | None = Field(default=None, min_length=1, max_length=36)
 
 
 class CleanupInput(Input):

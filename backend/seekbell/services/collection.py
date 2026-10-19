@@ -144,12 +144,20 @@ class SourceRunner:
             )
             return PollOutcome(report.status, report=report)
 
-    async def run(self, stop: asyncio.Event, *, wake: asyncio.Event | None = None) -> None:
+    async def run(
+        self,
+        stop: asyncio.Event,
+        *,
+        wake: asyncio.Event | None = None,
+        on_cycle: Callable[[PollOutcome], None] | None = None,
+    ) -> None:
         while not stop.is_set():
             if wake is not None:
                 wake.clear()
             started = time.monotonic()
-            await self.run_once()
+            outcome = await self.run_once()
+            if on_cycle is not None:
+                on_cycle(outcome)
             delay = started + self._interval - time.monotonic()
             if delay <= 0:
                 delay = self._interval  # Skip missed ticks rather than replaying them.

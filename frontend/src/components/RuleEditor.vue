@@ -44,6 +44,12 @@ const tags = [
           :disabled="disabled"
           aria-label="区分英文大小写"
       /></NFormItem>
+      <NFormItem label="信息不足时仍通知"
+        ><NSwitch
+          v-model:value="rule.notify_on_insufficient"
+          :disabled="disabled"
+          aria-label="信息不足时仍通知"
+      /></NFormItem>
     </div>
     <p class="muted">
       每次输入一个词或短语，按 Enter
