@@ -4,6 +4,10 @@
 
 当前已实现 **M1核心闭环与M2四渠道通知**：RSS解析、规则、基线/身份账本、事务outbox、可恢复投递，以及Telegram Bot/Bark/SMTP/Webhook适配、加密目标配置和独立目标测试记录。M2通过模拟验证；管理员、Web管理和自动调度接入尚未实现，不能作为监控服务投入使用。真实通知与用户验收待Web完成后统一组织，当前证据以[PROJECT_STATE](docs/PROJECT_STATE.md)为准。
 
+## 管理界面原型（待确认）
+
+已新增独立概览、任务编辑与手机交互原型，采用模拟数据，仅浏览器本地保存。启动、检查与源码结构见 [原型说明](docs/UI_PROTOTYPE.md)，视觉规则见 [设计规范草案](docs/UI_DESIGN.md)。先确认本轮设计，再扩展其他页面与接入真实服务。默认生产入口仍是原服务状态页。
+
 ## 环境
 
 本机已确认使用独立WSL2发行版`SeekBell-Dev`，源码位于Linux文件系统的`/home/dev/projects/seekbell`。Windows终端执行`wsl.exe -d SeekBell-Dev --cd /home/dev/projects/seekbell`进入。原D盘目录保留为交接副本；具体配置、隔离边界和Docker维护命令见[开发环境](docs/DEVELOPMENT_ENVIRONMENT.md)。
