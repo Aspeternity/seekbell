@@ -24,7 +24,7 @@ test('fresh workspace, catalog, website configuration and removal are complete',
   const drawer = page.locator('.website-drawer')
   await expect(drawer).toBeVisible()
   await expect(page.locator('.catalog-card')).toHaveCount(1)
-  await page.screenshot({ path: info.outputPath('websites-catalog.png'), fullPage: true })
+  await page.screenshot({ path: info.outputPath('websites-catalog.png'), fullPage: false })
   await page.getByLabel('搜索内置网站').fill('不存在')
   await expect(page.getByText('没有找到内置网站')).toBeVisible()
   await page.getByRole('button', { name: '清除搜索' }).click()
@@ -43,7 +43,8 @@ test('fresh workspace, catalog, website configuration and removal are complete',
   await drawer.getByRole('switch').click()
   await page.getByRole('button', { name: '测试连接（模拟）' }).click()
   await expect(drawer.locator('.match-result')).toContainText('模拟连接成功')
-  await page.screenshot({ path: info.outputPath('websites-config.png'), fullPage: true })
+  await drawer.locator('.website-drawer-body').evaluate((e) => e.scrollTo(0, 0))
+  await page.screenshot({ path: info.outputPath('websites-config.png'), fullPage: false })
   for (const width of [320, 390, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 })
     expect(await drawer.evaluate((e) => e.scrollWidth <= e.clientWidth)).toBe(true)
