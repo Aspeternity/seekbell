@@ -61,50 +61,58 @@ onMounted(async () => {
       <h2>内容与命中</h2>
       <NButton :loading="loading" @click="load">刷新内容</NButton>
     </div>
-    <p class="muted">
+    <p class="section-lead">
       只查看本地保留帖子与历史命中，不访问论坛、不补发通知。时间按系统显示时区显示。
     </p>
     <NAlert v-if="error" type="error" role="alert" class="notice">{{ error }}</NAlert>
-    <NForm @submit.prevent="search">
-      <div class="form-grid">
-        <NFormItem label="标题包含" :label-props="{ for: 'content-query' }"
-          ><NInput
-            v-model:value="query"
-            :disabled="loading"
-            :maxlength="200"
-            :input-props="{ id: 'content-query' }"
-        /></NFormItem>
-        <NFormItem label="作者精确匹配" :label-props="{ for: 'content-author' }"
-          ><NInput
-            v-model:value="author"
-            :disabled="loading"
-            :maxlength="500"
-            :input-props="{ id: 'content-author' }"
-        /></NFormItem>
-        <NFormItem label="版块精确匹配" :label-props="{ for: 'content-category' }"
-          ><NInput
-            v-model:value="category"
-            :disabled="loading"
-            :maxlength="500"
-            :input-props="{ id: 'content-category' }"
-        /></NFormItem>
-        <NFormItem label="命中任务" :label-props="{ for: 'content-task' }"
-          ><select id="content-task" v-model="taskId" class="native-select" :disabled="loading">
-            <option value="">全部任务</option>
-            <option v-for="task in tasks" :key="task.id" :value="task.id">
-              {{ task.name }}{{ task.deleted ? '（已删除）' : '' }}
-            </option>
-          </select></NFormItem
-        >
-        <NFormItem label="仅显示有命中的帖子"
-          ><NSwitch v-model:value="matchedOnly" :disabled="loading" aria-label="仅显示有命中的帖子"
-        /></NFormItem>
-      </div>
-      <NButton type="primary" attr-type="submit" :loading="loading">筛选内容</NButton>
-    </NForm>
+    <div class="filter-card">
+      <NForm @submit.prevent="search">
+        <div class="form-grid">
+          <NFormItem label="标题包含" :label-props="{ for: 'content-query' }"
+            ><NInput
+              v-model:value="query"
+              :disabled="loading"
+              :maxlength="200"
+              placeholder="输入标题关键词..."
+              :input-props="{ id: 'content-query' }"
+          /></NFormItem>
+          <NFormItem label="作者精确匹配" :label-props="{ for: 'content-author' }"
+            ><NInput
+              v-model:value="author"
+              :disabled="loading"
+              :maxlength="500"
+              placeholder="原帖作者用户名..."
+              :input-props="{ id: 'content-author' }"
+          /></NFormItem>
+          <NFormItem label="版块精确匹配" :label-props="{ for: 'content-category' }"
+            ><NInput
+              v-model:value="category"
+              :disabled="loading"
+              :maxlength="500"
+              placeholder="版块原文字..."
+              :input-props="{ id: 'content-category' }"
+          /></NFormItem>
+          <NFormItem label="命中任务" :label-props="{ for: 'content-task' }"
+            ><select id="content-task" v-model="taskId" class="native-select" :disabled="loading">
+              <option value="">全部任务</option>
+              <option v-for="task in tasks" :key="task.id" :value="task.id">
+                {{ task.name }}{{ task.deleted ? '（已删除）' : '' }}
+              </option>
+            </select></NFormItem
+          >
+          <NFormItem label="仅显示有命中的帖子"
+            ><NSwitch
+              v-model:value="matchedOnly"
+              :disabled="loading"
+              aria-label="仅显示有命中的帖子"
+          /></NFormItem>
+        </div>
+        <NButton type="primary" attr-type="submit" :loading="loading">筛选内容</NButton>
+      </NForm>
+    </div>
     <template v-if="result">
       <div class="panel-heading">
-        <p>符合筛选 {{ result.total }} 条 · 当前显示 {{ result.items.length }} 条</p>
+        <p class="muted">符合筛选 {{ result.total }} 条 · 当前显示 {{ result.items.length }} 条</p>
         <div class="actions">
           <NButton :disabled="loading || offset === 0" @click="page(-1)">上一页</NButton
           ><NButton
@@ -116,15 +124,16 @@ onMounted(async () => {
       </div>
       <p v-if="!result.items.length" class="empty">没有符合筛选的本地帖子。</p>
       <NCard v-for="post in result.items" :key="post.external_post_id" class="record-card">
-        <h3>
+        <h3 class="post-title">
           <a v-if="post.url" :href="post.url" target="_blank" rel="noopener noreferrer">{{
             post.title
           }}</a
           ><span v-else>{{ post.title }}</span>
         </h3>
         <div class="record-meta">
-          <NTag>作者：{{ post.author ?? '未知' }}</NTag
-          ><NTag>版块：{{ post.category ?? '未知' }}</NTag>
+          <NTag type="info" :bordered="false">作者：{{ post.author ?? '未知' }}</NTag
+          ><NTag :bordered="false">版块：{{ post.category ?? '未知' }}</NTag>
+          <NTag v-if="post.hits.length" type="success">命中 {{ post.hits.length }} 项</NTag>
         </div>
         <p class="muted">
           首次发现：{{ localDate(post.first_seen_at) }} · 发布时间：{{
@@ -151,7 +160,7 @@ onMounted(async () => {
             >{{ hit.name }} · 规则版本 {{ hit.version
             }}{{ hit.deleted ? '（任务已删除）' : '' }}</strong
           >
-          <p>{{ reasonText(hit.reason) }}</p>
+          <p class="rule-explanation">{{ reasonText(hit.reason) }}</p>
           <p class="muted">命中时间：{{ localDate(hit.matched_at) }}</p>
         </div>
       </NCard>

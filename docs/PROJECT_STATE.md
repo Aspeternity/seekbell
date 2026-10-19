@@ -13,13 +13,13 @@
 3. **规则匹配与信息不足通知**：`Rule`新增可选`notify_on_insufficient`（默认`false`），开启后`insufficient_data`仍记`RuleHit`并入队`Outbox`（任务名附`（信息不足）`）；匹配前对帖子文本与规则词统一做Unicode NFKC与连续空白折叠；批次摄取预编译`Rule`并缓存整词正则。
 4. **RSS良性`bozo`兼容与空轮询收敛**：`defusedxml`安全校验通过且`feed.entries`数量与原始`<item>`一致时，将`feedparser` `bozo`记为`feed_bozo_warning`诊断而非整批失败；无新帖、无基线/缺口/诊断的空成功轮询仅更新`SourceState`，不写`SourceRun`。单次只读探测`https://rss.nodeseek.com/`返回HTTP 200、20条合法（3条无摘要）、0诊断。
 5. **系统故障/恢复告警与载荷时间统一**：`ApplicationSettings`新增可选`alert_target_id`（`0007_settings`及启动`migrate()`幂等补列），后台异常、RSS连续失败≥5次或窗口缺口单次告警，恢复时单次通知；`Outbox`与`TargetTesting`载荷`post.first_seen_at`统一为ISO 8601 UTC字符串。
-6. **前端体验对齐**：`App.vue`同步URL hash（`#overview`/`#site`/`#tasks`/`#content`/`#targets`/`#status`），导航顺序对齐SPEC §6，移除过时开发进度横幅并在登录后收紧页头间距；`RuleEditor.vue`与`SettingsPanel.vue`接入新开关与告警目标选择。
+6. **前端体验对齐与现代化重构**：`App.vue`与`style.css`建立现代化SaaS仪表盘设计系统（毛玻璃顶栏、用户在线状态胶囊、分段式导航与子标签栏、双栏响应式卡片网格、结构化键值磁贴`.kv-box`、大字号等宽指标卡`.stat-number`、筛选工具栏卡片及左边框高亮规则说明框）；同步URL hash（`#overview`/`#site`/`#tasks`/`#content`/`#targets`/`#status`），导航顺序对齐SPEC §6，移除过时开发进度横幅并在登录后收紧页头间距；`RuleEditor.vue`与`SettingsPanel.vue`接入新开关与告警目标选择。
 
 ## 当前验收实例与验证证据
 
-本机验证通过：402项`pytest`、7项Playwright Chromium E2E（含移动端390px与桌面1280px）、`ruff check/format`、`vue-tsc --noEmit`、`vite build`及`scripts/check_privacy.py`全部通过。
+本机验证通过：402项`pytest`、7项Playwright Chromium E2E（含移动端390px与桌面1280px无横向溢出）、`ruff check/format`、`prettier`、`vue-tsc --noEmit`、`vite build`及`scripts/check_privacy.py`全部通过。13项审查优化已推送（`da0a94c`）。
 
-本机验收实例`http://127.0.0.1:18080/`（Docker项目`seekbell-acceptance`、卷`seekbell-acceptance_data`）保持原样未重置。若需在验收容器中体验本轮新特性，可重建本地镜像并重启`seekbell-acceptance`（保留原数据卷，`migrate()`会自动幂等补齐`alert_target_id`列）。
+本机验收实例`http://127.0.0.1:18080/`（Docker项目`seekbell-acceptance`、卷`seekbell-acceptance_data`）保持原数据卷未重置，并按最新提交重建本地镜像热更新，启动时由`migrate()`自动幂等补齐`alert_target_id`列。
 
 ## 下一步及授权
 

@@ -46,22 +46,36 @@ onUnmounted(() => clearInterval(timer))
           <NTag :type="overview.site.enabled ? 'success' : 'default'">{{
             overview.site.enabled ? '来源已启用' : '来源已暂停'
           }}</NTag>
-          <NTag>{{
-            overview.scheduler.enabled && overview.scheduler.healthy
-              ? '后台调度运行中'
-              : '后台调度未就绪'
-          }}</NTag>
+          <NTag
+            :type="overview.scheduler.enabled && overview.scheduler.healthy ? 'info' : 'warning'"
+            >{{
+              overview.scheduler.enabled && overview.scheduler.healthy
+                ? '后台调度运行中'
+                : '后台调度未就绪'
+            }}</NTag
+          >
         </div>
-        <p>最近成功采集：{{ localDate(overview.site.last_success_at) }}</p>
-        <p>最近尝试：{{ localDate(overview.site.last_attempt_at) }}</p>
-        <p>
-          最近窗口：{{ overview.site.window_count }} 条 · 连续失败 {{ overview.site.failures }} 次
-        </p>
-        <p>最近连接错误：{{ sourceError(overview.site.last_error_code) }}</p>
-        <p v-if="overview.site.failures">
+        <div class="kv-grid">
+          <div class="kv-box">
+            <p>最近成功采集：{{ localDate(overview.site.last_success_at) }}</p>
+          </div>
+          <div class="kv-box">
+            <p>最近尝试：{{ localDate(overview.site.last_attempt_at) }}</p>
+          </div>
+          <div class="kv-box">
+            <p>
+              最近窗口：{{ overview.site.window_count }} 条 · 连续失败
+              {{ overview.site.failures }} 次
+            </p>
+          </div>
+          <div class="kv-box">
+            <p>最近连接错误：{{ sourceError(overview.site.last_error_code) }}</p>
+          </div>
+        </div>
+        <p v-if="overview.site.failures" class="muted">
           下次允许尝试：{{ localDate(overview.site.next_attempt_at) }}
         </p>
-        <NAlert v-if="overview.site.possible_gap" type="warning"
+        <NAlert v-if="overview.site.possible_gap" type="warning" class="notice"
           >曾发现可能的 RSS 窗口缺口（{{
             localDate(overview.site.last_gap_at)
           }}），无法据此确定漏帖数量。</NAlert
@@ -72,20 +86,32 @@ onUnmounted(() => clearInterval(timer))
         </p>
       </NCard>
       <div class="stats-grid" aria-label="本地统计">
-        <NCard title="启用任务 / 全部任务"
-          >{{ overview.counts.enabled_tasks }} / {{ overview.counts.tasks }}</NCard
-        >
-        <NCard title="通知目标">{{ overview.counts.targets }}</NCard>
-        <NCard title="本地帖子">{{ overview.counts.posts }}</NCard>
-        <NCard title="规则命中">{{ overview.counts.hits }}</NCard>
-        <NCard title="等待 / 重试 / 在途"
-          >{{ overview.counts.deliveries.pending }} / {{ overview.counts.deliveries.retry }} /
-          {{ overview.counts.deliveries.leased }}</NCard
-        >
-        <NCard title="渠道接受 / 失败 / 已取消"
-          >{{ overview.counts.deliveries.sent }} / {{ overview.counts.deliveries.failed }} /
-          {{ overview.counts.deliveries.cancelled }}</NCard
-        >
+        <NCard title="启用任务 / 全部任务">
+          <div class="stat-number">
+            {{ overview.counts.enabled_tasks }} / {{ overview.counts.tasks }}
+          </div>
+        </NCard>
+        <NCard title="通知目标">
+          <div class="stat-number">{{ overview.counts.targets }}</div>
+        </NCard>
+        <NCard title="本地帖子">
+          <div class="stat-number">{{ overview.counts.posts }}</div>
+        </NCard>
+        <NCard title="规则命中">
+          <div class="stat-number">{{ overview.counts.hits }}</div>
+        </NCard>
+        <NCard title="等待 / 重试 / 在途">
+          <div class="stat-number">
+            {{ overview.counts.deliveries.pending }} / {{ overview.counts.deliveries.retry }} /
+            {{ overview.counts.deliveries.leased }}
+          </div>
+        </NCard>
+        <NCard title="渠道接受 / 失败 / 已取消">
+          <div class="stat-number">
+            {{ overview.counts.deliveries.sent }} / {{ overview.counts.deliveries.failed }} /
+            {{ overview.counts.deliveries.cancelled }}
+          </div>
+        </NCard>
       </div>
       <NAlert v-if="overview.counts.uncertain" type="warning" class="notice"
         >{{

@@ -12,18 +12,38 @@ import {
   NTag,
   zhCN,
 } from 'naive-ui'
+import type { GlobalThemeOverrides } from 'naive-ui'
 import { ApiError, authenticate, loadAuth, loadSystemInfo, logout } from './api'
 import type { AuthState } from './api'
 import { browserTimezone, displayTimezone, getSettings, setDisplayTimezone } from './management'
 
 const NotificationsPanel = defineAsyncComponent(() => import('./components/NotificationsPanel.vue'))
 const TasksPanel = defineAsyncComponent(() => import('./components/TasksPanel.vue'))
-
 const OverviewPanel = defineAsyncComponent(() => import('./components/OverviewPanel.vue'))
 const SitePanel = defineAsyncComponent(() => import('./components/SitePanel.vue'))
 const SettingsPanel = defineAsyncComponent(() => import('./components/SettingsPanel.vue'))
-
 const ContentPanel = defineAsyncComponent(() => import('./components/ContentPanel.vue'))
+
+const themeOverrides: GlobalThemeOverrides = {
+  common: {
+    primaryColor: '#15665c',
+    primaryColorHover: '#1d7c70',
+    primaryColorPressed: '#0e4740',
+    primaryColorSuppl: '#1d7c70',
+    borderRadius: '8px',
+  },
+  Card: {
+    borderRadius: '16px',
+    paddingMedium: '20px 22px',
+  },
+  Button: {
+    borderRadiusMedium: '8px',
+    fontWeight: '600',
+  },
+  Tag: {
+    borderRadius: '6px',
+  },
+}
 
 const validPages = new Set(['overview', 'site', 'tasks', 'content', 'targets', 'status'])
 function pageFromHash(): string {
@@ -103,7 +123,6 @@ async function submit() {
   } catch (cause) {
     clearPasswords()
     if (cause instanceof ApiError && [401, 403, 409].includes(cause.status)) {
-      // Recover stale sessions and setup races without replaying submitted credentials.
       try {
         auth.value = await loadAuth()
       } catch {
@@ -165,15 +184,19 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <NConfigProvider
-    :locale="zhCN"
-    :theme-overrides="{ common: { primaryColor: '#1b645b', primaryColorHover: '#257d71' } }"
-  >
-    <main class="shell">
+  <NConfigProvider :locale="zhCN" :theme-overrides="themeOverrides">
+    <main class="shell" :class="{ 'shell-unauth': !auth?.authenticated }">
       <header class="header">
-        <a class="brand" href="/" aria-label="SeekBell 首页"><span class="bell">S</span>SeekBell</a>
+        <a class="brand" href="/" aria-label="SeekBell 首页">
+          <span class="bell">S</span>
+          <span>SeekBell</span>
+          <span class="brand-subtitle">NodeSeek 新帖监控中心</span>
+        </a>
         <div v-if="auth?.authenticated" class="account">
-          <span>{{ auth.username }}</span>
+          <span class="user-pill">
+            <span class="user-dot" aria-hidden="true"></span>
+            <span>{{ auth.username }}</span>
+          </span>
           <NButton
             secondary
             :loading="submitting"
@@ -183,7 +206,7 @@ onUnmounted(() => {
             退出登录
           </NButton>
         </div>
-        <NTag v-else :bordered="false">新帖监控与通知</NTag>
+        <NTag v-else type="success" :bordered="false">新帖监控与通知</NTag>
       </header>
 
       <section
@@ -191,21 +214,32 @@ onUnmounted(() => {
         :class="{ 'intro-compact': auth?.authenticated }"
         aria-labelledby="page-title"
       >
-        <p class="eyebrow">从新帖，到你关心的消息</p>
-        <h1 id="page-title">
-          {{
-            auth?.authenticated ? '欢迎回来。' : setup ? '创建你的管理员账号。' : '登录 SeekBell。'
-          }}
-        </h1>
-        <p class="description">
-          {{
-            auth?.authenticated
-              ? '查看服务运行信息，管理你的 NodeSeek 新帖监控。'
-              : setup
-                ? '首次使用只需创建一个管理员账号。请保存好用户名和密码。'
-                : '使用管理员账号登录，继续管理你的监控。'
-          }}
-        </p>
+        <div>
+          <p class="eyebrow">从新帖，到你关心的消息</p>
+          <h1 id="page-title">
+            {{
+              auth?.authenticated
+                ? '欢迎回来。'
+                : setup
+                  ? '创建你的管理员账号。'
+                  : '登录 SeekBell。'
+            }}
+          </h1>
+          <p class="description">
+            {{
+              auth?.authenticated
+                ? '查看服务运行信息，管理你的 NodeSeek 新帖监控。'
+                : setup
+                  ? '首次使用只需创建一个管理员账号。请保存好用户名和密码。'
+                  : '使用管理员账号登录，继续管理你的监控。'
+            }}
+          </p>
+          <div v-if="!auth?.authenticated" class="feature-pills" aria-hidden="true">
+            <span class="feature-pill">NodeSeek 官方 RSS</span>
+            <span class="feature-pill">三值规则匹配</span>
+            <span class="feature-pill">四渠道合并投递</span>
+          </div>
+        </div>
       </section>
 
       <NAlert v-if="error" title="操作未完成" type="error" class="error-note" role="alert">
@@ -214,7 +248,11 @@ onUnmounted(() => {
       <NAlert v-if="notice" type="success" class="notice">{{ notice }}</NAlert>
       <NSpin :show="loading">
         <div :aria-busy="loading">
-          <NCard v-if="auth && !auth.authenticated" :title="setup ? '创建管理员' : '管理员登录'">
+          <NCard
+            v-if="auth && !auth.authenticated"
+            :title="setup ? '创建管理员' : '管理员登录'"
+            class="editor-card"
+          >
             <NForm @submit.prevent="submit">
               <NFormItem label="用户名" :label-props="{ for: 'username' }">
                 <NInput
@@ -273,31 +311,37 @@ onUnmounted(() => {
             <nav aria-label="管理导航" class="management-nav">
               <NButton
                 :type="activePage === 'overview' ? 'primary' : 'default'"
+                :secondary="activePage !== 'overview'"
                 @click="activePage = 'overview'"
                 >概览</NButton
               >
               <NButton
                 :type="activePage === 'site' ? 'primary' : 'default'"
+                :secondary="activePage !== 'site'"
                 @click="activePage = 'site'"
                 >监控网站</NButton
               >
               <NButton
                 :type="activePage === 'tasks' ? 'primary' : 'default'"
+                :secondary="activePage !== 'tasks'"
                 @click="activePage = 'tasks'"
                 >监控任务</NButton
               >
               <NButton
                 :type="activePage === 'content' ? 'primary' : 'default'"
+                :secondary="activePage !== 'content'"
                 @click="activePage = 'content'"
                 >内容与命中</NButton
               >
               <NButton
                 :type="activePage === 'targets' ? 'primary' : 'default'"
+                :secondary="activePage !== 'targets'"
                 @click="activePage = 'targets'"
                 >通知管理</NButton
               >
               <NButton
                 :type="activePage === 'status' ? 'primary' : 'default'"
+                :secondary="activePage !== 'status'"
                 @click="activePage = 'status'"
                 >系统设置</NButton
               >
@@ -313,7 +357,7 @@ onUnmounted(() => {
             <NotificationsPanel v-else-if="activePage === 'targets'" :csrf="auth.csrf_token" />
             <SettingsPanel v-else :csrf="auth.csrf_token" @account-updated="accountUpdated" />
           </section>
-          <NCard v-else title="连接服务">
+          <NCard v-else title="连接服务" class="record-card">
             <p>正在读取服务信息。若持续无法连接，请重试。</p>
             <NButton :loading="loading" @click="refresh">重试</NButton>
           </NCard>

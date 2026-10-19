@@ -103,66 +103,68 @@ onUnmounted(() => clearInterval(timer))
       <h2>投递记录</h2>
       <NButton :loading="loading" :disabled="busy || confirm" @click="load">刷新记录</NButton>
     </div>
-    <p class="muted">
+    <p class="section-lead">
       渠道接受不代表已阅读；SMTP
       仅表示服务器接受。结果未知时重试可能重复。时间按系统显示时区显示，每 5 秒刷新。
     </p>
     <NAlert v-if="error" type="error" class="notice">{{ error }}</NAlert
     ><NAlert v-if="notice" type="info" class="notice">{{ notice }}</NAlert>
-    <NForm @submit.prevent="filter"
-      ><div class="form-grid">
-        <NFormItem label="记录类别" :label-props="{ for: 'delivery-kind' }"
-          ><select
-            id="delivery-kind"
-            v-model="kind"
-            class="native-select"
-            :disabled="busy || confirm"
-            @change="kindChanged"
-          >
-            <option value="automatic">自动投递</option>
-            <option value="manual">手动重发</option>
-            <option value="test">目标测试</option>
-          </select></NFormItem
-        >
-        <NFormItem label="通知目标筛选" :label-props="{ for: 'delivery-target' }"
-          ><select
-            id="delivery-target"
-            v-model="targetId"
-            class="native-select"
-            :disabled="busy || confirm"
-          >
-            <option value="">全部目标</option>
-            <option v-for="target in targets" :key="target.id" :value="target.id">
-              {{ target.name }}
-            </option>
-          </select></NFormItem
-        >
-        <NFormItem label="投递状态" :label-props="{ for: 'delivery-status' }"
-          ><select
-            id="delivery-status"
-            v-model="status"
-            class="native-select"
-            :disabled="busy || confirm"
-          >
-            <option value="">全部状态</option>
-            <option
-              v-for="value in kind === 'automatic'
-                ? ['pending', 'retry', 'leased', 'sent', 'failed', 'cancelled']
-                : ['success', 'transient_error', 'permanent_error', 'unknown']"
-              :key="value"
-              :value="value"
+    <div class="filter-card">
+      <NForm @submit.prevent="filter"
+        ><div class="form-grid">
+          <NFormItem label="记录类别" :label-props="{ for: 'delivery-kind' }"
+            ><select
+              id="delivery-kind"
+              v-model="kind"
+              class="native-select"
+              :disabled="busy || confirm"
+              @change="kindChanged"
             >
-              {{ deliveryStatus(value) }}
-            </option>
-          </select></NFormItem
-        >
-      </div>
-      <NButton attr-type="submit" :disabled="busy || confirm" :loading="loading"
-        >筛选记录</NButton
-      ></NForm
-    >
+              <option value="automatic">自动投递</option>
+              <option value="manual">手动重发</option>
+              <option value="test">目标测试</option>
+            </select></NFormItem
+          >
+          <NFormItem label="通知目标筛选" :label-props="{ for: 'delivery-target' }"
+            ><select
+              id="delivery-target"
+              v-model="targetId"
+              class="native-select"
+              :disabled="busy || confirm"
+            >
+              <option value="">全部目标</option>
+              <option v-for="target in targets" :key="target.id" :value="target.id">
+                {{ target.name }}
+              </option>
+            </select></NFormItem
+          >
+          <NFormItem label="投递状态" :label-props="{ for: 'delivery-status' }"
+            ><select
+              id="delivery-status"
+              v-model="status"
+              class="native-select"
+              :disabled="busy || confirm"
+            >
+              <option value="">全部状态</option>
+              <option
+                v-for="value in kind === 'automatic'
+                  ? ['pending', 'retry', 'leased', 'sent', 'failed', 'cancelled']
+                  : ['success', 'transient_error', 'permanent_error', 'unknown']"
+                :key="value"
+                :value="value"
+              >
+                {{ deliveryStatus(value) }}
+              </option>
+            </select></NFormItem
+          >
+        </div>
+        <NButton type="primary" attr-type="submit" :disabled="busy || confirm" :loading="loading"
+          >筛选记录</NButton
+        ></NForm
+      >
+    </div>
     <div v-if="result" class="panel-heading">
-      <p>符合筛选 {{ result.total }} 条</p>
+      <p class="muted">符合筛选 {{ result.total }} 条</p>
       <div class="actions">
         <NButton :disabled="loading || busy || confirm || offset === 0" @click="page(-1)"
           >上一页</NButton
@@ -176,27 +178,41 @@ onUnmounted(() => clearInterval(timer))
     <p v-if="result && !result.items.length" class="empty">没有符合筛选的投递记录。</p>
     <NCard v-if="detail" title="投递详情" class="editor-card">
       <p class="post-text">{{ detail.title }}</p>
-      <p>
-        当时目标：{{ detail.target_name }} · {{ channelNames[detail.channel] }} · 配置版本
-        {{ detail.target_revision }}
-      </p>
-      <p>
-        记录 ID：<code>{{ detail.id }}</code>
-      </p>
-      <p>状态：{{ deliveryStatus(detail.status) }} · 尝试 {{ detail.attempt_count }} 次</p>
+      <div class="kv-grid">
+        <div class="kv-box">
+          <p>
+            当时目标：{{ detail.target_name }} · {{ channelNames[detail.channel] }} · 配置版本
+            {{ detail.target_revision }}
+          </p>
+        </div>
+        <div class="kv-box">
+          <p>状态：{{ deliveryStatus(detail.status) }} · 尝试 {{ detail.attempt_count }} 次</p>
+        </div>
+        <div class="kv-box">
+          <p>
+            记录 ID：<code>{{ detail.id }}</code>
+          </p>
+        </div>
+        <div class="kv-box">
+          <p>
+            开始：{{ localDate(detail.started_at)
+            }}<template v-if="detail.kind !== 'automatic'">
+              · 完成：{{ localDate(detail.finished_at) }}</template
+            >
+          </p>
+        </div>
+      </div>
       <p v-if="detail.code">结果码：{{ detail.code }}</p>
-      <p>
-        开始：{{ localDate(detail.started_at)
-        }}<template v-if="detail.kind !== 'automatic'">
-          · 完成：{{ localDate(detail.finished_at) }}</template
-        >
-      </p>
       <p v-if="detail.next_attempt_at">下次自动尝试：{{ localDate(detail.next_attempt_at) }}</p>
       <p v-if="detail.lease_until">租约到期：{{ localDate(detail.lease_until) }}</p>
       <NAlert v-if="detail.uncertain" type="warning" class="notice"
         >曾出现结果未知，即使后续成功仍可能重复。未完成的显式发送不会自动重试。</NAlert
       >
-      <p v-for="task in detail.matched_tasks" :key="task.id + ':' + task.version">
+      <p
+        v-for="task in detail.matched_tasks"
+        :key="task.id + ':' + task.version"
+        class="rule-explanation"
+      >
         {{ task.name }} · 规则版本 {{ task.version }}
       </p>
       <div v-for="attempt in detail.attempts" :key="attempt.sequence" class="history-item">
@@ -212,7 +228,12 @@ onUnmounted(() => clearInterval(timer))
         </p>
       </div>
       <div class="actions">
-        <a v-if="detail.url" :href="detail.url" target="_blank" rel="noopener noreferrer"
+        <a
+          v-if="detail.url"
+          :href="detail.url"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="external-link"
           >打开原帖</a
         ><NButton
           v-if="detail.original_event_id"
@@ -260,16 +281,24 @@ onUnmounted(() => clearInterval(timer))
       "
     />
     <NCard v-for="record in result?.items" :key="record.id" class="record-card"
-      ><h3 class="post-text">{{ record.title }}</h3>
+      ><h3 class="post-title">{{ record.title }}</h3>
       <div class="record-meta">
-        <NTag>{{
+        <NTag type="info" :bordered="false">{{
           record.kind === 'automatic'
             ? '自动投递'
             : record.kind === 'manual'
               ? '手动重发'
               : '目标测试'
         }}</NTag
-        ><NTag>{{ deliveryStatus(record.status) }}</NTag
+        ><NTag
+          :type="
+            ['sent', 'success'].includes(record.status)
+              ? 'success'
+              : ['failed', 'permanent_error'].includes(record.status)
+                ? 'error'
+                : 'default'
+          "
+          >{{ deliveryStatus(record.status) }}</NTag
         ><NTag v-if="record.uncertain" type="warning">结果不确定</NTag>
       </div>
       <p>

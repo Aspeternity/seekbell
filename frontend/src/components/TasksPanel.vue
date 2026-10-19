@@ -230,7 +230,9 @@ onMounted(load)
         >
       </div>
     </div>
-    <p class="muted">首版仅 NodeSeek 官方 RSS，匹配标题、摘要、作者与版块。无全文与回帖采集。</p>
+    <p class="section-lead">
+      首版仅 NodeSeek 官方 RSS，匹配标题、摘要、作者与版块。无全文与回帖采集。
+    </p>
     <NAlert v-if="error" type="error" role="alert" class="notice">{{ error }}</NAlert>
     <NAlert v-if="notice" type="success" role="status" class="notice">{{ notice }}</NAlert>
     <NAlert v-if="!loading && !targets.length" type="info" class="notice">
@@ -240,13 +242,18 @@ onMounted(load)
     </NAlert>
     <NCard v-if="formOpen" :title="editing ? '编辑监控任务' : '新建监控任务'" class="editor-card">
       <NForm @submit.prevent="save">
-        <NFormItem label="任务名称" :label-props="{ for: 'task-name' }"
-          ><NInput
-            v-model:value="name"
-            :disabled="busy"
-            :maxlength="200"
-            :input-props="{ id: 'task-name', required: true }"
-        /></NFormItem>
+        <div class="form-grid">
+          <NFormItem label="任务名称" :label-props="{ for: 'task-name' }"
+            ><NInput
+              v-model:value="name"
+              :disabled="busy"
+              :maxlength="200"
+              :input-props="{ id: 'task-name', required: true }"
+          /></NFormItem>
+          <NFormItem v-if="!editing" label="启用任务"
+            ><NSwitch v-model:value="enabled" :disabled="busy" aria-label="启用任务"
+          /></NFormItem>
+        </div>
         <fieldset class="target-choices" :disabled="busy">
           <legend>通知目标</legend>
           <NCheckbox
@@ -264,9 +271,6 @@ onMounted(load)
             {{ target.name }}{{ target.enabled ? '' : '（已停用）' }}
           </NCheckbox>
         </fieldset>
-        <NFormItem v-if="!editing" label="启用任务"
-          ><NSwitch v-model:value="enabled" :disabled="busy" aria-label="启用任务"
-        /></NFormItem>
         <RuleEditor v-model="rule" :disabled="busy" />
         <NAlert v-if="allNew" type="warning" class="notice"
           >当前没有筛选限制，将匹配全部新帖。</NAlert
@@ -356,9 +360,14 @@ onMounted(load)
             样本时间：{{ date(history.oldest_at) }} — {{ date(history.newest_at) }}
           </p>
           <div v-for="item in history.items" :key="item.external_post_id" class="history-item">
-            <a v-if="item.url" :href="item.url" target="_blank" rel="noopener noreferrer">{{
-              item.title
-            }}</a>
+            <a
+              v-if="item.url"
+              :href="item.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="external-link"
+              >{{ item.title }}</a
+            >
             <p v-else>{{ item.title }}</p>
             <NTag>{{ matchLabels[item.result.status] }}</NTag>
             <p>{{ reasonText(item.result) }}</p>
@@ -368,26 +377,32 @@ onMounted(load)
     </NCard>
 
     <p v-if="!loading && !tasks.length" class="empty">还没有监控任务。</p>
-    <NCard v-for="task in tasks" :key="task.id" :title="task.name" class="record-card">
-      <NTag :type="task.enabled ? 'success' : 'default'">{{
-        task.enabled ? '已启用' : '已暂停'
-      }}</NTag>
-      <p class="rule-explanation">{{ task.explanation }}</p>
-      <p class="muted">
-        NodeSeek · 规则版本 {{ task.version }} · {{ task.target_ids.length }} 个通知目标
-      </p>
-      <div class="actions">
-        <NButton :disabled="busy || formOpen" @click="edit(task)">编辑 {{ task.name }}</NButton>
-        <NButton :disabled="busy || formOpen" @click="edit(task, true)"
-          >复制 {{ task.name }}</NButton
-        >
-        <NButton :disabled="busy || formOpen" @click="toggle(task)"
-          >{{ task.enabled ? '暂停' : '恢复' }} {{ task.name }}</NButton
-        >
-        <NButton :disabled="busy || formOpen" type="error" secondary @click="remove(task)"
-          >删除 {{ task.name }}</NButton
-        >
-      </div>
-    </NCard>
+    <div v-else class="cards-grid">
+      <NCard v-for="task in tasks" :key="task.id" :title="task.name" class="record-card">
+        <div class="record-meta">
+          <NTag :type="task.enabled ? 'success' : 'default'">{{
+            task.enabled ? '已启用' : '已暂停'
+          }}</NTag>
+          <NTag type="info" :bordered="false">规则版本 {{ task.version }}</NTag>
+          <NTag :bordered="false">{{ task.target_ids.length }} 个通知目标</NTag>
+        </div>
+        <p class="rule-explanation">{{ task.explanation }}</p>
+        <p class="muted">
+          NodeSeek · 规则版本 {{ task.version }} · {{ task.target_ids.length }} 个通知目标
+        </p>
+        <div class="actions">
+          <NButton :disabled="busy || formOpen" @click="edit(task)">编辑 {{ task.name }}</NButton>
+          <NButton :disabled="busy || formOpen" @click="edit(task, true)"
+            >复制 {{ task.name }}</NButton
+          >
+          <NButton :disabled="busy || formOpen" @click="toggle(task)"
+            >{{ task.enabled ? '暂停' : '恢复' }} {{ task.name }}</NButton
+          >
+          <NButton :disabled="busy || formOpen" type="error" secondary @click="remove(task)"
+            >删除 {{ task.name }}</NButton
+          >
+        </div>
+      </NCard>
+    </div>
   </section>
 </template>

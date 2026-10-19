@@ -212,33 +212,37 @@ onMounted(load)
         >
       </div>
     </div>
-    <p class="muted">支持四种渠道。目标停用后停止发送与重试；重新启用不会补发已取消的消息。</p>
+    <p class="section-lead">
+      支持四种渠道。目标停用后停止发送与重试；重新启用不会补发已取消的消息。
+    </p>
     <NAlert v-if="error" type="error" role="alert" class="notice">{{ error }}</NAlert>
     <NAlert v-if="notice" type="success" role="status" class="notice">{{ notice }}</NAlert>
     <NAlert v-if="warning" type="warning" role="status" class="notice">{{ warning }}</NAlert>
     <NCard v-if="formOpen" :title="editing ? '编辑通知目标' : '新建通知目标'" class="editor-card">
       <NForm @submit.prevent="save">
-        <NFormItem label="目标名称" :label-props="{ for: 'target-name' }">
-          <NInput
-            v-model:value="name"
-            :maxlength="200"
-            :disabled="busy"
-            :input-props="{ id: 'target-name', required: true }"
-          />
-        </NFormItem>
-        <NFormItem label="渠道" :label-props="{ for: 'target-channel' }">
-          <select
-            id="target-channel"
-            :value="kind"
-            class="native-select"
-            :disabled="busy || !!editing"
-            @change="changeKind(($event.target as HTMLSelectElement).value as Channel)"
-          >
-            <option v-for="option in channels" :key="option.value" :value="option.value">
-              {{ option.label }}
-            </option>
-          </select>
-        </NFormItem>
+        <div class="form-grid">
+          <NFormItem label="目标名称" :label-props="{ for: 'target-name' }">
+            <NInput
+              v-model:value="name"
+              :maxlength="200"
+              :disabled="busy"
+              :input-props="{ id: 'target-name', required: true }"
+            />
+          </NFormItem>
+          <NFormItem label="渠道" :label-props="{ for: 'target-channel' }">
+            <select
+              id="target-channel"
+              :value="kind"
+              class="native-select"
+              :disabled="busy || !!editing"
+              @change="changeKind(($event.target as HTMLSelectElement).value as Channel)"
+            >
+              <option v-for="option in channels" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+          </NFormItem>
+        </div>
         <NFormItem v-if="!editing" label="启用目标">
           <NSwitch v-model:value="enabled" :disabled="busy" aria-label="启用目标" />
         </NFormItem>
@@ -344,32 +348,34 @@ onMounted(load)
     <p v-if="!loading && !targets.length" class="empty">
       还没有通知目标。先创建一个目标，再为监控任务选择接收端。
     </p>
-    <NCard v-for="target in targets" :key="target.id" :title="target.name" class="record-card">
-      <div class="record-meta">
-        <NTag>{{ channelNames[target.kind] }}</NTag
-        ><NTag :type="target.enabled ? 'success' : 'default'">{{
-          target.enabled ? '已启用' : '已停用'
-        }}</NTag>
-      </div>
-      <p class="muted">
-        {{
-          target.configured_secrets.length
-            ? '敏感配置已保存，编辑时不会显示原值。'
-            : '尚未保存敏感配置。'
-        }}
-      </p>
-      <div class="actions">
-        <NButton :disabled="busy || formOpen || !!testTarget" @click="edit(target)"
-          >编辑 {{ target.name }}</NButton
-        >
-        <NButton :disabled="busy || formOpen || !!testTarget" @click="toggle(target)"
-          >{{ target.enabled ? '停用' : '启用' }} {{ target.name }}</NButton
-        >
-        <NButton :disabled="busy || formOpen || !!testTarget" @click="prepareTest(target)"
-          >测试通知 {{ target.name }}</NButton
-        >
-      </div>
-    </NCard>
+    <div v-else class="cards-grid">
+      <NCard v-for="target in targets" :key="target.id" :title="target.name" class="record-card">
+        <div class="record-meta">
+          <NTag type="info" :bordered="false">{{ channelNames[target.kind] }}</NTag
+          ><NTag :type="target.enabled ? 'success' : 'default'">{{
+            target.enabled ? '已启用' : '已停用'
+          }}</NTag>
+        </div>
+        <p class="muted">
+          {{
+            target.configured_secrets.length
+              ? '敏感配置已保存，编辑时不会显示原值。'
+              : '尚未保存敏感配置。'
+          }}
+        </p>
+        <div class="actions">
+          <NButton :disabled="busy || formOpen || !!testTarget" @click="edit(target)"
+            >编辑 {{ target.name }}</NButton
+          >
+          <NButton :disabled="busy || formOpen || !!testTarget" @click="toggle(target)"
+            >{{ target.enabled ? '停用' : '启用' }} {{ target.name }}</NButton
+          >
+          <NButton :disabled="busy || formOpen || !!testTarget" @click="prepareTest(target)"
+            >测试通知 {{ target.name }}</NButton
+          >
+        </div>
+      </NCard>
+    </div>
     <p class="muted">测试结果单独保存在投递记录的“目标测试”类别，不改变自动去重。</p>
   </section>
 </template>
