@@ -17,7 +17,8 @@
     "dev:prototype": "vite --config vite.prototype.config.ts",
     "build:prototype": "pnpm typecheck && vite build --config vite.prototype.config.ts",
     "preview:prototype": "vite preview --config vite.prototype.config.ts --host 127.0.0.1 --port 5174",
-    "test:prototype": "playwright test"
+    "test:prototype": "playwright test",
+    "serve:prototype": "node serve-prototype.mjs"
   },
   "dependencies": {
     "naive-ui": "2.45.3",

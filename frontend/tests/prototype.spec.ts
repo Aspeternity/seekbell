@@ -102,6 +102,7 @@ test('responsive screenshots, navigation and no runtime errors', async ({ page }
     await expect(page.getByRole('button', { name: '打开导航' })).toBeFocused()
     await page.getByRole('button', { name: '打开导航' }).click()
     await page.getByRole('button', { name: '监控任务', exact: false }).click()
+    await page.getByRole('button', { name: '编辑好价服务器雷达', exact: true }).click()
   } else {
     await page.getByRole('button', { name: '编辑好价服务器雷达', exact: true }).click()
   }

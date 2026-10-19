@@ -2,7 +2,13 @@
 import { computed, ref } from 'vue'
 import Icon from './components/Icon.vue'
 import Toggle from './components/Toggle.vue'
-import { targets } from './model'
+import { state, formatTime } from './store'
+const targets = computed(() => state.targets)
+const attentionCount = computed(
+  () =>
+    state.deliveries.filter((r) => ['failed', 'retrying', 'unknown'].includes(r.status) && !r.test)
+      .length,
+)
 import type { Task } from './model'
 const props = defineProps<{ tasks: Task[] }>()
 const emit = defineEmits<{
@@ -10,6 +16,7 @@ const emit = defineEmits<{
   create: []
   toggle: [id: string]
   notice: [message: string]
+  navigate: [path: string]
 }>()
 const range = ref('24h'),
   query = ref(''),
@@ -91,9 +98,23 @@ const activities = [
   </section>
   <div class="overview-meta">
     <span
-      ><span class="status-dot green-dot" />监控运行中 <span class="separator">/</span>
-      <strong>NodeSeek</strong> 官方 RSS</span
+      ><span class="status-dot green-dot" />{{
+        !state.source.enabled
+          ? '采集已暂停'
+          : state.source.health === 'error'
+            ? '来源异常'
+            : '监控运行中'
+      }}
+      <span class="separator">/</span> <strong>NodeSeek</strong> 官方 RSS</span
     ><span class="muted">演示快照 · 10 月 19 日 14:30</span>
+  </div>
+  <div v-if="!state.source.enabled || state.source.health === 'error'" class="warning-note">
+    <Icon name="alert" :size="18" /><span>{{
+      !state.source.enabled
+        ? '共享来源已暂停，当前不会采集新帖。'
+        : '来源连接异常，请检查采集设置。'
+    }}</span
+    ><button class="text-link" @click="emit('navigate', '/websites')">查看来源</button>
   </div>
   <section class="stats-grid" aria-label="概览统计">
     <article class="stat-card">
@@ -131,8 +152,10 @@ const activities = [
     </article>
     <article class="stat-card">
       <div class="stat-label">待关注的投递<Icon name="alert" :size="18" /></div>
-      <div class="stat-value">1<span>次</span><span class="small-badge amber">正在重试</span></div>
-      <p>模拟：Bark 服务暂时不可达</p>
+      <div class="stat-value">
+        {{ attentionCount }}<span>次</span><span class="small-badge amber">需关注</span>
+      </div>
+      <p>查看通知管理中的异常与重试记录</p>
     </article>
   </section>
   <div class="overview-columns">
@@ -229,7 +252,12 @@ const activities = [
     <section class="panel source-panel">
       <div class="panel-heading">
         <h2>采集状态</h2>
-        <span class="live-label"><span class="status-dot green-dot" /> 正常</span>
+        <span class="live-label"
+          ><span class="status-dot green-dot" />
+          {{
+            !state.source.enabled ? '已暂停' : state.source.health === 'error' ? '异常' : '正常'
+          }}</span
+        >
       </div>
       <div class="source-identity">
         <div class="source-logo">N<span>›</span></div>
@@ -242,11 +270,11 @@ const activities = [
       <dl class="source-data">
         <div>
           <dt>最近成功采集</dt>
-          <dd>14:29:56</dd>
+          <dd>{{ formatTime(state.source.lastSuccess) }}</dd>
         </div>
         <div>
           <dt>采集间隔</dt>
-          <dd>10 <span>秒</span></dd>
+          <dd>{{ state.source.interval }} <span>秒</span></dd>
         </div>
         <div>
           <dt>本日发现新帖</dt>
@@ -254,9 +282,16 @@ const activities = [
         </div>
       </dl>
       <div class="uptime-bars" aria-label="最近 30 次模拟采集均成功">
-        <i v-for="n in 30" :key="n" />
+        <i
+          v-for="n in 30"
+          :key="n"
+          :class="{ 'is-error': n === 30 && state.source.health === 'error' }"
+        />
       </div>
-      <div class="uptime-label"><span>最近 30 次采集</span><span>全部成功</span></div>
+      <div class="uptime-label">
+        <span>最近 30 次采集</span
+        ><span>{{ state.source.health === 'error' ? '最近一次失败' : '全部成功' }}</span>
+      </div>
       <p class="source-note"><Icon name="shield" :size="15" />全部任务共享采集，不重复请求</p>
     </section>
   </div>
@@ -365,6 +400,6 @@ const activities = [
   </section>
   <footer class="page-footer">
     <span><Icon name="bell" :size="14" /> SeekBell · 留意你关心的</span
-    ><span>本地交互原型 <span class="separator">·</span> v0.1</span>
+    ><span>本地交互原型 <span class="separator">·</span> v0.2</span>
   </footer>
 </template>

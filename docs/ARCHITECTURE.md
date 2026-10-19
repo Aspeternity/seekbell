@@ -103,3 +103,5 @@ Codex 可在授权 SSH 范围内部署测试环境；没有 SSH 则提供含固�
 ## 管理界面原型隔离（2026-10-19）
 
 按用户确认的先审原型顺序，frontend/prototype.html和src/prototype独立于生产入口；vite.prototype.config.ts输出dist-prototype。沿用Vue/TypeScript/Vite，自定义UI组件，不移除既有Naive UI依赖。原型数据源、存储与试算均只在浏览器，不能调用正式API或写应用数据库，不进入默认Docker构建。正式接入时由后端RuleEngine统一判断，移除原型专用试算路径；UI细节与运行说明见UI_DESIGN/UI_PROTOTYPE。
+
+用户确认后扩展v0.2，pages按六个模块及Auth拆分，store.ts集中管理模拟状态与操作，App.vue负责Hash路由、访问跳转和未保存保护。普通数据采用有版本标识的白名单导入/持久化；连接凭据仅在表单内存，演示账号摘要和会话与普通导出分离。该浏览器认证不构成安全边界，不得替代服务端认证。跨页模拟支持目标停用取消重试、历史快照、独立测试/手动重发，但没有真实后台执行。交付ZIP可附dist-prototype，通过仅绑定本机的serve-prototype.mjs免依赖预览，Git不跟踪构建产物。

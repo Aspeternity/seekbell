@@ -3,9 +3,13 @@ import { computed, nextTick, reactive, ref, watch } from 'vue'
 import Icon from './components/Icon.vue'
 import Toggle from './components/Toggle.vue'
 import TagInput from './components/TagInput.vue'
-import { evaluate, historySamples, statusLabel, targets } from './model'
+import { evaluate, historySamples, statusLabel } from './model'
 import type { Sample, Task } from './model'
-const props = defineProps<{ task: Task }>()
+import { state } from './store'
+const targets = computed(() => state.targets)
+const props = withDefaults(defineProps<{ task: Task; returnLabel?: string }>(), {
+  returnLabel: '返回概览',
+})
 const emit = defineEmits<{ save: [task: Task]; cancel: []; dirty: [value: boolean] }>()
 const draft = reactive<Task>(JSON.parse(JSON.stringify(props.task)))
 const baseline = JSON.stringify(draft)
@@ -57,6 +61,8 @@ function save() {
   errors.value = []
   if (!draft.name.trim()) errors.value.push('请填写任务名称。')
   if (!draft.targets.length) errors.value.push('请至少选择一个通知目标。')
+  if (draft.targets.some((id) => !state.targets.some((t) => t.id === id)))
+    errors.value.push('通知目标已删除，请重新选择。')
   if (errors.value.length) {
     nextTick(() => document.querySelector<HTMLElement>('[data-form-errors]')?.focus())
     return
@@ -90,7 +96,7 @@ function jump(id: string) {
 <template>
   <div class="editor-heading">
     <button class="back-link" @click="emit('cancel')">
-      <Icon name="back" :size="17" />返回概览
+      <Icon name="back" :size="17" />{{ returnLabel }}
     </button>
     <div class="page-heading">
       <div>

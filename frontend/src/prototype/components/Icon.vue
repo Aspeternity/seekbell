@@ -1,6 +1,15 @@
 <script setup lang="ts">
 withDefaults(defineProps<{ name: string; size?: number }>(), { size: 20 })
 const paths: Record<string, string> = {
+  copy: 'M8 8h13v13H8zM16 8V3H3v13h5',
+  trash: 'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7',
+  rss: 'M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16M5 19h.01',
+  user: 'M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM4 21v-2a8 8 0 0 1 16 0v2',
+  download: 'M12 3v12m-5-5 5 5 5-5M3 16v5h18v-5',
+  upload: 'M12 16V4m-5 5 5-5 5 5M3 16v5h18v-5',
+  eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12ZM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z',
+  'eye-off':
+    'm3 3 18 18M9 5a10 10 0 0 1 3 0c6 0 10 7 10 7a18 18 0 0 1-4 4M6 6a20 20 0 0 0-4 6s4 7 10 7a10 10 0 0 0 4-1',
   bell: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4',
   grid: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',
   layers: 'm12 3 10 5-10 5L2 8l10-5ZM2 12l10 5 10-5M2 16l10 5 10-5',
