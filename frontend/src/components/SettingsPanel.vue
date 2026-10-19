@@ -157,12 +157,16 @@ onUnmounted(clearPasswords)
 <template>
   <section aria-label="系统设置" :aria-busy="loading || busy">
     <div class="panel-heading">
-      <h2>系统设置</h2>
+      <div>
+        <h2>系统设置</h2>
+        <p class="section-lead">配置显示时区、普通历史保留周期、告警通知目标及管理员账号。</p>
+      </div>
       <NButton :loading="loading" :disabled="busy" @click="load">重新读取设置</NButton>
     </div>
     <NAlert v-if="error" type="error" class="notice">{{ error }}</NAlert
     ><NAlert v-if="notice" type="success" class="notice">{{ notice }}</NAlert>
-    <div class="split-grid">
+
+    <div class="settings-console-grid">
       <NCard v-if="settings" title="显示与历史保留" class="record-card">
         <NForm @submit.prevent="save"
           ><div class="form-grid">
@@ -199,7 +203,7 @@ onUnmounted(clearPasswords)
             存储，显示设置不改变通知快照与采集计划。
           </p>
           <NAlert type="warning" class="notice"
-            >保存较短保留期后，后台维护会自动删除过期普通历史。独立已见/已发身份账本永久保留；等待、重试、在途和存在结果不确定性的投递及其关联内容保留。近期重发或迟到结果也会延后原记录清理。</NAlert
+            >保存较短保留期后，后台维护会自动删除过期普通历史。独立已见/已发身份账本永久保留；等待、重试、在途和存在结果不确定性的投递及其关联内容保留。</NAlert
           >
           <div class="actions">
             <NButton type="primary" attr-type="submit" :loading="busy" :disabled="days === null"
@@ -207,7 +211,7 @@ onUnmounted(clearPasswords)
             ><NButton :disabled="busy" @click="timezone = browserTimezone">使用浏览器时区</NButton>
           </div></NForm
         >
-        <div class="kv-grid">
+        <div class="kv-grid" style="margin-top: 14px">
           <div class="kv-box">
             <p>最近清理：{{ localDate(settings.last_cleanup_at) }}</p>
           </div>
@@ -215,11 +219,7 @@ onUnmounted(clearPasswords)
             <p>{{ labels[key] ?? key }}：{{ count }}</p>
           </div>
         </div>
-        <p class="muted">
-          后台调度开启时每分钟执行一批，每类主记录最多 200
-          条，关联尝试与贡献一并清理；不会清理未保存草稿所选天数，也不保证立即缩小 SQLite
-          文件。备份或导出前先考虑所需历史。
-        </p>
+        <p class="muted">后台调度开启时每分钟执行一批，每类主记录最多 200 条。</p>
         <NAlert v-if="!settings.scheduler.enabled" type="info" class="notice"
           >后台维护由启动配置关闭，可显式清理一批。</NAlert
         >
@@ -236,6 +236,7 @@ onUnmounted(clearPasswords)
           </div></NAlert
         >
       </NCard>
+
       <NCard v-if="settings" title="管理员账号" class="record-card">
         <p class="muted">
           需要当前密码验证。修改后撤销全部已登录会话，请用更新后的账号重新登录；新密码留空只修改用户名。
@@ -264,18 +265,20 @@ onUnmounted(clearPasswords)
             ><NInput
               v-model:value="newPassword"
               type="password"
-              :minlength="15"
+              :minlength="6"
               :maxlength="128"
               :disabled="busy"
+              placeholder="至少 6 个字符（留空不修改）"
               :input-props="{ id: 'account-new', autocomplete: 'new-password' }"
           /></NFormItem>
           <NFormItem label="再次输入新密码" :label-props="{ for: 'account-confirm' }"
             ><NInput
               v-model:value="confirmation"
               type="password"
-              :minlength="15"
+              :minlength="6"
               :maxlength="128"
               :disabled="busy"
+              placeholder="再次输入新密码"
               :input-props="{ id: 'account-confirm', autocomplete: 'new-password' }"
           /></NFormItem>
           <NButton attr-type="submit" type="primary" :loading="busy"
@@ -283,35 +286,37 @@ onUnmounted(clearPasswords)
           >
         </NForm>
       </NCard>
-    </div>
-    <div class="split-grid" style="margin-top: 16px">
-      <NCard title="备份与恢复" class="record-card"
-        ><p class="muted">
-          完整备份通过停服维护命令生成，包含账号、历史、去重账本、通知凭据及原密钥，并用独立口令加密。恢复时验证备份中的管理员密码，只能写入空数据目录，完成后须重新登录。部署操作见随版本提供的备份恢复文档；请先在独立环境验证，再切换日常数据卷。
-        </p></NCard
-      >
-      <NCard v-if="version" title="版本与运行状态" class="record-card">
-        <div class="record-meta">
-          <NTag :type="settings?.scheduler.healthy ? 'success' : 'error'">{{
-            settings?.scheduler.healthy ? '后台组件正常' : '后台组件异常'
-          }}</NTag>
-        </div>
-        <div class="kv-grid">
-          <div class="kv-box">
-            <p>应用版本：{{ version.version }}</p>
+
+      <div class="settings-side-stack">
+        <NCard v-if="version" title="版本与运行状态" class="record-card">
+          <div class="record-meta">
+            <NTag :type="settings?.scheduler.healthy ? 'success' : 'error'">{{
+              settings?.scheduler.healthy ? '后台组件正常' : '后台组件异常'
+            }}</NTag>
           </div>
-          <div class="kv-box">
-            <p>
-              代码版本：<code>{{ version.build_revision }}</code>
-            </p>
+          <div class="kv-grid">
+            <div class="kv-box">
+              <p>应用版本：{{ version.version }}</p>
+            </div>
+            <div class="kv-box">
+              <p>
+                代码版本：<code>{{ version.build_revision }}</code>
+              </p>
+            </div>
+            <div class="kv-box">
+              <p>
+                数据库迁移：<code>{{ version.database_revision }}</code>
+              </p>
+            </div>
           </div>
-          <div class="kv-box">
-            <p>
-              数据库迁移：<code>{{ version.database_revision }}</code>
-            </p>
-          </div>
-        </div>
-      </NCard>
+        </NCard>
+
+        <NCard title="备份与恢复" class="record-card"
+          ><p class="muted">
+            完整备份通过停服维护命令生成，包含账号、历史、去重账本、通知凭据及原密钥，并用独立口令加密。恢复时验证备份中的管理员密码，只能写入空数据目录，完成后须重新登录。
+          </p></NCard
+        >
+      </div>
     </div>
   </section>
 </template>

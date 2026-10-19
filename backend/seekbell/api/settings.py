@@ -33,7 +33,7 @@ class CleanupInput(Input):
 class AccountInput(Input):
     username: str = Field(min_length=1, max_length=64)
     current_password: SecretStr = Field(min_length=1, max_length=128)
-    new_password: SecretStr | None = Field(default=None, min_length=15, max_length=128)
+    new_password: SecretStr | None = Field(default=None, min_length=6, max_length=128)
 
     @field_validator("username")
     @classmethod

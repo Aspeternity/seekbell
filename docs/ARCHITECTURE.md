@@ -90,7 +90,7 @@ SMTP使用标准库smtplib在线程执行，默认隐式TLS，也可选STARTTLS�
 
 ## M3认证实现契约
 
-0004_authentication新增administrators、browser_sessions和auth_throttle。管理员固定id=1且有CHECK约束；在BEGIN IMMEDIATE中检查并创建，账号存在即关闭初始化，不维护可能失配的独立开关。密码使用Argon2id（19MiB、2轮、并行度1，随机盐）；哈希在线程池中执行，不占数据库写事务。用户名修剪首尾空白，密码不修剪/截断，默认15～128字符。
+0004_authentication新增administrators、browser_sessions和auth_throttle。管理员固定id=1且有CHECK约束；在BEGIN IMMEDIATE中检查并创建，账号存在即关闭初始化，不维护可能失配的独立开关。密码使用Argon2id（19MiB、2轮、并行度1，随机盐）；哈希在线程池中执行，不占数据库写事务。用户名修剪首尾空白，密码不修剪/截断，默认6～128字符。
 
 会话为32随机字节的opaque令牌，数据库只存SHA-256摘要、管理员引用、到期时间和Secure绑定。匿名30分钟、认证7天绝对有效期，登录轮换并撤销旧会话，退出删除服务端记录；重启不丢会话。新建时清理到期记录，并将匿名/认证会话分别限制为128/32个。Cookie为HttpOnly/SameSite=Strict、Path=/、无Domain；HTTPS设置Secure，HTTPS会话拒绝HTTP回放。
 

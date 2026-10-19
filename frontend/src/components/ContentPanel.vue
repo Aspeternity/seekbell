@@ -58,16 +58,20 @@ onMounted(async () => {
 <template>
   <section aria-label="内容与命中记录" :aria-busy="loading">
     <div class="panel-heading">
-      <h2>内容与命中</h2>
+      <div>
+        <h2>内容与命中</h2>
+        <p class="section-lead">
+          只查看本地保留帖子与历史命中，不访问论坛、不补发通知。时间按系统显示时区显示。
+        </p>
+      </div>
       <NButton :loading="loading" @click="load">刷新内容</NButton>
     </div>
-    <p class="section-lead">
-      只查看本地保留帖子与历史命中，不访问论坛、不补发通知。时间按系统显示时区显示。
-    </p>
+
     <NAlert v-if="error" type="error" role="alert" class="notice">{{ error }}</NAlert>
-    <div class="filter-card">
+
+    <div class="filter-toolbar-card">
       <NForm @submit.prevent="search">
-        <div class="form-grid">
+        <div class="toolbar-filter-grid">
           <NFormItem label="标题包含" :label-props="{ for: 'content-query' }"
             ><NInput
               v-model:value="query"
@@ -106,64 +110,76 @@ onMounted(async () => {
               :disabled="loading"
               aria-label="仅显示有命中的帖子"
           /></NFormItem>
+          <div class="toolbar-submit-slot">
+            <NButton type="primary" attr-type="submit" :loading="loading">筛选内容</NButton>
+          </div>
         </div>
-        <NButton type="primary" attr-type="submit" :loading="loading">筛选内容</NButton>
       </NForm>
     </div>
+
     <template v-if="result">
       <div class="panel-heading">
         <p class="muted">符合筛选 {{ result.total }} 条 · 当前显示 {{ result.items.length }} 条</p>
         <div class="actions">
-          <NButton :disabled="loading || offset === 0" @click="page(-1)">上一页</NButton
+          <NButton size="small" :disabled="loading || offset === 0" @click="page(-1)"
+            >上一页</NButton
           ><NButton
+            size="small"
             :disabled="loading || offset + result.items.length >= result.total"
             @click="page(1)"
             >下一页</NButton
           >
         </div>
       </div>
+
       <p v-if="!result.items.length" class="empty">没有符合筛选的本地帖子。</p>
-      <NCard v-for="post in result.items" :key="post.external_post_id" class="record-card">
-        <h3 class="post-title">
-          <a v-if="post.url" :href="post.url" target="_blank" rel="noopener noreferrer">{{
-            post.title
-          }}</a
-          ><span v-else>{{ post.title }}</span>
-        </h3>
-        <div class="record-meta">
-          <NTag type="info" :bordered="false">作者：{{ post.author ?? '未知' }}</NTag
-          ><NTag :bordered="false">版块：{{ post.category ?? '未知' }}</NTag>
-          <NTag v-if="post.hits.length" type="success">命中 {{ post.hits.length }} 项</NTag>
-        </div>
-        <p class="muted">
-          首次发现：{{ localDate(post.first_seen_at) }} · 发布时间：{{
-            post.published_at === null ? 'RSS 未提供' : localDate(post.published_at)
-          }}
-        </p>
-        <p class="post-text">
-          {{
-            post.summary === null
-              ? 'RSS 未提供摘要。'
-              : post.summary === ''
-                ? '摘要为空。'
-                : post.summary
-          }}
-        </p>
-        <NAlert v-if="post.display_truncated" type="info" class="notice"
-          >此处显示已截短；规则仍按实际收到的原字段匹配，不代表全文。</NAlert
-        >
-        <p v-if="!post.hits.length" class="muted">
-          没有命中记录：可能为基线帖子、无命中或字段不足，不能据此判断为确定“不命中”。
-        </p>
-        <div v-for="hit in post.hits" :key="hit.task_id + ':' + hit.version" class="history-item">
-          <strong
-            >{{ hit.name }} · 规则版本 {{ hit.version
-            }}{{ hit.deleted ? '（任务已删除）' : '' }}</strong
+      <div v-else class="posts-grid">
+        <NCard v-for="post in result.items" :key="post.external_post_id" class="record-card">
+          <h3 class="post-title">
+            <a v-if="post.url" :href="post.url" target="_blank" rel="noopener noreferrer">{{
+              post.title
+            }}</a
+            ><span v-else>{{ post.title }}</span>
+          </h3>
+          <div class="record-meta">
+            <NTag size="small" type="info" :bordered="false"
+              >作者：{{ post.author ?? '未知' }}</NTag
+            >
+            <NTag size="small" :bordered="false">版块：{{ post.category ?? '未知' }}</NTag>
+            <NTag v-if="post.hits.length" size="small" type="success"
+              >命中 {{ post.hits.length }} 项</NTag
+            >
+          </div>
+          <p class="muted">
+            首次发现：{{ localDate(post.first_seen_at) }} · 发布时间：{{
+              post.published_at === null ? 'RSS 未提供' : localDate(post.published_at)
+            }}
+          </p>
+          <p class="post-text">
+            {{
+              post.summary === null
+                ? 'RSS 未提供摘要。'
+                : post.summary === ''
+                  ? '摘要为空。'
+                  : post.summary
+            }}
+          </p>
+          <NAlert v-if="post.display_truncated" type="info" class="notice"
+            >此处显示已截短；规则仍按实际收到的原字段匹配，不代表全文。</NAlert
           >
-          <p class="rule-explanation">{{ reasonText(hit.reason) }}</p>
-          <p class="muted">命中时间：{{ localDate(hit.matched_at) }}</p>
-        </div>
-      </NCard>
+          <p v-if="!post.hits.length" class="muted">
+            没有命中记录：可能为基线帖子、无命中或字段不足，不能据此判断为确定“不命中”。
+          </p>
+          <div v-for="hit in post.hits" :key="hit.task_id + ':' + hit.version" class="history-item">
+            <strong
+              >{{ hit.name }} · 规则版本 {{ hit.version
+              }}{{ hit.deleted ? '（任务已删除）' : '' }}</strong
+            >
+            <p class="rule-explanation">{{ reasonText(hit.reason) }}</p>
+            <p class="muted">命中时间：{{ localDate(hit.matched_at) }}</p>
+          </div>
+        </NCard>
+      </div>
     </template>
   </section>
 </template>
