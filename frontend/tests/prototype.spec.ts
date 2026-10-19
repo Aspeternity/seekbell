@@ -13,6 +13,9 @@ test.beforeEach(async ({ page }) => {
     return route.continue()
   })
   await page.goto('/prototype.html')
+  await page.goto('/prototype.html#/')
+  await page.getByRole('button', { name: '载入示例工作台', exact: true }).click()
+  await page.getByRole('button', { name: '确认载入', exact: true }).click()
 })
 
 test('overview search, filters, toggle, range and local persistence', async ({ page }) => {

@@ -8,8 +8,7 @@ import {
   clone,
   notify,
   downloadConfig,
-  validState,
-  cleanState,
+  parseState,
   restoreState,
   resetState,
   resetAccount,
@@ -100,10 +99,10 @@ async function readImport(event: Event) {
       !('kind' in data) ||
       data.kind !== 'seekbell-demo-backup' ||
       !('data' in data) ||
-      !validState(data.data)
+      !parseState(data.data)
     )
       throw Error()
-    imported.value = cleanState(data.data)
+    imported.value = parseState(data.data)
   } catch {
     fileError.value = '文件不是兼容的 SeekBell 演示备份，或包含无效/缺失的数据。'
   } finally {
@@ -116,7 +115,7 @@ function restore() {
   const data = clone(imported.value)
   confirmAction(
     '恢复这份演示备份？',
-    '将替换当前浏览器内的任务、目标、内容、记录与偏好设置。管理员账号保持不变，不修改服务端。',
+    '将替换当前浏览器内的网站、任务、目标、内容、记录与偏好设置。管理员账号保持不变，不修改服务端。',
     () => {
       restoreState(data)
       Object.assign(draft, state.settings)
@@ -130,7 +129,7 @@ function restore() {
 function reset() {
   confirmAction(
     '重置整个演示工作空间？',
-    '清除浏览器内的编辑内容与演示账号，恢复默认示例并进入首次初始化。此操作不会影响真实数据库。',
+    '清除浏览器内的编辑内容与演示账号，恢复空工作空间并进入首次初始化。此操作不会影响真实数据库。',
     () => {
       resetState()
       resetAccount()
@@ -366,7 +365,7 @@ function reset() {
         <span class="brand-icon"><Icon name="bell" :size="26" /></span>
         <h2>SeekBell<span class="brand-period">.</span></h2>
         <p>留意你关心的。</p>
-        <span class="small-badge neutral">管理界面 v0.2 · 完整演示</span>
+        <span class="small-badge neutral">管理界面 v0.3 · 完整演示</span>
         <dl class="detail-grid">
           <div>
             <dt>前端</dt>
@@ -378,7 +377,7 @@ function reset() {
           </div>
           <div>
             <dt>来源</dt>
-            <dd>NodeSeek 官方 RSS</dd>
+            <dd>内置网站适配 · 当前支持 NodeSeek</dd>
           </div>
           <div>
             <dt>后端连接</dt>

@@ -1,0 +1,160 @@
+import { expect, test } from '@playwright/test'
+
+test.beforeEach(async ({ page }) => {
+  await page.route('**/*', (route) => {
+    const url = new URL(route.request().url())
+    if (
+      url.hostname !== '127.0.0.1' ||
+      url.pathname.startsWith('/api') ||
+      url.pathname.startsWith('/health')
+    )
+      throw new Error('Unexpected real request')
+    return route.continue()
+  })
+  await page.goto('/prototype.html#/websites')
+})
+
+test('fresh workspace, catalog, website configuration and removal are complete', async ({
+  page,
+}, info) => {
+  await expect(page.getByRole('heading', { name: '从第一个关心的网站开始' })).toBeVisible()
+  await expect(page.locator('.website-card')).toHaveCount(0)
+  await page.screenshot({ path: info.outputPath('websites-empty.png'), fullPage: true })
+  await page.getByRole('button', { name: '添加第一个网站' }).click()
+  const drawer = page.locator('.website-drawer')
+  await expect(drawer).toBeVisible()
+  await expect(page.locator('.catalog-card')).toHaveCount(1)
+  await page.screenshot({ path: info.outputPath('websites-catalog.png'), fullPage: true })
+  await page.getByLabel('搜索内置网站').fill('不存在')
+  await expect(page.getByText('没有找到内置网站')).toBeVisible()
+  await page.getByRole('button', { name: '清除搜索' }).click()
+  await page.getByRole('button', { name: '添加 NodeSeek', exact: true }).click()
+  await expect(page.getByLabel('共享采集间隔')).toHaveValue('10')
+  await expect(drawer.getByRole('switch')).not.toBeChecked()
+  await page.getByLabel('共享采集间隔').fill('9')
+  await page.getByRole('button', { name: '保存设置', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('10–3600')
+  await page.getByLabel('共享采集间隔').fill('30')
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.dialog[open]')).toContainText('尚未保存')
+  await page.getByRole('button', { name: '继续编辑', exact: true }).click()
+  await expect(page.getByLabel('共享采集间隔')).toHaveValue('30')
+  await page.getByRole('button', { name: '保存设置', exact: true }).click()
+  await drawer.getByRole('switch').click()
+  await page.getByRole('button', { name: '测试连接（模拟）' }).click()
+  await expect(drawer.locator('.match-result')).toContainText('模拟连接成功')
+  await page.screenshot({ path: info.outputPath('websites-config.png'), fullPage: true })
+  for (const width of [320, 390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 })
+    expect(await drawer.evaluate((e) => e.scrollWidth <= e.clientWidth)).toBe(true)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  }
+  await page.getByRole('button', { name: '关闭网站面板' }).click()
+  await expect(page.getByRole('button', { name: '添加第一个网站' })).toHaveCount(0)
+  await page.reload()
+  await expect(page.locator('.website-card')).toContainText('30')
+  await page.getByRole('button', { name: '添加网站', exact: true }).click()
+  await expect(page.getByRole('button', { name: '已添加', exact: true })).toBeDisabled()
+  await page.keyboard.press('Escape')
+  await expect(drawer).not.toBeVisible()
+  await expect(page.getByRole('button', { name: '添加网站', exact: true })).toBeFocused()
+  await page.getByLabel('搜索已添加网站').fill('none')
+  await expect(page.getByText('没有匹配的网站')).toBeVisible()
+  await page.getByRole('button', { name: '清除筛选' }).click()
+  await page.getByRole('button', { name: '配置 NodeSeek', exact: true }).click()
+  await page.getByRole('button', { name: '移除网站', exact: true }).click()
+  await page.getByRole('button', { name: '确认移除', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '从第一个关心的网站开始' })).toBeVisible()
+  await page.reload()
+  await expect(page.locator('.website-card')).toHaveCount(0)
+  await page.goto('/prototype.html#/task/new')
+  await expect(page.getByRole('heading', { name: '先添加一个监控网站' })).toBeVisible()
+  await page.goto('/prototype.html#/')
+  await expect(page.getByText('合计 0 条')).toBeVisible()
+  await expect(page.locator('.activity-row')).toHaveCount(0)
+})
+
+test('existing v2 work migrates without loss and attached tasks prevent removal', async ({
+  page,
+}, info) => {
+  await page.getByRole('button', { name: '载入示例工作台', exact: true }).click()
+  await page.getByRole('button', { name: '确认载入', exact: true }).click()
+  await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('seekbell-demo-v3')!)
+    const source = { ...data.websites[0], interval: 45 }
+    delete source.id
+    delete source.adapterId
+    const legacy = { ...data, version: 2, source }
+    delete legacy.websites
+    legacy.tasks.forEach((t: Record<string, unknown>) => {
+      delete t.websiteId
+    })
+    legacy.posts.forEach((p: Record<string, unknown>) => {
+      delete p.websiteId
+    })
+    legacy.tasks[0].name = '保留我的旧任务'
+    localStorage.setItem('seekbell-demo-v2', JSON.stringify(legacy))
+    localStorage.removeItem('seekbell-demo-v3')
+  })
+  await page.reload()
+  await page.screenshot({ path: info.outputPath('websites-cards.png'), fullPage: true })
+  await page.getByRole('button', { name: '配置 NodeSeek', exact: true }).click()
+  await expect(page.getByLabel('共享采集间隔')).toHaveValue('45')
+  await expect(page.locator('.website-linked-task')).toHaveCount(4)
+  await expect(page.locator('.website-linked-task').first()).toContainText('保留我的旧任务')
+  await expect(page.getByRole('button', { name: '移除网站', exact: true })).toBeDisabled()
+  await page.getByLabel('共享采集间隔').fill('60')
+  await page.getByRole('button', { name: '关闭网站面板' }).click()
+  await page.getByRole('button', { name: '放弃修改并关闭' }).click()
+  await page.getByRole('button', { name: '配置 NodeSeek', exact: true }).click()
+  await expect(page.getByLabel('共享采集间隔')).toHaveValue('45')
+  await page.getByRole('button', { name: '管理任务', exact: true }).click()
+  await expect(page.locator('.management-row')).toHaveCount(4)
+  await page.getByRole('button', { name: '保留我的旧任务', exact: true }).click()
+  await expect(page.getByLabel('监控网站', { exact: true })).toHaveValue('nodeseek')
+  await expect(page.getByLabel('监控网站', { exact: true })).toBeDisabled()
+})
+
+test('future built-in adapters keep independent settings in the same card layout', async ({
+  page,
+}) => {
+  // Test-only catalog fixtures. No additional adapters or unsupported sites are shipped.
+  await page.route('**/src/prototype/websites*', async (route) => {
+    const response = await route.fetch()
+    await route.fulfill({
+      response,
+      body:
+        (await response.text()) +
+        "\n; for (let i = 2; i <= 4; i++) websiteCatalog.push({ ...websiteCatalog[0], id: 'fixture-' + i, name: '适配测试 ' + i, domain: 'fixture-' + i + '.test', sourceUrl: 'https://fixture-' + i + '.test/rss' });",
+    })
+  })
+  await page.reload()
+  for (const name of ['NodeSeek', '适配测试 2', '适配测试 3', '适配测试 4']) {
+    await page.getByRole('button', { name: '添加网站', exact: true }).click()
+    await page.getByRole('button', { name: '添加 ' + name, exact: true }).click()
+    await page.getByRole('button', { name: '关闭网站面板' }).click()
+  }
+  await expect(page.locator('.website-card')).toHaveCount(4)
+  await page.getByRole('button', { name: '配置 适配测试 2', exact: true }).click()
+  await page.getByLabel('共享采集间隔').fill('90')
+  await page.getByRole('button', { name: '保存设置', exact: true }).click()
+  await page.locator('.website-drawer').getByRole('switch').click()
+  await page.getByLabel('模拟场景').selectOption('error')
+  await page.getByRole('button', { name: '测试连接（模拟）' }).click()
+  await expect(page.locator('.match-result')).toContainText('模拟连接失败')
+  await page.getByRole('button', { name: '关闭网站面板' }).click()
+  const records = await page.evaluate(
+    () => JSON.parse(localStorage.getItem('seekbell-demo-v3')!).websites,
+  )
+  expect(records[0]).toMatchObject({ interval: 10, enabled: false, health: 'pending' })
+  expect(records[1]).toMatchObject({ interval: 90, enabled: true, health: 'error' })
+  expect(records[2]).toMatchObject({ interval: 10, enabled: false, health: 'pending' })
+  await page.getByLabel('筛选网站状态').selectOption('error')
+  await expect(page.locator('.website-card')).toHaveCount(1)
+  await expect(page.locator('.website-card')).toContainText('适配测试 2')
+  await page.getByLabel('筛选网站状态').selectOption('all')
+  for (const width of [320, 390, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 900 })
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  }
+})

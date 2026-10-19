@@ -49,7 +49,9 @@ const page = computed(() => parts.value[0] || 'overview')
 const authPage = computed(() => ['login', 'setup'].includes(page.value))
 const editId = computed(() => parts.value[1] || 'new')
 const editing = computed(() =>
-  editId.value === 'new' ? emptyTask() : state.tasks.find((t) => t.id === editId.value),
+  editId.value === 'new'
+    ? { ...emptyTask(), websiteId: state.websites[0]?.id || '' }
+    : state.tasks.find((t) => t.id === editId.value),
 )
 const targetEditing = computed(() =>
   editId.value === 'new' ? newTarget() : state.targets.find((t) => t.id === editId.value),
@@ -198,7 +200,7 @@ function focusMain() {
   document.getElementById('main-content')?.focus()
 }
 function showInfo() {
-  infoTitle.value = '完整界面演示 v0.2'
+  infoTitle.value = '完整界面演示 v0.3'
   infoBody.value =
     '所有管理页面已可体验。任务、目标、来源、内容、投递和设置在浏览器内联动；支持演示登录和备份恢复。界面不连接真实后端、不采集 RSS、不发送通知。请使用演示凭据。'
   infoDialog.value?.showModal()
@@ -305,15 +307,27 @@ function showInfo() {
           @toggle="toggle"
           @notice="notify"
           @navigate="navigate"
-        /><TaskList v-else-if="page === 'tasks'" @navigate="navigate" /><TaskEditor
+        /><TaskList v-else-if="page === 'tasks'" @navigate="navigate" />
+        <section v-else-if="page === 'task' && !state.websites.length" class="panel empty-state">
+          <Icon name="globe" :size="36" />
+          <h1 tabindex="-1">先添加一个监控网站</h1>
+          <p>每个任务关联一个已添加的网站，添加后即可设置监控规则。</p>
+          <button class="button primary" @click="navigate('/websites')">前往添加网站</button>
+        </section>
+        <TaskEditor
           v-else-if="page === 'task' && editing"
           :key="path"
           :task="editing"
           :return-label="taskReturn === '/tasks' ? '返回任务列表' : '返回概览'"
           @dirty="(value) => (dirty = value)"
           @save="save"
+          @navigate="navigate"
           @cancel="navigate(taskReturn)"
-        /><Websites v-else-if="page === 'websites'" @dirty="(value) => (dirty = value)" /><Content
+        /><Websites
+          v-else-if="page === 'websites'"
+          @navigate="navigate"
+          @dirty="(value) => (dirty = value)"
+        /><Content
           v-else-if="page === 'content'"
           :key="path"
           :selected-id="parts[1]"
@@ -350,7 +364,7 @@ function showInfo() {
           class="page-footer"
         >
           <span><Icon name="bell" :size="14" />SeekBell · 留意你关心的</span
-          ><span>完整界面演示 · v0.2</span>
+          ><span>完整界面演示 · v0.3</span>
         </footer>
       </main>
     </div></template

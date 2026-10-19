@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import Icon from '../components/Icon.vue'
 import Toggle from '../components/Toggle.vue'
-import { state, clone, notify, setTaskEnabled, confirmAction } from '../store'
+import { state, clone, notify, setTaskEnabled, confirmAction, websiteName } from '../store'
 import type { Task } from '../model'
 const emit = defineEmits<{ navigate: [path: string] }>()
 const query = ref(''),
@@ -59,7 +59,7 @@ function remove(task: Task) {
     <div>
       <span>已暂停</span><strong>{{ state.tasks.filter((t) => !t.enabled).length }}</strong>
     </div>
-    <p><Icon name="shield" :size="18" />所有任务共享 NodeSeek 官方 RSS</p>
+    <p><Icon name="shield" :size="18" />同一网站下的任务共享采集来源</p>
   </div>
   <section class="panel">
     <div class="panel-heading">
@@ -92,8 +92,9 @@ function remove(task: Task) {
           <button class="text-link task-title" @click="emit('navigate', '/task/' + task.id)">
             {{ task.name }}
           </button>
-          <p>{{ task.description || 'NodeSeek · 新帖监控' }}</p>
+          <p>{{ task.description || websiteName(task.websiteId) + ' · 新帖监控' }}</p>
           <div class="chip-line">
+            <span class="plain-chip">{{ websiteName(task.websiteId) }}</span>
             <span class="plain-chip"
               >{{ task.groups.filter((g) => g.all.length || g.any.length).length }} 个条件组</span
             ><span class="plain-chip">{{ task.targets.length }} 个通知目标</span

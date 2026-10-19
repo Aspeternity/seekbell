@@ -114,7 +114,7 @@ function canRetry(record: Delivery) {
           <Icon name="refresh" :size="16" />手动重发（模拟）
         </button>
       </section>
-      <div class="website-layout">
+      <div class="detail-layout">
         <section class="panel reading-panel">
           <span
             class="result-pill"

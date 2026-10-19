@@ -1,6 +1,8 @@
 import { reactive, ref, watch } from 'vue'
 import { initialTasks, targets as seedTargets, historySamples, evaluate } from './model'
 import type { Task, Sample, Truth } from './model'
+import { createWebsite, websiteDefinition } from './websites'
+import type { InstalledWebsite } from './websites'
 
 export type Channel = 'telegram' | 'bark' | 'smtp' | 'webhook'
 export type DeliveryStatus = 'success' | 'retrying' | 'failed' | 'unknown' | 'cancelled'
@@ -22,6 +24,7 @@ export interface Target {
   lastTest: string
 }
 export interface Post extends Sample {
+  websiteId: string
   id: string
   time: string
   taskIds: string[]
@@ -45,18 +48,12 @@ export interface Delivery {
   reason: string
 }
 export interface DemoState {
-  version: 2
+  version: 3
   tasks: Task[]
   targets: Target[]
   posts: Post[]
   deliveries: Delivery[]
-  source: {
-    enabled: boolean
-    interval: number
-    health: 'healthy' | 'error'
-    lastSuccess: string
-    lastTest: string
-  }
+  websites: InstalledWebsite[]
   settings: { timezone: string; retention: number; alertTargets: string[]; recoveryAlerts: boolean }
 }
 export const channelMeta = {
@@ -100,7 +97,7 @@ export function newTarget(channel: Channel = 'telegram'): Target {
     lastTest: '',
   }
 }
-function initialState(): DemoState {
+export function initialState(example = false): DemoState {
   const targetList = seedTargets.map((t) => ({
     ...newTarget(t.id as Channel),
     ...t,
@@ -110,6 +107,7 @@ function initialState(): DemoState {
     const matched = initialTasks.filter((t) => evaluate(t, sample).status === 'yes')
     return {
       ...clone(sample),
+      websiteId: 'nodeseek',
       id: 'post-' + (i + 1),
       time: '2026-10-19T' + ['06:28:00', '05:45:00', '04:20:00', '06:12:00', '02:30:00'][i] + 'Z',
       taskIds: matched.map((t) => t.id),
@@ -125,6 +123,7 @@ function initialState(): DemoState {
   })
   posts.push({
     id: 'post-6',
+    websiteId: 'nodeseek',
     title: '三条线路的晚高峰体验与测评记录',
     summary: '合成测试内容：记录不同线路的体验。',
     author: 'network_lab',
@@ -209,22 +208,25 @@ function initialState(): DemoState {
     },
   ]
   return {
-    version: 2,
-    tasks: clone(initialTasks),
-    targets: targetList,
-    posts,
-    deliveries,
-    source: {
-      enabled: true,
-      interval: 10,
-      health: 'healthy',
-      lastSuccess: '2026-10-19T06:29:56Z',
-      lastTest: '',
-    },
+    version: 3,
+    tasks: example ? clone(initialTasks) : [],
+    targets: example ? targetList : [],
+    posts: example ? posts : [],
+    deliveries: example ? deliveries : [],
+    websites: example
+      ? [
+          {
+            ...createWebsite('nodeseek'),
+            enabled: true,
+            health: 'healthy',
+            lastSuccess: '2026-10-19T06:29:56Z',
+          },
+        ]
+      : [],
     settings: {
       timezone: 'Asia/Shanghai',
       retention: 30,
-      alertTargets: ['telegram'],
+      alertTargets: example ? ['telegram'] : [],
       recoveryAlerts: true,
     },
   }
@@ -237,6 +239,7 @@ export function isTask(v: unknown): v is Task {
   const t = v as Task
   return (
     isString(t.id) &&
+    isString(t.websiteId) &&
     isString(t.name) &&
     isString(t.description) &&
     typeof t.enabled === 'boolean' &&
@@ -275,30 +278,72 @@ export function isTarget(v: unknown): v is Target {
     isString(t.lastTest)
   )
 }
-const storageKey = 'seekbell-demo-v2'
+const storageKey = 'seekbell-demo-v3'
 const storageWarning = ref('')
+// Version 2 represented one implicit NodeSeek source; preserve existing work on upgrade.
+export function parseState(value: unknown): DemoState | null {
+  if (!value || typeof value !== 'object') return null
+  let data = value
+  if ('version' in data && data.version === 2) {
+    const old = data as Record<string, unknown>
+    if (
+      !old.source ||
+      typeof old.source !== 'object' ||
+      !Array.isArray(old.tasks) ||
+      !Array.isArray(old.posts)
+    )
+      return null
+    data = {
+      ...old,
+      version: 3,
+      websites: [{ ...old.source, id: 'nodeseek', adapterId: 'nodeseek' }],
+      tasks: old.tasks.map((t) => ({ ...t, websiteId: 'nodeseek' })),
+      posts: old.posts.map((p) => ({ ...p, websiteId: 'nodeseek' })),
+    }
+  }
+  return validState(data) ? cleanState(data) : null
+}
 function loadState(): DemoState {
-  const fallback = initialState()
   try {
-    const raw = localStorage.getItem(storageKey)
+    const raw = localStorage.getItem(storageKey) ?? localStorage.getItem('seekbell-demo-v2')
     if (raw) {
-      const data = JSON.parse(raw) as DemoState
-      if (validState(data)) return cleanState(data)
-      storageWarning.value = '演示存储格式不完整，已恢复默认示例。'
+      const data = parseState(JSON.parse(raw))
+      if (data) return data
+      storageWarning.value = '演示存储格式不完整，已恢复默认空工作空间。'
     } else {
       const legacy: unknown = JSON.parse(localStorage.getItem('seekbell-ui-prototype-v1') || 'null')
-      if (Array.isArray(legacy) && legacy.every(isTask)) fallback.tasks = legacy
+      if (Array.isArray(legacy)) {
+        const tasks = legacy.map((t) => ({ ...t, websiteId: 'nodeseek' }))
+        if (tasks.every(isTask)) return { ...initialState(true), tasks }
+      }
     }
   } catch {
-    storageWarning.value = '无法读取浏览器存储，已加载默认演示。'
+    storageWarning.value = '无法读取浏览器存储，已加载空工作空间。'
   }
-  return fallback
+  return initialState()
+}
+function isWebsite(value: unknown): value is InstalledWebsite {
+  if (!value || typeof value !== 'object') return false
+  const w = value as InstalledWebsite
+  return (
+    isString(w.id) &&
+    w.id === w.adapterId &&
+    !!websiteDefinition(w.adapterId) &&
+    typeof w.enabled === 'boolean' &&
+    Number.isInteger(w.interval) &&
+    w.interval >= 10 &&
+    w.interval <= 3600 &&
+    ['pending', 'healthy', 'error'].includes(w.health) &&
+    [w.lastSuccess, w.lastTest].every(
+      (v) => isString(v) && (v === '' || Number.isFinite(Date.parse(v))),
+    )
+  )
 }
 export function validState(data: unknown): data is DemoState {
   if (!data || typeof data !== 'object') return false
   const d = data as DemoState
   return (
-    d.version === 2 &&
+    d.version === 3 &&
     Array.isArray(d.tasks) &&
     d.tasks.length <= 200 &&
     d.tasks.every(isTask) &&
@@ -308,14 +353,11 @@ export function validState(data: unknown): data is DemoState {
     new Set(d.tasks.map((t) => t.id)).size === d.tasks.length &&
     new Set(d.targets.map((t) => t.id)).size === d.targets.length &&
     d.tasks.every((t) => t.targets.every((id) => d.targets.some((target) => target.id === id))) &&
-    !!d.source &&
-    typeof d.source.enabled === 'boolean' &&
-    Number.isInteger(d.source.interval) &&
-    d.source.interval >= 10 &&
-    d.source.interval <= 3600 &&
-    ['healthy', 'error'].includes(d.source.health) &&
-    isString(d.source.lastSuccess) &&
-    isString(d.source.lastTest) &&
+    Array.isArray(d.websites) &&
+    d.websites.length <= 100 &&
+    d.websites.every(isWebsite) &&
+    new Set(d.websites.map((w) => w.id)).size === d.websites.length &&
+    d.tasks.every((t) => d.websites.some((w) => w.id === t.websiteId)) &&
     !!d.settings &&
     ['Asia/Shanghai', 'UTC', 'Asia/Tokyo', 'America/Los_Angeles'].includes(d.settings.timezone) &&
     Number.isInteger(d.settings.retention) &&
@@ -330,6 +372,7 @@ export function validState(data: unknown): data is DemoState {
       (p) =>
         p &&
         isString(p.id) &&
+        isString(p.websiteId) &&
         isString(p.title) &&
         (p.summary === null || isString(p.summary)) &&
         (p.author === null || isString(p.author)) &&
@@ -367,9 +410,10 @@ export function validState(data: unknown): data is DemoState {
 // Whitelist fields when importing; never carry unknown credential fields into storage.
 export function cleanState(d: DemoState): DemoState {
   return {
-    version: 2,
+    version: 3,
     tasks: d.tasks.map((t) => ({
       id: t.id,
+      websiteId: t.websiteId,
       name: t.name,
       description: t.description,
       enabled: t.enabled,
@@ -402,13 +446,15 @@ export function cleanState(d: DemoState): DemoState {
       responseMode: t.responseMode,
       lastTest: t.lastTest,
     })),
-    source: {
-      enabled: d.source.enabled,
-      interval: d.source.interval,
-      health: d.source.health,
-      lastSuccess: d.source.lastSuccess,
-      lastTest: d.source.lastTest,
-    },
+    websites: d.websites.map((w) => ({
+      id: w.id,
+      adapterId: w.adapterId,
+      enabled: w.enabled,
+      interval: w.interval,
+      health: w.health,
+      lastSuccess: w.lastSuccess,
+      lastTest: w.lastTest,
+    })),
     settings: {
       timezone: d.settings.timezone,
       retention: d.settings.retention,
@@ -417,6 +463,7 @@ export function cleanState(d: DemoState): DemoState {
     },
     posts: d.posts.map((p) => ({
       id: p.id,
+      websiteId: p.websiteId,
       title: p.title,
       summary: p.summary,
       author: p.author,
@@ -445,6 +492,48 @@ export function cleanState(d: DemoState): DemoState {
   }
 }
 export const state = reactive<DemoState>(loadState())
+export function websiteName(id: string) {
+  return (
+    websiteDefinition(state.websites.find((w) => w.id === id)?.adapterId || id)?.name || '未知网站'
+  )
+}
+export function loadExampleWorkspace() {
+  confirmAction(
+    '载入示例工作台？',
+    '用一组 NodeSeek 合成数据替换当前工作空间，便于体验全部页面。不会连接网站或发送通知。管理员账号保持不变。',
+    () => {
+      Object.assign(state, initialState(true))
+      notify('示例工作台已载入。所有数据均为模拟。')
+    },
+    '确认载入',
+  )
+}
+export function addWebsite(adapterId: string) {
+  if (state.websites.some((w) => w.adapterId === adapterId)) return null
+  const website = createWebsite(adapterId)
+  state.websites.push(website)
+  notify(websiteName(website.id) + ' 已添加，可按需启用并创建任务。')
+  return website
+}
+export function removeWebsite(id: string) {
+  if (state.tasks.some((t) => t.websiteId === id)) {
+    notify('请先移除该网站关联的监控任务。')
+    return false
+  }
+  state.websites = state.websites.filter((w) => w.id !== id)
+  state.deliveries
+    .filter(
+      (r) =>
+        r.status === 'retrying' && state.posts.some((p) => p.id === r.postId && p.websiteId === id),
+    )
+    .forEach((r) => {
+      r.status = 'cancelled'
+      r.reason = '网站已移除，待重试记录已取消。'
+    })
+  notify('网站已移除，已有内容与投递历史保留。')
+  return true
+}
+
 export const toast = ref('')
 let toastTimer: ReturnType<typeof setTimeout> | undefined
 export function notify(message: string) {
@@ -481,6 +570,10 @@ export function setTaskEnabled(task: Task, value: boolean) {
   notify(value ? '任务已恢复；不补发暂停期间的帖子。' : '任务已暂停；历史命中仍保留。')
 }
 export function saveTask(task: Task) {
+  if (!state.websites.some((w) => w.id === task.websiteId)) {
+    notify('请先添加并选择监控网站。')
+    return
+  }
   const copy = clone(task)
   copy.name = copy.name.trim()
   copy.groups = copy.groups.filter((g) => g.all.length || g.any.length)

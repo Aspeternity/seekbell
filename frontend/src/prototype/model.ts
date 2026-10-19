@@ -3,6 +3,7 @@ export interface Group {
   any: string[]
 }
 export interface Task {
+  websiteId: string
   id: string
   name: string
   description: string
@@ -36,6 +37,7 @@ export const targets = [
 export function emptyTask(): Task {
   return {
     id: '',
+    websiteId: '',
     name: '',
     description: '',
     enabled: true,
@@ -57,6 +59,7 @@ export function emptyTask(): Task {
 export const initialTasks: Task[] = [
   {
     ...emptyTask(),
+    websiteId: 'nodeseek',
     id: 'deals',
     name: '好价服务器雷达',
     description: '留意 DMIT 与搬瓦工的新优惠',
@@ -73,6 +76,7 @@ export const initialTasks: Task[] = [
   },
   {
     ...emptyTask(),
+    websiteId: 'nodeseek',
     id: 'selfhost',
     name: '自托管灵感收集',
     description: '发现值得折腾的新项目',
@@ -85,6 +89,7 @@ export const initialTasks: Task[] = [
   },
   {
     ...emptyTask(),
+    websiteId: 'nodeseek',
     id: 'network',
     name: '网络与线路观察',
     description: '关注线路测试和网络体验',
@@ -97,6 +102,7 @@ export const initialTasks: Task[] = [
   },
   {
     ...emptyTask(),
+    websiteId: 'nodeseek',
     id: 'trade',
     name: '闲置设备好物',
     description: '筛选值得关注的设备转让',

@@ -1,181 +1,534 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import Icon from '../components/Icon.vue'
 import Toggle from '../components/Toggle.vue'
-import { state, notify, formatTime, confirmAction } from '../store'
-const emit = defineEmits<{ dirty: [value: boolean] }>()
-const draft = reactive({ interval: state.source.interval })
-const baseline = ref(JSON.stringify(draft)),
+import {
+  state,
+  notify,
+  formatTime,
+  confirmAction,
+  addWebsite,
+  removeWebsite,
+  loadExampleWorkspace,
+} from '../store'
+import { websiteCatalog, websiteDefinition } from '../websites'
+import type { InstalledWebsite } from '../websites'
+const emit = defineEmits<{ dirty: [value: boolean]; navigate: [path: string] }>()
+const search = ref(''),
+  filter = ref('all'),
+  catalogSearch = ref('')
+const panel = ref<HTMLDialogElement>(),
+  mode = ref<'catalog' | 'detail'>('catalog'),
+  selectedId = ref('')
+const draft = reactive({ interval: 10 })
+const baseline = ref(10),
   error = ref(''),
   testing = ref(false),
-  scenario = ref('success')
-const dirty = computed(() => JSON.stringify(draft) !== baseline.value)
+  scenario = ref('success'),
+  testResult = ref('')
+const selected = computed(() => state.websites.find((w) => w.id === selectedId.value))
+const definition = computed(() => websiteDefinition(selected.value?.adapterId || ''))
+const dirty = computed(() => !!selected.value && draft.interval !== baseline.value)
 watch(dirty, (value) => emit('dirty', value))
-const testResult = ref('')
+const status = (w: InstalledWebsite) =>
+  !w.enabled
+    ? '已暂停'
+    : w.health === 'error'
+      ? '连接异常'
+      : w.health === 'healthy'
+        ? '采集正常'
+        : '等待首次采集'
+const statusClass = (w: InstalledWebsite) =>
+  !w.enabled ? 'neutral' : w.health === 'healthy' ? 'yes' : 'unknown'
+const linked = (id: string) => state.tasks.filter((t) => t.websiteId === id)
+const visible = computed(() =>
+  state.websites.filter((w) => {
+    const info = websiteDefinition(w.adapterId)
+    return (
+      (info?.name + ' ' + info?.domain).toLowerCase().includes(search.value.trim().toLowerCase()) &&
+      (filter.value === 'all' ||
+        (filter.value === 'enabled'
+          ? w.enabled
+          : filter.value === 'paused'
+            ? !w.enabled
+            : w.enabled && w.health === 'error'))
+    )
+  }),
+)
+const available = computed(() =>
+  websiteCatalog.filter((w) =>
+    (w.name + ' ' + w.description).toLowerCase().includes(catalogSearch.value.trim().toLowerCase()),
+  ),
+)
+async function show() {
+  await nextTick()
+  panel.value?.showModal()
+  document.body.classList.add('website-panel-open')
+}
+function catalog() {
+  mode.value = 'catalog'
+  selectedId.value = ''
+  catalogSearch.value = ''
+  show()
+}
+function detail(w: InstalledWebsite) {
+  selectedId.value = w.id
+  mode.value = 'detail'
+  draft.interval = w.interval
+  baseline.value = w.interval
+  error.value = ''
+  testResult.value = ''
+  scenario.value = 'success'
+  show()
+}
+function close() {
+  panel.value?.close()
+  document.body.classList.remove('website-panel-open')
+  selectedId.value = ''
+  emit('dirty', false)
+}
+function requestClose() {
+  if (dirty.value)
+    confirmAction(
+      '关闭网站配置？',
+      '你有尚未保存的采集间隔。关闭后，这些修改将丢失。',
+      close,
+      '放弃修改并关闭',
+      '继续编辑',
+    )
+  else close()
+}
+function install(id: string) {
+  const w = addWebsite(id)
+  if (w) detail(w)
+}
 function save() {
+  if (!selected.value) return
   if (!Number.isInteger(draft.interval) || draft.interval < 10 || draft.interval > 3600) {
     error.value = '采集间隔应为 10–3600 之间的整数秒。'
     return
   }
-  state.source.interval = draft.interval
-  baseline.value = JSON.stringify(draft)
+  selected.value.interval = draft.interval
+  baseline.value = draft.interval
   error.value = ''
-  notify('来源设置已保存在当前浏览器。')
+  notify('网站设置已保存在当前浏览器。')
 }
-function toggle(value: boolean) {
+function toggle(w: InstalledWebsite, enabled: boolean) {
   const apply = () => {
-    state.source.enabled = value
+    w.enabled = enabled
     notify(
-      value ? '来源已在演示中恢复，将以当前条目重建基线。' : '来源已暂停，任务与历史配置保留。',
+      enabled
+        ? '网站已启用，将以当前条目建立基线，不补发历史帖子。'
+        : '网站已暂停，任务与历史保留。',
     )
   }
-  if (value) apply()
+  if (enabled) apply()
   else
     confirmAction(
-      '暂停 NodeSeek 采集？',
-      '所有监控任务将暂停接收新帖。恢复时重建当下基线，不补发暂停期间的内容。',
+      '暂停 ' + websiteDefinition(w.adapterId)?.name + ' 采集？',
+      '只影响这个网站的关联任务，其他网站继续运行。恢复时重建当下基线，不补发暂停期间内容。',
       apply,
-      '暂停来源',
+      '暂停网站',
     )
 }
 async function test() {
+  const w = selected.value
+  if (!w || testing.value) return
+  const result = scenario.value
   testing.value = true
   testResult.value = ''
   await new Promise((resolve) => setTimeout(resolve, 450))
-  state.source.lastTest = new Date().toISOString()
-  state.source.health = scenario.value === 'success' ? 'healthy' : 'error'
-  if (scenario.value === 'success') {
-    state.source.lastSuccess = state.source.lastTest
-    testResult.value = '模拟连接成功：RSS 格式有效，发现 20 条示例条目。'
-  } else {
-    testResult.value = '模拟连接失败：服务暂不可达。真实调度将退避重试，不会视为空 RSS。'
+  if (!state.websites.includes(w)) {
+    testing.value = false
+    return
   }
+  w.lastTest = new Date().toISOString()
+  w.health = result === 'success' ? 'healthy' : 'error'
+  if (result === 'success') w.lastSuccess = w.lastTest
+  if (selectedId.value === w.id)
+    testResult.value =
+      result === 'success'
+        ? '模拟连接成功：RSS 格式有效，发现 20 条示例条目。'
+        : '模拟连接失败：服务暂不可达。真实调度将退避重试，不会视为空 RSS。'
   testing.value = false
 }
+function remove() {
+  const w = selected.value
+  if (!w) return
+  if (linked(w.id).length) {
+    notify('请先移除该网站关联的监控任务。')
+    return
+  }
+  confirmAction(
+    '移除 ' + definition.value?.name + '？',
+    '移除该网站的采集配置，已有内容与投递历史保留。之后可以从内置网站库重新添加。',
+    () => {
+      if (removeWebsite(w.id)) close()
+    },
+    '确认移除',
+  )
+}
+function tasks() {
+  const navigate = () => {
+    close()
+    emit('navigate', '/tasks')
+  }
+  if (dirty.value)
+    confirmAction(
+      '离开网站配置？',
+      '未保存的采集间隔将丢失。',
+      navigate,
+      '放弃修改并离开',
+      '继续编辑',
+    )
+  else navigate()
+}
+onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
 </script>
 <template>
   <section class="page-heading">
     <div>
-      <p class="eyebrow">ONE SOURCE, MANY POSSIBILITIES</p>
+      <p class="eyebrow">YOUR SOURCES, YOUR WORLD</p>
       <h1 tabindex="-1">监控网站</h1>
-      <p class="subtitle">可靠地采集，安静地关注。</p>
+      <p class="subtitle">把关注的网站放在一起，让每一份信息各有来处。</p>
     </div>
-    <span class="small-badge neutral">1 个内置网站</span>
+    <button class="button primary" @click="catalog"><Icon name="plus" :size="18" />添加网站</button>
   </section>
-  <div class="website-layout">
-    <section class="panel website-main">
-      <div class="website-brand">
-        <div class="source-logo large">N<span>›</span></div>
-        <div>
-          <h2>NodeSeek</h2>
-          <p>面向技术爱好者的交流社区</p>
-          <span
-            class="result-pill"
-            :class="
-              !state.source.enabled ? 'no' : state.source.health === 'healthy' ? 'yes' : 'unknown'
-            "
-            ><span class="status-dot" />{{
-              !state.source.enabled
-                ? '已暂停'
-                : state.source.health === 'healthy'
-                  ? '采集正常'
-                  : '来源异常'
-            }}</span
-          >
-        </div>
-        <Toggle
-          :model-value="state.source.enabled"
-          label="NodeSeek 采集启用状态"
-          @update:model-value="toggle"
-        />
-      </div>
-      <div class="website-source">
-        <Icon name="rss" :size="20" />
-        <div>
-          <strong>官方 RSS</strong>
-          <p>https://rss.nodeseek.com/</p>
-        </div>
-        <span class="small-badge neutral">内置来源</span>
-      </div>
-      <div class="source-metrics">
-        <div>
-          <span>最近成功</span><strong>{{ formatTime(state.source.lastSuccess) }}</strong>
-        </div>
-        <div>
-          <span>演示发现新帖</span><strong>286 <small>条</small></strong>
-        </div>
-        <div>
-          <span>关联任务</span><strong>{{ state.tasks.length }} <small>个</small></strong>
-        </div>
-      </div>
-      <div class="form-content">
-        <h3 class="section-subtitle">采集设置</h3>
-        <form @submit.prevent="save">
-          <label class="field-label" for="source-interval">共享采集间隔</label>
-          <div class="unit-input">
-            <input
-              id="source-interval"
-              v-model.number="draft.interval"
-              type="number"
-              min="10"
-              max="3600"
-              step="1"
-              class="text-input"
-              required
-            /><span>秒</span>
-          </div>
-          <p class="field-help">全部任务共享该频率。10 秒为候选默认值，不代表官方限频保证。</p>
-          <div class="info-note">
-            <Icon name="clock" :size="18" />
-            <p>固定周期，不重叠请求。网络错误会退避重试；429 尊重服务端 Retry-After。</p>
-          </div>
-          <p v-if="error" class="inline-error" role="alert">{{ error }}</p>
-          <div class="inline-form-footer">
-            <span>{{ dirty ? '有未保存的修改' : '设置已保存' }}</span
-            ><button class="button primary" type="submit">保存设置</button>
-          </div>
-        </form>
-      </div>
-    </section>
-    <aside class="side-stack">
-      <section class="panel support-panel">
-        <h2><Icon name="shield" :size="18" />来源能力</h2>
-        <p>只使用 RSS 实际提供的信息。</p>
-        <ul class="capability-list">
-          <li
-            v-for="name in ['新帖标题与摘要', '作者用户名', '版块信息', '稳定帖子标识']"
-            :key="name"
-          >
-            <Icon name="check" :size="16" />{{ name }}
-          </li>
-        </ul>
-        <div class="subtle-divider" />
-        <p>不读取全文、回帖或网页；摘要可能缺失或截断。首次成功采集建立基线，不推送已有帖子。</p>
-      </section>
-      <section class="panel support-panel">
-        <h2><Icon name="activity" :size="18" />连接测试</h2>
-        <p>在本地切换结果，检查成功和异常状态的呈现。</p>
-        <label class="field-label" for="source-scenario">模拟场景</label
-        ><select id="source-scenario" v-model="scenario" class="text-input">
-          <option value="success">RSS 连接成功</option>
-          <option value="error">服务暂时不可用</option></select
-        ><button class="button test-button" :disabled="testing" @click="test">
-          <Icon name="refresh" :size="16" :class="{ spinning: testing }" />{{
-            testing ? '测试中…' : '测试连接（模拟）'
-          }}
-        </button>
-        <div
-          v-if="testResult"
-          class="match-result"
-          :class="state.source.health === 'healthy' ? 'yes' : 'unknown'"
-          role="status"
-        >
-          {{ testResult }}
-        </div>
-        <p class="small-note">
-          最近测试：{{ formatTime(state.source.lastTest) }}<br />不会请求真实 RSS。
-        </p>
-      </section>
-    </aside>
+  <div class="website-summary">
+    <div>
+      <span class="icon-tile orange"><Icon name="globe" /></span
+      ><span
+        ><strong>{{ state.websites.length }}</strong> 个已添加网站</span
+      >
+    </div>
+    <span
+      ><i class="status-dot green-dot" />{{
+        state.websites.filter((w) => w.enabled).length
+      }}
+      个已启用</span
+    >
+    <span
+      ><i class="status-dot" />{{ state.websites.filter((w) => !w.enabled).length }} 个已暂停</span
+    >
+    <p>独立配置 · 按需添加</p>
   </div>
+  <section v-if="!state.websites.length" class="panel website-empty">
+    <div class="empty-orbit" aria-hidden="true">
+      <span><Icon name="globe" :size="36" /></span><i /><b />
+    </div>
+    <p class="eyebrow">START WITH WHAT MATTERS</p>
+    <h2>从第一个关心的网站开始</h2>
+    <p>SeekBell 不会默认添加任何网站。<br />从内置网站库选择需要的来源，再为它创建监控任务。</p>
+    <button class="button primary" @click="catalog">
+      <Icon name="plus" :size="18" />添加第一个网站
+    </button>
+    <div class="website-onboarding">
+      <span><b>01</b>选择网站</span><Icon name="arrow" :size="15" /><span><b>02</b>配置采集</span
+      ><Icon name="arrow" :size="15" /><span><b>03</b>创建任务</span>
+    </div>
+  </section>
+  <template v-else>
+    <div class="website-toolbar">
+      <label class="search-input"
+        ><Icon name="search" :size="17" /><input
+          v-model="search"
+          aria-label="搜索已添加网站"
+          placeholder="搜索网站名称或域名…"
+      /></label>
+      <select v-model="filter" class="text-input" aria-label="筛选网站状态">
+        <option value="all">全部状态</option>
+        <option value="enabled">已启用</option>
+        <option value="paused">已暂停</option>
+        <option value="error">连接异常</option>
+      </select>
+      <span class="muted">{{ visible.length }} 个网站</span>
+    </div>
+    <div class="website-grid">
+      <article v-for="w in visible" :key="w.id" class="panel website-card">
+        <button
+          class="website-card-main"
+          :aria-label="'配置 ' + websiteDefinition(w.adapterId)?.name"
+          @click="detail(w)"
+        >
+          <div class="website-card-top">
+            <span class="source-logo large"
+              >{{ websiteDefinition(w.adapterId)?.mark }}<span>›</span></span
+            ><span class="result-pill" :class="statusClass(w)"
+              ><i class="status-dot" />{{ status(w) }}</span
+            >
+          </div>
+          <h2>{{ websiteDefinition(w.adapterId)?.name }}</h2>
+          <p class="website-domain">{{ websiteDefinition(w.adapterId)?.domain }}</p>
+          <p class="website-description">{{ websiteDefinition(w.adapterId)?.description }}</p>
+          <div class="chip-line">
+            <span class="plain-chip">{{ websiteDefinition(w.adapterId)?.sourceLabel }}</span
+            ><span class="plain-chip">内置适配</span>
+          </div>
+          <dl class="website-card-facts">
+            <div>
+              <dt>采集间隔</dt>
+              <dd>{{ w.interval }}<small> 秒</small></dd>
+            </div>
+            <div>
+              <dt>关联任务</dt>
+              <dd>{{ linked(w.id).length }}<small> 个</small></dd>
+            </div>
+          </dl>
+          <p class="website-last">
+            <Icon name="clock" :size="14" />{{
+              w.lastSuccess ? '最近成功 ' + formatTime(w.lastSuccess) : '尚无采集记录'
+            }}
+          </p>
+        </button>
+        <div class="website-card-footer">
+          <label
+            ><Toggle
+              :model-value="w.enabled"
+              :label="websiteDefinition(w.adapterId)?.name + ' 采集启用状态'"
+              @update:model-value="(value) => toggle(w, value)"
+            /><span>{{ w.enabled ? '已启用' : '已暂停' }}</span></label
+          ><button
+            class="text-link"
+            :aria-label="'查看 ' + websiteDefinition(w.adapterId)?.name + ' 配置'"
+            @click="detail(w)"
+          >
+            查看配置<Icon name="arrow" :size="15" />
+          </button>
+        </div>
+      </article>
+      <button v-if="!search && filter === 'all'" class="website-add-card" @click="catalog">
+        <span class="add-round"><Icon name="plus" :size="25" /></span><strong>添加监控网站</strong
+        ><span>从内置网站库选择新的关注</span>
+      </button>
+    </div>
+    <div v-if="!visible.length" class="panel empty-state">
+      <Icon name="search" :size="28" />
+      <h3>没有匹配的网站</h3>
+      <p>换一个关键词，或查看全部状态。</p>
+      <button class="button" @click="((search = ''), (filter = 'all'))">清除筛选</button>
+    </div>
+  </template>
+  <div class="website-bottom-note">
+    <Icon name="shield" :size="19" />
+    <p>
+      每个网站独立采集，同一网站下的任务共享来源。<br /><span
+        >当前可添加 NodeSeek；更多网站将在完成适配后加入内置库。</span
+      >
+    </p>
+    <button v-if="!state.websites.length" class="text-link" @click="loadExampleWorkspace">
+      载入示例工作台
+    </button>
+  </div>
+
+  <dialog
+    ref="panel"
+    class="website-drawer"
+    :aria-label="mode === 'catalog' ? '添加内置网站' : (definition?.name || '') + ' 网站配置'"
+    @cancel.prevent="requestClose"
+    @click="
+      (event) => {
+        if (event.target === panel) requestClose()
+      }
+    "
+  >
+    <div class="website-drawer-shell">
+      <header class="website-drawer-header">
+        <div>
+          <p class="eyebrow">
+            {{ mode === 'catalog' ? 'BUILT FOR SEEKBELL' : 'WEBSITE SETTINGS' }}
+          </p>
+          <h2>{{ mode === 'catalog' ? '添加内置网站' : definition?.name }}</h2>
+        </div>
+        <button class="icon-button" aria-label="关闭网站面板" @click="requestClose">
+          <Icon name="close" :size="21" />
+        </button>
+      </header>
+      <div v-if="mode === 'catalog'" class="website-drawer-body">
+        <p class="drawer-intro">选择你真正关注的网站。添加后可独立调整采集频率，随时暂停或移除。</p>
+        <label class="search-input catalog-search"
+          ><Icon name="search" :size="17" /><input
+            v-model="catalogSearch"
+            aria-label="搜索内置网站"
+            placeholder="搜索内置网站…"
+        /></label>
+        <div class="catalog-caption">
+          <span>可用网站</span><span>{{ available.length }} 个</span>
+        </div>
+        <article v-for="item in available" :key="item.id" class="catalog-card">
+          <div class="catalog-identity">
+            <span class="source-logo">{{ item.mark }}<span>›</span></span>
+            <div>
+              <h3>{{ item.name }}</h3>
+              <p>{{ item.domain }}</p>
+            </div>
+            <span class="small-badge neutral">内置</span>
+          </div>
+          <p>{{ item.description }}</p>
+          <div class="chip-line">
+            <span v-for="cap in item.capabilities" :key="cap" class="plain-chip">{{ cap }}</span>
+          </div>
+          <div class="catalog-action">
+            <span><Icon name="rss" :size="15" />{{ item.sourceLabel }}</span
+            ><button
+              class="button primary"
+              :disabled="state.websites.some((w) => w.adapterId === item.id)"
+              @click="install(item.id)"
+            >
+              {{
+                state.websites.some((w) => w.adapterId === item.id) ? '已添加' : '添加 ' + item.name
+              }}
+            </button>
+          </div>
+        </article>
+        <div v-if="!available.length" class="empty-state">
+          <Icon name="search" :size="26" />
+          <h3>没有找到内置网站</h3>
+          <p>当前仅提供已完成适配的网站。</p>
+          <button class="button" @click="catalogSearch = ''">清除搜索</button>
+        </div>
+        <div class="catalog-future">
+          <Icon name="layers" :size="22" />
+          <div>
+            <strong>让更多关注，陆续加入</strong>
+            <p>网站库会随适配能力扩展。这里不接受任意网址，也不会把尚未支持的网站列为可用。</p>
+          </div>
+        </div>
+      </div>
+      <template v-else-if="selected && definition">
+        <div class="website-drawer-body">
+          <div class="drawer-website-status">
+            <div>
+              <span class="result-pill" :class="statusClass(selected)"
+                ><i class="status-dot" />{{ status(selected) }}</span
+              >
+              <p>{{ definition.description }}</p>
+            </div>
+            <Toggle
+              :model-value="selected.enabled"
+              :label="definition.name + ' 采集启用状态'"
+              @update:model-value="(value) => toggle(selected!, value)"
+            />
+          </div>
+          <section class="drawer-section">
+            <h3>网站与来源</h3>
+            <div class="website-source">
+              <Icon name="rss" :size="20" />
+              <div>
+                <strong>{{ definition.sourceLabel }}</strong>
+                <p>{{ definition.sourceUrl }}</p>
+              </div>
+            </div>
+            <div class="chip-line">
+              <span v-for="cap in definition.capabilities" :key="cap" class="plain-chip">{{
+                cap
+              }}</span>
+            </div>
+            <p class="field-help">{{ definition.limits }}</p>
+          </section>
+          <section class="drawer-section">
+            <h3>采集配置</h3>
+            <label class="field-label" for="source-interval">共享采集间隔</label>
+            <div class="unit-input">
+              <input
+                id="source-interval"
+                v-model.number="draft.interval"
+                class="text-input"
+                type="number"
+                min="10"
+                max="3600"
+                step="1"
+                :aria-invalid="!!error"
+              /><span>秒</span>
+            </div>
+            <p class="field-help">
+              仅作用于 {{ definition.name }}，该网站下的全部任务共享此频率。10
+              秒为候选默认值，不代表官方限频保证。
+            </p>
+            <p v-if="error" class="inline-error" role="alert">{{ error }}</p>
+            <div class="info-note">
+              <Icon name="shield" :size="17" />
+              <p>
+                首次启用或暂停后恢复时建立当前基线，不推送已有帖子。请求不重叠，异常时退避重试。
+              </p>
+            </div>
+          </section>
+          <section class="drawer-section">
+            <div class="drawer-section-title">
+              <h3>连接测试</h3>
+              <span class="small-badge neutral">模拟</span>
+            </div>
+            <p class="field-help">只验证连接状态的界面反馈，不请求真实网站，不开启采集。</p>
+            <div class="website-test-row">
+              <label class="sr-only" for="source-scenario">模拟场景</label
+              ><select
+                id="source-scenario"
+                v-model="scenario"
+                class="text-input"
+                :disabled="testing"
+              >
+                <option value="success">RSS 连接成功</option>
+                <option value="error">服务暂时不可用</option></select
+              ><button class="button" :disabled="testing" @click="test">
+                <Icon name="refresh" :size="16" :class="{ spinning: testing }" />{{
+                  testing ? '测试中…' : '测试连接（模拟）'
+                }}
+              </button>
+            </div>
+            <div
+              v-if="testResult"
+              class="match-result"
+              :class="selected.health === 'healthy' ? 'yes' : 'unknown'"
+              role="status"
+            >
+              {{ testResult }}
+            </div>
+            <p class="small-note">最近测试：{{ formatTime(selected.lastTest) }}</p>
+          </section>
+          <section class="drawer-section">
+            <div class="drawer-section-title">
+              <h3>
+                关联任务 <span class="count-badge">{{ linked(selected.id).length }}</span>
+              </h3>
+              <button class="text-link" @click="tasks">
+                管理任务<Icon name="arrow" :size="14" />
+              </button>
+            </div>
+            <p v-if="!linked(selected.id).length" class="field-help">
+              还没有关联任务。添加任务时，选择这个网站作为监控来源。
+            </p>
+            <div v-for="t in linked(selected.id)" :key="t.id" class="website-linked-task">
+              <Icon :name="t.icon" :size="16" /><span>{{ t.name }}</span
+              ><span class="muted">{{ t.enabled ? '已启用' : '已暂停' }}</span>
+            </div>
+          </section>
+          <section class="website-remove">
+            <div>
+              <h3>移除网站</h3>
+              <p>
+                {{
+                  linked(selected.id).length
+                    ? '请先移除关联任务，再移除网站。历史记录会保留。'
+                    : '已有内容与投递历史保留，之后可以重新添加。'
+                }}
+              </p>
+            </div>
+            <button
+              class="button danger-text"
+              :disabled="!!linked(selected.id).length"
+              @click="remove"
+            >
+              移除网站
+            </button>
+          </section>
+        </div>
+        <footer class="website-drawer-footer">
+          <span>{{ dirty ? '有未保存的修改' : '设置已保存' }}</span
+          ><button class="button" @click="requestClose">关闭</button
+          ><button class="button primary" @click="save">
+            <Icon name="check" :size="16" />保存设置
+          </button>
+        </footer>
+      </template>
+    </div>
+  </dialog>
 </template>

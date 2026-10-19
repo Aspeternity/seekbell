@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import Icon from './components/Icon.vue'
 import Toggle from './components/Toggle.vue'
-import { state, formatTime } from './store'
+import { state, formatTime, websiteName, loadExampleWorkspace } from './store'
 const targets = computed(() => state.targets)
 const attentionCount = computed(
   () =>
@@ -31,7 +31,10 @@ const filtered = computed(() =>
 )
 const daily = [0, 1, 0, 0, 1, 0, 2, 1, 3, 2, 1, 4, 2, 3, 1, 2, 4, 2, 1, 3, 2, 4, 2, 1]
 const weekly = [29, 36, 24, 48, 32, 57, 42]
-const chart = computed(() => (range.value === '24h' ? daily : weekly))
+const chart = computed(() => {
+  const values = range.value === '24h' ? daily : weekly
+  return state.posts.length ? values : values.map(() => 0)
+})
 const total = computed(() => chart.value.reduce((sum, value) => sum + value, 0))
 const graph = computed(() =>
   chart.value
@@ -98,23 +101,36 @@ const activities = [
   </section>
   <div class="overview-meta">
     <span
-      ><span class="status-dot green-dot" />{{
-        !state.source.enabled
-          ? '采集已暂停'
-          : state.source.health === 'error'
-            ? '来源异常'
-            : '监控运行中'
-      }}
-      <span class="separator">/</span> <strong>NodeSeek</strong> 官方 RSS</span
-    ><span class="muted">演示快照 · 10 月 19 日 14:30</span>
+      ><span class="status-dot" />{{
+        state.websites.length
+          ? '已添加 ' + state.websites.length + ' 个网站'
+          : '等待添加第一个网站'
+      }}<span class="separator">/</span
+      >{{ state.websites.filter((w) => w.enabled).length }} 个已启用</span
+    ><span class="muted">{{
+      state.posts.length ? '演示快照 · 10 月 19 日 14:30' : '你的工作空间已就绪'
+    }}</span>
   </div>
-  <div v-if="!state.source.enabled || state.source.health === 'error'" class="warning-note">
+  <section v-if="!state.websites.length" class="panel overview-welcome">
+    <span class="icon-tile orange"><Icon name="globe" /></span>
+    <div>
+      <h2>先选择你想关注的网站</h2>
+      <p>从内置网站库按需添加，再创建规则和通知。首次部署不会默认启用任何网站。</p>
+    </div>
+    <button class="button primary" @click="emit('navigate', '/websites')">
+      添加网站<Icon name="plus" :size="16" />
+    </button>
+  </section>
+  <div
+    v-else-if="state.websites.some((w) => !w.enabled || w.health === 'error')"
+    class="warning-note"
+  >
     <Icon name="alert" :size="18" /><span>{{
-      !state.source.enabled
-        ? '共享来源已暂停，当前不会采集新帖。'
-        : '来源连接异常，请检查采集设置。'
+      state.websites.some((w) => w.enabled && w.health === 'error')
+        ? '来源连接异常，请检查采集设置。'
+        : '部分网站已暂停，关联任务暂不采集新帖。'
     }}</span
-    ><button class="text-link" @click="emit('navigate', '/websites')">查看来源</button>
+    ><button class="text-link" @click="emit('navigate', '/websites')">查看网站</button>
   </div>
   <section class="stats-grid" aria-label="概览统计">
     <article class="stat-card">
@@ -140,7 +156,7 @@ const activities = [
     <article class="stat-card">
       <div class="stat-label">成功投递<Icon name="send" :size="18" /></div>
       <div class="stat-value">
-        {{ range === '24h' ? 38 : 249 }}<span>次</span
+        {{ state.posts.length ? (range === '24h' ? 38 : 249) : 0 }}<span>次</span
         ><span class="mini-bars" aria-hidden="true"
           ><i
             v-for="(height, i) in [10, 18, 13, 22, 16, 25, 21, 30, 25]"
@@ -251,48 +267,41 @@ const activities = [
     </section>
     <section class="panel source-panel">
       <div class="panel-heading">
-        <h2>采集状态</h2>
-        <span class="live-label"
-          ><span class="status-dot green-dot" />
-          {{
-            !state.source.enabled ? '已暂停' : state.source.health === 'error' ? '异常' : '正常'
+        <h2>网站采集</h2>
+        <button class="text-link" @click="emit('navigate', '/websites')">
+          管理网站<Icon name="arrow" :size="14" />
+        </button>
+      </div>
+      <div v-if="!state.websites.length" class="empty-state">
+        <Icon name="globe" :size="30" />
+        <h3>还没有监控网站</h3>
+        <p>添加后，在这里查看各个网站的状态。</p>
+      </div>
+      <button
+        v-for="w in state.websites"
+        :key="w.id"
+        class="overview-website-row"
+        @click="emit('navigate', '/websites')"
+      >
+        <span class="icon-tile orange"><Icon name="globe" :size="18" /></span
+        ><span
+          ><strong>{{ websiteName(w.id) }}</strong
+          ><small>{{ w.lastSuccess ? formatTime(w.lastSuccess) : '尚无采集记录' }}</small></span
+        ><span
+          class="result-pill"
+          :class="!w.enabled ? 'neutral' : w.health === 'healthy' ? 'yes' : 'unknown'"
+          >{{
+            !w.enabled
+              ? '已暂停'
+              : w.health === 'error'
+                ? '异常'
+                : w.health === 'healthy'
+                  ? '正常'
+                  : '待采集'
           }}</span
         >
-      </div>
-      <div class="source-identity">
-        <div class="source-logo">N<span>›</span></div>
-        <div>
-          <h3>NodeSeek</h3>
-          <p>官方 RSS · 唯一采集来源</p>
-        </div>
-        <Icon name="globe" :size="18" />
-      </div>
-      <dl class="source-data">
-        <div>
-          <dt>最近成功采集</dt>
-          <dd>{{ formatTime(state.source.lastSuccess) }}</dd>
-        </div>
-        <div>
-          <dt>采集间隔</dt>
-          <dd>{{ state.source.interval }} <span>秒</span></dd>
-        </div>
-        <div>
-          <dt>本日发现新帖</dt>
-          <dd>286 <span>条</span></dd>
-        </div>
-      </dl>
-      <div class="uptime-bars" aria-label="最近 30 次模拟采集均成功">
-        <i
-          v-for="n in 30"
-          :key="n"
-          :class="{ 'is-error': n === 30 && state.source.health === 'error' }"
-        />
-      </div>
-      <div class="uptime-label">
-        <span>最近 30 次采集</span
-        ><span>{{ state.source.health === 'error' ? '最近一次失败' : '全部成功' }}</span>
-      </div>
-      <p class="source-note"><Icon name="shield" :size="15" />全部任务共享采集，不重复请求</p>
+      </button>
+      <p class="source-note"><Icon name="shield" :size="15" />各网站独立配置，同站任务共享采集</p>
     </section>
   </div>
   <section class="panel tasks-panel">
@@ -323,7 +332,9 @@ const activities = [
         <span class="icon-tile" :class="task.color"><Icon :name="task.icon" /></span
         ><span
           ><strong>{{ task.name }}</strong
-          ><small>{{ task.description || 'NodeSeek · 新帖监控' }}</small></span
+          ><small>{{
+            task.description || websiteName(task.websiteId) + ' · 新帖监控'
+          }}</small></span
         >
       </button>
       <div class="target-icons">
@@ -355,7 +366,12 @@ const activities = [
         <Icon name="arrow" :size="17" />
       </button>
     </div>
-    <div v-if="!filtered.length" class="empty-state">
+    <div v-if="!tasks.length" class="empty-state">
+      <Icon name="layers" :size="28" />
+      <h3>还没有监控任务</h3>
+      <p>添加网站后，为你关心的内容设置一条规则。</p>
+    </div>
+    <div v-else-if="!filtered.length" class="empty-state">
       <Icon name="search" :size="28" />
       <h3>没有找到匹配的任务</h3>
       <p>试试其他关键词，或查看全部状态。</p>
@@ -374,7 +390,11 @@ const activities = [
       </div>
       <span class="small-badge neutral">模拟内容</span>
     </div>
-    <div v-for="(item, index) in activities" :key="item.title" class="activity-row">
+    <div
+      v-for="(item, index) in state.posts.length ? activities : []"
+      :key="item.title"
+      class="activity-row"
+    >
       <span class="timeline-dot" :class="item.color"><Icon :name="item.icon" :size="17" /></span>
       <div class="activity-copy">
         <button
@@ -398,8 +418,12 @@ const activities = [
       ><time>{{ item.time }}</time>
     </div>
   </section>
+  <div v-if="!state.posts.length" class="empty-state">
+    <p>还没有命中记录。也可以先载入合成样例，体验完整工作台。</p>
+    <button class="text-link" @click="loadExampleWorkspace">载入示例工作台</button>
+  </div>
   <footer class="page-footer">
     <span><Icon name="bell" :size="14" /> SeekBell · 留意你关心的</span
-    ><span>本地交互原型 <span class="separator">·</span> v0.2</span>
+    ><span>本地交互原型 <span class="separator">·</span> v0.3</span>
   </footer>
 </template>

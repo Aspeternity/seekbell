@@ -58,7 +58,7 @@ async function submit() {
       <div class="auth-story-copy">
         <p class="eyebrow">LESS SCROLLING. MORE LIVING.</p>
         <h2>让消息找到你。<br />把时间留给生活。</h2>
-        <p>从 NodeSeek 的新帖中，留意你在意的。<br />几条简单规则，一份属于你的信息流。</p>
+        <p>从你关注的网站中，留意你在意的。<br />几条简单规则，一份属于你的信息流。</p>
         <div class="signal-illustration" aria-hidden="true">
           <span class="signal-ring ring-one" /><span class="signal-ring ring-two" />
           <div class="signal-bell"><Icon name="bell" :size="44" /></div>

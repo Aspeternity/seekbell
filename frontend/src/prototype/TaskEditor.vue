@@ -5,12 +5,17 @@ import Toggle from './components/Toggle.vue'
 import TagInput from './components/TagInput.vue'
 import { evaluate, historySamples, statusLabel } from './model'
 import type { Sample, Task } from './model'
-import { state } from './store'
+import { state, websiteName } from './store'
 const targets = computed(() => state.targets)
 const props = withDefaults(defineProps<{ task: Task; returnLabel?: string }>(), {
   returnLabel: '返回概览',
 })
-const emit = defineEmits<{ save: [task: Task]; cancel: []; dirty: [value: boolean] }>()
+const emit = defineEmits<{
+  save: [task: Task]
+  cancel: []
+  navigate: [path: string]
+  dirty: [value: boolean]
+}>()
 const draft = reactive<Task>(JSON.parse(JSON.stringify(props.task)))
 const baseline = JSON.stringify(draft)
 const errors = ref<string[]>([])
@@ -59,6 +64,8 @@ watch(
 )
 function save() {
   errors.value = []
+  if (!state.websites.some((w) => w.id === draft.websiteId))
+    errors.value.push('请选择已添加的监控网站。')
   if (!draft.name.trim()) errors.value.push('请填写任务名称。')
   if (!draft.targets.length) errors.value.push('请至少选择一个通知目标。')
   if (draft.targets.some((id) => !state.targets.some((t) => t.id === id)))
@@ -102,7 +109,7 @@ function jump(id: string) {
       <div>
         <div class="editor-title-line">
           <h1 tabindex="-1">{{ draft.id ? '编辑监控任务' : '新建监控任务' }}</h1>
-          <span class="small-badge neutral">NodeSeek</span>
+          <span class="small-badge neutral">{{ websiteName(draft.websiteId) }}</span>
         </div>
         <p class="subtitle">告诉 SeekBell，你想留意什么。</p>
       </div>
@@ -173,14 +180,30 @@ function jump(id: string) {
             placeholder="这项任务想关注什么？"
             maxlength="160"
           />
-          <div class="source-fixed">
-            <span class="source-logo mini">N<span>›</span></span>
-            <div>
-              <strong>NodeSeek</strong>
-              <p>官方 RSS · 标题、摘要、作者与版块</p>
-            </div>
-            <span class="small-badge neutral">内置来源</span>
-          </div>
+          <label class="field-label" for="task-website">监控网站</label>
+          <select
+            id="task-website"
+            v-model="draft.websiteId"
+            class="text-input"
+            :disabled="!!draft.id"
+          >
+            <option v-for="w in state.websites" :key="w.id" :value="w.id">
+              {{ websiteName(w.id) }}{{ w.enabled ? '' : ' · 已暂停' }}
+            </option>
+          </select>
+          <p class="field-help">
+            {{
+              draft.id
+                ? '任务所属网站固定；如需更换，请创建新任务，避免混用历史记录。'
+                : '只显示已添加的网站。采集频率在网站配置中统一设置。'
+            }}
+          </p>
+          <p
+            v-if="!state.websites.find((w) => w.id === draft.websiteId)?.enabled"
+            class="warning-note"
+          >
+            该网站已暂停。任务可以保存，启用网站后才会采集新帖。
+          </p>
         </div>
       </section>
       <section id="rules" class="panel form-panel">
@@ -359,7 +382,9 @@ function jump(id: string) {
           <h2>这条规则，会做什么？</h2>
           <span class="live-label">实时</span>
         </div>
-        <p>当 <strong>NodeSeek</strong> 出现新帖，</p>
+        <p>
+          当 <strong>{{ websiteName(draft.websiteId) }}</strong> 出现新帖，
+        </p>
         <div class="summary-quote">{{ summary }}。</div>
         <p v-if="draft.exclude.length">
           同时排除 <strong>{{ draft.exclude.join('、') }}</strong

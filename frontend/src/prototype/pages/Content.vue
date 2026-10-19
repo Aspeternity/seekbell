@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import Icon from '../components/Icon.vue'
-import { state, formatTime, deliveryLabels } from '../store'
+import { state, websiteName, formatTime, deliveryLabels } from '../store'
 import { statusLabel } from '../model'
 const props = defineProps<{ selectedId?: string }>()
 const emit = defineEmits<{ navigate: [path: string] }>()
@@ -53,13 +53,14 @@ const deliveries = computed(() => state.deliveries.filter((r) => r.postId === pr
           <p class="eyebrow">A SIGNAL WORTH KEEPING</p>
           <h1 tabindex="-1" class="article-heading">{{ selected.title }}</h1>
           <p class="subtitle">
-            NodeSeek · {{ selected.author || '作者缺失' }} · {{ selected.category || '版块缺失' }} ·
+            {{ websiteName(selected.websiteId) }} · {{ selected.author || '作者缺失' }} ·
+            {{ selected.category || '版块缺失' }} ·
             {{ formatTime(selected.time) }}
           </p>
         </div>
         <span class="result-pill" :class="selected.status">{{ statusLabel[selected.status] }}</span>
       </section>
-      <div class="website-layout">
+      <div class="detail-layout">
         <div class="side-stack">
           <section class="panel reading-panel">
             <h2>RSS 内容快照</h2>
