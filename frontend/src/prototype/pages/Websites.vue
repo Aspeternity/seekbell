@@ -4,16 +4,19 @@ import Icon from '../components/Icon.vue'
 import Toggle from '../components/Toggle.vue'
 import {
   state,
+  isLive,
+  saveWebsite,
   notify,
   formatTime,
   confirmAction,
   addWebsite,
   removeWebsite,
   loadExampleWorkspace,
-} from '../store'
+} from '@workspace'
 import { websiteCatalog, websiteDefinition } from '../websites'
 import type { InstalledWebsite } from '../websites'
 const emit = defineEmits<{ dirty: [value: boolean]; navigate: [path: string] }>()
+const mutating = ref(false)
 const search = ref(''),
   filter = ref('all'),
   catalogSearch = ref('')
@@ -33,11 +36,13 @@ watch(dirty, (value) => emit('dirty', value))
 const status = (w: InstalledWebsite) =>
   !w.enabled
     ? '已暂停'
-    : w.health === 'error'
-      ? '连接异常'
-      : w.health === 'healthy'
-        ? '采集正常'
-        : '等待首次采集'
+    : isLive
+      ? '尚未启动采集'
+      : w.health === 'error'
+        ? '连接异常'
+        : w.health === 'healthy'
+          ? '采集正常'
+          : '等待首次采集'
 const statusClass = (w: InstalledWebsite) =>
   !w.enabled ? 'neutral' : w.health === 'healthy' ? 'yes' : 'unknown'
 const linked = (id: string) => state.tasks.filter((t) => t.websiteId === id)
@@ -98,24 +103,51 @@ function requestClose() {
     )
   else close()
 }
-function install(id: string) {
-  const w = addWebsite(id)
-  if (w) close()
+async function install(id: string) {
+  if (mutating.value) return
+  mutating.value = true
+  error.value = ''
+  try {
+    const w = await addWebsite(id)
+    if (w) close()
+  } catch (e) {
+    error.value = (e as Error).message
+  } finally {
+    mutating.value = false
+  }
 }
-function save() {
+async function save() {
+  if (mutating.value) return
   if (!selected.value) return
   if (!Number.isInteger(draft.interval) || draft.interval < 10 || draft.interval > 3600) {
     error.value = '采集间隔应为 10–3600 之间的整数秒。'
     return
   }
-  selected.value.interval = draft.interval
-  baseline.value = draft.interval
-  error.value = ''
-  notify('网站设置已保存在当前浏览器。')
+  mutating.value = true
+  try {
+    await saveWebsite(selected.value, draft.interval)
+    baseline.value = draft.interval
+    error.value = ''
+    notify(isLive ? '网站配置已保存到服务端；采集调度尚未接入。' : '网站设置已保存在当前浏览器。')
+  } catch (e) {
+    error.value = (e as Error).message
+  } finally {
+    mutating.value = false
+  }
 }
 function toggle(w: InstalledWebsite, enabled: boolean) {
-  const apply = () => {
-    w.enabled = enabled
+  const apply = async () => {
+    if (mutating.value) return
+    mutating.value = true
+    try {
+      await saveWebsite(w, w.interval, enabled)
+    } catch (e) {
+      notify((e as Error).message)
+      return
+    } finally {
+      mutating.value = false
+    }
+    if (isLive) return
     notify(
       enabled
         ? '网站已启用，将以当前条目建立基线，不补发历史帖子。'
@@ -162,8 +194,16 @@ function remove() {
   confirmAction(
     '移除 ' + definition.value?.name + '？',
     '移除该网站的采集配置，已有内容与投递历史保留。之后可以从内置网站库重新添加。',
-    () => {
-      if (removeWebsite(w.id)) close()
+    async () => {
+      if (mutating.value) return
+      mutating.value = true
+      try {
+        if (await removeWebsite(w.id)) close()
+      } catch (e) {
+        error.value = (e as Error).message
+      } finally {
+        mutating.value = false
+      }
     },
     '确认移除',
   )
@@ -315,7 +355,11 @@ onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
         >当前可添加 NodeSeek；更多网站将在完成适配后加入内置库。</span
       >
     </p>
-    <button v-if="!state.websites.length" class="text-link" @click="loadExampleWorkspace">
+    <button
+      v-if="!isLive && !state.websites.length"
+      class="text-link"
+      @click="loadExampleWorkspace"
+    >
       载入示例工作台
     </button>
   </div>
@@ -344,6 +388,7 @@ onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
           <Icon name="close" :size="21" />
         </button>
       </header>
+      <p v-if="error && mode === 'catalog'" class="form-errors" role="alert">{{ error }}</p>
       <div v-if="mode === 'catalog'" class="website-drawer-body">
         <p class="drawer-intro">选择你真正关注的网站。添加后可独立调整采集频率，随时暂停或移除。</p>
         <label class="search-input catalog-search"
@@ -373,7 +418,7 @@ onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
               <span><Icon name="rss" :size="15" />{{ item.sourceLabel }}</span
               ><button
                 class="button primary"
-                :disabled="state.websites.some((w) => w.adapterId === item.id)"
+                :disabled="mutating || state.websites.some((w) => w.adapterId === item.id)"
                 @click="install(item.id)"
               >
                 {{
@@ -453,11 +498,15 @@ onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
             <div class="info-note">
               <Icon name="shield" :size="17" />
               <p>
-                首次启用或暂停后恢复时建立当前基线，不推送已有帖子。请求不重叠，异常时退避重试。
+                {{
+                  isLive
+                    ? '配置会保存到服务端。采集调度及连接测试尚未接入，不会请求真实网站。'
+                    : '首次启用或暂停后恢复时建立当前基线，不推送已有帖子。请求不重叠，异常时退避重试。'
+                }}
               </p>
             </div>
           </section>
-          <section class="drawer-section">
+          <section v-if="!isLive" class="drawer-section">
             <div class="drawer-section-title">
               <h3>连接测试</h3>
               <span class="small-badge neutral">模拟</span>
@@ -529,7 +578,7 @@ onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
         <footer class="website-drawer-footer">
           <span>{{ dirty ? '有未保存的修改' : '设置已保存' }}</span
           ><button class="button" @click="requestClose">关闭</button
-          ><button class="button primary" @click="save">
+          ><button class="button primary" :disabled="mutating" @click="save">
             <Icon name="check" :size="16" />保存设置
           </button>
         </footer>

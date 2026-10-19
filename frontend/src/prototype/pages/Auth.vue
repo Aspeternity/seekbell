@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import Icon from '../components/Icon.vue'
-import { account, setSession, updateAccount, verifyPassword } from '../store'
+import { account, authenticate, isLive } from '@workspace'
 const props = defineProps<{ setup: boolean }>()
 const emit = defineEmits<{ navigate: [path: string] }>()
 const username = ref(props.setup ? '' : account.username),
@@ -32,17 +32,12 @@ async function submit() {
   }
   busy.value = true
   try {
-    if (props.setup) await updateAccount(username.value, password.value)
-    else if (username.value !== account.username || !(await verifyPassword(password.value))) {
-      error.value = '用户名或演示密码不正确。'
-      return
-    }
-    setSession(true)
+    await authenticate(props.setup, username.value, password.value)
     password.value = ''
     confirmation.value = ''
     emit('navigate', '/')
-  } catch {
-    error.value = '当前浏览器无法完成演示登录，请重试。'
+  } catch (e) {
+    error.value = (e as Error).message || '无法完成登录，请重试。'
   } finally {
     busy.value = false
   }
@@ -75,11 +70,20 @@ async function submit() {
     </section>
     <main class="auth-main">
       <div class="auth-box">
-        <span class="demo-badge"><span class="status-dot" />本地演示 · 非真实认证</span
+        <span class="demo-badge"
+          ><span class="status-dot" />{{
+            isLive ? '自托管工作空间' : '本地演示 · 非真实认证'
+          }}</span
         ><template v-if="setup && account.created"
           ><div class="auth-success-icon"><Icon name="shield" :size="32" /></div>
           <h1 tabindex="-1">管理员已经就绪</h1>
-          <p class="auth-subtitle">此演示工作空间已创建唯一管理员，不再开放注册。</p>
+          <p class="auth-subtitle">
+            {{
+              isLive
+                ? '此工作空间已创建唯一管理员，请登录。'
+                : '此演示工作空间已创建唯一管理员，不再开放注册。'
+            }}
+          </p>
           <button class="button primary auth-submit" @click="emit('navigate', '/login')">
             前往登录<Icon name="arrow" :size="17" /></button></template
         ><template v-else
@@ -102,14 +106,14 @@ async function submit() {
                 placeholder="例如：admin"
                 maxlength="32" /></label
             ><label
-              >{{ setup ? '设置演示密码' : '演示密码' }}
+              >{{ isLive ? (setup ? '设置密码' : '密码') : setup ? '设置演示密码' : '演示密码' }}
               <div class="password-field">
                 <input
                   v-model="password"
                   :type="visible ? 'text' : 'password'"
                   class="text-input"
                   :autocomplete="setup ? 'new-password' : 'current-password'"
-                  placeholder="请输入演示密码"
+                  :placeholder="isLive ? '请输入密码' : '请输入演示密码'"
                   maxlength="128"
                 /><button
                   class="icon-button"
@@ -136,24 +140,28 @@ async function submit() {
               }}<Icon name="arrow" :size="17" />
             </button>
           </form>
-          <div v-if="!setup && !account.created" class="demo-login-note">
+          <div v-if="!isLive && !setup && !account.created" class="demo-login-note">
             <Icon name="help" :size="17" />
             <div>
               <strong>演示账号</strong>
               <p>用户名：{{ account.username }}<br />密码：SeekBell2026!</p>
             </div>
           </div>
-          <p class="auth-switch" v-if="!account.created">
+          <p class="auth-switch" v-if="!isLive && !account.created">
             <button class="text-link" @click="emit('navigate', setup ? '/login' : '/setup')">
               {{ setup ? '体验现成演示账号' : '体验首次初始化' }}
             </button>
           </p>
-          <p v-else-if="!setup" class="small-note spaced">
+          <p v-else-if="!isLive && !setup" class="small-note spaced">
             请使用你在本浏览器创建的演示账号。真实服务的账号恢复流程不属于本原型。
           </p></template
         >
         <p class="auth-privacy">
-          <Icon name="shield" :size="15" />请勿使用真实账号或密码。演示不连接服务端。
+          <Icon name="shield" :size="15" />{{
+            isLive
+              ? '账号保存在当前服务，密码不会回传。'
+              : '请勿使用真实账号或密码。演示不连接服务端。'
+          }}
         </p>
       </div>
       <footer>SeekBell · 留意你关心的</footer>

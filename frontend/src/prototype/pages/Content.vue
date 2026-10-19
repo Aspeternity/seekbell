@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import Icon from '../components/Icon.vue'
-import { state, websiteName, formatTime, deliveryLabels } from '../store'
+import { state, websiteName, formatTime, deliveryLabels } from '@workspace'
 import { statusLabel } from '../model'
 const props = defineProps<{ selectedId?: string }>()
 const emit = defineEmits<{ navigate: [path: string] }>()

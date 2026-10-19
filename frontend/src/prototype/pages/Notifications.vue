@@ -4,6 +4,7 @@ import Icon from '../components/Icon.vue'
 import Toggle from '../components/Toggle.vue'
 import {
   state,
+  isLive,
   channelMeta,
   deliveryLabels,
   formatTime,
@@ -13,8 +14,8 @@ import {
   confirmAction,
   setTargetEnabled,
   cancelTargetRetries,
-} from '../store'
-import type { Target, Delivery, DeliveryStatus } from '../store'
+} from '@workspace'
+import type { Target, Delivery, DeliveryStatus } from '@workspace'
 const props = withDefaults(defineProps<{ tab?: string; recordId?: string }>(), { tab: 'targets' })
 const emit = defineEmits<{ navigate: [path: string] }>()
 const query = ref(''),
@@ -229,6 +230,9 @@ function canRetry(record: Delivery) {
         {{ item.label }}<span>{{ item.count }}</span>
       </button>
     </nav>
+    <p v-if="isLive" class="info-note">
+      通知配置已接入加密保存；发送、独立测试、历史查询及目标删除将在后续阶段接入。
+    </p>
     <template v-if="tab === 'targets'"
       ><div class="filter-toolbar free-toolbar">
         <label class="search-input grow"
@@ -261,7 +265,7 @@ function canRetry(record: Delivery) {
           </p>
           <div class="credential-status">
             <Icon name="shield" :size="15" />连接配置已隐藏 ·
-            {{ target.configured ? '演示已配置' : '未配置' }}
+            {{ target.configured ? (isLive ? '已加密配置' : '演示已配置') : '未配置' }}
           </div>
           <div class="target-card-meta">
             <span
@@ -272,11 +276,12 @@ function canRetry(record: Delivery) {
             ><span>{{ target.summary ? '包含摘要' : '仅标题与基础信息' }}</span>
           </div>
           <div class="notification-card-actions">
-            <button class="button" @click="openTest(target)">
+            <button v-if="!isLive" class="button" @click="openTest(target)">
               <Icon name="play" :size="14" />测试</button
             ><button class="button" @click="emit('navigate', '/target/' + target.id)">编辑</button
             ><button
               class="icon-button danger-text"
+              v-if="!isLive"
               :aria-label="'删除' + target.name"
               @click="remove(target)"
             >

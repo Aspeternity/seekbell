@@ -5,11 +5,14 @@ import Toggle from './components/Toggle.vue'
 import TagInput from './components/TagInput.vue'
 import { evaluate, historySamples, statusLabel } from './model'
 import type { Sample, Task } from './model'
-import { state, websiteName } from './store'
+import { state, websiteName, isLive, evaluateTask } from '@workspace'
 const targets = computed(() => state.targets)
-const props = withDefaults(defineProps<{ task: Task; returnLabel?: string }>(), {
-  returnLabel: '返回概览',
-})
+const props = withDefaults(
+  defineProps<{ task: Task; returnLabel?: string; saving?: boolean; saveError?: string }>(),
+  {
+    returnLabel: '返回概览',
+  },
+)
 const emit = defineEmits<{
   save: [task: Task]
   cancel: []
@@ -19,6 +22,8 @@ const emit = defineEmits<{
 const draft = reactive<Task>(JSON.parse(JSON.stringify(props.task)))
 const baseline = JSON.stringify(draft)
 const errors = ref<string[]>([])
+const testing = ref(false),
+  testError = ref('')
 const testMode = ref('manual')
 const testResult = ref<ReturnType<typeof evaluate> | null>(null)
 const historyResults = ref<{ sample: Sample; result: ReturnType<typeof evaluate> }[] | null>(null)
@@ -63,6 +68,7 @@ watch(
   { deep: true },
 )
 function save() {
+  if (props.saving) return
   errors.value = []
   if (!state.websites.some((w) => w.id === draft.websiteId))
     errors.value.push('请选择已添加的监控网站。')
@@ -81,19 +87,58 @@ function toggleCategory(category: string) {
     ? draft.categories.filter((c) => c !== category)
     : [...draft.categories, category]
 }
-function runTest() {
-  if (testMode.value === 'manual')
-    testResult.value = evaluate(draft, {
-      ...sample,
-      summary: missingSummary.value ? null : sample.summary,
-      author: sample.author || null,
-      category: sample.category || null,
-    })
-  else
-    historyResults.value = historySamples.map((item) => ({
-      sample: item,
-      result: evaluate(draft, item),
-    }))
+async function runTest() {
+  if (testing.value) return
+  testing.value = true
+  testError.value = ''
+  const snapshot = JSON.stringify({
+    draft,
+    sample,
+    missingSummary: missingSummary.value,
+    testMode: testMode.value,
+  })
+  try {
+    const task = JSON.parse(JSON.stringify(draft))
+    if (testMode.value === 'manual') {
+      const result = await evaluateTask(task, {
+        ...sample,
+        summary: missingSummary.value ? null : sample.summary,
+        author: sample.author || null,
+        category: sample.category || null,
+      })
+      if (
+        snapshot ===
+        JSON.stringify({
+          draft,
+          sample,
+          missingSummary: missingSummary.value,
+          testMode: testMode.value,
+        })
+      )
+        testResult.value = result
+    } else {
+      const results = await Promise.all(
+        historySamples.map(async (item) => ({
+          sample: item,
+          result: await evaluateTask(task, item),
+        })),
+      )
+      if (
+        snapshot ===
+        JSON.stringify({
+          draft,
+          sample,
+          missingSummary: missingSummary.value,
+          testMode: testMode.value,
+        })
+      )
+        historyResults.value = results
+    }
+  } catch (e) {
+    testError.value = (e as Error).message
+  } finally {
+    testing.value = false
+  }
 }
 function jump(id: string) {
   section.value = id
@@ -115,7 +160,11 @@ function jump(id: string) {
       </div>
       <span class="autosave-note"
         ><span class="status-dot" />{{
-          JSON.stringify(draft) === baseline ? '仅使用模拟数据' : '有未保存的修改'
+          JSON.stringify(draft) === baseline
+            ? isLive
+              ? '配置保存到服务端'
+              : '仅使用模拟数据'
+            : '有未保存的修改'
         }}</span
       >
     </div>
@@ -137,6 +186,7 @@ function jump(id: string) {
       <Icon name="play" :size="14" />试匹配
     </button>
   </nav>
+  <p v-if="saveError" class="form-errors" role="alert">{{ saveError }}</p>
   <div v-if="errors.length" data-form-errors class="form-errors" tabindex="-1" role="alert">
     <Icon name="alert" :size="20" />
     <div>
@@ -202,7 +252,11 @@ function jump(id: string) {
             v-if="!state.websites.find((w) => w.id === draft.websiteId)?.enabled"
             class="warning-note"
           >
-            该网站已暂停。任务可以保存，启用网站后才会采集新帖。
+            {{
+              isLive
+                ? '网站配置已暂停，可以保存任务；采集调度尚未接入。'
+                : '该网站已暂停。任务可以保存，启用网站后才会采集新帖。'
+            }}
           </p>
         </div>
       </section>
@@ -306,7 +360,13 @@ function jump(id: string) {
                 {{ category }}
               </button>
             </div>
-            <p class="field-help">演示版块；正式版使用来源提供的版块名称。</p>
+            <p class="field-help">
+              {{
+                isLive
+                  ? '按RSS提供的版块名称精确匹配；没有可靠版块时建议不限制。'
+                  : '演示版块；正式版使用来源提供的版块名称。'
+              }}
+            </p>
           </fieldset>
           <details class="advanced">
             <summary>
@@ -356,6 +416,15 @@ function jump(id: string) {
           <span class="small-badge neutral">已选 {{ draft.targets.length }}</span>
         </div>
         <div class="form-content">
+          <p v-if="!targets.length" class="warning-note">请先添加一个通知目标。</p>
+          <button
+            v-if="!targets.length"
+            type="button"
+            class="button"
+            @click="emit('navigate', '/target/new')"
+          >
+            添加通知目标
+          </button>
           <div class="target-options">
             <label
               v-for="target in targets"
@@ -475,7 +544,8 @@ function jump(id: string) {
           ><strong>5 条合成历史样本</strong>
           <p>2026/10/19 · 09:00–14:30<br />包含命中、排除与字段缺失场景。</p>
         </div>
-        <button type="button" class="button test-button" @click="runTest">
+        <p v-if="testError" class="form-errors" role="alert">{{ testError }}</p>
+        <button type="button" class="button test-button" :disabled="testing" @click="runTest">
           <Icon name="play" :size="15" />{{
             testMode === 'manual' ? '试匹配这条帖子' : '试匹配 5 条样本'
           }}
@@ -515,7 +585,11 @@ function jump(id: string) {
           </article>
         </div>
         <p class="test-footnote">
-          仅在本地试算，不发送通知、不改变历史。正式接入后由后端统一判断。
+          {{
+            isLive
+              ? '由服务端规则引擎试算，不发送通知、不改变历史。'
+              : '仅在本地试算，不发送通知、不改变历史。正式接入后由后端统一判断。'
+          }}
         </p>
       </section>
       <div class="editor-tip">
@@ -527,12 +601,14 @@ function jump(id: string) {
       <div>
         <span class="status-dot" /><span
           >{{ draft.enabled ? '保存后任务为启用状态' : '保存后任务保持暂停'
-          }}<small>仅保存在当前浏览器</small></span
+          }}<small>{{
+            isLive ? '保存到服务端；采集调度尚未接入' : '仅保存在当前浏览器'
+          }}</small></span
         >
       </div>
       <div class="save-actions">
         <button class="button" type="button" @click="emit('cancel')">取消</button
-        ><button class="button primary" type="submit">
+        ><button class="button primary" type="submit" :disabled="saving">
           <Icon name="check" :size="17" />保存任务
         </button>
       </div>

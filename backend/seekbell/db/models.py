@@ -107,6 +107,7 @@ class TaskVersion(Base):
     task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id"), primary_key=True)
     version: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(String(160), default="", server_default="")
     rule: Mapped[dict] = mapped_column(JSON)
     target_ids: Mapped[list] = mapped_column(JSON)
     created_at: Mapped[float] = mapped_column(Float)
@@ -267,3 +268,31 @@ class TargetTestAttempt(Base):
     finished_at: Mapped[float | None] = mapped_column(Float)
     result: Mapped[str] = mapped_column(String(32))
     error_code: Mapped[str | None] = mapped_column(String(80))
+
+
+class Administrator(Base):
+    __tablename__ = "administrators"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_administrator_singleton"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    username: Mapped[str] = mapped_column(String(32))
+    password_hash: Mapped[str] = mapped_column(String(256))
+
+
+class LoginSession(Base):
+    __tablename__ = "login_sessions"
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    csrf: Mapped[str] = mapped_column(String(80))
+    expires_at: Mapped[float] = mapped_column(Float)
+
+
+class WebsiteInstallation(Base):
+    __tablename__ = "website_installations"
+    website_id: Mapped[str] = mapped_column(ForeignKey("websites.id"), primary_key=True)
+
+
+class WorkspacePreferences(Base):
+    __tablename__ = "workspace_preferences"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_workspace_singleton"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(24))
+    description: Mapped[str] = mapped_column(String(40))

@@ -23,3 +23,5 @@ data/
 playwright-report/
 test-results/
 frontend/dist-prototype/
+
+frontend/test-results-live/

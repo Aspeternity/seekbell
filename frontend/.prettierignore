@@ -4,3 +4,5 @@ pnpm-lock.yaml
 dist-prototype
 test-results
 playwright-report
+
+test-results-live/

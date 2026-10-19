@@ -1,0 +1,267 @@
+import { reactive, ref } from 'vue'
+import type { Task, Sample } from '../prototype/model'
+import { emptyTask } from '../prototype/model'
+import { createWebsite, websiteDefinition } from '../prototype/websites'
+import type { InstalledWebsite } from '../prototype/websites'
+import type { DemoState, Target } from '../prototype/shared'
+import { channelMeta, clone, newTarget } from '../prototype/shared'
+export * from '../prototype/shared'
+export const isLive = true
+const empty = (): DemoState => ({
+  version: 3,
+  tasks: [],
+  targets: [],
+  websites: [],
+  posts: [],
+  deliveries: [],
+  settings: {
+    workspaceName: '个人工作空间',
+    workspaceDescription: 'Administrator',
+    timezone: 'Asia/Shanghai',
+    retention: 30,
+    alertTargets: [],
+    recoveryAlerts: false,
+  },
+})
+export const state = reactive<DemoState>(empty())
+export const account = reactive({ username: '', created: false })
+export const signedIn = ref(false)
+export const toast = ref('')
+let timer: ReturnType<typeof setTimeout> | undefined
+export function notify(message: string) {
+  toast.value = message
+  clearTimeout(timer)
+  timer = setTimeout(() => (toast.value = ''), 6000)
+}
+let csrf = ''
+async function request(path: string, method = 'GET', body?: unknown): Promise<any> {
+  const response = await fetch('/api/' + path, {
+    method,
+    credentials: 'same-origin',
+    headers: {
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      ...(method === 'GET' ? {} : { 'X-CSRF-Token': csrf }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  })
+  const data = await response.json().catch(() => ({ detail: '服务响应无效，请稍后重试。' }))
+  if (!response.ok) {
+    if (response.status === 401 && path.startsWith('manage/')) {
+      signedIn.value = false
+      Object.assign(state, empty())
+      window.dispatchEvent(new Event('seekbell-session-expired'))
+    }
+    throw new Error(typeof data.detail === 'string' ? data.detail : '操作失败，请检查配置后重试。')
+  }
+  return data
+}
+function applyAuth(info: any) {
+  account.created = info.initialized
+  account.username = info.username || ''
+  signedIn.value = info.authenticated
+  csrf = info.csrf
+}
+export async function initialize() {
+  applyAuth(await request('auth/status'))
+  if (signedIn.value) await refresh()
+}
+export async function authenticate(setup: boolean, username: string, password: string) {
+  applyAuth(await request('auth/status'))
+  if (signedIn.value) {
+    await refresh()
+    return
+  }
+  const info = await request(setup ? 'auth/setup' : 'auth/login', 'POST', { username, password })
+  applyAuth(info)
+  await refresh()
+}
+export async function setSession(value: boolean) {
+  if (value) return
+  if (signedIn.value) await request('auth/logout', 'POST')
+  signedIn.value = false
+  Object.assign(state, empty())
+  applyAuth(await request('auth/status'))
+}
+export function websiteName(id: string) {
+  return websiteDefinition(id)?.name || '未知网站'
+}
+function rule(task: Task) {
+  return {
+    scope: task.scope,
+    groups: task.groups.map((g) => ({ all_of: g.all, any_of: g.any })),
+    exclude: task.exclude,
+    categories: task.categories,
+    authors_include: task.authorsInclude,
+    authors_exclude: task.authorsExclude,
+    case_sensitive: task.caseSensitive,
+    mode: task.wholeWord ? 'english_word' : 'contains',
+  }
+}
+function taskBody(task: Task) {
+  return {
+    name: task.name,
+    description: task.description,
+    website_id: task.websiteId,
+    enabled: task.enabled,
+    rule: rule(task),
+    target_ids: task.targets,
+  }
+}
+export async function refresh() {
+  const data = await request('manage/workspace')
+  state.websites = data.websites.map((w: any) => ({
+    ...createWebsite(w.adapterId),
+    ...w,
+    lastSuccess: w.lastSuccess ? new Date(w.lastSuccess * 1000).toISOString() : '',
+  }))
+  state.tasks = data.tasks.map((t: any) => ({
+    ...emptyTask(),
+    id: t.id,
+    websiteId: t.website_id,
+    name: t.name,
+    description: t.description,
+    enabled: t.enabled,
+    scope: t.rule.scope,
+    groups: t.rule.groups.map((g: any) => ({ all: g.all_of, any: g.any_of })),
+    exclude: t.rule.exclude,
+    categories: t.rule.categories,
+    authorsInclude: t.rule.authors_include,
+    authorsExclude: t.rule.authors_exclude,
+    caseSensitive: t.rule.case_sensitive,
+    wholeWord: t.rule.mode === 'english_word',
+    targets: t.target_ids,
+  }))
+  state.targets = data.targets.map((t: any) => ({
+    ...newTarget(t.kind),
+    ...channelMeta[t.kind as keyof typeof channelMeta],
+    id: t.id,
+    name: t.name,
+    channel: t.kind,
+    enabled: t.enabled,
+    configured: true,
+    summary: t.config.include_summary,
+    summaryLimit: t.config.summary_limit,
+    group: t.config.group || 'SeekBell',
+    security: t.config.security || 'tls',
+    port: t.config.port || 465,
+    responseMode: t.config.response_mode || 'json_ok',
+  }))
+  Object.assign(state.settings, data.settings)
+}
+export async function addWebsite(id: string) {
+  await request('manage/websites', 'POST', { adapter_id: id })
+  await refresh()
+  notify('网站已保存到服务端。')
+  return state.websites.find((w) => w.id === id)
+}
+export async function saveWebsite(
+  website: InstalledWebsite,
+  interval: number,
+  enabled = website.enabled,
+) {
+  await request('manage/websites/' + website.id, 'PUT', { interval, enabled })
+  await refresh()
+  notify('网站配置已保存；采集调度尚未接入。')
+}
+export async function removeWebsite(id: string) {
+  await request('manage/websites/' + id, 'DELETE')
+  await refresh()
+  notify('网站已移除，历史身份与记录保留。')
+  return true
+}
+export async function saveTask(task: Task) {
+  const result = await request(
+    'manage/tasks' + (task.id ? '/' + task.id : ''),
+    task.id ? 'PUT' : 'POST',
+    taskBody(task),
+  )
+  await refresh()
+  notify('任务已保存到服务端；采集与发送调度尚未接入。')
+  return result
+}
+export async function setTaskEnabled(task: Task, value: boolean) {
+  try {
+    await saveTask({ ...clone(task), enabled: value })
+  } catch (error) {
+    notify((error as Error).message)
+  }
+}
+export async function removeTask(task: Task) {
+  await request('manage/tasks/' + task.id, 'DELETE')
+  await refresh()
+  notify('任务已删除，历史保留。')
+}
+export async function saveTarget(target: Target, config: Record<string, unknown> = {}) {
+  await request('manage/targets' + (target.id ? '/' + target.id : ''), target.id ? 'PUT' : 'POST', {
+    name: target.name,
+    kind: target.channel,
+    enabled: target.enabled,
+    config,
+  })
+  await refresh()
+  notify('通知配置已加密保存；没有发送消息。')
+}
+export async function setTargetEnabled(target: Target, value: boolean) {
+  try {
+    await saveTarget({ ...clone(target), enabled: value })
+  } catch (error) {
+    notify((error as Error).message)
+  }
+}
+export async function savePreferences(settings: DemoState['settings']) {
+  await request('manage/workspace', 'PUT', {
+    name: settings.workspaceName,
+    description: settings.workspaceDescription,
+  })
+  await refresh()
+}
+export async function evaluateTask(task: Task, sample: Sample) {
+  const data = await request('manage/rules/evaluate', 'POST', { rule: rule(task), post: sample })
+  return {
+    status: ({ match: 'yes', no_match: 'no', insufficient_data: 'unknown' } as const)[
+      data.status as 'match' | 'no_match' | 'insufficient_data'
+    ],
+    reasons: data.reasons.map((r: any) => [r.code, r.term].filter(Boolean).join('：')) as string[],
+  }
+}
+export const formatTime = (value: string) =>
+  value
+    ? new Intl.DateTimeFormat('zh-CN', {
+        timeZone: state.settings.timezone,
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }).format(new Date(value))
+    : '尚未记录'
+export const confirmation = ref<{
+  title: string
+  body: string
+  label: string
+  cancelLabel: string
+  run: () => void
+} | null>(null)
+export function confirmAction(
+  title: string,
+  body: string,
+  run: () => void,
+  label = '确认',
+  cancelLabel = '取消',
+) {
+  confirmation.value = { title, body, run, label, cancelLabel }
+}
+const unavailable = () => {
+  notify('此功能将在后续阶段接入。')
+}
+export const loadExampleWorkspace = unavailable,
+  testTarget = unavailable,
+  resend = unavailable,
+  cancelTargetRetries = unavailable,
+  downloadConfig = unavailable,
+  restoreState = unavailable,
+  resetState = unavailable,
+  resetAccount = unavailable,
+  updateAccount = unavailable
+export const parseState = () => null,
+  verifyPassword = async () => false

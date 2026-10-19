@@ -112,6 +112,19 @@ Codex 可在授权 SSH 范围内部署测试环境；没有 SSH 则提供含固�
 
 新浏览器/重置默认为空工作空间；示例只能主动载入。存储v3白名单化网站与关联字段；v2单一隐含来源迁移成已添加NodeSeek并保留任务、记录和设置，旧备份同样迁移；不清空用户旧数据。实际目录仍只注册NodeSeek，测试中临时注入多个合成目录项验证独立配置，不随产品交付额外适配器。
 
-后端尚保留M1种子NodeSeek网站/关闭来源的实现，未因UI改动执行数据库迁移。正式接入时必须区分内置目录与已添加实例，让首次安装无实例；旧部署需保留已有配置/身份账本。不能仅隐藏种子行或直接删除旧来源数据来伪装实现这一需求。
+v0.3原型阶段未迁移后端。M3首个接入阶段通过独立WebsiteInstallation表达安装实例，保留Website/Source作为适配器身份与历史锚点；新库无安装记录，旧部署保留原实例/配置/身份账本，具体迁移契约见下节。
 
 2026-10-20 v0.4：网站目录选择以居中原生dialog展示，配置仍右侧面板；添加完成关闭选择器，不自动切换或叠加配置。偏好新增workspaceName/workspaceDescription普通字段，App侧栏读取已保存值，Settings保留草稿和预览；沿用v3兼容格式，对缺失新字段的v2/v3数据及备份补默认值，校验长度并白名单导出，不修改账号模型或后端。
+
+
+## M3首个真实接入契约（2026-10-20）
+
+默认生产入口复用v0.4页面与样式，Vite的@workspace别名分别选择live或模拟store。共享纯类型/渠道元数据位于prototype/shared.ts；正式Bootstrap传入正式概览/设置视图，模拟构建不导入live模块。正式状态来自/api/manage/workspace，不迁移演示账号/浏览器备份，不写演示localStorage。保留独立prototype.html及dist-prototype。
+
+0004_management增加单例Administrator、LoginSession、WebsiteInstallation、WorkspacePreferences；TaskVersion增加最多160字符description。SQLite迁移入口持BEGIN IMMEDIATE后识别空库/既有迁移版本：空库安装实例表为空，从既有M0/M1/M2升级保留原网站实例。适配器身份行不是用户已安装实例；移除实例仅删除安装关系、禁用来源并重建后续基线，保留历史身份。活跃任务依赖阻止移除；创建任务在同一配置写事务检查安装关系。任务所属网站固定，备注随规则版本留证。
+
+初始化的管理员和会话同事务创建，管理员主键限制id=1，不使用初始化令牌。密码为独立随机盐scrypt(N=2^17,r=8,p=1)。不透明随机会话令牌仅以SHA-256摘要存入服务端，12小时过期，退出删除。Cookie为HttpOnly/SameSite=Strict，可信HTTPS请求标Secure。登录/初始化使用进程密钥签名的预会话CSRF，管理写入验证会话CSRF及Origin；不信任未配置的代理。API no-store，验证错误不包含输入，SQL日志隐藏参数。认证来源每分钟10次/全局30次，内存限速且哈希串行；重启重置限速，不是多副本方案。参考[OWASP密码存储](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)及[CSRF](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)。
+
+M3配置API复用Configuration及CredentialVault，启动创建/加载私有密钥；已有密文缺钥/错钥直接停止。目标新增/编辑/启停和配置读写已接入，留空敏感字段保留，不回显值；目标更新与停用取消在同一事务。为满足任务至少一个已配置目标的规格，首闭环支持四渠道配置，但不启用测试发送或采集/投递生命周期。规则试算使用原RuleEngine。工作空间名称/说明单例存储，不扩展多用户或多工作空间。
+
+本子阶段不宣称M3完成：正式概览仅配置数量，历史/投递/统计、管理员修改、目标删除/测试及备份/保留/告警仍待接入，不执行模拟成功。离线核心服务维持已有语义；SourceRunner/DeliveryWorker尚不由FastAPI启动。检查与复现见本阶段证据及README。

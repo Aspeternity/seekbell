@@ -15,8 +15,8 @@ import {
   confirmAction,
   verifyPassword,
   updateAccount,
-} from '../store'
-import type { DemoState } from '../store'
+} from '@workspace'
+import type { DemoState } from '@workspace'
 const props = withDefaults(defineProps<{ tab?: string }>(), { tab: 'preferences' })
 const emit = defineEmits<{ navigate: [path: string]; dirty: [value: boolean] }>()
 const draft = reactive(clone(state.settings)),

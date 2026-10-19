@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import Icon from './components/Icon.vue'
 import Toggle from './components/Toggle.vue'
-import { state, formatTime, websiteName, loadExampleWorkspace } from './store'
+import { state, formatTime, websiteName, loadExampleWorkspace } from '@workspace'
 const targets = computed(() => state.targets)
 const attentionCount = computed(
   () =>

@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 export default defineConfig({
   testDir: './tests',
+  testIgnore: '**/live/**',
   fullyParallel: true,
   workers: 4,
   forbidOnly: !!process.env.CI,

@@ -52,16 +52,70 @@ print(json.dumps({'version': info, 'uid': os.getuid(), 'assets': assets, 'marker
 """
 
 
+MANAGEMENT_PROBE = """
+import http.cookiejar
+import json
+import urllib.request
+
+jar = http.cookiejar.CookieJar()
+opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+csrf = ""
+
+def request(path, values=None):
+    headers = {}
+    if values is not None:
+        headers = {"Content-Type": "application/json", "X-CSRF-Token": csrf}
+    req = urllib.request.Request(
+        "http://127.0.0.1:8000/api/" + path,
+        data=None if values is None else json.dumps(values).encode(), headers=headers,
+    )
+    with opener.open(req, timeout=10) as response:
+        if path in ("auth/setup", "auth/login"):
+            assert "httponly" in response.headers["set-cookie"].lower()
+        return json.load(response)
+
+status = request("auth/status")
+csrf = status["csrf"]
+session = request("auth/login" if status["initialized"] else "auth/setup",
+                  {"username": "container_admin", "password": "Synthetic-Container-2026"})
+csrf = session["csrf"]
+workspace = request("manage/workspace")
+if not workspace["websites"]:
+    request("manage/websites", {"adapter_id": "nodeseek"})
+if not workspace["targets"]:
+    target = request("manage/targets", {
+        "name": "Container synthetic", "kind": "webhook", "enabled": False,
+        "config": {"url": "https://receiver.example.test/synthetic"},
+    })["id"]
+else:
+    target = workspace["targets"][0]["id"]
+if not workspace["tasks"]:
+    request("manage/tasks", {
+        "name": "Container persistence", "description": "Retained across service restart",
+        "website_id": "nodeseek", "enabled": False, "rule": {}, "target_ids": [target],
+    })
+workspace = request("manage/workspace")
+assert len(workspace["websites"]) == 1 and len(workspace["tasks"]) == 1
+assert workspace["tasks"][0]["description"] == "Retained across service restart"
+assert "url" not in workspace["targets"][0]["config"]
+assert not workspace["runtime_active"]
+print(json.dumps({
+    "website": workspace["websites"][0]["id"], "task": workspace["tasks"][0]["id"],
+    "target": workspace["targets"][0]["id"], "note": workspace["tasks"][0]["description"],
+}))
+"""
+
+
 def docker(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["docker", *args], check=check, text=True, capture_output=True, timeout=30
     )
 
 
-def wait_ready(container: str, *, require_healthcheck: bool = False) -> None:
+def wait_ready(container: str, *, require_healthcheck: bool = False, probe: str = PROBE) -> None:
     deadline = time.monotonic() + 45
     while time.monotonic() < deadline:
-        result = docker("exec", container, "python", "-c", PROBE, check=False)
+        result = docker("exec", container, "python", "-c", probe, check=False)
         if result.returncode == 0:
             health = docker("inspect", container, "--format", "{{.State.Health.Status}}")
             if not require_healthcheck or health.stdout.strip() == "healthy":
@@ -106,6 +160,15 @@ def main() -> None:
         )
         assert demo["mode"] == "offline_synthetic"
         assert demo["final_status"] == "sent" and demo["duplicate_poll_queued"] == 0
+        managed_first = json.loads(
+            docker("exec", container, "python", "-c", MANAGEMENT_PROBE).stdout
+        )
+        docker("restart", container)
+        wait_ready(container, probe=MANAGEMENT_PROBE)
+        managed_second = json.loads(
+            docker("exec", container, "python", "-c", MANAGEMENT_PROBE).stdout
+        )
+        assert managed_first == managed_second, "Management configuration changed across restart"
         image_id = docker("image", "inspect", args.image, "--format", "{{.Id}}").stdout.strip()
         print(
             json.dumps(
@@ -116,6 +179,7 @@ def main() -> None:
                     "restart_persistence": "passed",
                     "instance_lock": "passed",
                     "network": "none",
+                    "management_persistence": managed_second,
                     "offline_core_demo": demo,
                 },
                 ensure_ascii=False,
