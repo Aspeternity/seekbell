@@ -1,10 +1,10 @@
 # 当前状态
 
-更新时间：2026-10-19（Asia/Shanghai）。M1/M2已实现；M3服务端仍未完成。本轮用户确认v0.1视觉，授权扩展全部网页并统一交付。v0.2完整前端模拟数据版已实现、自动验证通过，正在制作最终源码交付包；未声称真实监控服务完成。
+更新时间：2026-10-19（Asia/Shanghai）。M1/M2已实现；M3服务端仍未完成。本轮用户确认v0.1视觉，授权扩展全部网页并统一交付。v0.2完整前端模拟数据版已实现、自动验证通过，源码、预构建、规范与截图统一交付；未声称真实监控服务完成。
 
 ## 环境与代码
 
-仅在SeekBell-Dev的/home/dev/projects/seekbell开发；聊天原Ubuntu经wsl.exe显式执行。D盘交接副本、原环境与全局WSL未改。[环境入口](DEVELOPMENT_ENVIRONMENT.md)。分支codex/ui-prototype，上一HEAD3333122，v0.1实现ff98b16。本次修改frontend/src/prototype、tests、package.json，新增静态预览服务并更新README及UI/规格/架构文档；将与本状态一起本地提交，不推送。M2基准1fdec56。
+仅在SeekBell-Dev的/home/dev/projects/seekbell开发；聊天原Ubuntu经wsl.exe显式执行。D盘交接副本、原环境与全局WSL未改。[环境入口](DEVELOPMENT_ENVIRONMENT.md)。分支codex/ui-prototype，v0.2实现7b525bd65e9bb3d2cae8841b932632a88b43c444，v0.1实现ff98b16。实现与文档已本地提交，随后只补证据文档；未推送。M2基准1fdec56。
 
 ## 已实现与证据
 
@@ -14,7 +14,7 @@ SeekBell-Dev类型检查、原型及生产构建、格式、隐私与差异检�
 
 ## 下一步与读取清单
 
-完成本地提交与源码/预构建/规范/截图打包。下一轮先核对目录、分支/HEAD/工作区，读本状态及UI两文档，按任务读取src/prototype；不全仓重读。进入真实后端接入时再读SPEC第2/6节、ARCHITECTURE认证/调度与相关API。RuleEngine统一后端，移除JS模拟试算；备注映射待确认。
+本阶段前端交付完成，等待用户审阅。交付文件SeekBell-v0.2-complete.zip，包含全部源码、静态产物、42张截图与规范。下一轮先核对目录、分支/HEAD/工作区，读本状态及UI两文档，按任务读取src/prototype；不全仓重读。进入真实后端接入时再读SPEC第2/6节、ARCHITECTURE认证/调度与相关API。RuleEngine统一后端，移除JS模拟试算；备注映射待确认。
 
 当前无开发阻塞。统计和历史为合成快照；浏览器认证非安全边界，备份非生产数据库备份。服务端认证、受保护管理API、生命周期/自动调度与正式手动重发尚未完成。真实RSS/四渠道、PVE/arm64、生产备份恢复、Safari/手机真机和完整界面用户验收未做。
 
