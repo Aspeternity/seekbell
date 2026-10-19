@@ -1,10 +1,10 @@
 # 当前状态
 
-更新时间：2026-10-20（Asia/Shanghai）。M1/M2已实现；M3服务端未完成。用户认可v0.3后明确：配置网站保留右侧面板，添加网站改居中；截图中左上工作空间区域支持设置自定义。v0.4前端已实现并验证，正在提交和打包，仍为模拟数据版。
+更新时间：2026-10-20（Asia/Shanghai）。M1/M2已实现；M3服务端未完成。用户认可v0.3后明确：配置网站保留右侧面板，添加网站改居中；截图中左上工作空间区域支持设置自定义。v0.4前端已实现并验证，源码、预构建、规范与截图已准备交付，仍为模拟数据版。
 
 ## 环境与代码
 
-仅在SeekBell-Dev的/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe执行；D盘交接副本、原环境、全局WSL未改。[环境入口](DEVELOPMENT_ENVIRONMENT.md)。分支codex/ui-prototype，起点ff545a5；v0.3实现fd711e7，v0.2实现7b525bd，M2基准1fdec56。本轮修改Websites、Settings、App、store、样式/测试与规格文档，本地提交，未推送。
+仅在SeekBell-Dev的/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe执行；D盘交接副本、原环境、全局WSL未改。[环境入口](DEVELOPMENT_ENVIRONMENT.md)。分支codex/ui-prototype，v0.4实现44c535995571299e4f54192a5a822674de05516d；v0.3实现fd711e7，v0.2实现7b525bd，M2基准1fdec56。实现和文档已本地提交，后续仅补证据；未推送。
 
 ## 本轮实现与证据
 
@@ -14,7 +14,7 @@ SeekBell-Dev类型、原型/生产构建、格式、隐私、差异检查通过�
 
 ## 下一步与读取清单
 
-交付SeekBell-v0.4-complete.zip后等待用户审阅。下一轮先核对正式目录、分支/HEAD/工作区，读本状态、UI两文档及本轮记录，再按任务读代码。正式接入读SPEC第1/2/3/6节、ARCHITECTURE网站库/认证/调度；后端M1仍播种NodeSeek关闭来源，须区分目录与用户实例，保留旧数据。JS试算最终统一后端RuleEngine，备注映射待确认。
+完整包SeekBell-v0.4-complete.zip，等待用户审阅。下一轮先核对正式目录、分支/HEAD/工作区，读本状态、UI两文档及本轮记录，再按任务读代码。正式接入读SPEC第1/2/3/6节、ARCHITECTURE网站库/认证/调度；后端M1仍播种NodeSeek关闭来源，须区分目录与用户实例，保留旧数据。JS试算最终统一后端RuleEngine，备注映射待确认。
 
 无开发阻塞。真实认证/API/调度/采集/通知/生产备份未接；浏览器认证非安全边界，模拟统计非实测。额外网站只存在测试夹具，无新增产品适配器。Safari/真机、PVE/arm64及用户本轮验收未做。
 
