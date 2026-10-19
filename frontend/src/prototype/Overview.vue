@@ -424,6 +424,6 @@ const activities = [
   </div>
   <footer class="page-footer">
     <span><Icon name="bell" :size="14" /> SeekBell · 留意你关心的</span
-    ><span>本地交互原型 <span class="separator">·</span> v0.3</span>
+    ><span>本地交互原型 <span class="separator">·</span> v0.4</span>
   </footer>
 </template>

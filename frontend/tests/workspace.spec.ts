@@ -216,6 +216,8 @@ test('target test, uncertain resend and disabled target cancellation keep distin
 
 test('preferences, safe backup export and validated restore work end to end', async ({ page }) => {
   await go(page, '/settings/preferences')
+  await page.getByLabel('工作空间名称', { exact: true }).fill('备份工作空间')
+  await page.getByLabel('工作空间说明 选填', { exact: true }).fill('保留我的说明')
   await page.getByLabel('显示时区').selectOption('UTC')
   await page.getByLabel('普通历史保留天数').fill('60')
   await page.getByRole('button', { name: '保存偏好设置' }).click()
@@ -229,6 +231,8 @@ test('preferences, safe backup export and validated restore work end to end', as
   const backup = JSON.parse(raw)
   expect(backup.kind).toBe('seekbell-demo-backup')
   expect(backup.data.settings.retention).toBe(60)
+  expect(backup.data.settings.workspaceName).toBe('备份工作空间')
+  expect(backup.data.settings.workspaceDescription).toBe('保留我的说明')
   expect(raw).not.toContain('digest')
   const input = page.getByLabel('选择演示备份文件')
   await input.setInputFiles({
@@ -237,6 +241,7 @@ test('preferences, safe backup export and validated restore work end to end', as
     buffer: Buffer.from('{"kind":"seekbell-demo-backup","data":{}}'),
   })
   await expect(page.getByRole('alert')).toContainText('不是兼容')
+  backup.data.settings.workspaceName = '恢复后的空间'
   backup.data.tasks[0].name = '从备份恢复的任务'
   backup.data.targets[0].bot_token = 'must-not-persist'
   await input.setInputFiles({
@@ -246,6 +251,7 @@ test('preferences, safe backup export and validated restore work end to end', as
   })
   await page.getByRole('button', { name: '确认恢复这份备份' }).click()
   await page.getByRole('button', { name: '确认恢复', exact: true }).click()
+  await expect(page.locator('.workspace-label')).toContainText('恢复后的空间')
   await go(page, '/tasks')
   await expect(page.getByRole('button', { name: '从备份恢复的任务', exact: true })).toBeVisible()
   expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain('must-not-persist')

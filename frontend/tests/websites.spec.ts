@@ -29,6 +29,8 @@ test('fresh workspace, catalog, website configuration and removal are complete',
   await expect(page.getByText('没有找到内置网站')).toBeVisible()
   await page.getByRole('button', { name: '清除搜索' }).click()
   await page.getByRole('button', { name: '添加 NodeSeek', exact: true }).click()
+  await expect(drawer).not.toBeVisible()
+  await page.getByRole('button', { name: '配置 NodeSeek', exact: true }).click()
   await expect(page.getByLabel('共享采集间隔')).toHaveValue('10')
   await expect(drawer.getByRole('switch')).not.toBeChecked()
   await page.getByLabel('共享采集间隔').fill('9')
@@ -87,6 +89,8 @@ test('existing v2 work migrates without loss and attached tasks prevent removal'
     delete source.adapterId
     const legacy = { ...data, version: 2, source }
     delete legacy.websites
+    delete legacy.settings.workspaceName
+    delete legacy.settings.workspaceDescription
     legacy.tasks.forEach((t: Record<string, unknown>) => {
       delete t.websiteId
     })
@@ -133,7 +137,7 @@ test('future built-in adapters keep independent settings in the same card layout
   for (const name of ['NodeSeek', '适配测试 2', '适配测试 3', '适配测试 4']) {
     await page.getByRole('button', { name: '添加网站', exact: true }).click()
     await page.getByRole('button', { name: '添加 ' + name, exact: true }).click()
-    await page.getByRole('button', { name: '关闭网站面板' }).click()
+    await expect(page.locator('.website-drawer')).not.toBeVisible()
   }
   await expect(page.locator('.website-card')).toHaveCount(4)
   await page.getByRole('button', { name: '配置 适配测试 2', exact: true }).click()
@@ -158,4 +162,79 @@ test('future built-in adapters keep independent settings in the same card layout
     await page.setViewportSize({ width, height: 900 })
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   }
+})
+
+test('workspace identity saves, validates, persists and upgrades older settings', async ({
+  page,
+}, info) => {
+  await page.goto('/prototype.html#/settings/preferences')
+  await page.getByLabel('工作空间名称', { exact: true }).fill('   ')
+  await page.getByRole('button', { name: '保存偏好设置', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('不能只包含空格')
+  await page.getByLabel('工作空间名称', { exact: true }).fill('Asp 的信息雷达')
+  await page.getByLabel('工作空间说明 选填', { exact: true }).fill('技术、好价与日常关注')
+  await expect(page.locator('.workspace-preview')).toContainText('Asp 的信息雷达')
+  await expect(page.locator('.workspace-label')).toContainText('个人工作空间')
+  await page.getByRole('button', { name: '保存偏好设置', exact: true }).click()
+  await expect(page.locator('.workspace-label')).toContainText('Asp 的信息雷达')
+  await expect(page.locator('.workspace-label .workspace-icon')).toHaveText('A')
+  await page.reload()
+  await expect(page.getByLabel('工作空间名称', { exact: true })).toHaveValue('Asp 的信息雷达')
+  await expect(page.locator('.workspace-label')).toContainText('技术、好价与日常关注')
+  await page.locator('h1').focus()
+  await page.evaluate(() => window.scrollTo(0, 0))
+  await page.screenshot({ path: info.outputPath('workspace-settings.png'), fullPage: true })
+  if ((page.viewportSize()?.width || 0) < 761)
+    await page.getByRole('button', { name: '打开导航' }).click()
+  await page.getByRole('button', { name: '设置工作空间', exact: true }).click()
+  await expect(page).toHaveURL(/#\/settings\/preferences$/)
+  await page
+    .getByLabel('工作空间名称', { exact: true })
+    .fill('这是一个用于验证侧栏省略显示的很长工作空间名称')
+  await page.getByLabel('工作空间说明 选填', { exact: true }).fill('')
+  await page.getByRole('button', { name: '保存偏好设置', exact: true }).click()
+  await expect(page.locator('.workspace-label small')).toHaveCount(0)
+  for (const width of [320, 390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 })
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  }
+  await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('seekbell-demo-v3')!)
+    delete data.settings.workspaceName
+    delete data.settings.workspaceDescription
+    data.settings.retention = 75
+    localStorage.setItem('seekbell-demo-v3', JSON.stringify(data))
+  })
+  await page.reload()
+  await expect(page.getByLabel('工作空间名称', { exact: true })).toHaveValue('个人工作空间')
+  await expect(page.getByLabel('普通历史保留天数')).toHaveValue('75')
+})
+
+test('catalog is centered on desktop and configuration remains a separate right drawer', async ({
+  page,
+}) => {
+  await page.getByRole('button', { name: '添加网站', exact: true }).click()
+  const dialog = page.locator('.website-drawer')
+  for (const width of [320, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 })
+    const bounds = await dialog.boundingBox()
+    expect(bounds).not.toBeNull()
+    if (width > 760) {
+      expect(Math.abs(bounds!.x + bounds!.width / 2 - width / 2)).toBeLessThan(2)
+      expect(Math.abs(bounds!.y + bounds!.height / 2 - 450)).toBeLessThan(2)
+      expect(bounds!.height).toBeLessThanOrEqual(765)
+    } else {
+      expect(bounds!.width).toBe(width)
+      expect(bounds!.height).toBe(900)
+    }
+    expect(await dialog.evaluate((e) => e.scrollWidth <= e.clientWidth)).toBe(true)
+  }
+  await page.getByRole('button', { name: '添加 NodeSeek', exact: true }).click()
+  await expect(dialog).not.toBeVisible()
+  await expect(page.locator('.website-card')).toHaveCount(1)
+  await page.getByRole('button', { name: '配置 NodeSeek', exact: true }).click()
+  const bounds = await dialog.boundingBox()
+  expect(Math.abs(bounds!.x + bounds!.width - 1440)).toBeLessThan(2)
+  expect(bounds!.width).toBe(580)
+  await expect(dialog).not.toHaveClass(/website-catalog-modal/)
 })

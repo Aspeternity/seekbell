@@ -43,13 +43,23 @@ const baseline = ref(snapshot()),
 watch(dirty, (value) => emit('dirty', value))
 function savePreferences() {
   errors.value = []
+  if (!draft.workspaceName.trim() || draft.workspaceName.length > 24) {
+    errors.value = ['工作空间名称应为 1–24 个字符，不能只包含空格。']
+    return
+  }
+  if (draft.workspaceDescription.length > 40) {
+    errors.value = ['工作空间说明不能超过 40 个字符。']
+    return
+  }
+  draft.workspaceName = draft.workspaceName.trim()
+  draft.workspaceDescription = draft.workspaceDescription.trim()
   if (!Number.isInteger(draft.retention) || draft.retention < 1 || draft.retention > 365) {
     errors.value = ['保留天数应为 1–365 之间的整数。']
     return
   }
   state.settings = clone(draft)
   baseline.value = snapshot()
-  notify('偏好设置已保存，时间显示已同步更新。')
+  notify('偏好设置已保存，工作空间与时间显示已同步更新。')
 }
 async function saveAccount() {
   errors.value = []
@@ -175,12 +185,54 @@ function reset() {
     <section v-if="tab === 'preferences'" class="panel settings-card">
       <div class="panel-heading">
         <div>
-          <h2>时间与历史</h2>
-          <p>保留足够上下文，不让信息无限堆积</p>
+          <h2>工作空间与偏好</h2>
+          <p>让这片信息空间，有自己的名字</p>
         </div>
         <Icon name="clock" :size="19" />
       </div>
       <form class="form-content form-stack" @submit.prevent="savePreferences">
+        <h3>工作空间</h3>
+        <p class="small-note">名称与说明显示在左侧导航顶部，方便识别你的工作空间。</p>
+        <div class="workspace-settings-fields">
+          <label for="workspace-name">工作空间名称</label>
+          <input
+            id="workspace-name"
+            v-model="draft.workspaceName"
+            class="text-input"
+            maxlength="24"
+            placeholder="例如：我的信息雷达"
+            :aria-invalid="errors.length > 0 && !draft.workspaceName.trim()"
+          />
+          <p class="small-note">最多 24 个字符。</p>
+          <label for="workspace-description">工作空间说明 <span class="optional">选填</span></label>
+          <input
+            id="workspace-description"
+            v-model="draft.workspaceDescription"
+            class="text-input"
+            maxlength="40"
+            placeholder="例如：技术、好价与日常关注"
+          />
+        </div>
+        <div class="workspace-preview" aria-label="工作空间外观预览">
+          <span class="workspace-icon" aria-hidden="true">{{
+            draft.workspaceName.trim() === '个人工作空间'
+              ? 'S'
+              : Array.from(draft.workspaceName.trim())[0]?.toUpperCase() || 'S'
+          }}</span>
+          <span class="workspace-copy"
+            ><strong :title="draft.workspaceName">{{
+              draft.workspaceName.trim() || '工作空间名称'
+            }}</strong
+            ><small v-if="draft.workspaceDescription.trim()" :title="draft.workspaceDescription">{{
+              draft.workspaceDescription.trim()
+            }}</small></span
+          >
+          <span class="workspace-dot" aria-hidden="true" />
+        </div>
+        <p class="small-note">上方为外观预览，保存后同步到导航；此名称不会更改管理员登录账号。</p>
+        <div class="subtle-divider" />
+        <h3>时间与历史</h3>
+
         <label
           >显示时区<select v-model="draft.timezone" class="text-input">
             <option value="Asia/Shanghai">中国标准时间 · Asia/Shanghai</option>
@@ -365,7 +417,7 @@ function reset() {
         <span class="brand-icon"><Icon name="bell" :size="26" /></span>
         <h2>SeekBell<span class="brand-period">.</span></h2>
         <p>留意你关心的。</p>
-        <span class="small-badge neutral">管理界面 v0.3 · 完整演示</span>
+        <span class="small-badge neutral">管理界面 v0.4 · 完整演示</span>
         <dl class="detail-grid">
           <div>
             <dt>前端</dt>

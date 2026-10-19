@@ -54,7 +54,14 @@ export interface DemoState {
   posts: Post[]
   deliveries: Delivery[]
   websites: InstalledWebsite[]
-  settings: { timezone: string; retention: number; alertTargets: string[]; recoveryAlerts: boolean }
+  settings: {
+    workspaceName: string
+    workspaceDescription: string
+    timezone: string
+    retention: number
+    alertTargets: string[]
+    recoveryAlerts: boolean
+  }
 }
 export const channelMeta = {
   telegram: {
@@ -224,6 +231,8 @@ export function initialState(example = false): DemoState {
         ]
       : [],
     settings: {
+      workspaceName: '个人工作空间',
+      workspaceDescription: 'Administrator',
       timezone: 'Asia/Shanghai',
       retention: 30,
       alertTargets: example ? ['telegram'] : [],
@@ -301,6 +310,17 @@ export function parseState(value: unknown): DemoState | null {
       posts: old.posts.map((p) => ({ ...p, websiteId: 'nodeseek' })),
     }
   }
+  // Additive defaults preserve earlier v2/v3 browser state and backups.
+  if ('settings' in data && data.settings && typeof data.settings === 'object') {
+    data = {
+      ...data,
+      settings: {
+        workspaceName: '个人工作空间',
+        workspaceDescription: 'Administrator',
+        ...data.settings,
+      },
+    }
+  }
   return validState(data) ? cleanState(data) : null
 }
 function loadState(): DemoState {
@@ -359,6 +379,11 @@ export function validState(data: unknown): data is DemoState {
     new Set(d.websites.map((w) => w.id)).size === d.websites.length &&
     d.tasks.every((t) => d.websites.some((w) => w.id === t.websiteId)) &&
     !!d.settings &&
+    typeof d.settings.workspaceName === 'string' &&
+    d.settings.workspaceName.trim().length > 0 &&
+    d.settings.workspaceName.length <= 24 &&
+    typeof d.settings.workspaceDescription === 'string' &&
+    d.settings.workspaceDescription.length <= 40 &&
     ['Asia/Shanghai', 'UTC', 'Asia/Tokyo', 'America/Los_Angeles'].includes(d.settings.timezone) &&
     Number.isInteger(d.settings.retention) &&
     d.settings.retention >= 1 &&
@@ -456,6 +481,8 @@ export function cleanState(d: DemoState): DemoState {
       lastTest: w.lastTest,
     })),
     settings: {
+      workspaceName: d.settings.workspaceName.trim(),
+      workspaceDescription: d.settings.workspaceDescription.trim(),
       timezone: d.settings.timezone,
       retention: d.settings.retention,
       alertTargets: [...d.settings.alertTargets],

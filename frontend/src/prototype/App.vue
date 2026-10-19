@@ -200,7 +200,7 @@ function focusMain() {
   document.getElementById('main-content')?.focus()
 }
 function showInfo() {
-  infoTitle.value = '完整界面演示 v0.3'
+  infoTitle.value = '完整界面演示 v0.4'
   infoBody.value =
     '所有管理页面已可体验。任务、目标、来源、内容、投递和设置在浏览器内联动；支持演示登录和备份恢复。界面不连接真实后端、不采集 RSS、不发送通知。请使用演示凭据。'
   infoDialog.value?.showModal()
@@ -229,10 +229,25 @@ function showInfo() {
       >
         <Icon name="close" />
       </button>
-      <div class="workspace-label">
-        <span class="workspace-icon">S</span><span>个人工作空间<small>Administrator</small></span
-        ><span class="workspace-dot" />
-      </div>
+      <button
+        class="workspace-label"
+        aria-label="设置工作空间"
+        @click="navigate('/settings/preferences')"
+      >
+        <span class="workspace-icon" aria-hidden="true">{{
+          state.settings.workspaceName === '个人工作空间'
+            ? 'S'
+            : Array.from(state.settings.workspaceName)[0]?.toUpperCase()
+        }}</span>
+        <span class="workspace-copy"
+          ><strong :title="state.settings.workspaceName">{{ state.settings.workspaceName }}</strong
+          ><small
+            v-if="state.settings.workspaceDescription"
+            :title="state.settings.workspaceDescription"
+            >{{ state.settings.workspaceDescription }}</small
+          ></span
+        ><span class="workspace-dot" aria-hidden="true" />
+      </button>
       <p class="nav-label">工作空间</p>
       <nav>
         <button
@@ -364,7 +379,7 @@ function showInfo() {
           class="page-footer"
         >
           <span><Icon name="bell" :size="14" />SeekBell · 留意你关心的</span
-          ><span>完整界面演示 · v0.3</span>
+          ><span>完整界面演示 · v0.4</span>
         </footer>
       </main>
     </div></template

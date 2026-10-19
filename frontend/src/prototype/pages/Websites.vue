@@ -100,7 +100,7 @@ function requestClose() {
 }
 function install(id: string) {
   const w = addWebsite(id)
-  if (w) detail(w)
+  if (w) close()
 }
 function save() {
   if (!selected.value) return
@@ -323,6 +323,7 @@ onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
   <dialog
     ref="panel"
     class="website-drawer"
+    :class="{ 'website-catalog-modal': mode === 'catalog' }"
     :aria-label="mode === 'catalog' ? '添加内置网站' : (definition?.name || '') + ' 网站配置'"
     @cancel.prevent="requestClose"
     @click="
@@ -354,32 +355,36 @@ onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
         <div class="catalog-caption">
           <span>可用网站</span><span>{{ available.length }} 个</span>
         </div>
-        <article v-for="item in available" :key="item.id" class="catalog-card">
-          <div class="catalog-identity">
-            <span class="source-logo">{{ item.mark }}<span>›</span></span>
-            <div>
-              <h3>{{ item.name }}</h3>
-              <p>{{ item.domain }}</p>
+        <div class="website-catalog-grid">
+          <article v-for="item in available" :key="item.id" class="catalog-card">
+            <div class="catalog-identity">
+              <span class="source-logo">{{ item.mark }}<span>›</span></span>
+              <div>
+                <h3>{{ item.name }}</h3>
+                <p>{{ item.domain }}</p>
+              </div>
+              <span class="small-badge neutral">内置</span>
             </div>
-            <span class="small-badge neutral">内置</span>
-          </div>
-          <p>{{ item.description }}</p>
-          <div class="chip-line">
-            <span v-for="cap in item.capabilities" :key="cap" class="plain-chip">{{ cap }}</span>
-          </div>
-          <div class="catalog-action">
-            <span><Icon name="rss" :size="15" />{{ item.sourceLabel }}</span
-            ><button
-              class="button primary"
-              :disabled="state.websites.some((w) => w.adapterId === item.id)"
-              @click="install(item.id)"
-            >
-              {{
-                state.websites.some((w) => w.adapterId === item.id) ? '已添加' : '添加 ' + item.name
-              }}
-            </button>
-          </div>
-        </article>
+            <p>{{ item.description }}</p>
+            <div class="chip-line">
+              <span v-for="cap in item.capabilities" :key="cap" class="plain-chip">{{ cap }}</span>
+            </div>
+            <div class="catalog-action">
+              <span><Icon name="rss" :size="15" />{{ item.sourceLabel }}</span
+              ><button
+                class="button primary"
+                :disabled="state.websites.some((w) => w.adapterId === item.id)"
+                @click="install(item.id)"
+              >
+                {{
+                  state.websites.some((w) => w.adapterId === item.id)
+                    ? '已添加'
+                    : '添加 ' + item.name
+                }}
+              </button>
+            </div>
+          </article>
+        </div>
         <div v-if="!available.length" class="empty-state">
           <Icon name="search" :size="26" />
           <h3>没有找到内置网站</h3>
