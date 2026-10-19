@@ -4,7 +4,7 @@
 
 ## 环境与代码
 
-唯一开发环境SeekBell-Dev，/home/dev/projects/seekbell；从原Ubuntu显式经wsl.exe执行，D盘交接副本及原工具/容器未改。[环境入口](DEVELOPMENT_ENVIRONMENT.md)。分支codex/frontend-backend-integration，从已推送main的ce65503创建，开始工作区干净。v0.4实现44c5359，M2基准1fdec56。当前实现待本地提交；未提交路径集中backend认证/API/迁移、frontend共享适配与live入口、测试/CI脚本和对应文档；不得将旧SHA视为本轮验证对象。
+唯一开发环境SeekBell-Dev，/home/dev/projects/seekbell；从原Ubuntu显式经wsl.exe执行，D盘交接副本及原工具/容器未改。[环境入口](DEVELOPMENT_ENVIRONMENT.md)。分支codex/frontend-backend-integration，从已推送main的ce65503创建，开始工作区干净。v0.4实现44c5359，M2基准1fdec56。实现提交99115b0a1eb1450f0387a587a08d0888469f6a2a；其后仅文档归档。本地提交，未推送或合并main；提交后核对工作区。
 
 ## 已实现与验证
 
@@ -12,13 +12,13 @@
 
 管理员单例事务、scrypt、服务端会话/撤销、HttpOnly/SameSite/HTTPS Secure、CSRF/Origin及登录限速已实现。四渠道配置复用Fernet，只保存不发送；密钥缺失/错误不自动替换，读取不回显敏感值。规则试算共用后端RuleEngine。尚未接入页面明确提示，不展示模拟运行成功。
 
-SeekBell-Dev工作区基于ce65503的实现通过：后端233项、原型浏览器40项、真实闭环桌面/手机2项；含失败保留草稿、刷新、新浏览器登录、320–1440布局。类型、两入口构建、Ruff/格式通过；隐私检查通过；单容器校验待提交后执行。6张接入截图及命令见阶段证据。旧v0.4 ZIP仍为100a95c模拟快照，不重打包。旧远程CI仅证明原型来源ac1476b；本轮远程CI未执行。
+SeekBell-Dev的实现99115b0通过：后端233项、原型浏览器40项、真实闭环桌面/手机2项；含失败保留草稿、刷新、新浏览器登录、320–1440布局。类型、两入口构建、Ruff/格式通过；隐私/锁校验/wheel通过。Rootless Docker单容器（禁用外网、UID10001）验证API/资源/进程锁、重启及真实配置持久化通过；本地镜像ID sha256:b480417740c0c86f0a9bc1ad4f89420cbccde03c0b7bb45e2172be324358be99，非发布镜像。6张接入截图及命令见阶段证据。旧v0.4 ZIP仍为100a95c模拟快照，不重打包。旧远程CI仅证明原型来源ac1476b；本轮远程CI未执行。
 
 ## 下一步与读取清单
 
-先完成本轮证据归档/本地提交，再依次接真实内容/命中/投递查询、概览统计、管理员修改与目标测试，随后接采集/投递生命周期。当前没有真实采集和发送，关闭浏览器后的监控尚待生命周期接入，不能称M3完成。
+下一小阶段依次接真实内容/命中/投递查询、概览统计、管理员修改与目标测试，随后接采集/投递生命周期。当前没有真实采集和发送，关闭浏览器后的监控尚待生命周期接入，不能称M3完成。
 
-恢复先核对发行版/目录/分支/HEAD/工作区，读AGENTS、本状态和本阶段证据；按需读SPEC 1/2/3/6、ARCHITECTURE的M3接入契约，及api/auth.py、api/management.py、services/authentication.py、configuration.py、frontend/src/live与共享页面。无开发阻塞。Safari/真机、PVE/arm64、生产备份恢复、发布镜像及真实环境验收未验证。4175原型预览此前存在，恢复时核对进程。
+恢复先核对发行版/目录/分支/HEAD/工作区，读AGENTS、本状态和本阶段证据；按需读SPEC 1/2/3/6、ARCHITECTURE的M3接入契约，及api/auth.py、api/management.py、services/authentication.py、configuration.py、frontend/src/live与共享页面。无开发阻塞。Safari/真机、PVE/arm64、生产备份恢复、发布镜像及真实环境验收未验证。4175原型预览此前存在，恢复时核对进程；8011临时测试服务及临时容器/卷已清理。
 
 ## 授权
 
