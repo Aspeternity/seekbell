@@ -1,29 +1,29 @@
 # 当前状态
 
-更新时间：2026-10-20（Asia/Shanghai，原卷切换开发中）。M1/M2、M3本地自动退出已完成；M4第二子阶段网页加密下载/上传生成独立恢复副本已完成本地自动验证，整体M4和真实服务/用户验收仍未完成。[本阶段证据](history/2026-10-20-网页加密备份与独立恢复.md)，[前阶段状态](history/2026-10-20-网页备份开发前状态.md)。
+更新时间：2026-10-20（Asia/Shanghai）。M1/M2、M3本地自动退出完成；M4第三子阶段保留原卷的切换/升级/显式回退已实现并通过禁外网镜像演练，整体M4及真实环境/用户验收未完成。[本阶段证据](history/2026-10-20-保留原卷切换与升级回退.md)，[前阶段](history/2026-10-20-切换开发前状态.md)。
 
 ## 环境与代码
 
-只在SeekBell-Dev的/home/dev/projects/seekbell开发，原Ubuntu显式经wsl.exe执行。[环境入口](DEVELOPMENT_ENVIRONMENT.md)。分支codex/frontend-backend-integration；实现提交69668ada946a2504af4b5ecb3ac683219ef3ea45，其后仅验证文档，无未提交产品改动。原D盘/WSL及全局配置未改。
+唯一开发环境SeekBell-Dev、/home/dev/projects/seekbell，原Ubuntu显式wsl.exe派发。[入口](DEVELOPMENT_ENVIRONMENT.md)。分支codex/frontend-backend-integration，实现01f4bd6、原卷只读WAL修复f58e5f24b86883fcd3bf35c4eebac4b3775a2e92；其后仅本阶段验证文档，无未提交产品改动。原D盘/Ubuntu工具和全局WSL未改。
 
 ## 本阶段与证据
 
-网页在持有实例锁的进程内做SQLite一致快照，后台继续运行；CLI仍须停服。管理员会话/CSRF/同源/当前密码再验证、限速和单操作门禁；私有暂存、取消join线程再清理。上传清单8KiB/数据库2GiB/300秒。复用原加密格式与全量验证，只发布固定data_dir/web-restore新候选，撤销副本旧会话；不覆盖/切换/启动副本，不接收路径，无新依赖/迁移。已有候选拒绝覆盖，状态可刷新；大库浏览器Blob内存占用较高，建议CLI。[命令及边界](BACKUP_RESTORE.md)。
+宿主机scripts/manage_release.py提供prepare/status/activate/rollback，Web无Docker权限。准备前须停服；原卷只读挂载并持同一实例锁，DB+WAL私有物化后由SQLite生成一致快照；不裸复制单DB或immutable忽略WAL。仅新卷迁移/校验原钥/清副本会话/原子发布，源与候选摘要及构建/迁移/原启动时刻再核对，固定image ID/卷/data_dir成对切换。--restored把web-restore转入新卷，原卷保留。状态0700/0600原子更新、本地单用户项目锁；启动失败停新服务不自动回退，rollback须明确accept-data-loss，不downgrade新库/不合并。无新依赖/产品迁移。[真实命令与边界](RELEASES.md)。
 
-独立WSL证据：全量393项104.99秒；最后仅补中断/清理边界，网页21项17.79秒通过（含新增3项，非再次全量）。桌面/手机备份2项10秒、相关生产页面20项通过；未改模拟原型行为，复用原证据。Ruff/锁/wheel/前端类型构建格式/隐私noreply通过，远程CI未跑。
+最终代码f58e5f2在SeekBell-Dev全量413项104.66秒通过，切换专项17项5.25秒通过（含WAL修复）。前端类型/构建/格式及备份桌面手机2项8.9秒通过；其余UI不变复用原证据。Ruff/锁/wheel/隐私noreply通过，远程CI未跑。
 
-本地Rootless/amd64镜像seekbell:web-backup-local，代码69668ad，image ID sha256:08603d00e3c86512e13fdd785bc62ba1582bff526104ebc93055d9f790463b0a，未发布。通用打包/重启/锁/资源与禁外网Compose已通过；后者验证网页往返、原库/原钥/队列保持、副本会话撤销、运行中CLI拒绝、停服备份/恢复和恢复实例重登；仅清理本轮资源。
+本地Rootless/amd64镜像seekbell:release-local，代码f58e5f2，image ID sha256:bcc185ab9a19c3dc185068e25fd4e01ff5b764d138bebab960b6cd9849fc6511，未发布。禁外网演练验证合成未来迁移成功/事务失败、启动失败停止不自动回退、原卷字节/原钥不变、显式原版本对回退及网页副本切换；通用打包/健康/资源/锁/重启/配置和离线Runtime也通过。本轮临时资源已清理，非任意未来版本兼容证明。
 
-## 用户验收实例保留
+## 原验收实例保留
 
-项目seekbell-acceptance-b45fc2c-20261020，容器后缀-seekbell-1、新卷后缀_data；镜像seekbell:backup-local（旧代码b45fc2c），http://localhost:18081/。本次只读核对healthy、重启0，未升级/重置/替用户操作。旧seekbell-acceptance卷迁移号不兼容，旧容器已停、卷保留；勿复用旧项目名或改迁移号。旧4175/18080未动。[启动故障](history/2026-10-20-本机验收启动修复.md)。
+项目seekbell-acceptance-b45fc2c-20261020，容器后缀-seekbell-1、卷后缀_data，镜像seekbell:backup-local（b45fc2c），http://localhost:18081/。本次只读确认healthy/重启计数0，无替换/重置/代用户操作。旧seekbell-acceptance不兼容卷保留且旧容器停止；勿复用旧项目名、改迁移号或覆盖试验。旧4175/18080未动。[故障记录](history/2026-10-20-本机验收启动修复.md)。
 
-## 本次进行中与下一步
+## 下一步与恢复
 
-用户要求继续原卷切换与升级失败回退。未提交：backend/release.py离线原卷只读锁/一致快照、新卷迁移/原钥校验/清副本会话/原子发布、来源和候选校验；backup.py提取公共SQLite快照；scripts/manage_release.py宿主机维护CLI、compose.release及离线覆盖、tests/test_release.py、check_release_container.py/CI、维护文档和相应界面说明；.dockerignore补排除浏览器产物。不向网页授予Docker权限；准备须先停服，新卷独立、原卷保留；激活固定镜像与卷对，健康失败停新服务、不自动回退；明确回退需接受切换后的数据丢失。本次未提交代码全量411项104.79秒通过，切换专项15项4.55秒通过；网页备份复验2项9.2秒通过。Ruff/锁/wheel/隐私noreply通过；固定提交镜像及禁外网真实Compose演练待完成，尚未宣布本阶段通过。
+下一本地子阶段补反代HTTPS配置与部署检查，无开发阻塞。GHCR/双架构、实际反代/PVE/arm64/Safari/真机、跨版本加密恢复、真实RSS/通知及用户验收待完成。本地P02/P03已有证据不等于实机验收。启用副本会按原配置处理队列，回退丢失之后回执可能重复发送。
 
-首轮容器演练在只读WAL源首次读取失败，临时资源已清理，原验收实例未动。正在改为锁内私有物化DB+WAL后再由SQLite生成一致快照；原卷维持只读，不走immutable忽略WAL。实现已本地提交01f4bd6，当前release.py/演练指纹有本轮修正未提交，需重测和新固定镜像。后续补维护命令和交接提交。跨版本备份恢复、PVE/arm64/实际反代/Safari/真机、真实RSS/通知及用户验收仍待完成。恢复读AGENTS、本状态、BACKUP_RESTORE和ARCHITECTURE备份节，再读release/维护脚本及测试；无需全仓重读。
+恢复读AGENTS、本状态、RELEASES；按需读BACKUP_RESTORE/ARCHITECTURE备份节及release/维护脚本和专项测试，不全仓重读。
 
 ## 授权
 
-本次用户要求下一步开发；沿用本地开发/独立WSL/noreply。不推送/合并main、不组织多代理；不运行真实RSS/通知、不远程部署/公开发布、不清理原环境或改全局WSL。当前验收实例和用户后续配置必须保留。
+用户要求继续下一步本地开发；沿用独立WSL/noreply。不推送/合并main、不组织多代理，不执行真实发送/远程部署/公开发布/原环境清理/全局WSL变更。用户验收实例及之后配置必须保留。
