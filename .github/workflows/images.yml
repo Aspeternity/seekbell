@@ -11,6 +11,10 @@ on:
         description: Explicitly publish tested candidates to GHCR (requires repository opt-in)
         type: boolean
         default: false
+      tag:
+        description: Optional short candidate tag (latest is not allowed)
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -36,6 +40,7 @@ jobs:
           PUBLISH: ${{ inputs.publish }}
           ENABLED: ${{ vars.SEEKBELL_GHCR_ENABLED }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          SHORT_TAG: ${{ inputs.tag }}
         shell: bash
         run: |
           python3 - <<'PY'
@@ -44,6 +49,10 @@ jobs:
           revision = os.environ['EXPECTED_REVISION']
           assert re.fullmatch('[0-9a-f]{40}', revision), 'Use a full commit SHA'
           assert revision == os.environ['GITHUB_SHA'], 'Selected branch has a different commit'
+          tag = os.environ['SHORT_TAG']
+          if tag:
+              assert len(tag) <= 64 and re.fullmatch(r'[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*', tag) and tag != 'latest', 'Invalid short candidate tag'
+              assert os.environ['PUBLISH'] == 'true', 'A short tag requires publication'
           if os.environ['PUBLISH'] == 'true':
               assert os.environ['ENABLED'] == 'true', 'GHCR publication is not enabled'
               assert os.environ['GITHUB_REF'] == 'refs/heads/' + os.environ['DEFAULT_BRANCH'], 'Publish from the default branch only'
@@ -131,6 +140,13 @@ jobs:
           subprocess.run(['docker', 'pull', '--platform', 'linux/amd64', report['reference']], check=True)
           subprocess.run(['python3', 'scripts/check_container.py', report['reference'], '--revision', os.environ['GITHUB_SHA']], check=True)
           PYCODE
+      - name: Add explicit short tag after all image checks
+        if: ${{ inputs.tag != '' }}
+        env:
+          SHORT_TAG: ${{ inputs.tag }}
+        run: |
+          python3 scripts/release_images.py --revision "$GITHUB_SHA" --repository "$IMAGE_REPOSITORY" \
+            alias --receipt release.json --tag "$SHORT_TAG" --execute --report alias.json
       - name: Record pinned deployment reference
         run: |
           python3 - <<'PY'
@@ -149,6 +165,7 @@ jobs:
           path: |
             release.json
             package.json
+            alias.json
           if-no-files-found: error
           retention-days: 30
           overwrite: true

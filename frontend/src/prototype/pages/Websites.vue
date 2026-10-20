@@ -204,7 +204,7 @@ async function test() {
   if (isLive) {
     confirmAction(
       '测试 NodeSeek 官方 RSS 连接？',
-      '将请求一次官方 RSS，使用已保存的采集间隔并遵守退避。不会启用网站、保存草稿间隔或创建帖子、命中及通知。',
+      '将请求一次官方 RSS；测试独立限频，并遵守来源错误退避。不会启用网站、改变采集周期、保存草稿间隔或创建帖子、命中及通知。',
       () => runLiveTest(w.id),
       '确认测试连接',
     )
@@ -558,7 +558,7 @@ onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
             <p class="field-help">
               {{
                 isLive
-                  ? '仅检查官方 RSS 的连接与解析，不开启采集，不改变历史、基线和去重。'
+                  ? '仅检查官方 RSS 的连接与解析。测试有独立的 2 秒防连点间隔，不改变后台采集周期、历史、基线和去重；来源错误退避仍生效。'
                   : '只验证连接状态的界面反馈，不请求真实网站，不开启采集。'
               }}
             </p>
@@ -606,7 +606,7 @@ onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
               </p>
               <p v-else>诊断代码：{{ connection.code }}</p>
               <p>最近测试：{{ connectionTime(connection.started_at) }}</p>
-              <p>下次可请求时间：{{ connectionTime(connection.next_attempt_at) }}</p>
+              <p>下次可测试时间：{{ connectionTime(connection.next_attempt_at) }}</p>
             </div>
             <p v-else-if="isLive" class="small-note">尚无连接测试记录。</p>
             <p v-else class="small-note">最近测试：{{ formatTime(selected.lastTest) }}</p>

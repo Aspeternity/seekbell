@@ -1,4 +1,4 @@
-"""Explicit checks share the collector lock and throttle, but never ingest posts."""
+"""Explicit checks have their own cooldown, sharing only network exclusion and error backoff."""
 
 import math
 
@@ -10,6 +10,8 @@ from seekbell.db.transactions import database_call, write_session
 from seekbell.domain.delivery import SourcePolicy
 from seekbell.domain.errors import SourceFailure
 from seekbell.sites.nodeseek import BUILTIN_ADAPTERS
+
+TEST_COOLDOWN_SECONDS = 2
 
 
 class ProbeConflict(Exception):
@@ -39,24 +41,28 @@ def get_probe(engine, website_id):
         probe = session.get(SourceProbe, source.id)
         result = probe_view(probe)
         if result:
-            result["next_attempt_at"] = source_due(
-                session.get(SourceState, source.id), source, probe
-            )
+            result["next_attempt_at"] = test_due(session.get(SourceState, source.id), probe)
         return result
 
 
-def probe_due(probe, interval):
+def probe_due(probe):
     if probe is None:
         return 0
-    return max(probe.next_attempt_at, (probe.finished_at or probe.started_at) + interval)
-
-
-def source_due(state, source, probe):
+    # A successful legacy probe may store the old monitor interval. Only real
+    # failures retain that saved backoff; normal tests use their own cooldown.
     return max(
-        state.next_attempt_at,
-        state.last_attempt_at + source.interval_seconds if state.last_attempt_at else 0,
-        probe_due(probe, source.interval_seconds),
+        probe.next_attempt_at if probe.status == "failure" else 0,
+        (probe.finished_at if probe.finished_at is not None else probe.started_at)
+        + TEST_COOLDOWN_SECONDS,
     )
+
+
+def probe_backoff(probe):
+    return probe.next_attempt_at if probe is not None and probe.status == "failure" else 0
+
+
+def test_due(state, probe):
+    return max(state.next_attempt_at if state.failures else 0, probe_due(probe))
 
 
 def reserve(engine, source_id, at):
@@ -66,14 +72,24 @@ def reserve(engine, source_id, at):
             raise ProbeConflict("请先添加内置网站。")
         state = session.get(SourceState, source_id)
         probe = session.get(SourceProbe, source_id)
-        next_at = source_due(state, source, probe)
+        next_at = test_due(state, probe)
         if at < next_at:
-            raise ProbeConflict("来源处于采集间隔或退避中，请稍后测试。", next_at - at)
+            delay = next_at - at
+            reason = "连接测试操作过于频繁"
+            if (
+                state.failures
+                and state.last_error_code
+                and state.next_attempt_at >= probe_due(probe)
+            ):
+                reason = f"最近采集失败（{state.last_error_code}），来源正在退避"
+            elif probe and probe.status == "failure" and probe.code:
+                reason = f"最近连接测试失败（{probe.code}），来源正在退避"
+            raise ProbeConflict(f"{reason}；约 {math.ceil(delay)} 秒后可再次测试。", delay)
         if probe is None:
             probe = SourceProbe(source_id=source_id)
             session.add(probe)
         probe.started_at, probe.finished_at = at, None
-        probe.next_attempt_at = at + source.interval_seconds
+        probe.next_attempt_at = at + TEST_COOLDOWN_SECONDS
         # A crash/cancelled request leaves honest evidence, never a false success.
         probe.status, probe.code, probe.item_count = "unknown", "check_not_completed", None
         return source.website_id, source.url
@@ -82,9 +98,8 @@ def reserve(engine, source_id, at):
 def finish(engine, source_id, at, *, count=None, error=None):
     with write_session(engine) as session:
         probe = session.get(SourceProbe, source_id)
-        source = session.get(Source, source_id)
         probe.finished_at = at
-        probe.next_attempt_at = max(probe.next_attempt_at, at + source.interval_seconds)
+        probe.next_attempt_at = max(probe.next_attempt_at, at + TEST_COOLDOWN_SECONDS)
         if error:
             probe.status, probe.code, probe.item_count = "failure", error.code, None
             probe.next_attempt_at = max(
