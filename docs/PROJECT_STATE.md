@@ -4,7 +4,7 @@
 
 ## 环境与代码
 
-仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。当前codex/rss-connection-independent，实现10cf4e7f05cd12c1e8321985af1d80b83c4ea672；本轮收尾仅README、状态/证据随文档提交，代码不变。分支未推送/合并main，main/origin仍fc8f95b，旧开发分支cb3de42保留。原D盘/Ubuntu工具与全局WSL未改。
+仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。当前codex/rss-connection-independent，实现10cf4e7f05cd12c1e8321985af1d80b83c4ea672；本轮待提交发布helper/专项、images.yml短标签输入、37秒场景、Portainer模板及相关文档；不改变已验证RSS业务代码。分支未推送/合并main，main/origin仍fc8f95b，旧开发分支cb3de42保留。原D盘/Ubuntu工具与全局WSL未改。
 
 ## 当前修复与证据
 
@@ -22,6 +22,6 @@
 
 ## 下一步与授权
 
-新修复合并/公开镜像发布授权仍待答复；获授权后按精确SHA完整CI/两架构、公开元数据/索引/匿名拉取检查，再由用户更新Portainer。真实RSS/四渠道、HTTPS/Safari/真机、运行观察及完整用户验收待反馈；跨版本加密恢复未验证。回退可能重复发送，保留原卷、不降级新库。
+用户现明确授权“发布镜像并给Compose”，后台按配置时间、10秒仅默认；本轮已补37秒场景和可选短标签rss-fix-1、Portainer模板，89项专项/actionlint通过，正在提交。合并/发布后按精确SHA完整CI/两架构、公开元数据/索引/匿名拉取检查，再由用户更新Portainer。真实RSS/四渠道、HTTPS/Safari/真机、运行观察及完整用户验收待反馈；跨版本加密恢复未验证。回退可能重复发送，保留原卷、不降级新库。
 
-此前单次main合并/GHCR发布及镜像公开授权均已完成，非永久发布授权。无本轮新镜像公开发布、远程部署、真实发送、源码公开、正式Release或旧环境/全局WSL变更授权。不组织多代理。恢复读AGENTS、本状态和独立限频记录；发布时再读IMAGE_RELEASE/相关workflow。仅文档收尾skip ci复用10cf4e7，不循环写自身SHA。
+此前单次main合并/GHCR发布及镜像公开授权均已完成，非永久发布授权。本轮新修复合并main/公开GHCR及短标签已授权，允许仅为本次临时开启发布后恢复；无远程部署、真实发送、源码公开、正式Release或旧环境/全局WSL变更授权。不组织多代理。恢复读AGENTS、本状态和独立限频记录；发布时再读IMAGE_RELEASE/相关workflow。仅文档收尾skip ci复用10cf4e7，不循环写自身SHA。

@@ -228,6 +228,52 @@ def release(
     return result
 
 
+def alias(report: dict, revision: str, repository: str, tag: str, *, execute: bool = False) -> dict:
+    image, _ = identity(revision, repository)
+    if (
+        len(tag) > 64
+        or not re.fullmatch(r"[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*", tag)
+        or tag == "latest"
+    ):
+        raise ReleaseError("Expected an explicit short candidate tag, not latest")
+    digest = report.get("digest", "")
+    digests = report.get("manifests", {})
+    if (
+        report.get("published") is not True
+        or report.get("revision") != revision
+        or not DIGEST.fullmatch(digest)
+        or report.get("reference") != f"{image}@{digest}"
+        or set(digests) != set(ARCHITECTURES)
+        or any(not DIGEST.fullmatch(value) for value in digests.values())
+    ):
+        raise ReleaseError("Alias requires the matching published two-platform receipt")
+    pinned = json.loads(
+        docker(
+            "buildx", "imagetools", "inspect", "--format", "{{json .Manifest}}", report["reference"]
+        )
+    )
+    if verify_index(pinned, digests) != digest:
+        raise ReleaseError("Alias source differs from verified registry index")
+    target = f"{image}:{tag}"
+    result = {
+        "revision": revision,
+        "tag": target,
+        "reference": report["reference"],
+        "digest": digest,
+        "published": False,
+    }
+    if execute:
+        # One existing index source is copied verbatim; do not rebuild or combine runs.
+        docker("buildx", "imagetools", "create", "--tag", target, report["reference"])
+        tagged = json.loads(
+            docker("buildx", "imagetools", "inspect", "--format", "{{json .Manifest}}", target)
+        )
+        if verify_index(tagged, digests) != digest:
+            raise ReleaseError("Short tag differs from verified registry index")
+        result["published"] = True
+    return result
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--revision", required=True)
@@ -245,6 +291,13 @@ def main() -> None:
     publish.add_argument("--run", required=True)
     publish.add_argument("--execute", action="store_true")
     publish.add_argument("--report", type=Path, required=True)
+    short = commands.add_parser(
+        "alias", help="Alias a checked published index; --execute writes GHCR"
+    )
+    short.add_argument("--receipt", type=Path, required=True)
+    short.add_argument("--tag", required=True)
+    short.add_argument("--execute", action="store_true")
+    short.add_argument("--report", type=Path, required=True)
     args = parser.parse_args()
     try:
         if args.command == "pack":
@@ -253,6 +306,15 @@ def main() -> None:
             )
         elif args.command == "verify":
             result = verify(args.directory, args.architecture, args.revision, args.repository)
+        elif args.command == "alias":
+            result = alias(
+                json.loads(args.receipt.read_text()),
+                args.revision,
+                args.repository,
+                args.tag,
+                execute=args.execute,
+            )
+            args.report.write_text(json.dumps(result, indent=2) + "\n")
         else:
             result = release(
                 args.artifacts, args.revision, args.repository, args.run, execute=args.execute

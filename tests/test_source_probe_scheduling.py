@@ -28,7 +28,7 @@ def response():
     )
 
 
-@pytest.mark.parametrize("interval", [10, 3600])
+@pytest.mark.parametrize("interval", [10, 37, 3600])
 def test_recent_successful_collection_does_not_block_manual_check_or_get_rescheduled(
     core, interval
 ):

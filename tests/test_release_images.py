@@ -324,3 +324,66 @@ def test_single_platform_push_must_resolve_to_a_real_manifest(
     with pytest.raises(images.ReleaseError):
         images.release(artifacts, REVISION, REPOSITORY, "123-1", execute=True)
     assert not any(args[:3] == ("buildx", "imagetools", "create") for args in docker)
+
+
+def published_receipt():
+    return {
+        "published": True,
+        "revision": REVISION,
+        "digest": INDEX_DIGEST,
+        "reference": f"ghcr.io/{REPOSITORY}@{INDEX_DIGEST}",
+        "manifests": DIGESTS,
+    }
+
+
+def test_alias_default_only_reads_the_pinned_registry_index(docker):
+    result = images.alias(published_receipt(), REVISION, REPOSITORY, "rss-fix-1")
+    assert result["published"] is False
+    assert all(args[:3] == ("buildx", "imagetools", "inspect") for args in docker)
+
+
+def test_alias_copies_the_verified_two_platform_index_without_rebuild(docker):
+    report = published_receipt()
+    result = images.alias(report, REVISION, REPOSITORY, "rss-fix-1", execute=True)
+    assert result["published"] and result["digest"] == INDEX_DIGEST
+    assert docker == [
+        ("buildx", "imagetools", "inspect", "--format", "{{json .Manifest}}", report["reference"]),
+        (
+            "buildx",
+            "imagetools",
+            "create",
+            "--tag",
+            f"ghcr.io/{REPOSITORY}:rss-fix-1",
+            report["reference"],
+        ),
+        ("buildx", "imagetools", "inspect", "--format", "{{json .Manifest}}", result["tag"]),
+    ]
+
+
+@pytest.mark.parametrize("tag", ["latest", "../other", "other/image:tag", "--append", "x" * 65])
+def test_invalid_alias_never_accesses_registry(docker, tag):
+    with pytest.raises(images.ReleaseError):
+        images.alias(published_receipt(), REVISION, REPOSITORY, tag, execute=True)
+    assert not docker
+
+
+@pytest.mark.parametrize("fault", ["published", "revision", "digest", "reference", "manifests"])
+def test_alias_rejects_unverified_or_mismatching_receipt_before_registry_access(docker, fault):
+    report = published_receipt()
+    report[fault] = {} if fault == "manifests" else "wrong"
+    with pytest.raises(images.ReleaseError):
+        images.alias(report, REVISION, REPOSITORY, "rss-fix-1", execute=True)
+    assert not docker
+
+
+def test_changed_alias_index_does_not_record_success(docker, monkeypatch):
+    original = images.docker
+
+    def changed(*args):
+        if args[-1].endswith(":rss-fix-1") and args[2] == "inspect":
+            return json.dumps({**index(), "digest": "sha256:" + "6" * 64})
+        return original(*args)
+
+    monkeypatch.setattr(images, "docker", changed)
+    with pytest.raises(images.ReleaseError, match="Short tag differs"):
+        images.alias(published_receipt(), REVISION, REPOSITORY, "rss-fix-1", execute=True)
