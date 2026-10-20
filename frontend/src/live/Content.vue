@@ -336,7 +336,7 @@ function clear() {
         <div v-if="!listing.data.value.total" class="empty-state">
           <Icon name="search" :size="30" />
           <h3>没有符合条件的内容</h3>
-          <p>当前没有已保存的记录，或筛选条件未匹配。采集调度尚未接入。</p>
+          <p>当前没有已保存的记录，或筛选条件未匹配。请检查网站启停状态与概览中的最近采集结果。</p>
           <button class="button" @click="clear">清除筛选</button>
         </div>
         <Pagination

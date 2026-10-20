@@ -216,3 +216,10 @@ Runtime增加独立alert_stop；其他actor意外失败降低就绪并停止采�
 系统消息使用独立schema_version=2、type=system_alert及alert对象，无伪造Post或任务；Webhook投递ID同时作稳定event_id/Idempotency-Key，普通帖子v1保持原约定。TG/Bark/SMTP复用既有凭据解密、网络限制和纯文本边界；Bark系统消息不带原帖url。固定故障代码不含远端错误/配置。GET /api/manage/alerts/state、/history及/history/{id}只读快照分页（上限100）返回白名单诊断/结果，不返回密文或接收地址。未知与失败可见，但本阶段不加手动重发系统告警入口。
 
 普通保留清理可删过期SystemEvent及其全部已结束、完成时间过期的AlertDelivery；pending或未结束unknown保护整个事件。SystemState代次锚点不删，历史清空不重新发持续故障。新表、索引与ORM一致，迁移整体回滚。独立--system/8017浏览器服务使用临时库、真实Runtime及模拟HTTP/Notifier；产品无模拟开关。验证与边界见[阶段记录](history/2026-10-20-时区与系统告警接入.md)。
+
+
+## M3版本信息与退出核对（2026-10-20，第九子阶段）
+
+正式设置AboutSettings复用/api/version、/health/ready及受认证/api/manage/runtime，不新增后端或数据库结构。api.ts分离版本/就绪读取及协议校验，两者各自限8秒/禁止缓存；就绪503仍允许显示可读版本，非约定健康响应显示读取错误。原独立状态入口loadSystemInfo仍要求就绪。界面保留完整构建版本，development标明未固定提交，迁移null不冒充管理员未初始化；真实Runtime状态另行读取，401沿用会话过期处理。共享useRemote忽略过期/卸载响应，手动刷新/重试不写配置或发送消息。就绪只说明数据库与运行循环，不作为外部RSS可用或实际收信的证明。
+
+正式导航提供版本信息；生产备份恢复按M4，既有备份直达地址明确未可用，不提供模拟导入/导出。未知设置地址404，正式空态与帮助说明以已接入范围为准；模拟原型独立。M3操作/路由核对及证据见[退出矩阵](history/2026-10-20-版本信息与M3退出核对.md)，用户验收与真实服务验证另记。

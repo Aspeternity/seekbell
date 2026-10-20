@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import AboutSettings from './AboutSettings.vue'
 import DisplaySettings from './DisplaySettings.vue'
 import AlertsSettings from './AlertsSettings.vue'
 import RetentionSettings from './RetentionSettings.vue'
@@ -7,6 +8,10 @@ import Icon from '../prototype/components/Icon.vue'
 import { state, account, savePreferences, saveAdministrator, setSession } from './store'
 const props = defineProps<{ tab?: string }>()
 const emit = defineEmits<{ navigate: [path: string]; dirty: [value: boolean] }>()
+const tabs = ref<HTMLElement>()
+onMounted(() =>
+  tabs.value?.querySelector('.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }),
+)
 const retentionDirty = ref(false)
 const auxiliaryDirty = ref(false)
 const name = ref(state.settings.workspaceName),
@@ -100,7 +105,7 @@ async function logout() {
     </div>
     <span class="small-badge neutral">单管理员</span>
   </section>
-  <nav class="page-tabs" aria-label="设置分类">
+  <nav ref="tabs" class="page-tabs" aria-label="设置分类">
     <button
       v-for="item in [
         { id: 'preferences', label: '工作空间' },
@@ -108,9 +113,11 @@ async function logout() {
         { id: 'retention', label: '保留策略' },
         { id: 'display', label: '时区' },
         { id: 'alerts', label: '系统告警' },
+        { id: 'about', label: '版本信息' },
       ]"
       :key="item.id"
       :class="{ active: tab === item.id }"
+      :aria-current="tab === item.id ? 'page' : undefined"
       @click="emit('navigate', '/settings/' + item.id)"
     >
       {{ item.label }}
@@ -232,9 +239,11 @@ async function logout() {
     <RetentionSettings v-else-if="props.tab === 'retention'" @dirty="retentionDirty = $event" />
     <DisplaySettings v-else-if="props.tab === 'display'" @dirty="auxiliaryDirty = $event" />
     <AlertsSettings v-else-if="props.tab === 'alerts'" @dirty="auxiliaryDirty = $event" />
-    <section v-else class="panel empty-state">
-      <h2>此设置将在后续阶段接入</h2>
-      <p>当前可保存工作空间名称与说明，或管理登录会话。</p>
+    <AboutSettings v-else-if="props.tab === 'about'" />
+    <section v-else-if="props.tab === 'backup'" class="panel empty-state">
+      <h2>备份与恢复</h2>
+      <p>生产备份与恢复将在 M4 接入，当前尚不可用。</p>
+      <p class="small-note">演示备份无法恢复正式数据库、账号或加密凭据。</p>
     </section>
   </div>
 </template>

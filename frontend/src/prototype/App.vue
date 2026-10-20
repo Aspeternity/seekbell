@@ -244,7 +244,7 @@ function showInfo() {
     '所有管理页面已可体验。任务、目标、来源、内容、投递和设置在浏览器内联动；支持演示登录和备份恢复。界面不连接真实后端、不采集 RSS、不发送通知。请使用演示凭据。'
   if (isLive)
     infoBody.value =
-      '初始化、登录、配置保存、历史查询、概览统计与管理员修改已接入服务端。独立目标测试与手动重发需明确确认；服务端采集与自动投递随服务运行，关闭浏览器仍会继续；目标删除等功能逐步接入。'
+      '初始化、登录、配置保存、历史查询、概览统计与管理员修改已接入服务端。独立目标测试与手动重发需明确确认；服务端采集与自动投递随服务运行，关闭浏览器仍会继续。目标删除、保留策略、时区与系统告警已接入；版本信息可在系统设置查看。生产备份恢复将在 M4 接入，真实 RSS/通知与用户验收尚未完成。'
   infoDialog.value?.showModal()
 }
 </script>
@@ -441,7 +441,7 @@ function showInfo() {
           @navigate="navigate"
         /><component
           :is="liveComponents.settings"
-          v-else-if="isLive && page === 'settings'"
+          v-else-if="isLive && page === 'settings' && validPage"
           :key="path"
           :tab="parts[1]"
           @dirty="(value: boolean) => (dirty = value)"
@@ -456,7 +456,11 @@ function showInfo() {
         <section v-else class="panel not-found">
           <span class="not-found-number">404</span>
           <h1 tabindex="-1">这条线索暂时不在这里</h1>
-          <p>页面可能不存在，或演示记录已被删除。</p>
+          <p>
+            {{
+              isLive ? '页面可能不存在，或记录已被删除。' : '页面可能不存在，或演示记录已被删除。'
+            }}
+          </p>
           <button class="button primary" @click="navigate('/')">
             返回概览<Icon name="arrow" :size="16" />
           </button>
