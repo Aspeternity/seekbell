@@ -15,9 +15,11 @@ from seekbell.db.models import DeliveredPost, DeliveryAttempt, Outbox, RuleHit
 from seekbell.db.runtime import create_database_engine, migrate, schema_revision
 from seekbell.domain.delivery import DeliveryPolicy, SendResult
 from seekbell.domain.rules import Rule
+from seekbell.notifiers.credentials import CredentialVault
 from seekbell.services.collection import SourceRunner
 from seekbell.services.configuration import Configuration
 from seekbell.services.delivery import DeliveryWorker
+from seekbell.services.manual_sending import ConfiguredTargetTesting, ManualSending
 
 
 class SyntheticStream(httpx.AsyncByteStream):
@@ -53,8 +55,15 @@ async def exercise(directory: Path) -> dict:
     engine = create_database_engine(Settings(data_dir=directory))
     try:
         migrate(engine)
-        config = Configuration(engine)
-        target = config.create_target("Offline demo target")
+        vault = CredentialVault.open(directory, create=True)
+        config = Configuration(engine, vault)
+        target = config.create_target(
+            "Offline demo target",
+            kind="webhook",
+            config={
+                "url": "https://receiver.example.test/offline-synthetic",
+            },
+        )
         for name in ("Synthetic first rule", "Synthetic second rule"):
             config.create_task(name, Rule(), [target], at=1)
         config.set_source_enabled("nodeseek-rss", True, at=100)
@@ -84,7 +93,7 @@ async def exercise(directory: Path) -> dict:
             notifier = SyntheticNotifier()
             worker = DeliveryWorker(
                 engine,
-                {"mock": notifier},
+                {"webhook": notifier},
                 policy=DeliveryPolicy(lease_seconds=10),
                 clock=lambda: clock[0],
             )
@@ -106,7 +115,7 @@ async def exercise(directory: Path) -> dict:
 
             event = session.get(Outbox, abandoned.event_id)
             assert event.status == "sent" and event.uncertain
-            return {
+            result = {
                 "mode": "offline_synthetic",
                 "database_revision": schema_revision(engine),
                 "baseline_posts": first.new_posts,
@@ -120,6 +129,23 @@ async def exercise(directory: Path) -> dict:
                 "uncertainty_retained": event.uncertain,
                 "duplicate_poll_queued": repeated.queued,
             }
+        manual = ManualSending(engine, {"webhook": notifier})
+        manual_id = await manual.run(abandoned.event_id)
+        await manual.run(abandoned.event_id, key=manual_id)
+        assert manual.get_result(manual_id)["result"] == "success"
+        result["manual_send_calls"] = len(notifier.calls) - result["mock_send_calls"]
+        tester = ConfiguredTargetTesting(engine, {"webhook": notifier})
+        test_id = await tester.run(target)
+        await tester.run(target, key=test_id)
+        assert tester.get_result(test_id)["result"] == "success"
+        result["target_test_send_calls"] = (
+            len(notifier.calls) - result["mock_send_calls"] - result["manual_send_calls"]
+        )
+        with Session(engine) as session:
+            assert session.get(Outbox, abandoned.event_id).status == "sent"
+            assert session.scalar(select(func.count()).select_from(DeliveredPost)) == 1
+        result["manual_dedup_preserved"] = True
+        return result
     finally:
         engine.dispose()
 

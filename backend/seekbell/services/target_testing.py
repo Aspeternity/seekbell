@@ -14,7 +14,13 @@ from seekbell.notifiers.base import Notifier
 from seekbell.services.configuration import identifier, target_snapshot
 
 
+class OperationConflict(ValueError):
+    pass
+
+
 class TargetTesting:
+    record_type = TargetTestAttempt
+
     def __init__(
         self,
         engine: Engine,
@@ -28,12 +34,20 @@ class TargetTesting:
             raise ValueError("Target test timeout must be between 0 and 10 seconds")
         self.timeout = timeout
 
-    def _start(self, target_id: str):
-        key, at = identifier(), self.clock()
+    def validate(self, target, revision):
+        if target is None:
+            raise ValueError("Unknown target")
+
+    def _start(self, target_id: str, key=None, revision=None):
+        key, at = key or identifier(), self.clock()
         with write_session(self.engine) as session:
+            existing = session.get(TargetTestAttempt, key)
+            if existing:
+                if existing.target_id != target_id:
+                    raise OperationConflict("操作标识已用于另一目标。")
+                return key, None, None
             target = session.get(NotificationTarget, target_id)
-            if target is None:
-                raise ValueError("Unknown target")
+            self.validate(target, revision)
             snapshot = target_snapshot(target)
             session.add(
                 TargetTestAttempt(
@@ -65,12 +79,14 @@ class TargetTesting:
 
     def _finish(self, key: str, result: SendResult):
         with write_session(self.engine) as session:
-            attempt = session.get(TargetTestAttempt, key)
+            attempt = session.get(self.record_type, key)
             attempt.result, attempt.error_code = result.status, result.code
             attempt.finished_at = self.clock()
 
-    async def run(self, target_id: str) -> str:
-        key, snapshot, payload = await asyncio.to_thread(self._start, target_id)
+    async def run(self, target_id: str, *, key=None, revision=None) -> str:
+        key, snapshot, payload = await asyncio.to_thread(self._start, target_id, key, revision)
+        if snapshot is None:
+            return key
         notifier = self.notifiers.get(snapshot["kind"])
         result = SendResult(status="permanent_error", code="unsupported_notifier")
         if notifier:
@@ -89,7 +105,7 @@ class TargetTesting:
 
     def get_result(self, key: str) -> dict:
         with Session(self.engine) as session:
-            attempt = session.get(TargetTestAttempt, key)
+            attempt = session.get(self.record_type, key)
             if attempt is None:
                 raise ValueError("Unknown target test")
             return {

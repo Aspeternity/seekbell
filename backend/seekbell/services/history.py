@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from seekbell.db.models import (
     DeliveredPost,
     DeliveryAttempt,
+    ManualDelivery,
     NotificationTarget,
     Outbox,
     Post,
@@ -500,21 +501,40 @@ class History:
             )
             return result
 
-    def list_tests(self, *, page=1, page_size=20, q="", status="all", target_id="", window=None):
-        statement = select(TargetTestAttempt)
+    def list_tests(self, **filters):
+        return self._list_explicit(TargetTestAttempt, **filters)
+
+    def list_manual(self, **filters):
+        return self._list_explicit(ManualDelivery, **filters)
+
+    def _list_explicit(
+        self,
+        model,
+        *,
+        page=1,
+        page_size=20,
+        q="",
+        status="all",
+        target_id="",
+        window=None,
+        source_event_id="",
+    ):
+        statement = select(model)
         if q:
             statement = statement.where(
-                TargetTestAttempt.target_snapshot["name"].as_string().icontains(q, autoescape=True)
+                model.target_snapshot["name"].as_string().icontains(q, autoescape=True)
             )
         if status != "all":
-            statement = statement.where(TargetTestAttempt.result == status)
+            statement = statement.where(model.result == status)
         if target_id:
-            statement = statement.where(TargetTestAttempt.target_id == target_id)
-        statement = bounded_date(statement, TargetTestAttempt.started_at, window)
+            statement = statement.where(model.target_id == target_id)
+        if source_event_id and model is ManualDelivery:
+            statement = statement.where(model.source_event_id == source_event_id)
+        statement = bounded_date(statement, model.started_at, window)
         with read_session(self.engine) as session:
             total = session.scalar(select(func.count()).select_from(statement.subquery()))
             rows = session.scalars(
-                statement.order_by(TargetTestAttempt.started_at.desc(), TargetTestAttempt.id)
+                statement.order_by(model.started_at.desc(), model.id)
                 .offset((page - 1) * page_size)
                 .limit(page_size)
             ).all()
@@ -522,7 +542,10 @@ class History:
                 "total": total,
                 "page": page,
                 "page_size": page_size,
-                "items": [self.test_item(row) for row in rows],
+                "items": [
+                    self.manual_item(row) if model is ManualDelivery else self.test_item(row)
+                    for row in rows
+                ],
             }
 
     @staticmethod
@@ -585,3 +608,54 @@ class History:
                 ],
                 "truncated": len(task_rows) > 200 or len(categories) > 200 or len(targets) > 200,
             }
+
+    @staticmethod
+    def manual_item(row):
+        return {
+            **History.test_item(row),
+            "source_event_id": row.source_event_id,
+            "title": text(row.payload.get("post", {}).get("title"), "历史消息"),
+            "target_revision": row.target_snapshot.get("revision"),
+        }
+
+    def get_manual(self, key, *, task_page=1, page_size=20):
+        with read_session(self.engine) as session:
+            row = session.get(ManualDelivery, key)
+            if row is None:
+                raise MissingHistory("手动重发记录不存在或已清理。")
+            result = self.manual_item(row)
+            result["source_exists"] = session.get(Outbox, row.source_event_id) is not None
+            raw_post = row.payload.get("post", {})
+            result["post"] = {
+                field: raw_post.get(field)
+                for field in (
+                    "title",
+                    "summary",
+                    "author",
+                    "category",
+                    "published_at",
+                    "first_seen_at",
+                )
+            }
+            website_id = raw_post.get("website_id")
+            external_id = raw_post.get("external_post_id")
+            result["post"]["original_url"] = original_url(
+                website_id, external_id, raw_post.get("url")
+            )
+            result["post_id"] = (
+                post_key(website_id, external_id)
+                if website_id and external_id and session.get(Post, (website_id, external_id))
+                else None
+            )
+            tasks = row.payload.get("matched_tasks", [])
+            offset = (task_page - 1) * page_size
+            result["tasks"] = {
+                "total": len(tasks),
+                "page": task_page,
+                "page_size": page_size,
+                "items": [
+                    {"name": text(item.get("name"), "历史任务"), "version": item.get("version")}
+                    for item in tasks[offset : offset + page_size]
+                ],
+            }
+            return result

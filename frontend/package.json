@@ -20,7 +20,8 @@
     "test:prototype": "playwright test",
     "serve:prototype": "node serve-prototype.mjs",
     "test:live": "playwright test --config playwright.live.config.ts",
-    "test:history": "playwright test --config playwright.history.config.ts"
+    "test:history": "playwright test --config playwright.history.config.ts",
+    "test:sending": "playwright test --config playwright.sending.config.ts"
   },
   "dependencies": {
     "naive-ui": "2.45.3",

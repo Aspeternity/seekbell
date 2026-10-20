@@ -104,11 +104,11 @@ function setRange(value: '24h' | '7d') {
         <p>按任务版本累计，含同帖多任务命中</p>
       </article>
       <article class="stat-card">
-        <div class="stat-label">渠道确认接受<Icon name="send" :size="18" /></div>
+        <div class="stat-label">自动渠道确认接受<Icon name="send" :size="18" /></div>
         <div class="stat-value" data-testid="overview-delivered">
           {{ data.window.delivered }}<span>次</span>
         </div>
-        <p>按时段内回执；同帖与目标去重，不含目标测试</p>
+        <p>自动投递按时段内回执；同帖与目标去重</p>
       </article>
       <article class="stat-card">
         <div class="stat-label">当前待关注投递<Icon name="alert" :size="18" /></div>

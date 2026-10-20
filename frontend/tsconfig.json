@@ -23,6 +23,7 @@
     "vite.config.ts",
     "vite.prototype.config.ts",
     "playwright.live.config.ts",
-    "playwright.history.config.ts"
+    "playwright.history.config.ts",
+    "playwright.sending.config.ts"
   ]
 }

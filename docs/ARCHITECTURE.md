@@ -149,3 +149,15 @@ GET /api/manage/overview?range=24h|7d复用认证/no-store与显式BEGIN只读�
 PUT /api/auth/administrator接受username、current_password及可选new_password，复用会话CSRF/Origin、认证限速与串行scrypt；当前密码错误400、会话失效401、格式或无修改422。新用户名沿用3–32位ASCII字母/数字/下划线/短横线，新密码8–128字符；省略新密码保留密码。昂贵哈希在写锁外，写事务再次核对会话存在/过期、CSRF及凭据哈希，原子更新单例管理员、删除全部旧会话并建立新Cookie/CSRF。仅改用户名也换随机盐，防止改名往返后旧凭据验证继续生效；登录在哈希后写事务重查用户名/哈希，阻止密码修改竞态重新发出旧密码会话。无需新增迁移。
 
 正式设置等待服务端成功后才同步账号并清空密码草稿，错误保留编辑、支持未保存保护，不写浏览器持久存储。浏览器统计与管理员表单测试仍复用history临时库；固定时钟只通过测试入口依赖覆盖，不提供生产时间参数或模拟数据开关。接口口径、自动证据及未完成范围见[阶段记录](history/2026-10-20-概览与管理员接入.md)。
+
+## M3独立通知操作（2026-10-20，第四子阶段）
+
+应用生命周期创建/关闭NotifierRegistry，供受保护的显式测试/重发使用，仍不启动SourceRunner或DeliveryWorker。GET /api/manage/targets/{id}/test-preview与/deliveries/{id}/resend-preview只返回目标名称/渠道/版本及消息标题；POST对应/test、/resend要求会话CSRF/Origin、request_id UUID和确认的目标revision。仅支持四种已配置渠道；目标测试允许暂停目标，重发要求目标启用、原意图为sent/failed/cancelled，避免与pending/retry/leased自动投递并行。确认后配置版本变化返回409，界面需重新打开确认。
+
+沿用TargetTesting的先持久化后网络、单次10秒上限及未知留证，新增ConfiguredTargetTesting验证入口和ManualSending。每次界面操作生成随机UUID，结果响应丢失后的重试沿用同一UUID：记录存在时返回已有结果，不再次发送；同一UUID绑定原目标/原投递，不能用于另一对象。SQLite写事务串行检查和建立记录，覆盖并发重复请求；记录存续期间实现此幂等，不承诺渠道端exactly-once。进程内显式操作最多2个并发，满额429，未建立新记录。取消/退出/重启中断可留下finished_at为空的unknown，刷新可读，绝不自动重试或把未知当成功。SMTP线程和HTTP渠道沿用M2边界。
+
+0006_manual_delivery仅增加manual_deliveries及开始/目标/来源索引；保存原自动事件ID、当前目标的加密配置快照、原消息快照、开始/完成时间及结果。原ID不是外键，原自动可读历史清理不破坏独立留证；目标身份仍为外键。重发使用当前目标配置及原消息内容/任务快照，生成新消息事件ID，不重写原outbox、attempt、贡献、SeenPost或DeliveredPost，不重新执行规则；不会因手动成功修改自动去重，不进入自动队列或重试。明确接受/拒绝/临时错误/未知均单独记录。
+
+GET /api/manage/history/manual及/{id}复用只读快照、分页/日期/目标/状态/目标名筛选；支持source_event_id查询关联记录。详情含当前操作时目标名称/配置版本、消息/任务快照分页和原记录入口，只按白名单返回，无密文/地址/租约。概览回执指标明确为自动投递，独立测试与手动重发不计入。正式目标列表/确认弹窗通过Bootstrap注入；原型保留模拟行为。弹窗确认前无发送，取消不改变数据，未知明确提示可能重复；普通HTTP也可生成操作UUID，不依赖secure-context的randomUUID。
+
+浏览器发送验证使用独立--sending临时库/8013及测试依赖覆盖，全部渠道替换为合成Notifier，产品无模拟渠道开关；正常生产端只在管理员确认POST时调用真实适配器。离线CLI演练增加显式操作，仍只用临时库、合成配置及模拟发送。检查、授权和限制见[阶段证据](history/2026-10-20-通知测试与手动重发.md)。

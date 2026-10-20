@@ -346,7 +346,7 @@ def test_failed_management_upgrade_rolls_back_and_can_retry(tmp_path):
         with Session(engine) as session:
             assert session.get(Source, "nodeseek-rss")
         migrate(engine)
-        assert schema_revision(engine) == "0005_history"
+        assert schema_revision(engine) == "0006_manual_delivery"
         with Session(engine) as session:
             assert session.get(WebsiteInstallation, "nodeseek")
     finally:

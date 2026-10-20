@@ -22,3 +22,5 @@ frontend/test-results-live/
 frontend/playwright-report/
 
 frontend/test-results-history/
+
+frontend/test-results-sending/

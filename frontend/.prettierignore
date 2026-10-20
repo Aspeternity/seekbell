@@ -8,3 +8,5 @@ playwright-report
 test-results-live/
 
 test-results-history/
+
+test-results-sending/

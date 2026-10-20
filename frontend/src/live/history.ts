@@ -91,6 +91,15 @@ export interface TestRecord {
   started_at: number
   finished_at: number | null
 }
+export interface ManualRecord extends TestRecord {
+  source_event_id: string
+  source_exists: boolean
+  title: string
+  target_revision: number
+  post_id: string | null
+  post: DeliveryDetail['post']
+  tasks: Page<{ name: string; version: number }>
+}
 export interface Options {
   tasks: { id: string; name: string; deleted: boolean }[]
   categories: string[]

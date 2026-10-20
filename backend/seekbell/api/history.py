@@ -140,3 +140,33 @@ def tests(
 @router.get("/tests/{key}")
 def target_test(key: str, reader: Reader):
     return found(reader.get_test, key)
+
+
+@router.get("/manual")
+def manual(
+    params: Paging,
+    window: Day,
+    reader: Reader,
+    q: str = Query("", max_length=200),
+    target_id: str = Query("", max_length=80),
+    source_event_id: str = Query("", max_length=80),
+    status: Literal["all", "success", "transient_error", "permanent_error", "unknown"] = "all",
+):
+    return reader.list_manual(
+        **params,
+        window=window,
+        q=q,
+        status=status,
+        target_id=target_id,
+        source_event_id=source_event_id,
+    )
+
+
+@router.get("/manual/{key}")
+def manual_detail(
+    key: str,
+    reader: Reader,
+    task_page: int = Query(1, ge=1, le=100000),
+    page_size: int = Query(20, ge=1, le=100),
+):
+    return found(reader.get_manual, key, task_page=task_page, page_size=page_size)

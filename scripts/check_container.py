@@ -104,6 +104,7 @@ assert not workspace["runtime_active"]
 assert request("manage/history/posts")["total"] == 0
 assert request("manage/history/deliveries")["total"] == 0
 assert request("manage/history/tests")["total"] == 0
+assert request("manage/history/manual")["total"] == 0
 assert request("manage/history/options")["websites"][0]["id"] == "nodeseek"
 overview = request("manage/overview?range=7d")
 assert not overview["runtime_active"] and not any(overview["window"].values())
@@ -170,6 +171,8 @@ def main() -> None:
         )
         assert demo["mode"] == "offline_synthetic"
         assert demo["final_status"] == "sent" and demo["duplicate_poll_queued"] == 0
+        assert demo["manual_send_calls"] == 1 and demo["manual_dedup_preserved"]
+        assert demo["target_test_send_calls"] == 1
         managed_first = json.loads(
             docker("exec", container, "python", "-c", MANAGEMENT_PROBE).stdout
         )

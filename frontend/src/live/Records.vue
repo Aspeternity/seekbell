@@ -10,8 +10,16 @@ import {
   kindLabels,
   resultClass,
 } from './history'
-import type { Page, Options, DeliveryRecord, DeliveryDetail, TestRecord } from './history'
+import type {
+  Page,
+  Options,
+  DeliveryRecord,
+  DeliveryDetail,
+  TestRecord,
+  ManualRecord,
+} from './history'
 import Pagination from './Pagination.vue'
+import SendDialog from './SendDialog.vue'
 import Feedback from './Feedback.vue'
 const props = withDefaults(defineProps<{ tab?: string; recordId?: string }>(), {
   tab: 'deliveries',
@@ -23,6 +31,7 @@ const q = ref(''),
   day = ref(''),
   uncertain = ref('all'),
   page = ref(1)
+const resendOpen = ref(false)
 const attemptPage = ref(1),
   taskPage = ref(1)
 watch([q, status, target, day, uncertain], () => (page.value = 1), { flush: 'sync' })
@@ -30,12 +39,12 @@ const options = useRemote(
   () => historyGet<Options>('options'),
   () => [],
 )
-const listing = useRemote<Page<DeliveryRecord> | Page<TestRecord> | undefined>(
+const listing = useRemote<Page<DeliveryRecord> | Page<TestRecord> | Page<ManualRecord> | undefined>(
   () =>
     props.recordId
       ? Promise.resolve(undefined)
-      : props.tab === 'tests'
-        ? historyGet<Page<TestRecord>>('tests', {
+      : props.tab !== 'deliveries'
+        ? historyGet<Page<TestRecord> | Page<ManualRecord>>(props.tab, {
             q: q.value,
             status: status.value,
             target_id: target.value,
@@ -75,19 +84,22 @@ const detail = useRemote(
 )
 const testDetail = useRemote(
   () =>
-    props.recordId && props.tab === 'tests'
-      ? historyGet<TestRecord>('tests/' + props.recordId)
+    props.recordId && props.tab !== 'deliveries'
+      ? historyGet<TestRecord | ManualRecord>(props.tab + '/' + props.recordId, {
+          task_page: taskPage.value,
+        })
       : Promise.resolve(undefined),
-  () => [props.recordId, props.tab],
+  () => [props.recordId, props.tab, taskPage.value],
 )
 const time = (at: number | null) =>
   at === null ? '未记录' : formatTime(new Date(at * 1000).toISOString())
-const value = (row: DeliveryRecord | TestRecord) => ('status' in row ? row.status : row.result)
-const label = (row: DeliveryRecord | TestRecord) =>
+const value = (row: DeliveryRecord | TestRecord | ManualRecord) =>
+  'status' in row ? row.status : row.result
+const label = (row: DeliveryRecord | TestRecord | ManualRecord) =>
   'status' in row ? deliveryLabels[row.status] : resultLabels[row.result] || '历史结果未记录'
-const title = (row: DeliveryRecord | TestRecord) =>
+const title = (row: DeliveryRecord | TestRecord | ManualRecord) =>
   'title' in row ? row.title : row.target_name + ' · 目标测试'
-const created = (row: DeliveryRecord | TestRecord) =>
+const created = (row: DeliveryRecord | TestRecord | ManualRecord) =>
   'created_at' in row ? row.created_at : row.started_at
 function clear() {
   q.value = ''
@@ -100,16 +112,19 @@ function clear() {
 <template>
   <template v-if="recordId">
     <button class="back-link" @click="emit('navigate', '/notifications/' + tab)">
-      <Icon name="back" :size="17" />返回{{ tab === 'tests' ? '测试记录' : '投递记录' }}
+      <Icon name="back" :size="17" />返回{{
+        tab === 'tests' ? '测试记录' : tab === 'manual' ? '手动重发记录' : '投递记录'
+      }}
     </button>
-    <template v-if="tab === 'tests'">
+    <template v-if="tab !== 'deliveries'">
       <Feedback
         :loading="testDetail.loading.value"
         :error="testDetail.error.value"
         @retry="testDetail.reload"
       />
       <section v-if="testDetail.data.value" class="panel reading-panel">
-        <h1 tabindex="-1">目标测试详情</h1>
+        <h1 tabindex="-1">{{ tab === 'manual' ? '手动重发详情' : '目标测试详情' }}</h1>
+        <button class="text-link" @click="testDetail.reload">刷新记录</button>
         <h2>{{ testDetail.data.value.target_name }}</h2>
         <span class="result-pill" :class="resultClass(testDetail.data.value.result)">{{
           resultLabels[testDetail.data.value.result] || '历史结果未记录'
@@ -132,12 +147,48 @@ function clear() {
             <dd>{{ testDetail.data.value.error_code || '无' }}</dd>
           </div>
           <div class="wide">
-            <dt>测试标识</dt>
+            <dt>操作标识</dt>
             <dd class="mono">{{ testDetail.data.value.id }}</dd>
           </div>
         </dl>
-        <p class="small-note">
+        <template v-if="'source_event_id' in testDetail.data.value">
+          <h2 class="record-title">{{ testDetail.data.value.title }}</h2>
+          <p class="small-note">
+            使用当前目标配置快照 · 版本
+            {{ testDetail.data.value.target_revision }}；独立手动重发，不改变自动去重、不自动重试。
+          </p>
+          <p class="article-summary">{{ testDetail.data.value.post.summary ?? '摘要缺失' }}</p>
+          <p v-for="(task, i) in testDetail.data.value.tasks.items" :key="i" class="small-note">
+            {{ task.name }} · 版本 {{ task.version }}
+          </p>
+          <Pagination
+            :page="taskPage"
+            :total="testDetail.data.value.tasks.total"
+            :page-size="testDetail.data.value.tasks.page_size"
+            label="重发任务"
+            @change="(v) => (taskPage = v)"
+          />
+          <button
+            v-if="testDetail.data.value.source_exists"
+            class="button"
+            @click="
+              emit('navigate', '/notifications/deliveries/' + testDetail.data.value.source_event_id)
+            "
+          >
+            查看原投递
+          </button>
+          <p v-else class="small-note">原投递已清理，独立重发快照仍保留。</p>
+        </template>
+        <p v-else class="small-note">
           独立目标测试不计入帖子自动投递账本。此页面只读取已保存结果，不运行或重发测试。
+        </p>
+        <p
+          v-if="
+            testDetail.data.value.finished_at === null || testDetail.data.value.result === 'unknown'
+          "
+          class="warning-note"
+        >
+          尝试尚未结束或结果未知，接收端可能已经收到；不会自动重试，请刷新记录查看。
         </p>
         <p
           v-if="testDetail.data.value.kind === 'smtp' && testDetail.data.value.result === 'success'"
@@ -160,7 +211,13 @@ function clear() {
             <h1 tabindex="-1">投递详情</h1>
             <p class="subtitle">自动投递意图 · {{ time(detail.data.value.created_at) }}</p>
           </div>
-          <span class="small-badge neutral">只读历史</span>
+          <button
+            v-if="['sent', 'failed', 'cancelled'].includes(detail.data.value.status)"
+            class="button primary"
+            @click="resendOpen = true"
+          >
+            <Icon name="refresh" :size="16" />手动重发</button
+          ><span v-else class="small-badge neutral">原投递尚未结束</span>
         </section>
         <div class="detail-layout">
           <div class="side-stack">
@@ -223,7 +280,7 @@ function clear() {
                 查看关联内容<Icon name="arrow" :size="15" />
               </button>
               <p v-else class="small-note">原内容记录已清理，投递快照仍保留。</p>
-              <p class="small-note">此页面不发出通知。手动重发和运行生命周期将在后续阶段接入。</p>
+              <p class="small-note">读取详情不会发送通知；显式确认后才运行独立重发。</p>
             </section>
             <section class="panel reading-panel">
               <h2>消息内容快照</h2>
@@ -319,6 +376,7 @@ function clear() {
         v-for="item in [
           { id: 'targets', label: '通知目标' },
           { id: 'deliveries', label: '投递记录' },
+          { id: 'manual', label: '手动重发' },
           { id: 'tests', label: '测试记录' },
         ]"
         :key="item.id"
@@ -331,7 +389,7 @@ function clear() {
     </nav>
     <p class="info-note">
       只读取持久化的{{
-        tab === 'tests' ? '独立目标测试' : '自动投递'
+        tab === 'tests' ? '独立目标测试' : tab === 'manual' ? '手动重发' : '自动投递'
       }}记录，不触发采集、发送或重发。
     </p>
     <section class="panel">
@@ -340,13 +398,19 @@ function clear() {
           ><Icon name="search" :size="16" /><input
             v-model="q"
             aria-label="搜索投递记录"
-            :placeholder="tab === 'tests' ? '搜索历史目标名称…' : '搜索内容或历史目标名称…'"
+            :placeholder="tab !== 'deliveries' ? '搜索历史目标名称…' : '搜索内容或历史目标名称…'"
             maxlength="200"
         /></label>
         <select v-model="status" aria-label="投递状态筛选">
           <option value="all">全部状态</option>
           <option
-            v-for="(label, key) in tab === 'tests' ? resultLabels : deliveryLabels"
+            v-for="(label, key) in tab !== 'deliveries'
+              ? tab === 'manual'
+                ? Object.fromEntries(
+                    Object.entries(resultLabels).filter(([key]) => key !== 'in_progress'),
+                  )
+                : resultLabels
+              : deliveryLabels"
             :key="key"
             :value="key"
           >
@@ -359,7 +423,7 @@ function clear() {
             {{ item.name }}
           </option>
         </select>
-        <select v-if="tab !== 'tests'" v-model="uncertain" aria-label="结果未知筛选">
+        <select v-if="tab === 'deliveries'" v-model="uncertain" aria-label="结果未知筛选">
           <option value="all">全部不确定性</option>
           <option value="true">曾有结果未知</option>
           <option value="false">未标记结果未知</option>
@@ -423,4 +487,16 @@ function clear() {
         />
       </template></section
   ></template>
+  <SendDialog
+    v-if="resendOpen && recordId"
+    action="resend"
+    :id="recordId"
+    @close="resendOpen = false"
+    @complete="
+      (path) => {
+        resendOpen = false
+        emit('navigate', path)
+      }
+    "
+  />
 </template>

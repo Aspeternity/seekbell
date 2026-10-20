@@ -1,3 +1,4 @@
+import asyncio
 import secrets
 from contextlib import asynccontextmanager
 
@@ -13,12 +14,16 @@ from seekbell.api.auth import router as auth_router
 from seekbell.api.history import router as history_router
 from seekbell.api.management import router as management_router
 from seekbell.api.overview import router as overview_router
+from seekbell.api.sending import install_errors
+from seekbell.api.sending import router as sending_router
 from seekbell.api.system import router
 from seekbell.config import Settings
 from seekbell.db.models import NotificationTarget
 from seekbell.db.runtime import create_database_engine, instance_lock, migrate
 from seekbell.notifiers.credentials import CredentialError, CredentialVault
+from seekbell.notifiers.registry import NotifierRegistry
 from seekbell.services.authentication import LoginLimiter
+from seekbell.services.manual_sending import ConfiguredTargetTesting, ManualSending
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -51,7 +56,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         )
                     ):
                         app.state.vault.unseal(target.id, target.kind, target.config_ciphertext)
-                yield
+                registry = NotifierRegistry(app.state.vault)
+                try:
+                    app.state.target_testing = ConfiguredTargetTesting(engine, registry.notifiers)
+                    app.state.manual_sending = ManualSending(engine, registry.notifiers)
+                    app.state.sending_gate = asyncio.Semaphore(2)
+                    yield
+                finally:
+                    await registry.aclose()
             finally:
                 engine.dispose()
 
@@ -89,6 +101,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(management_router)
     app.include_router(history_router)
     app.include_router(overview_router)
+    app.include_router(sending_router)
+    install_errors(app)
     # No SPA catch-all: unknown API endpoints and missing assets keep their real 404 status.
     if (settings.static_dir / "index.html").is_file():
         app.mount("/", StaticFiles(directory=settings.static_dir, html=True), name="frontend")

@@ -32,6 +32,7 @@ const liveComponents = defineProps<{
   settings?: Component
   content?: Component
   records?: Component
+  targets?: Component
 }>()
 function normalize(hash: string) {
   try {
@@ -103,7 +104,9 @@ const validPage = computed(
     (page.value !== 'settings' ||
       ['preferences', 'account', 'backup', 'about'].includes(parts.value[1] || '')) &&
     (page.value !== 'notifications' ||
-      ['targets', 'deliveries', 'tests'].includes(parts.value[1] || '')),
+      ['targets', 'deliveries', 'tests', ...(isLive ? ['manual'] : [])].includes(
+        parts.value[1] || '',
+      )),
 )
 const dialog = ref<HTMLDialogElement>(),
   infoDialog = ref<HTMLDialogElement>(),
@@ -235,7 +238,7 @@ function showInfo() {
     '所有管理页面已可体验。任务、目标、来源、内容、投递和设置在浏览器内联动；支持演示登录和备份恢复。界面不连接真实后端、不采集 RSS、不发送通知。请使用演示凭据。'
   if (isLive)
     infoBody.value =
-      '初始化、登录、配置保存、历史查询、概览统计与管理员修改已接入服务端。采集和通知发送尚未启动，其余功能逐步接入。'
+      '初始化、登录、配置保存、历史查询、概览统计与管理员修改已接入服务端。独立目标测试与手动重发需明确确认；后台采集和自动投递尚未启动，其余功能逐步接入。'
   infoDialog.value?.showModal()
 }
 </script>
@@ -360,6 +363,11 @@ function showInfo() {
           @navigate="navigate"
         />
         <component
+          v-else-if="isLive && page === 'notifications' && parts[1] === 'targets'"
+          :is="liveComponents.targets"
+          @navigate="navigate"
+        />
+        <component
           v-else-if="isLive && page === 'content'"
           :is="liveComponents.content"
           :key="path"
@@ -368,7 +376,9 @@ function showInfo() {
         />
         <component
           v-else-if="
-            isLive && page === 'notifications' && ['deliveries', 'tests'].includes(parts[1] || '')
+            isLive &&
+            page === 'notifications' &&
+            ['deliveries', 'tests', 'manual'].includes(parts[1] || '')
           "
           :is="liveComponents.records"
           :key="path"

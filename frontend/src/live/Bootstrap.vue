@@ -5,6 +5,7 @@ import Overview from './Overview.vue'
 import Settings from './Settings.vue'
 import Content from './Content.vue'
 import Records from './Records.vue'
+import Targets from './Targets.vue'
 import { initialize } from './store'
 const ready = ref(false),
   error = ref(''),
@@ -30,6 +31,7 @@ start()
     :settings="Settings"
     :content="Content"
     :records="Records"
+    :targets="Targets"
   />
   <main v-else class="panel empty-state">
     <h1>SeekBell</h1>

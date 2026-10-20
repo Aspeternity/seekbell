@@ -325,3 +325,21 @@ class TaskEvaluation(Base):
     status: Mapped[str] = mapped_column(String(32))
     result: Mapped[dict] = mapped_column(JSON)
     evaluated_at: Mapped[float] = mapped_column(Float)
+
+
+class ManualDelivery(Base):
+    __tablename__ = "manual_deliveries"
+    __table_args__ = (
+        Index("ix_manual_started", "started_at", "id"),
+        Index("ix_manual_source", "source_event_id"),
+        Index("ix_manual_target", "target_id"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    source_event_id: Mapped[str] = mapped_column(String(36))
+    target_id: Mapped[str] = mapped_column(ForeignKey("notification_targets.id"))
+    target_snapshot: Mapped[dict] = mapped_column(JSON)
+    payload: Mapped[dict] = mapped_column(JSON)
+    started_at: Mapped[float] = mapped_column(Float)
+    finished_at: Mapped[float | None] = mapped_column(Float)
+    result: Mapped[str] = mapped_column(String(32))
+    error_code: Mapped[str | None] = mapped_column(String(80))
