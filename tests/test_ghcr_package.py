@@ -61,7 +61,7 @@ def test_nonprivate_package_is_rejected_even_when_missing_is_allowed(monkeypatch
         "owner",
         "linked-public",
         "linked-other",
-        "unlinked",
+        "invalid-link",
         "name",
         "type",
     ],
@@ -78,8 +78,8 @@ def test_unexpected_identity_or_access_is_rejected(monkeypatch, fault):
         package["repository"]["private"] = False
     elif fault == "linked-other":
         package["repository"]["full_name"] = "other/project"
-    elif fault == "unlinked":
-        package["repository"] = None
+    elif fault == "invalid-link":
+        package["repository"] = "invalid"
     elif fault == "name":
         package["name"] = "other"
     else:
@@ -131,4 +131,25 @@ def test_redirects_never_forward_the_token():
     assert (
         package_tool.NoRedirect().redirect_request(None, None, 302, "", {}, "https://example.test")
         is None
+    )
+
+
+@pytest.mark.parametrize("reported", [False, True])
+def test_nullable_or_absent_repository_follows_the_official_schema(monkeypatch, reported):
+    package = copy.deepcopy(PACKAGE)
+    if reported:
+        package["repository"] = None
+    else:
+        package.pop("repository")
+    respond(monkeypatch, package=package)
+    result = package_tool.check("synthetic/seekbell", "synthetic-token")
+    assert result["private_verified"] is True
+    assert result["repository_binding"] == "not-reported"
+
+
+def test_reported_repository_is_explicitly_distinguished(monkeypatch):
+    respond(monkeypatch)
+    assert (
+        package_tool.check("synthetic/seekbell", "synthetic-token")["repository_binding"]
+        == "reported"
     )

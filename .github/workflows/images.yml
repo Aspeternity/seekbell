@@ -99,7 +99,7 @@ jobs:
         run: |
           python3 scripts/release_images.py --revision "$GITHUB_SHA" --repository "$IMAGE_REPOSITORY" \
             release --artifacts "$RUNNER_TEMP/images" --run "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --report plan.json
-      - name: Verify private repository and existing package before any registry write
+      - name: Verify private source repository and package before any registry write
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 scripts/check_ghcr_package.py --repository "$IMAGE_REPOSITORY" --allow-missing
@@ -112,7 +112,7 @@ jobs:
         run: |
           python3 scripts/release_images.py --revision "$GITHUB_SHA" --repository "$IMAGE_REPOSITORY" \
             release --artifacts "$RUNNER_TEMP/images" --run "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --execute --report release.json
-      - name: Confirm published package remains private and linked to this repository
+      - name: Confirm published package remains private and record reported linkage
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 scripts/check_ghcr_package.py --repository "$IMAGE_REPOSITORY" --wait-seconds 30 > package.json
@@ -143,6 +143,7 @@ jobs:
               summary.write('Code: `' + report['revision'] + '`. Deployment and user acceptance remain separate.\n')
           PY
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: ${{ always() && hashFiles('release.json') != '' }}
         with:
           name: image-release-receipt
           path: |

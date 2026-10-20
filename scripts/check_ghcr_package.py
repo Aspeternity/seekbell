@@ -65,12 +65,27 @@ def check(repository: str, token: str, *, allow_missing: bool = False, wait: int
         return {**result, "visibility": "not-found", "private_verified": False}
     if package.get("visibility") != "private":
         raise PackageError("Refusing to publish to a package whose visibility is not private")
-    linked = package.get("repository") or {}
-    if linked.get("full_name", "").lower() != repository or linked.get("private") is not True:
-        raise PackageError("Package must be linked to the authorized private repository")
+    # The official package schema permits absent/null repository metadata for GHCR.
+    # Missing metadata is not evidence that linkage failed. Image source identity is
+    # checked independently by release_images against the tested artifact config.
+    linked = package.get("repository")
+    binding = "not-reported"
+    if linked is not None:
+        if (
+            not isinstance(linked, dict)
+            or linked.get("full_name", "").lower() != repository
+            or linked.get("private") is not True
+        ):
+            raise PackageError("Reported package repository does not match the private source")
+        binding = "reported"
     if package.get("name") != name or package.get("package_type") != "container":
         raise PackageError("Unexpected package identity")
-    return {**result, "visibility": "private", "private_verified": True}
+    return {
+        **result,
+        "visibility": "private",
+        "private_verified": True,
+        "repository_binding": binding,
+    }
 
 
 def main():
