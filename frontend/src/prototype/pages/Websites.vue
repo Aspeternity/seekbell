@@ -5,6 +5,7 @@ import Toggle from '../components/Toggle.vue'
 import {
   state,
   isLive,
+  runtime,
   saveWebsite,
   notify,
   formatTime,
@@ -36,15 +37,15 @@ watch(dirty, (value) => emit('dirty', value))
 const status = (w: InstalledWebsite) =>
   !w.enabled
     ? '已暂停'
-    : isLive
-      ? '尚未启动采集'
+    : isLive && !runtime.active
+      ? '后台未运行'
       : w.health === 'error'
         ? '连接异常'
         : w.health === 'healthy'
           ? '采集正常'
           : '等待首次采集'
 const statusClass = (w: InstalledWebsite) =>
-  !w.enabled ? 'neutral' : w.health === 'healthy' ? 'yes' : 'unknown'
+  !w.enabled || (isLive && !runtime.active) ? 'neutral' : w.health === 'healthy' ? 'yes' : 'unknown'
 const linked = (id: string) => state.tasks.filter((t) => t.websiteId === id)
 const visible = computed(() =>
   state.websites.filter((w) => {
@@ -128,7 +129,7 @@ async function save() {
     await saveWebsite(selected.value, draft.interval)
     baseline.value = draft.interval
     error.value = ''
-    notify(isLive ? '网站配置已保存到服务端；采集调度尚未接入。' : '网站设置已保存在当前浏览器。')
+    notify(isLive ? '网站配置已保存到服务端，将按启停状态采集。' : '网站设置已保存在当前浏览器。')
   } catch (e) {
     error.value = (e as Error).message
   } finally {
@@ -500,7 +501,7 @@ onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
               <p>
                 {{
                   isLive
-                    ? '配置会保存到服务端。采集调度及连接测试尚未接入，不会请求真实网站。'
+                    ? '启用后由服务端采集官方 RSS。首次启用或暂停后恢复时只建立基线，不补发历史；关闭浏览器仍会运行。'
                     : '首次启用或暂停后恢复时建立当前基线，不推送已有帖子。请求不重叠，异常时退避重试。'
                 }}
               </p>

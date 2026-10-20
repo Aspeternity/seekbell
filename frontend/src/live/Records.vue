@@ -355,7 +355,7 @@ function clear() {
               @change="(v) => (attemptPage = v)"
             />
             <p class="small-note">
-              显示数据库最后保存的状态。当前没有启动后台投递；SMTP 成功仅表示服务器接受。
+              显示数据库最后保存的状态。后台按有限退避处理自动投递；SMTP 成功仅表示服务器接受。
             </p>
           </aside>
         </div></template

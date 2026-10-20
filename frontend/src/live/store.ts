@@ -25,6 +25,11 @@ const empty = (): DemoState => ({
 })
 export const state = reactive<DemoState>(empty())
 export const account = reactive({ username: '', created: false })
+export const runtime = reactive<{ active: boolean; status: string; code: string | null }>({
+  active: false,
+  status: 'starting',
+  code: null,
+})
 export const signedIn = ref(false)
 export const toast = ref('')
 let timer: ReturnType<typeof setTimeout> | undefined
@@ -122,6 +127,9 @@ function taskBody(task: Task) {
     target_ids: task.targets,
   }
 }
+export async function refreshRuntime() {
+  Object.assign(runtime, await request('manage/runtime'))
+}
 export async function refresh() {
   const data = await request('manage/workspace')
   state.websites = data.websites.map((w: any) => ({
@@ -162,6 +170,7 @@ export async function refresh() {
     responseMode: t.config.response_mode || 'json_ok',
   }))
   Object.assign(state.settings, data.settings)
+  Object.assign(runtime, data.runtime)
 }
 export async function addWebsite(id: string) {
   await request('manage/websites', 'POST', { adapter_id: id })
@@ -176,7 +185,11 @@ export async function saveWebsite(
 ) {
   await request('manage/websites/' + website.id, 'PUT', { interval, enabled })
   await refresh()
-  notify('网站配置已保存；采集调度尚未接入。')
+  notify(
+    runtime.active
+      ? '网站配置已保存，后台将按启停状态采集。'
+      : '配置已保存；后台未运行，请检查概览。',
+  )
 }
 export async function removeWebsite(id: string) {
   await request('manage/websites/' + id, 'DELETE')
@@ -191,7 +204,7 @@ export async function saveTask(task: Task) {
     taskBody(task),
   )
   await refresh()
-  notify('任务已保存到服务端；采集与发送调度尚未接入。')
+  notify('任务已保存，将对之后首次发现的帖子生效。')
   return result
 }
 export async function setTaskEnabled(task: Task, value: boolean) {

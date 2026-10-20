@@ -8,7 +8,7 @@ from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
 from seekbell.db.models import NotificationTarget, TargetTestAttempt
-from seekbell.db.transactions import write_session
+from seekbell.db.transactions import database_call, write_session
 from seekbell.domain.delivery import SendResult
 from seekbell.notifiers.base import Notifier
 from seekbell.services.configuration import identifier, target_snapshot
@@ -84,7 +84,7 @@ class TargetTesting:
             attempt.finished_at = self.clock()
 
     async def run(self, target_id: str, *, key=None, revision=None) -> str:
-        key, snapshot, payload = await asyncio.to_thread(self._start, target_id, key, revision)
+        key, snapshot, payload = await database_call(self._start, target_id, key, revision)
         if snapshot is None:
             return key
         notifier = self.notifiers.get(snapshot["kind"])
@@ -100,7 +100,7 @@ class TargetTesting:
                 result = SendResult(status="unknown", code="send_timeout")
             except Exception:
                 result = SendResult(status="unknown", code="send_exception")
-        await asyncio.to_thread(self._finish, key, result)
+        await database_call(self._finish, key, result)
         return key
 
     def get_result(self, key: str) -> dict:

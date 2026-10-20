@@ -77,7 +77,7 @@ function remove(task: Task) {
       <span>全部任务</span><strong>{{ state.tasks.length }}</strong>
     </div>
     <div>
-      <span>运行中</span
+      <span>{{ isLive ? '已启用配置' : '运行中' }}</span
       ><strong class="positive-text">{{ state.tasks.filter((t) => t.enabled).length }}</strong>
     </div>
     <div>

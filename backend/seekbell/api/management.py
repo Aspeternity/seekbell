@@ -21,6 +21,7 @@ from seekbell.db.transactions import write_session
 from seekbell.domain.posts import PostFields
 from seekbell.domain.rules import Rule, evaluate
 from seekbell.services.configuration import Configuration
+from seekbell.services.runtime import status as runtime_status
 
 router = APIRouter(prefix="/api/manage", dependencies=[Depends(require_admin)])
 
@@ -136,7 +137,8 @@ def workspace(request: Request):
             },
         }
     result["targets"] = [config(request).get_target(key) for key in target_ids]
-    result["runtime_active"] = False
+    result["runtime"] = runtime_status(request)
+    result["runtime_active"] = result["runtime"]["active"]
     return result
 
 
@@ -174,10 +176,22 @@ def update_website(key: str, values: WebsiteUpdate, request: Request):
         state = session.get(SourceState, source.id)
         if website.enabled and not values.enabled:
             state.needs_baseline = True
+        was_enabled = website.enabled and source.enabled
         website.enabled = source.enabled = values.enabled
         source.interval_seconds = values.interval
         if values.enabled:
-            state.next_attempt_at = max(time.time(), state.next_attempt_at)
+            now = time.time()
+            if state.failures:
+                earliest = (
+                    state.last_attempt_at + values.interval
+                    if state.last_attempt_at is not None
+                    else now
+                )
+                state.next_attempt_at = max(now, state.next_attempt_at, earliest)
+            elif not was_enabled:
+                state.next_attempt_at = now
+            elif state.last_attempt_at is not None:
+                state.next_attempt_at = max(now, state.last_attempt_at + values.interval)
     return {"ok": True}
 
 
@@ -269,3 +283,8 @@ def update_target(key: str, values: TargetInput, request: Request):
 @router.post("/rules/evaluate")
 def evaluate_rule(values: RuleTest):
     return evaluate(values.rule, values.post)
+
+
+@router.get("/runtime")
+def runtime(request: Request):
+    return runtime_status(request)

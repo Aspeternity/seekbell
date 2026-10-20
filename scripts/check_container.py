@@ -99,7 +99,7 @@ workspace = request("manage/workspace")
 assert len(workspace["websites"]) == 1 and len(workspace["tasks"]) == 1
 assert workspace["tasks"][0]["description"] == "Retained across service restart"
 assert "url" not in workspace["targets"][0]["config"]
-assert not workspace["runtime_active"]
+assert workspace["runtime_active"] and workspace["runtime"]["status"] == "running"
 # Packaged readonly routes use the same migrated database, with no demo rows.
 assert request("manage/history/posts")["total"] == 0
 assert request("manage/history/deliveries")["total"] == 0
@@ -107,7 +107,8 @@ assert request("manage/history/tests")["total"] == 0
 assert request("manage/history/manual")["total"] == 0
 assert request("manage/history/options")["websites"][0]["id"] == "nodeseek"
 overview = request("manage/overview?range=7d")
-assert not overview["runtime_active"] and not any(overview["window"].values())
+assert overview["runtime_active"] and not any(overview["window"].values())
+assert request("manage/runtime")["status"] == "running"
 assert overview["configuration"] == {"websites": 1, "tasks": 1, "enabled_tasks": 0, "targets": 1}
 assert len(overview["buckets"]) == 7 and overview["recent_matches"] == []
 print(json.dumps({
@@ -173,6 +174,15 @@ def main() -> None:
         assert demo["final_status"] == "sent" and demo["duplicate_poll_queued"] == 0
         assert demo["manual_send_calls"] == 1 and demo["manual_dedup_preserved"]
         assert demo["target_test_send_calls"] == 1
+        lifecycle = json.loads(
+            docker("exec", container, "python", "-m", "seekbell.services.runtime_demo").stdout
+        )
+        assert lifecycle["mode"] == "offline_synthetic" and lifecycle["sends"] == 1
+        assert (
+            lifecycle["baseline_silent"]
+            and lifecycle["runtime_stopped"]
+            and lifecycle["http_closed"]
+        )
         managed_first = json.loads(
             docker("exec", container, "python", "-c", MANAGEMENT_PROBE).stdout
         )
@@ -208,6 +218,7 @@ def main() -> None:
                     "network": "none",
                     "management_persistence": managed_second,
                     "offline_core_demo": demo,
+                    "offline_runtime": lifecycle,
                 },
                 ensure_ascii=False,
                 indent=2,

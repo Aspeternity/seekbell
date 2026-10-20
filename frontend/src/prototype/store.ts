@@ -729,3 +729,5 @@ export function removeTask(task: Task) {
 export async function evaluateTask(task: Task, sample: Sample) {
   return evaluate(task, sample)
 }
+
+export const runtime = { active: false, status: 'demo', code: null as string | null }

@@ -63,6 +63,7 @@ def overview(engine, range_name="24h", *, at=None):
                     "enabled": website.enabled and source.enabled,
                     "last_attempt_at": state.last_attempt_at,
                     "last_success_at": state.last_success_at,
+                    "next_attempt_at": state.next_attempt_at,
                     "failures": state.failures,
                     "error_code": error_code(state.last_error_code),
                     "possible_gap": state.possible_gap,
@@ -112,7 +113,7 @@ def overview(engine, range_name="24h", *, at=None):
             "range": range_name,
             "start": start,
             "end": end,
-            # Lifespan does not start a collector or delivery worker in this stage.
+            # Database-only view; API adds the in-process actor status.
             "runtime_active": False,
             "configuration": {
                 "websites": total(WebsiteInstallation),

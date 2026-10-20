@@ -66,11 +66,17 @@ function setRange(value: '24h' | '7d') {
   </div>
   <Feedback :loading="remote.loading.value" :error="remote.error.value" @retry="remote.reload" />
   <template v-if="data">
-    <div v-if="!data.runtime_active" class="warning-note">
+    <div v-if="!data.runtime_active && data.runtime.status !== 'failed'" class="warning-note">
       <Icon name="clock" :size="18" /><span
         >后台采集与通知发送尚未启动。已启用的配置不会自动执行。</span
       >
     </div>
+    <p v-if="data.runtime_active" class="info-note" role="status">
+      后台采集与自动投递已运行。启用网站后按配置采集，关闭浏览器仍会继续。
+    </p>
+    <p v-if="data.runtime.status === 'failed'" class="form-errors" role="alert">
+      后台任务已停止（{{ data.runtime.code }}），请检查服务；数据库历史仍可读取。
+    </p>
     <section v-if="!data.configuration.websites" class="panel overview-welcome">
       <span class="icon-tile orange"><Icon name="globe" /></span>
       <div>
@@ -232,11 +238,16 @@ function setRange(value: '24h' | '7d') {
             最后尝试：{{ stamp(source.last_attempt_at) }} · 连续失败 {{ source.failures
             }}{{ source.error_code ? ' · ' + source.error_code : '' }}
           </p>
+          <p v-if="source.enabled" class="small-note">
+            下次可尝试：{{ stamp(source.next_attempt_at) }}
+          </p>
           <p v-if="source.possible_gap" class="small-note">
             曾发现可能缺口：{{ stamp(source.last_gap_at) }}
           </p>
         </div>
-        <p class="source-note"><Icon name="shield" :size="15" />历史成功时间不代表当前正在采集。</p>
+        <p class="source-note">
+          <Icon name="shield" :size="15" />显示数据库最后保存的采集状态，点击刷新概览更新。
+        </p>
       </section>
     </div>
     <section class="panel activity-panel">

@@ -24,9 +24,10 @@ from seekbell.notifiers.credentials import CredentialError, CredentialVault
 from seekbell.notifiers.registry import NotifierRegistry
 from seekbell.services.authentication import LoginLimiter
 from seekbell.services.manual_sending import ConfiguredTargetTesting, ManualSending
+from seekbell.services.runtime import Runtime
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, *, runtime_factory=None) -> FastAPI:
     settings = settings or Settings()
 
     @asynccontextmanager
@@ -34,7 +35,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         with instance_lock(settings.data_dir.resolve()):
             engine = create_database_engine(settings)
             try:
-                # A migration failure prevents startup; there is no background collector in M0.
+                # Migration/credential validation must complete before actors can start.
                 await run_in_threadpool(migrate, engine)
                 app.state.engine = engine
                 key_path = settings.data_dir.resolve() / "credentials.key"
@@ -61,7 +62,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     app.state.target_testing = ConfiguredTargetTesting(engine, registry.notifiers)
                     app.state.manual_sending = ManualSending(engine, registry.notifiers)
                     app.state.sending_gate = asyncio.Semaphore(2)
-                    yield
+                    runtime = (runtime_factory or Runtime)(engine, registry.notifiers)
+                    app.state.runtime = runtime
+                    try:
+                        await runtime.start()
+                        yield
+                    finally:
+                        await runtime.aclose()
                 finally:
                     await registry.aclose()
             finally:

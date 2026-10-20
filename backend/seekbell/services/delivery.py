@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from sqlalchemy import Engine, and_, or_, select
 
 from seekbell.db.models import (
+    Administrator,
     DeliveredPost,
     DeliveryAttempt,
     NotificationTarget,
@@ -17,7 +18,7 @@ from seekbell.db.models import (
     Task,
     TaskVersion,
 )
-from seekbell.db.transactions import write_session
+from seekbell.db.transactions import database_call, write_session
 from seekbell.domain.delivery import DeliveryPolicy, SendResult
 from seekbell.notifiers.base import Notifier
 from seekbell.services.configuration import identifier
@@ -40,11 +41,14 @@ class DeliveryWorker:
         *,
         policy: DeliveryPolicy | None = None,
         clock: Callable[[], float] = time.time,
+        managed: bool = False,
+        tick: float = 1,
     ):
         self.engine = engine
         self.notifiers = notifiers
         self.policy = policy or DeliveryPolicy()
         self.clock = clock
+        self.managed, self.tick = managed, tick
 
     @staticmethod
     def _active_tasks(session, event_id: str) -> list[dict]:
@@ -77,6 +81,8 @@ class DeliveryWorker:
 
     def claim(self, *, at: float) -> Claim | None:
         with write_session(self.engine) as session:
+            if self.managed and session.get(Administrator, 1) is None:
+                return None
             events = session.scalars(
                 select(Outbox)
                 .where(
@@ -213,7 +219,7 @@ class DeliveryWorker:
             return True
 
     async def run_once(self) -> str | None:
-        claim = await asyncio.to_thread(self.claim, at=self.clock())
+        claim = await database_call(self.claim, at=self.clock())
         if claim is None:
             return None
         notifier = self.notifiers.get(claim.target_snapshot["kind"])
@@ -231,7 +237,7 @@ class DeliveryWorker:
                 result = SendResult(status="unknown", code="send_timeout")
             except Exception:
                 result = SendResult(status="unknown", code="send_exception")
-        await asyncio.to_thread(self.finish, claim, result, at=self.clock())
+        await database_call(self.finish, claim, result, at=self.clock())
         return claim.event_id
 
     async def run(self, stop: asyncio.Event) -> None:
@@ -239,4 +245,4 @@ class DeliveryWorker:
             event_id = await self.run_once()
             if event_id is None:
                 with suppress(TimeoutError):
-                    await asyncio.wait_for(stop.wait(), timeout=1)
+                    await asyncio.wait_for(stop.wait(), timeout=self.tick)

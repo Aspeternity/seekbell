@@ -47,7 +47,7 @@ function completed(path: string) {
     </button>
   </nav>
   <p class="info-note">
-    保存配置不会发送消息；测试和手动重发须明确确认。后台自动采集与投递尚未启动。
+    保存配置不会发送消息；测试和手动重发须明确确认。启用的任务由服务端自动投递，关闭浏览器不影响后台执行。
   </p>
   <div class="filter-toolbar free-toolbar">
     <label class="search-input grow"

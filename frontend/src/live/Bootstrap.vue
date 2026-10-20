@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onBeforeUnmount } from 'vue'
 import App from '../prototype/App.vue'
 import Overview from './Overview.vue'
 import Settings from './Settings.vue'
 import Content from './Content.vue'
 import Records from './Records.vue'
 import Targets from './Targets.vue'
-import { initialize } from './store'
+import { initialize, signedIn, refreshRuntime, runtime } from './store'
 const ready = ref(false),
   error = ref(''),
   busy = ref(false)
@@ -23,6 +23,19 @@ async function start() {
   }
 }
 start()
+const runtimeTimer = setInterval(async () => {
+  if (!signedIn.value) return
+  try {
+    await refreshRuntime()
+  } catch {
+    Object.assign(runtime, {
+      active: false,
+      status: 'unavailable',
+      code: 'runtime_status_unavailable',
+    })
+  }
+}, 5000)
+onBeforeUnmount(() => clearInterval(runtimeTimer))
 </script>
 <template>
   <App
