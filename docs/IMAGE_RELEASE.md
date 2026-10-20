@@ -24,19 +24,21 @@
 
 开关检查失败会直接报错，不伪装成发布成功。未配置环境审核门禁；私有仓库的environment/reviewer功能受GitHub账户计划限制，不能假定存在自动人工审批。上述显式开关、手动选择和默认分支限制用于减少误操作，不能替代仓库写权限管理与实际授权；不配置/提升账户计划或权限来绕过限制。
 
-发布前preflight仅有packages读取权限，先核对目的包访问，失败不浪费后续构建；只有publish job获得`packages: write`，用短期`GITHUB_TOKEN`登录GHCR，不要求长期PAT，不向build job提供registry写权限。包名固定为`ghcr.io/<小写owner>/<小写repo>`，不接受外部registry/命名空间输入。发布job在写registry前用短期令牌检查仓库私有、已有包私有；API若报告仓库则核对一致；404仅允许继续尝试创建，不当作“包不存在”的证明，不改变他包权限。首次推送按GHCR默认私有创建，成功后再次确认私有并保存package.json；仓库字段可选/可空，缺失标记not-reported、不当作关联失败，镜像source配置仍独立核对本仓库。未知/公开或明确报告其他仓库的包均失败停止，不自动改可见性。首次包或已有包的Actions写权限、可见性和访问继承须核对；工作流不改变包可见性、不创建GitHub Release、不更新latest或语义版本标签，也不自动部署。
+发布前preflight仅有packages读取权限；只有publish job获得`packages: write`，用短期`GITHUB_TOKEN`登录GHCR，不要求长期PAT，不向build job提供registry写权限。包名固定为`ghcr.io/<小写owner>/<小写repo>`，不接受外部registry/命名空间输入。用户已明确选择公开镜像、保留私有源码仓库：三个元数据检查均显式传`--visibility public`，写前后核对私有源仓库和既有公开包；包不可读/缺失、私有/internal/未知可见性均停止，不尝试先创建默认私有包。工作流只校验、不改变可见性，首次新包须操作者另行准备并公开。
+
+GitHub包repository字段可选/可空，缺失记not-reported；报告时必须匹配私有源仓库。镜像source/config/层仍独立核对已测归档。回执记录实际visibility、visibility_verified及private_verified；公开包不会记成private_verified=true。工具默认保留private模式用于历史/其他显式调用，本仓工作流固定public，不提供手动降级参数。工作流不公开源码、不创建GitHub Release、不更新latest/语义标签，也不自动部署。
 
 ## 发布行为与失败处理
 
 发布job从同次运行下载两份产物，先核对校验和、平台、代码SHA、source标签、构建环境变量和非root UID，再登录；发布前再次核对两份归档。默认`release`子命令只生成本地计划并加载校验镜像，只有额外`--execute`才写registry。
 
-标签包含`sha-<完整SHA>-<run ID>-<attempt>`，每次重跑attempt不同，两个原生子标签追加`-amd64`/`-arm64`。分别推送已加载且校验过的本机image ID，读取registry单平台manifest确认config digest等于归档内原始配置字节的SHA256；通过两个不可变digest合成索引，严格核对索引恰含linux/amd64和linux/arm64及预期digest，再以索引digest重读确认。classic与containerd的image ID可能分别指向配置/manifest/索引，不能把image ID直接当config digest；加载后比较运行配置及各层指纹，分别留证。回执即使后续校验失败也保留，但不能据此称整轮成功。私有元数据检查后，再从registry按索引digest显式拉取amd64，在禁外网新临时实例执行包内服务/重启/实例锁检查；arm64已在推送前原生验证，发布后不在amd64宿主机模拟运行。成功后Actions summary与`image-release-receipt`（30天）给出代码SHA、索引digest、两个子manifest及`ghcr.io/...@sha256:...`固定部署引用。应另存回执，不能依赖短期artifact永久保留。
+标签包含`sha-<完整SHA>-<run ID>-<attempt>`，每次重跑attempt不同，两个原生子标签追加`-amd64`/`-arm64`。分别推送已加载且校验过的本机image ID，读取registry单平台manifest确认config digest等于归档内原始配置字节的SHA256；通过两个不可变digest合成索引，严格核对索引恰含linux/amd64和linux/arm64及预期digest，再以索引digest重读确认。classic与containerd的image ID可能分别指向配置/manifest/索引，不能把image ID直接当config digest；加载后比较运行配置及各层指纹，分别留证。回执即使后续校验失败也保留，但不能据此称整轮成功。预期可见性检查后，再从registry按索引digest显式拉取amd64，在禁外网新临时实例执行包内服务/重启/实例锁检查；arm64已在推送前原生验证，发布后不在amd64宿主机模拟运行。成功后Actions summary与`image-release-receipt`（30天）给出代码SHA、索引digest、两个子manifest及`ghcr.io/...@sha256:...`固定部署引用。应另存回执，不能依赖短期artifact永久保留。
 
 标签命名降低工作流自身重跑覆盖的风险，registry中有写权限的人仍可改标签。部署/回退均以回执中的digest及实际本机image ID为准，不依赖标签不可变假设。发布中断可能已留下单平台标签或已创建索引；失败不代表registry无写入，不自动删远程包，也不切换任何运行实例。检查当次日志和registry后重跑，新的attempt使用不同标签；只有全部核对成功才记录成功回执。可重跑失败job；候选归档已过期时须全流程重跑，不能拿其他run产物拼接。
 
 ## 部署核对与本地命令
 
-授权部署时在目标宿主机以受控方式登录/拉取回执中的固定digest；registry只读凭据不得进入Compose、Web配置、Git或日志。先确认目标是amd64或arm64及本地image标签/版本，再按[新卷升级回退](RELEASES.md)维护；现有Compose的`pull_policy: never`继续要求事先显式加载/拉取。首次新部署与旧实例升级分别处理，勿复用不兼容旧卷或当前用户验收项目。HTTPS与只读预检按[反代部署](PROXY_DEPLOYMENT.md)，真实RSS/四渠道配置与发送属于M5授权验收。
+公开包可直接匿名拉取回执中的固定digest，无需GitHub账号、PAT或docker login。发布写入仍只由短期GITHUB_TOKEN认证。先确认目标是amd64或arm64及本地image标签/版本，再按[新卷升级回退](RELEASES.md)维护；现有Compose的`pull_policy: never`继续要求事先显式加载/拉取。首次新部署与旧实例升级分别处理，勿复用不兼容旧卷或当前用户验收项目。HTTPS与只读预检按[反代部署](PROXY_DEPLOYMENT.md)，真实RSS/四渠道配置与发送属于M5授权验收。
 
 本地在SeekBell-Dev执行，示例输出目录必须不存在，`SEEKBELL_IMAGE`指向带匹配revision/source标签的已验证镜像；这些命令不写registry：
 
@@ -56,3 +58,15 @@ python3 scripts/release_images.py --revision "$SEEKBELL_REVISION" --repository a
 ## 已执行候选
 
 2026-10-21已按用户授权完成main d55ee70的私有候选发布，完整CI、两种原生架构及发布后固定digest拉取检查通过。部署候选引用为`ghcr.io/aspeternity/seekbell@sha256:afab58706a30d2b01617f600ab36d09f82f427470a9e4e6bf2bc6f995470dbd4`。回执/两平台指纹和首次后置误判根因见[记录](history/2026-10-21-主分支合并与GHCR候选发布.md)。临时发布开关已恢复原先缺失，不代表永久发布或部署授权。
+
+## 公开镜像与匿名部署
+
+2026-10-21用户要求“公开”，并在包设置页完成操作；本机使用空的临时Docker配置（无登录/凭据），实际匿名拉取固定digest成功，匿名读取并核对索引恰含原amd64/arm64两个manifest，镜像和digest均未重建。GitHub仓库API另确认源码仍private。证据见[公开核对](history/2026-10-21-GHCR公开与匿名拉取.md)及[JSON](history/2026-10-21-GHCR-public-verification.json)。首次发布时的private回执是历史事实，不改写。
+
+PVE部署可跳过原说明中的Token、docker login/logout，直接执行：
+
+~~~bash
+docker pull ghcr.io/aspeternity/seekbell@sha256:afab58706a30d2b01617f600ab36d09f82f427470a9e4e6bf2bc6f995470dbd4
+~~~
+
+Compose继续固定同一digest、pull_policy=never，数据卷与现有实例不变。操作者是否加sudo取决于目标Docker权限。

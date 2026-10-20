@@ -153,3 +153,53 @@ def test_reported_repository_is_explicitly_distinguished(monkeypatch):
         package_tool.check("synthetic/seekbell", "synthetic-token")["repository_binding"]
         == "reported"
     )
+
+
+@pytest.mark.parametrize("binding", ["reported", "absent", "null"])
+def test_public_package_requires_explicit_policy_and_records_actual_visibility(
+    monkeypatch, binding
+):
+    package = copy.deepcopy(PACKAGE)
+    package["visibility"] = "public"
+    if binding == "absent":
+        package.pop("repository")
+    elif binding == "null":
+        package["repository"] = None
+    respond(monkeypatch, package=package)
+    result = package_tool.check(
+        "synthetic/seekbell", "synthetic-token", expected_visibility="public"
+    )
+    assert result["visibility"] == "public"
+    assert result["visibility_verified"] is True
+    assert result["private_verified"] is False
+    assert result["repository_binding"] == ("reported" if binding == "reported" else "not-reported")
+
+
+@pytest.mark.parametrize("visibility", ["private", "internal", None])
+def test_public_policy_rejects_unexpected_visibility(monkeypatch, visibility):
+    respond(monkeypatch, package={**PACKAGE, "visibility": visibility})
+    with pytest.raises(package_tool.PackageError, match="visibility"):
+        package_tool.check("synthetic/seekbell", "synthetic-token", expected_visibility="public")
+
+
+def test_public_policy_cannot_create_an_unverified_missing_package(monkeypatch):
+    respond(monkeypatch, package=None)
+    with pytest.raises(package_tool.PackageError, match="not readable"):
+        package_tool.check("synthetic/seekbell", "synthetic-token", expected_visibility="public")
+
+
+def test_public_package_still_rejects_a_different_reported_source(monkeypatch):
+    package = copy.deepcopy(PACKAGE)
+    package["visibility"] = "public"
+    package["repository"]["full_name"] = "other/project"
+    respond(monkeypatch, package=package)
+    with pytest.raises(package_tool.PackageError, match="private source"):
+        package_tool.check("synthetic/seekbell", "synthetic-token", expected_visibility="public")
+
+
+@pytest.mark.parametrize("visibility", ["internal", "unknown"])
+def test_invalid_visibility_policy_is_rejected_before_network_access(monkeypatch, visibility):
+    calls = respond(monkeypatch)
+    with pytest.raises(package_tool.PackageError, match="visibility"):
+        package_tool.check("synthetic/seekbell", "synthetic-token", expected_visibility=visibility)
+    assert not calls

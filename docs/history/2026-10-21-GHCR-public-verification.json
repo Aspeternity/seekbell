@@ -1,0 +1,15 @@
+{
+  "date": "2026-10-21",
+  "environment": "SeekBell-Dev rootless Docker; empty temporary Docker config, no registry login",
+  "anonymous_pull": "passed",
+  "platform": "linux/amd64",
+  "reference": "ghcr.io/aspeternity/seekbell@sha256:afab58706a30d2b01617f600ab36d09f82f427470a9e4e6bf2bc6f995470dbd4",
+  "anonymous_index": "passed",
+  "manifests": {
+    "amd64": "sha256:226f62b50e9df78e188b3908fcb99099c3dade6265eacf22f78cb5a56692eecb",
+    "arm64": "sha256:9e38df4b63c561aa51f62d11de75c1f8e139b9c5c448bd5673e049d619ddf45a"
+  },
+  "image_code_sha": "d55ee70be475029b11dc5ce30c6cf340c889c349",
+  "source_repository_private": true,
+  "source_repository_verified_by": "Authenticated read-only GitHub repository API"
+}
