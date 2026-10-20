@@ -56,52 +56,9 @@ jobs:
 
   native:
     needs: [preflight, baseline]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - architecture: amd64
-            runner: ubuntu-24.04
-          - architecture: arm64
-            runner: ubuntu-24.04-arm
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 40
-    env:
-      ARCHITECTURE: ${{ matrix.architecture }}
-      IMAGE_REPOSITORY: ${{ needs.preflight.outputs.repository }}
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-      - name: Build native image without registry login or publication
-        run: |
-          test "$(docker version --format '{{.Server.Arch}}')" = "$ARCHITECTURE"
-          docker build --platform "linux/$ARCHITECTURE" \
-            --build-arg VCS_REF="$GITHUB_SHA" \
-            --label "org.opencontainers.image.source=https://github.com/$IMAGE_REPOSITORY" \
-            -t seekbell:candidate .
-      - name: Check packaged service and persistence offline
-        run: python3 scripts/check_container.py seekbell:candidate --revision "$GITHUB_SHA"
-      - name: Rehearse encrypted backup and independent restore offline
-        run: python3 scripts/check_backup_container.py seekbell:candidate --revision "$GITHUB_SHA"
-      - name: Rehearse migrations, volume switch and explicit rollback offline
-        run: python3 scripts/check_release_container.py seekbell:candidate --revision "$GITHUB_SHA"
-      - name: Load pinned proxy image
-        run: docker pull nginx@sha256:970364228b1e4f932abc22d321932816782cca8a20b85a77552a7cfe9acfb3b5
-      - name: Rehearse TLS and streaming without external egress
-        run: python3 scripts/check_proxy_container.py seekbell:candidate --revision "$GITHUB_SHA"
-      - name: Package and verify exact tested image content
-        run: |
-          python3 scripts/release_images.py --revision "$GITHUB_SHA" --repository "$IMAGE_REPOSITORY" \
-            pack --image seekbell:candidate --architecture "$ARCHITECTURE" --output "$RUNNER_TEMP/candidate"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: image-${{ matrix.architecture }}
-          path: ${{ runner.temp }}/candidate/
-          if-no-files-found: error
-          retention-days: 3
-          compression-level: 0
-          overwrite: true
+    uses: ./.github/workflows/native-images.yml
+    permissions:
+      contents: read
 
   publish:
     if: ${{ inputs.publish }}

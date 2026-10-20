@@ -79,3 +79,10 @@ jobs:
           SEEKBELL_IMAGE: seekbell:ci
           SEEKBELL_REVISION: ${{ github.sha }}
         run: pnpm --dir frontend test:proxy
+
+  native-candidates:
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/codex/') }}
+    needs: baseline
+    uses: ./.github/workflows/native-images.yml
+    permissions:
+      contents: read

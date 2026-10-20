@@ -1,10 +1,10 @@
 # 双架构镜像候选与GHCR流程（M4第五子阶段）
 
-本流程准备可审阅的镜像候选，不部署服务。`.github/workflows/images.yml`只有`workflow_dispatch`入口；push/PR仍只执行原CI，不会登录或写GHCR。新流程默认`publish=false`，分别使用`ubuntu-24.04`和`ubuntu-24.04-arm`原生构建Linux amd64/arm64，不安装QEMU或修改本机Docker。私有仓库使用账户Actions额度，runner/额度是否可用须实际运行确认。
+本流程准备可审阅的镜像候选，不部署服务。`.github/workflows/images.yml`只有`workflow_dispatch`入口；普通push/PR不登录或写GHCR；codex/开发分支的push在完整CI成功后调用同一原生双架构检查，便于合并主分支前验证。新流程默认`publish=false`，分别使用`ubuntu-24.04`和`ubuntu-24.04-arm`原生构建Linux amd64/arm64，不安装QEMU或修改本机Docker。私有仓库使用账户Actions额度，runner/额度是否可用须实际运行确认。
 
 ## 候选检查与产物
 
-启动时必须填写所选分支当前完整40位小写SHA，和事件SHA不一致立即失败；没有任意外部ref参数。先调用原有完整CI（Python/前端/浏览器/禁外网容器），通过后再执行双架构构建。每个平台检查Docker daemon原生架构，镜像写入同一代码SHA及GitHub source标签，再分别运行包内服务/重启持久化、加密备份独立恢复、合成迁移/新卷切换/失败显式回退、真实隔离TLS反代演练。所有业务检查使用临时数据/合成目标，禁论坛和真实通知。构建所需基础镜像/软件依赖仍需网络。
+手动启动时必须填写所选分支当前完整40位小写SHA，和事件SHA不一致立即失败；没有任意外部ref参数。开发分支push由事件SHA确定候选，不提供发布入口。原生构建/演练/归档集中在native-images.yml复用，只有contents:read权限。先调用原有完整CI（Python/前端/浏览器/禁外网容器），通过后再执行双架构构建。每个平台检查Docker daemon原生架构，镜像写入同一代码SHA及GitHub source标签，再分别运行包内服务/重启持久化、加密备份独立恢复、合成迁移/新卷切换/失败显式回退、真实隔离TLS反代演练。所有业务检查使用临时数据/合成目标，禁论坛和真实通知。构建所需基础镜像/软件依赖仍需网络。
 
 检查全部通过才从固定image ID建立私有产物标签并保存`image.tar`和`image.json`，保存后再核对配置及层指纹，上传`image-amd64`、`image-arm64`，保存3天。JSON记录平台、完整SHA、source、image ID、运行配置digest和归档SHA256；证据包括对应Actions日志。归档只含构建镜像，不含演练数据卷/会话/备份。产物可用于候选审阅，不能把工作流定义或本地amd64检查当作远程CI/arm64运行已通过。
 
@@ -14,7 +14,7 @@
 
 本次只实现和本地检查，未推送仓库、未触发Actions、未创建GHCR包、未部署。后续远程操作沿用PROJECT_STATE的授权边界；规格中的GHCR规划不代表已获发布授权。
 
-获授权后先审阅/合并相应代码，并核对GitHub Actions及两个原生runner额度。先对明确SHA手动运行`Native image candidates`，保留`publish=false`；检查完整baseline及两平台日志。默认分支上的工作流可被GitHub手动触发，分支候选的可选范围按GitHub实际界面核对。
+获授权后先审阅/合并相应代码，并核对GitHub Actions及两个原生runner额度。先对明确SHA手动运行`Native image candidates`，保留`publish=false`；检查完整baseline及两平台日志。GitHub的workflow_dispatch入口须先存在于默认分支；本流程尚未合并时，先推送codex/开发分支，通过普通CI后的native-candidates检查取得两平台产物，不为派发而合并main。合并另获授权后，才可手动选择分支/SHA运行候选或显式发布。
 
 真正写GHCR还必须同时满足：
 

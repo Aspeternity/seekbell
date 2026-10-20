@@ -264,4 +264,4 @@ Settings新增精确可信代理IP（默认空、最多32个，拒绝*/CIDR/host
 
 ## M4镜像候选与发布边界
 
-双架构采用原生amd64/arm64 runner，分别构建与禁业务外网演练后保存镜像归档；手动流程默认只生成候选，显式仓库开关和手动发布选择、默认分支及完整CI通过后才授予独立job的GHCR写权限。发布复用测试产物，核对运行配置digest与层指纹，再以两个单平台digest合成索引并固定索引digest部署。区分classic/containerd的本机image ID、运行配置digest和registry manifest/index digest；不以代码SHA标签推定逐字节可重现或标签不可改写。没有自动部署/自动真实发送。[具体流程与限制](IMAGE_RELEASE.md)。
+双架构采用原生amd64/arm64 runner，分别构建与禁业务外网演练后保存镜像归档；只读可复用工作流由codex/开发分支push的完整CI及手动候选流程共同调用，支持合并前验证；手动流程默认只生成候选，显式仓库开关和手动发布选择、默认分支及完整CI通过后才授予独立job的GHCR写权限。发布复用测试产物，核对运行配置digest与层指纹，再以两个单平台digest合成索引并固定索引digest部署。区分classic/containerd的本机image ID、运行配置digest和registry manifest/index digest；不以代码SHA标签推定逐字节可重现或标签不可改写。没有自动部署/自动真实发送。[具体流程与限制](IMAGE_RELEASE.md)。
