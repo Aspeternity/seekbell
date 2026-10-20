@@ -1,27 +1,29 @@
 # 当前状态
 
-更新时间：2026-10-21（Asia/Shanghai）。M0～M3实现与本地自动检查已完成；M4工程自动退出通过，当前进入M5实机/用户验收准备。[阶段顺序](ROADMAP.md)，[本轮证据](history/2026-10-21-主分支合并与GHCR候选发布.md)。用户已通过Portainer自行部署并反馈RSS测试问题；Codex未部署/真实发送。
+更新时间：2026-10-21（Asia/Shanghai）。M0～M3实现与本地自动检查完成，M4工程退出通过；当前M5由用户在Portainer自行部署验收，反馈RSS测试间隔问题。Codex未操作用户部署或真实采集/发送。[阶段顺序](ROADMAP.md)。
 
 ## 环境与代码
 
-仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。main已普通合并/推送，既有镜像代码基准d55ee70be475029b11dc5ce30c6cf340c889c349，开发分支cb3de42保留。产品代码仍等同faa991d，近期仅CI/发布/测试/文档，无业务/依赖/迁移变更。原D盘副本、Ubuntu工具与全局WSL未改。本轮scripts/check_ghcr_package.py、专项、images.yml及相关文档/公开证据适配显式public；与状态同次提交，不改镜像内业务。67项发布专项通过。本轮RSS修复待提交：source_probe.py、Websites.vue、test_source_probe_scheduling.py及文档；模拟复现3失败/2通过后，45项针对性检查17.48秒通过，正在完整后端/前端构建/操作浏览器回归。见[RSS问题](history/2026-10-21-RSS连接测试等待修复.md)。
+仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。当前分支codex/rss-connection-wait，实现d167356d296a1fa729d9e4c1655093d99e5d3af9，本轮仅文档收尾随状态提交；分支未推送/合并main。main/origin仍fc8f95b（公开包校验），旧开发分支cb3de42保留。原D盘/Ubuntu工具及全局WSL未改。
 
-## M4结果与边界
+## 当前修复与证据
 
-[39485766557](https://github.com/Aspeternity/seekbell/actions/runs/39485766557)对d55ee70整体success：后端496项195.78秒、浏览器64项；构建/迁移/容器重启/锁、加密备份独立恢复、新卷升级/失败回退、真实TLS通过。amd64与arm64各原生构建/演练/归档，无QEMU；复用已测产物发布私有GHCR，确认两个子manifest/config及索引、写后private和按digest拉取amd64禁外网复验成功。
+用户截图启用网站/10秒间隔，测试一直被429拦截；概览最后尝试05:06、连续失败0、下次05:06，尚缺完整版本/最近成功时间。代码确认手动测试与自动采集共享到期窗口，后台可持续抢先；笼统错误又隐藏原因/剩余时间，不能据此判为远端限流。
 
-固定引用：`ghcr.io/aspeternity/seekbell@sha256:afab58706a30d2b01617f600ab36d09f82f427470a9e4e6bf2bc6f995470dbd4`。两平台指纹、已下载且ZIP SHA匹配的回执见[长期JSON](history/2026-10-21-GHCR-release-receipt.json)；工作流artifact仅30天。[命令与限制](IMAGE_RELEASE.md)。
+已修启用网站距到期≤10秒时持来源锁异步等一次，到期重新核对安装/间隔/退避再请求；长等待回显秒数及固定故障码，不提前请求。等待不持DB事务、取消释放锁；测试不改正式健康/基线/账本。前端显示等待状态，无依赖/迁移。
 
-首轮39482339606实际写入后误判失败，其aabfe5e2...索引保留。已确认官方API repository可选/可空；现缺失记not-reported，明确报告错配仍拒绝，private/source/config独立验证，不声称UI关联已证明。临时诊断已禁用/删除，发布开关已恢复原先缺失并GET核对；首次发布时未改包可见性；后续公开见下。此前原型误收集、Docker隐式IPAM根因见[CI记录](history/2026-10-21-远程CI与原生双架构验证.md)，无需重复排查。
+原实现先复现3失败/2通过；修复针对性45项17.48秒、全量后端513项116.89秒、前端类型/构建和桌面/手机操作浏览器2项13.3秒通过。Ruff全仓通过；d167356本机amd64镜像seekbell:rss-probe-local（ID db263a7a...）禁外网服务/重启/持久化/锁及合成Runtime通过。[完整证据](history/2026-10-21-RSS连接测试等待修复.md)。新修复未远程CI/原生arm64/发布或用户环境验证，不能声称旧镜像已更新。
 
-## 验收实例与下一步
+## 既有镜像与验收实例
 
-保留seekbell-acceptance-b45fc2c-20261020项目、-seekbell-1容器、_data卷与seekbell:backup-local（b45fc2c），http://localhost:18081/；最近只读running/重启0，未替换/重置/代配置。旧不兼容卷及4175/18080保留，勿复用旧名/改迁移号。[故障说明](history/2026-10-20-本机验收启动修复.md)。两平台ci-34cf183本机候选保留，ID见归档。
+现有公开镜像代码d55ee70，固定引用`ghcr.io/aspeternity/seekbell@sha256:afab58706a30d2b01617f600ab36d09f82f427470a9e4e6bf2bc6f995470dbd4`。首次完整发布[39485766557](https://github.com/Aspeternity/seekbell/actions/runs/39485766557)496后端/64浏览器、原生双架构及digest拉取通过；[回执](history/2026-10-21-GHCR-release-receipt.json)。用户随后亲自改Public，空凭据匿名拉取/双平台索引验证通过、源码仍private，[记录](history/2026-10-21-GHCR公开与匿名拉取.md)。main的三处发布检查显式public，67项专项通过；开关已恢复缺失。
 
-用户选择自行PVE部署验收，已给VM/Compose/SSH访问步骤；现用户截图及概览证明已部署并在验收；完整版本/网络/渠道验收仍待反馈。下一步由用户按矩阵检查固定digest、实际域名证书、真实RSS/四渠道、Safari/真机、重启/恢复及观察，反馈验收后确认正式发布；Codex未获远程部署/真实发送授权。以上均未执行；跨版本加密恢复仍未验证。原生CI不替代用户设备验收，回退可能重复发送，保留原卷、不降级新库。
+首轮aabfe5e2...部分发布保留；repository元数据可选/可空，缺失记not-reported，错配拒绝，见历史，不重复诊断。原型误收集/IPAM根因见远程CI归档。
 
-## 恢复与授权
+保留18081本机验收项目seekbell-acceptance-b45fc2c-20261020、-seekbell-1容器、_data卷、backup-local镜像；最近running/重启0，勿替换/重置。旧不兼容卷及4175/18080保留；ci-34cf183候选亦保留，完整ID见归档。
 
-恢复读AGENTS、本状态及本轮证据；部署任务按需读DEVELOPMENT_ENVIRONMENT、IMAGE_RELEASE、PROXY_DEPLOYMENT、RELEASES、ACCEPTANCE。不全仓重读。文档收尾标skip ci，复用d55ee70代码证据，不声称文档HEAD已重跑或循环写自身SHA。
+## 下一步与授权
 
-用户2026-10-21授权main合并/私有GHCR发布及临时开关恢复，已完成；后明确“公开”镜像并亲自完成包设置，匿名拉取/索引验证通过，源码API确认仍private。见[公开记录](history/2026-10-21-GHCR公开与匿名拉取.md)。发布检查三处改显式public，67项专项及格式通过，未重建镜像；后续新代码CI另记，不冒充旧镜像证据。沿用独立WSL/noreply。无远程部署、真实发送、源码仓库公开、正式GitHub Release、旧环境清理或全局WSL变更授权。不组织多代理，保留验收实例。
+待本轮新修复合并/公开镜像发布授权后跑精确SHA完整CI/两架构及公开/匿名拉取检查，再由用户更新Portainer验收。真实RSS/四渠道、HTTPS/Safari/真机、运行观察及完整用户验收仍待反馈；跨版本加密恢复未验证。回退可能重复发送，保留原卷、不降级新库。
+
+此前用户已授权单次main合并/GHCR发布及镜像公开，均完成；非永久发布授权。无本轮新镜像公开发布、远程部署、真实发送、源码公开、正式Release或旧环境/全局WSL变更授权。不组织多代理。恢复读AGENTS、本状态和RSS修复记录，发布时再读IMAGE_RELEASE及相关workflow；文档收尾skip ci复用d167356，不循环写自身SHA。
