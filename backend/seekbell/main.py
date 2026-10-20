@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from seekbell.api.auth import router as auth_router
+from seekbell.api.history import router as history_router
 from seekbell.api.management import router as management_router
 from seekbell.api.system import router
 from seekbell.config import Settings
@@ -85,6 +86,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(router)
     app.include_router(auth_router)
     app.include_router(management_router)
+    app.include_router(history_router)
     # No SPA catch-all: unknown API endpoints and missing assets keep their real 404 status.
     if (settings.static_dir / "index.html").is_file():
         app.mount("/", StaticFiles(directory=settings.static_dir, html=True), name="frontend")

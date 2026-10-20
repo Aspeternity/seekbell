@@ -3,6 +3,8 @@ import { ref } from 'vue'
 import App from '../prototype/App.vue'
 import Overview from './Overview.vue'
 import Settings from './Settings.vue'
+import Content from './Content.vue'
+import Records from './Records.vue'
 import { initialize } from './store'
 const ready = ref(false),
   error = ref(''),
@@ -22,7 +24,13 @@ async function start() {
 start()
 </script>
 <template>
-  <App v-if="ready" :overview="Overview" :settings="Settings" />
+  <App
+    v-if="ready"
+    :overview="Overview"
+    :settings="Settings"
+    :content="Content"
+    :records="Records"
+  />
   <main v-else class="panel empty-state">
     <h1>SeekBell</h1>
     <p role="status">{{ error || '正在连接工作空间…' }}</p>

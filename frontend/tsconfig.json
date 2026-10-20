@@ -22,6 +22,7 @@
     "src/**/*.vue",
     "vite.config.ts",
     "vite.prototype.config.ts",
-    "playwright.live.config.ts"
+    "playwright.live.config.ts",
+    "playwright.history.config.ts"
   ]
 }

@@ -20,3 +20,5 @@ frontend/dist-prototype/
 frontend/test-results/
 frontend/test-results-live/
 frontend/playwright-report/
+
+frontend/test-results-history/

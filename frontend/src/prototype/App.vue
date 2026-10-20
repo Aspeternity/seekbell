@@ -27,7 +27,12 @@ import {
   confirmation,
   confirmAction,
 } from '@workspace'
-const liveComponents = defineProps<{ overview?: Component; settings?: Component }>()
+const liveComponents = defineProps<{
+  overview?: Component
+  settings?: Component
+  content?: Component
+  records?: Component
+}>()
 function normalize(hash: string) {
   try {
     const p = decodeURIComponent(hash.replace(/^#/, '')) || '/'
@@ -230,7 +235,7 @@ function showInfo() {
     '所有管理页面已可体验。任务、目标、来源、内容、投递和设置在浏览器内联动；支持演示登录和备份恢复。界面不连接真实后端、不采集 RSS、不发送通知。请使用演示凭据。'
   if (isLive)
     infoBody.value =
-      '初始化、登录、网站、任务、通知配置与工作空间已接入服务端。采集和通知发送尚未启动，其余页面逐步接入。'
+      '初始化、登录、网站、任务、通知配置与工作空间已接入服务端。内容、命中与投递历史已接入只读查询。采集和通知发送尚未启动，其余功能逐步接入。'
   infoDialog.value?.showModal()
 }
 </script>
@@ -354,15 +359,23 @@ function showInfo() {
           v-if="isLive && page === 'overview'"
           @navigate="navigate"
         />
-        <section
+        <component
+          v-else-if="isLive && page === 'content'"
+          :is="liveComponents.content"
+          :key="path"
+          :selected-id="parts[1]"
+          @navigate="navigate"
+        />
+        <component
           v-else-if="
-            isLive && (page === 'content' || (page === 'notifications' && parts[1] !== 'targets'))
+            isLive && page === 'notifications' && ['deliveries', 'tests'].includes(parts[1] || '')
           "
-          class="panel empty-state"
-        >
-          <h1 tabindex="-1">{{ pageTitle }}</h1>
-          <p>历史查询、投递和测试将在后续阶段接入。当前没有启动真实采集或发送。</p>
-        </section>
+          :is="liveComponents.records"
+          :key="path"
+          :tab="parts[1]"
+          :record-id="parts[2]"
+          @navigate="navigate"
+        />
         <Overview
           v-else-if="page === 'overview'"
           :tasks="state.tasks"

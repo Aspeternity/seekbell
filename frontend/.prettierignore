@@ -6,3 +6,5 @@ test-results
 playwright-report
 
 test-results-live/
+
+test-results-history/

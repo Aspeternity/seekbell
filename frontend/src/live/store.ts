@@ -34,7 +34,7 @@ export function notify(message: string) {
   timer = setTimeout(() => (toast.value = ''), 6000)
 }
 let csrf = ''
-async function request(path: string, method = 'GET', body?: unknown): Promise<any> {
+export async function request<T = any>(path: string, method = 'GET', body?: unknown): Promise<T> {
   const response = await fetch('/api/' + path, {
     method,
     credentials: 'same-origin',

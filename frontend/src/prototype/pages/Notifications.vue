@@ -227,11 +227,11 @@ function canRetry(record: Delivery) {
         :aria-current="tab === item.id ? 'page' : undefined"
         @click="emit('navigate', '/notifications/' + item.id)"
       >
-        {{ item.label }}<span>{{ item.count }}</span>
+        {{ item.label }}<span v-if="!isLive || item.id === 'targets'">{{ item.count }}</span>
       </button>
     </nav>
     <p v-if="isLive" class="info-note">
-      通知配置已接入加密保存；发送、独立测试、历史查询及目标删除将在后续阶段接入。
+      通知配置已接入加密保存；历史查询已接入；发送、独立测试及目标删除将在后续阶段接入。
     </p>
     <template v-if="tab === 'targets'"
       ><div class="filter-toolbar free-toolbar">

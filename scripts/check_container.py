@@ -99,6 +99,11 @@ assert len(workspace["websites"]) == 1 and len(workspace["tasks"]) == 1
 assert workspace["tasks"][0]["description"] == "Retained across service restart"
 assert "url" not in workspace["targets"][0]["config"]
 assert not workspace["runtime_active"]
+# Packaged readonly routes use the same migrated database, with no demo rows.
+assert request("manage/history/posts")["total"] == 0
+assert request("manage/history/deliveries")["total"] == 0
+assert request("manage/history/tests")["total"] == 0
+assert request("manage/history/options")["websites"][0]["id"] == "nodeseek"
 print(json.dumps({
     "website": workspace["websites"][0]["id"], "task": workspace["tasks"][0]["id"],
     "target": workspace["targets"][0]["id"], "note": workspace["tasks"][0]["description"],

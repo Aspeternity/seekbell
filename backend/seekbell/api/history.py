@@ -1,0 +1,142 @@
+from datetime import date
+from typing import Annotated, Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+
+from seekbell.api.auth import require_admin
+from seekbell.services.history import History, MissingHistory, date_window
+
+router = APIRouter(prefix="/api/manage/history", dependencies=[Depends(require_admin)])
+
+
+def history(request: Request):
+    return History(request.app.state.engine)
+
+
+def paging(
+    page: int = Query(1, ge=1, le=100000),
+    page_size: int = Query(20, ge=1, le=100),
+):
+    return {"page": page, "page_size": page_size}
+
+
+def day(
+    discovered_on: date | None = None,
+    timezone: str = Query("Asia/Shanghai", max_length=64),
+):
+    try:
+        return date_window(discovered_on, timezone)
+    except (ValueError, OverflowError):
+        raise HTTPException(422, "发现日期或显示时区无效。") from None
+
+
+Reader = Annotated[History, Depends(history)]
+Paging = Annotated[dict, Depends(paging)]
+Day = Annotated[tuple[float, float] | None, Depends(day)]
+
+
+def found(action, *args, **kwargs):
+    try:
+        return action(*args, **kwargs)
+    except MissingHistory as error:
+        raise HTTPException(404, str(error)) from None
+
+
+@router.get("/options")
+def options(reader: Reader):
+    return reader.options()
+
+
+@router.get("/posts")
+def posts(
+    params: Paging,
+    window: Day,
+    reader: Reader,
+    q: str = Query("", max_length=200),
+    status: Literal[
+        "all", "match", "no_match", "insufficient_data", "not_evaluated", "unrecorded"
+    ] = "all",
+    task_id: str = Query("", max_length=80),
+    website_id: str = Query("", max_length=80),
+    category: str = Query("", max_length=500),
+):
+    return reader.list_posts(
+        **params,
+        window=window,
+        q=q,
+        status=status,
+        task_id=task_id,
+        website_id=website_id,
+        category=category,
+    )
+
+
+@router.get("/posts/{key}")
+def post(key: str, reader: Reader):
+    return found(reader.get_post, key)
+
+
+@router.get("/posts/{key}/evaluations")
+def evaluations(key: str, params: Paging, reader: Reader):
+    return found(reader.evaluations, key, **params)
+
+
+@router.get("/deliveries")
+def deliveries(
+    params: Paging,
+    window: Day,
+    reader: Reader,
+    q: str = Query("", max_length=200),
+    status: Literal["all", "pending", "retry", "leased", "sent", "failed", "cancelled"] = "all",
+    target_id: str = Query("", max_length=80),
+    website_id: str = Query("", max_length=80),
+    post_id: str = Query("", max_length=400),
+    uncertain: bool | None = None,
+):
+    return found(
+        reader.list_deliveries,
+        **params,
+        window=window,
+        q=q,
+        status=status,
+        target_id=target_id,
+        website_id=website_id,
+        post_id=post_id,
+        uncertain=uncertain,
+    )
+
+
+@router.get("/deliveries/{key}")
+def delivery(
+    key: str,
+    reader: Reader,
+    attempt_page: int = Query(1, ge=1, le=100000),
+    task_page: int = Query(1, ge=1, le=100000),
+    page_size: int = Query(20, ge=1, le=100),
+):
+    return found(
+        reader.get_delivery,
+        key,
+        attempt_page=attempt_page,
+        task_page=task_page,
+        page_size=page_size,
+    )
+
+
+@router.get("/tests")
+def tests(
+    params: Paging,
+    window: Day,
+    reader: Reader,
+    q: str = Query("", max_length=200),
+    target_id: str = Query("", max_length=80),
+    status: Literal[
+        "all", "success", "transient_error", "permanent_error", "unknown", "in_progress"
+    ] = "all",
+):
+    return reader.list_tests(**params, window=window, q=q, status=status, target_id=target_id)
+
+
+@router.get("/tests/{key}")
+def target_test(key: str, reader: Reader):
+    return found(reader.get_test, key)

@@ -17,6 +17,7 @@ from seekbell.db.models import (
     SourceRun,
     SourceState,
     Task,
+    TaskEvaluation,
     TaskVersion,
     Website,
 )
@@ -151,6 +152,7 @@ class Ingestion:
                         url=post.url,
                         published_at=post.published_at.timestamp() if post.published_at else None,
                         first_seen_at=at,
+                        baseline=baseline,
                     )
                 )
                 if baseline:
@@ -159,6 +161,17 @@ class Ingestion:
                 target_hits: dict[str, list[tuple[RuleHit, TaskVersion]]] = {}
                 for task, version in versions:
                     decision = evaluate(Rule.model_validate(version.rule), post)
+                    session.add(
+                        TaskEvaluation(
+                            task_id=task.id,
+                            task_version=version.version,
+                            website_id=post.website_id,
+                            external_post_id=post.external_post_id,
+                            status=decision.status,
+                            result=decision.model_dump(mode="json"),
+                            evaluated_at=at,
+                        )
+                    )
                     if decision.status == "insufficient_data":
                         insufficient += 1
                     if decision.status != "match":

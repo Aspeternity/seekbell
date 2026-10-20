@@ -35,6 +35,8 @@ const emit = defineEmits<{ navigate: [path: string] }>()
   </section>
   <div class="bottom-note">
     <Icon name="clock" :size="18" />
-    <p>当前已接入认证与配置保存。采集、通知发送、历史与统计将在后续阶段接入，尚未启动后台监控。</p>
+    <p>
+      当前已接入认证、配置保存与历史查询。采集、通知发送与概览统计将在后续阶段接入，尚未启动后台监控。
+    </p>
   </div>
 </template>

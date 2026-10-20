@@ -139,6 +139,7 @@ class Post(Base):
     url: Mapped[str] = mapped_column(String(2048))
     published_at: Mapped[float | None] = mapped_column(Float)
     first_seen_at: Mapped[float] = mapped_column(Float, index=True)
+    baseline: Mapped[bool | None] = mapped_column(Boolean)
 
 
 class SourceItem(Base):
@@ -169,6 +170,7 @@ class RuleHit(Base):
         UniqueConstraint(
             "task_id", "task_version", "website_id", "external_post_id", name="uq_task_hit"
         ),
+        Index("ix_rule_hits_post", "website_id", "external_post_id"),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     task_id: Mapped[str] = mapped_column(String(36), index=True)
@@ -200,6 +202,7 @@ class Outbox(Base):
             name="ck_outbox_lease",
         ),
         Index("ix_outbox_available", "status", "available_at"),
+        Index("ix_outbox_created_at", "created_at", "id"),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     website_id: Mapped[str] = mapped_column(String(80))
@@ -296,3 +299,29 @@ class WorkspacePreferences(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(24))
     description: Mapped[str] = mapped_column(String(40))
+
+
+class TaskEvaluation(Base):
+    """Immutable outcome for a task version when a post is first discovered."""
+
+    __tablename__ = "task_evaluations"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["task_id", "task_version"], ["task_versions.task_id", "task_versions.version"]
+        ),
+        ForeignKeyConstraint(
+            ["website_id", "external_post_id"],
+            ["seen_posts.website_id", "seen_posts.external_post_id"],
+        ),
+        CheckConstraint(
+            "status IN ('match','no_match','insufficient_data')", name="ck_evaluation_status"
+        ),
+        Index("ix_evaluations_post_status", "website_id", "external_post_id", "status"),
+    )
+    task_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    task_version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    website_id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    external_post_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    status: Mapped[str] = mapped_column(String(32))
+    result: Mapped[dict] = mapped_column(JSON)
+    evaluated_at: Mapped[float] = mapped_column(Float)
