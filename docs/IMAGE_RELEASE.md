@@ -52,3 +52,7 @@ python3 scripts/release_images.py --revision "$SEEKBELL_REVISION" --repository a
 两架构归档须分别在独立目录`<artifacts>/amd64`和`<artifacts>/arm64`。`release --artifacts <artifacts> --run <run-id>-<attempt> --report <计划.json>`默认仅核对本地，不写GHCR；别为本地演练添加`--execute`。
 
 依据核对于2026-10-21：[Docker多平台原生runner](https://docs.docker.com/build/ci/github-actions/multi-platform/)、[GitHub私有仓库runner](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)、[GHCR认证与包权限](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)、[environment功能限制](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments)。新工作流第三方Actions固定完整提交，版本标签解析记录见本阶段history。
+
+## 已执行候选
+
+2026-10-21已按用户授权完成main d55ee70的私有候选发布，完整CI、两种原生架构及发布后固定digest拉取检查通过。部署候选引用为`ghcr.io/aspeternity/seekbell@sha256:afab58706a30d2b01617f600ab36d09f82f427470a9e4e6bf2bc6f995470dbd4`。回执/两平台指纹和首次后置误判根因见[记录](history/2026-10-21-主分支合并与GHCR候选发布.md)。临时发布开关已恢复原先缺失，不代表永久发布或部署授权。

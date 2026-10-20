@@ -80,3 +80,7 @@ CI不调用真实通知、不轮询论坛。仅 amd64 实机通过时，如实�
 ## M4远程CI与原生双架构候选
 
 2026-10-21：34cf183的[Actions 39463442124](https://github.com/Aspeternity/seekbell/actions/runs/39463442124)完整baseline及原生amd64/arm64 job全部成功：后端473项、浏览器64项及容器备份/升级/回退/TLS/产物身份检查通过。修复原型套件误收专项和TLS网络隐式IPAM兼容问题。两平台产物已真实下载、核对ZIP/归档/配置/层并在SeekBell-Dev加载，无发布预检通过；完整指纹与失败根因见[证据](history/2026-10-21-远程CI与原生双架构验证.md)。这些属于GitHub原生自动验证，不代表GHCR发布、目标PVE/用户ARM设备验收、Safari/真机体验或真实RSS/四渠道收信；实机清单继续保持待执行。
+
+## M4私有GHCR交付退出
+
+2026-10-21：main代码d55ee70be475029b11dc5ce30c6cf340c889c349的[39485766557](https://github.com/Aspeternity/seekbell/actions/runs/39485766557)整体成功：496项后端、64项浏览器、原生amd64/arm64容器/备份/升级回退/TLS全部通过；发布复用已测产物，两个manifest合成索引并按固定digest重读，私有包前后核对及发布后amd64拉取/禁外网服务检查通过。固定引用`ghcr.io/aspeternity/seekbell@sha256:afab58706a30d2b01617f600ab36d09f82f427470a9e4e6bf2bc6f995470dbd4`，完整回执与首轮失败根因见[证据](history/2026-10-21-主分支合并与GHCR候选发布.md)。M4工程自动退出完成；实机清单、真实渠道/论坛、目标证书、Safari/用户设备、跨版本加密恢复及用户验收仍未执行。未切换用户验收实例，临时发布开关已恢复关闭。
