@@ -36,3 +36,5 @@ frontend/test-results-system/
 **/*.sbbackup
 
 frontend/test-results-backup/
+
+frontend/test-results-proxy/

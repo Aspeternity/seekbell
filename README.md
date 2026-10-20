@@ -86,11 +86,12 @@ uv run --frozen python -m seekbell
 |---|---|---|
 |`SEEKBELL_DATA_DIR`|`data`|SQLite 和进程锁目录；容器内为 `/data`|
 |`SEEKBELL_STATIC_DIR`|`frontend/dist`|构建后的前端目录|
+|`SEEKBELL_TRUSTED_PROXY_IPS`|空|确切可信代理IP，逗号分隔；默认忽略转发头|
 |`SEEKBELL_BUILD_REVISION`|`development`|显示的代码版本；镜像通过 `VCS_REF` 写入完整提交 SHA|
 
 公开接口为版本/健康与/api/auth/status、setup、login；配置接口/api/manage/*需服务端会话，写操作需X-CSRF-Token并校验Origin。首次无需初始化令牌。会话12小时有效，退出立即撤销，API响应禁止缓存；密码8–128字符，登录限速按来源10次/分钟、全局30次/分钟。
 
-反代头默认不信任。HTTPS代理须保留原Host，并在启动Uvicorn时显式设置--proxy-headers及--forwarded-allow-ips为实际可信代理地址，禁止通配信任；受信任的HTTPS请求才设置Secure Cookie，普通本机HTTP也可登录。仅做了HTTP/HTTPS Cookie和来源校验自动测试，实际反代部署待验证。存活不依赖外部服务；就绪检查验证数据库/迁移及后台actor存活。初始化后按已安装网站及启停配置自动采集和投递；空库不请求外网。
+反代头默认不信任。外部HTTPS代理须保留Host（含非默认端口）并覆盖转发头，通过SEEKBELL_TRUSTED_PROXY_IPS明确指定应用实际看到的代理IP；ASGI层统一处理，Uvicorn入口保持--no-proxy-headers。受信HTTPS设置Secure Cookie，普通本机HTTP仍可登录。配置示例、只读检查与本地真实Nginx/TLS演练见[HTTPS部署](docs/PROXY_DEPLOYMENT.md)，实际目标环境部署仍待授权验证。存活不依赖外部服务；就绪检查验证数据库/迁移及后台actor存活。初始化后按已安装网站及启停配置自动采集和投递；空库不请求外网。
 
 真实浏览器复验使用一次性临时服务/数据库：首闭环8011为空库，历史8012、显式发送8013、后台8014、管理操作8015、保留清理8016、时区/系统告警8017使用各自合成夹具，备份8018/8019使用独立空库和浏览器合成账号；不读上述开发数据，不访问论坛或发送消息：
 

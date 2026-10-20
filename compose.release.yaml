@@ -2,6 +2,7 @@
 services:
   seekbell:
     environment:
+      SEEKBELL_TRUSTED_PROXY_IPS: ${SEEKBELL_TRUSTED_PROXY_IPS:-}
       SEEKBELL_DATA_DIR: ${SEEKBELL_RELEASE_DATA_DIR:?Set the matched data directory}
 volumes:
   data:

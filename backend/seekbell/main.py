@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from seekbell.api.auth import router as auth_router
 from seekbell.api.backups import router as backups_router
@@ -125,6 +126,13 @@ def create_app(settings: Settings | None = None, *, runtime_factory=None) -> Fas
         response.headers["Referrer-Policy"] = "same-origin"
         response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
         return response
+
+    if settings.trusted_proxy_ips:
+        # Applied consistently to the packaged Uvicorn and in-process ASGI entrypoints.
+        # Uvicorn's outer proxy middleware remains disabled to avoid double interpretation.
+        app.add_middleware(
+            ProxyHeadersMiddleware, trusted_hosts=settings.trusted_proxy_ips.split(",")
+        )
 
     app.include_router(router)
     app.include_router(auth_router)

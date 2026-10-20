@@ -252,3 +252,12 @@ restore仅当前迁移版本，独立新目录，先解密认证、版本/结构
 状态以固定image ID/volume/data_dir成对保存。激活前核对daemon、Compose指纹、原容器身份/启动时刻、原快照及候选摘要；external卷必须已存在，避免误建空库。单用户本地项目文件锁及0700/0600原子状态，保留preparing/prepared/activating/active等阶段与失败状态；status同时报告实际实例，崩溃中间态不得解释为成功。失败启动停止匹配的新实例，无自动回退；显式rollback需accept-data-loss，才停止当前匹配实例并启动原镜像/原卷，绝不downgrade新库或合并数据。原卷/失败候选不自动清理。真实队列在启用后按原配置执行，回退/时间点恢复可能重复发送。
 
 --restored把已验证web-restore从原卷复制到独立新卷，再同样准备/切换，源父实例锁及已有副本锁均受保护。只提供受控维护工具，不能承诺任意自定义Compose/跨主机/其他用户或外部手动Docker并发的协调。维护命令与故障边界见RELEASES；CI以唯一禁外网项目和合成未来迁移/启动失败镜像验证，不交付合成迁移。
+
+
+## M4外部HTTPS反代与部署检查（2026-10-20，第四子阶段）
+
+Settings新增精确可信代理IP（默认空、最多32个，拒绝*/CIDR/hostname/未指定/组播/zone）；统一在ASGI层使用已锁定Uvicorn ProxyHeadersMiddleware，网络入口保持no-proxy-headers避免重复解释。可信peer才影响scheme/client，Host保留端口，同源校验及Secure Cookie仍用实际请求上下文；直接HTTP可用。应用/native关闭访问日志，固定业务诊断保留，不记录请求体/凭据。无新依赖或迁移。
+
+提供外部Nginx模板，单边缘覆盖转发头、保留Host端口、清除其他转发头、TLS由外部终止，备份上传/下载不缓存/不重放，2049MiB及超时配合应用总量校验。无代理服务加入产品Compose，应用仍单容器。宿主机只读部署CLI分别核对容器权限/卷/本机端口及HTTPS证书/版本/健康/Cookie，拒绝URL秘密、跳转和环境代理，不触发认证写入/网络采集。发布维护对保存代理配置并在切换/回退重放，空值兼容旧状态；配置文件指纹保护仍生效。
+
+本地以独立内部Docker网络、固定Nginx1.30.6 digest和临时CA验证真实TLS/认证/流式备份/伪造代理头与日志样本，桌面手机验证HTTPS会话。临时CA不入系统信任库，浏览器仅测试证书场景忽略未知CA，Python端严格验证链/主机名与未知CA拒绝。实际目标证书/代理/PVE/GHCR/双架构与用户验收另记。命令及信任边界见PROXY_DEPLOYMENT。

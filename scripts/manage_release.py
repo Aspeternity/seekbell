@@ -139,7 +139,12 @@ def current(project):
         raise ReleaseError("不支持自定义静态目录的实例自动切换。")
     if info["Config"]["User"] != "10001:10001" or not info["HostConfig"]["ReadonlyRootfs"]:
         raise ReleaseError("实例需使用标准非root/只读根配置。")
-    allowed = {"SEEKBELL_DATA_DIR", "SEEKBELL_STATIC_DIR", "SEEKBELL_BUILD_REVISION"}
+    allowed = {
+        "SEEKBELL_DATA_DIR",
+        "SEEKBELL_STATIC_DIR",
+        "SEEKBELL_BUILD_REVISION",
+        "SEEKBELL_TRUSTED_PROXY_IPS",
+    }
     if any(key.startswith("SEEKBELL_") and key not in allowed for key in environment):
         raise ReleaseError("存在未支持的启动配置，需人工核对后维护。")
     offline = info["HostConfig"]["NetworkMode"] == "none"
@@ -154,6 +159,7 @@ def current(project):
             raise ReleaseError("只支持一个127.0.0.1本机端口。")
         port = binding[0]["HostPort"]
     return {
+        "trusted_proxy_ips": environment.get("SEEKBELL_TRUSTED_PROXY_IPS", ""),
         "container": info["Id"],
         "image": info["Image"],
         "volume": mounts[0]["Name"],
@@ -168,7 +174,9 @@ def current(project):
 
 
 def same(actual, expected):
-    return all(actual[key] == expected[key] for key in ("image", "volume", "data_dir"))
+    return all(actual[key] == expected[key] for key in ("image", "volume", "data_dir")) and (
+        actual.get("trusted_proxy_ips", "") == expected.get("trusted_proxy_ips", "")
+    )
 
 
 def unused(*volumes):
@@ -281,6 +289,7 @@ def compose(state, pair):
         "SEEKBELL_RELEASE_VOLUME": pair["volume"],
         "SEEKBELL_RELEASE_DATA_DIR": pair["data_dir"],
         "SEEKBELL_PORT": pair["port"],
+        "SEEKBELL_TRUSTED_PROXY_IPS": pair.get("trusted_proxy_ips", ""),
     }
     arguments = ["docker", "compose", "--project-directory", str(ROOT), "-p", state["project"]]
     for name in FILES[:2] + ((FILES[2],) if pair["offline"] else ()):

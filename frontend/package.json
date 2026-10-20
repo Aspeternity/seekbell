@@ -26,7 +26,8 @@
     "test:operations": "playwright test --config playwright.operations.config.ts",
     "test:retention": "playwright test --config playwright.retention.config.ts",
     "test:system": "playwright test --config playwright.system.config.ts",
-    "test:backup": "playwright test --config playwright.backup.config.ts"
+    "test:backup": "playwright test --config playwright.backup.config.ts",
+    "test:proxy": "playwright test --config playwright.proxy.config.ts"
   },
   "dependencies": {
     "naive-ui": "2.45.3",

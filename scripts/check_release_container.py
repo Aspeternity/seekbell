@@ -36,7 +36,7 @@ def main():
     tags = [project + ":good", project + ":bad", project + ":startup-bad"]
     candidates = {}
     source_volume = None
-    env = {**os.environ, "SEEKBELL_IMAGE": base_image}
+    env = {**os.environ, "SEEKBELL_IMAGE": base_image, "SEEKBELL_TRUSTED_PROXY_IPS": "192.0.2.10"}
     command = [
         "docker",
         "compose",
@@ -46,6 +46,8 @@ def main():
         str(ROOT / "compose.yaml"),
         "-f",
         str(ROOT / "compose.release-offline.yaml"),
+        "-f",
+        str(ROOT / "compose.proxy.yaml"),
     ]
 
     def compose(*arguments):

@@ -69,3 +69,12 @@ jobs:
         run: python scripts/check_backup_container.py seekbell:ci --revision "$GITHUB_SHA"
       - name: Rehearse isolated volume switch and explicit rollback offline
         run: python scripts/check_release_container.py seekbell:ci --revision "$GITHUB_SHA"
+      - name: Load pinned external proxy for isolated TLS rehearsal
+        run: docker pull nginx@sha256:970364228b1e4f932abc22d321932816782cca8a20b85a77552a7cfe9acfb3b5
+      - name: Rehearse actual HTTPS proxy and streaming without external egress
+        run: python scripts/check_proxy_container.py seekbell:ci --revision "$GITHUB_SHA"
+      - name: Check browser login through actual HTTPS proxy
+        env:
+          SEEKBELL_IMAGE: seekbell:ci
+          SEEKBELL_REVISION: ${{ github.sha }}
+        run: pnpm --dir frontend test:proxy
