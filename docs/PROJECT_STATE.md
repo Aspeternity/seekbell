@@ -1,10 +1,10 @@
 # 当前状态
 
-更新时间：2026-10-20（Asia/Shanghai）。M1/M2已实现，M3九阶段接入及本地自动退出核对完成，用户/真实服务验收未做。M4第一阶段本地Compose与停服加密备份/独立恢复已实现，375项后端及相关4项浏览器通过；固定SHA容器/Compose检查通过。[本阶段证据](history/2026-10-20-Compose与加密备份恢复.md)，M3详证见同目录版本信息与退出核对。
+更新时间：2026-10-20（Asia/Shanghai，本次保存交接）。M1/M2已实现，M3九阶段接入及本地自动退出核对完成，用户/真实服务验收未做。M4第一阶段本地Compose与停服加密备份/独立恢复已实现，375项后端及相关4项浏览器通过；固定SHA容器/Compose检查通过。[本阶段证据](history/2026-10-20-Compose与加密备份恢复.md)，M3详证见同目录版本信息与退出核对。
 
 ## 环境与代码
 
-唯一开发环境SeekBell-Dev，/home/dev/projects/seekbell，原Ubuntu显式经wsl.exe执行。[环境入口](DEVELOPMENT_ENVIRONMENT.md)。分支codex/frontend-backend-integration，起点9a98fd2535193b99058ecd915926c19b2d7358dd干净。实现提交b45fc2c82a12cb8ecffe94026d271e90aec36691；固定SHA镜像/Compose检查通过，其后仅补交接证据。无迁移/依赖变更。原D盘/原WSL工具容器和全局设置未改。
+唯一开发环境SeekBell-Dev，/home/dev/projects/seekbell，原Ubuntu显式经wsl.exe执行。[环境入口](DEVELOPMENT_ENVIRONMENT.md)。分支codex/frontend-backend-integration，起点9a98fd2535193b99058ecd915926c19b2d7358dd干净。实现提交b45fc2c82a12cb8ecffe94026d271e90aec36691；固定SHA镜像/Compose检查通过，其后仅补交接证据。本次保存前核对HEAD为d0d482ec6973409c4c77df2ca00b1425a1bf0613、工作区干净，仅更新本状态，不开展新实现或重复未变测试。无迁移/依赖变更；原D盘/原WSL工具容器和全局设置未改。
 
 ## 实现与证据
 
@@ -24,7 +24,7 @@ Rootless/amd64镜像seekbell:backup-local，ID sha256:ed2bf35a1cb282140cb7855a56
 
 ## 下一步与恢复
 
-第一阶段本地验证完成。下一阶段接M4网页备份下载/恢复编排，再补原卷切换及升级/失败回退；M4整体未完成，无开发阻塞。
+第一阶段本地验证完成。下一阶段接M4网页备份下载/恢复编排，再补原卷切换及升级/失败回退；M4整体未完成，无开发阻塞。先核对在线备份与实例锁/Runtime写入边界，不能从运行中的Web直接调用要求停服的CLI路径；恢复需管理员重新验证、校验与失败安全，不扩展为覆盖日常数据的试验。
 
 恢复核对发行版/目录/分支/HEAD/工作区，读AGENTS、本状态、阶段证据及BACKUP_RESTORE，按需读ARCHITECTURE部署/备份、ACCEPTANCE P02/P03、backup及runtime/认证与测试。不得把备份丢弃会话误作丢失账号；不得用真实数据/原卷做恢复试验。PVE/arm64、反代、Safari/真机、真实RSS/通知和用户验收未做。
 
