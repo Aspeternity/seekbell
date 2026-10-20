@@ -61,13 +61,14 @@ jar = http.cookiejar.CookieJar()
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
 csrf = ""
 
-def request(path, values=None):
+def request(path, values=None, method=None):
     headers = {}
     if values is not None:
         headers = {"Content-Type": "application/json", "X-CSRF-Token": csrf}
     req = urllib.request.Request(
         "http://127.0.0.1:8000/api/" + path,
-        data=None if values is None else json.dumps(values).encode(), headers=headers,
+        data=None if values is None else json.dumps(values).encode(),
+        headers=headers, method=method,
     )
     with opener.open(req, timeout=10) as response:
         if path in ("auth/setup", "auth/login"):
@@ -104,6 +105,10 @@ assert request("manage/history/posts")["total"] == 0
 assert request("manage/history/deliveries")["total"] == 0
 assert request("manage/history/tests")["total"] == 0
 assert request("manage/history/options")["websites"][0]["id"] == "nodeseek"
+overview = request("manage/overview?range=7d")
+assert not overview["runtime_active"] and not any(overview["window"].values())
+assert overview["configuration"] == {"websites": 1, "tasks": 1, "enabled_tasks": 0, "targets": 1}
+assert len(overview["buckets"]) == 7 and overview["recent_matches"] == []
 print(json.dumps({
     "website": workspace["websites"][0]["id"], "task": workspace["tasks"][0]["id"],
     "target": workspace["targets"][0]["id"], "note": workspace["tasks"][0]["description"],
@@ -168,10 +173,24 @@ def main() -> None:
         managed_first = json.loads(
             docker("exec", container, "python", "-c", MANAGEMENT_PROBE).stdout
         )
+        account_probe = MANAGEMENT_PROBE.replace(
+            "print(json.dumps({",
+            'csrf = request("auth/administrator", {'
+            '"username": "container_updated",'
+            '"current_password": "Synthetic-Container-2026",'
+            '"new_password": "Synthetic-Container-Updated-2026"'
+            '}, method="PUT")["csrf"]\n'
+            'assert request("auth/status")["username"] == "container_updated"\n'
+            "print(json.dumps({",
+        )
+        docker("exec", container, "python", "-c", account_probe)
+        persisted_probe = MANAGEMENT_PROBE.replace(
+            '"container_admin"', '"container_updated"'
+        ).replace('"Synthetic-Container-2026"', '"Synthetic-Container-Updated-2026"')
         docker("restart", container)
-        wait_ready(container, probe=MANAGEMENT_PROBE)
+        wait_ready(container, probe=persisted_probe)
         managed_second = json.loads(
-            docker("exec", container, "python", "-c", MANAGEMENT_PROBE).stdout
+            docker("exec", container, "python", "-c", persisted_probe).stdout
         )
         assert managed_first == managed_second, "Management configuration changed across restart"
         image_id = docker("image", "inspect", args.image, "--format", "{{.Id}}").stdout.strip()

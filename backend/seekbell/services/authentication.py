@@ -91,7 +91,13 @@ def login(engine, username: str, password: str, previous: str = "") -> tuple[str
         )
     if not valid:
         return None
+    expected = (admin.username, admin.password_hash)
     with write_session(engine) as session:
+        current = session.get(Administrator, 1)
+        # Re-check after hashing: an administrator change may have committed
+        # while this login was verifying the old credentials.
+        if current is None or (current.username, current.password_hash) != expected:
+            return None
         if previous:
             session.execute(
                 delete(LoginSession).where(LoginSession.token_hash == token_hash(previous))
@@ -111,3 +117,43 @@ def session_info(engine, token: str):
 def initialized(engine) -> bool:
     with Session(engine) as session:
         return session.scalar(select(Administrator.id)) is not None
+
+
+class InvalidSession(PermissionError):
+    pass
+
+
+class IncorrectPassword(ValueError):
+    pass
+
+
+def update_administrator(engine, token, csrf, username, current_password, new_password=None):
+    with Session(engine) as session:
+        admin = session.get(Administrator, 1)
+        record = session.get(LoginSession, token_hash(token)) if token else None
+        if record is None or record.expires_at <= time.time() or admin is None:
+            raise InvalidSession
+        expected = admin.password_hash
+        if not verify_password(current_password, expected):
+            raise IncorrectPassword
+        if username == admin.username and new_password is None:
+            raise ValueError("No changes")
+    # A fresh salt even for username-only changes prevents stale login checks
+    # from succeeding after a rename away and back. Do expensive work outside
+    # the SQLite write lock.
+    encoded = password_hash(new_password if new_password is not None else current_password)
+    with write_session(engine) as session:
+        admin = session.get(Administrator, 1)
+        record = session.get(LoginSession, token_hash(token))
+        if (
+            record is None
+            or record.expires_at <= time.time()
+            or not hmac.compare_digest(record.csrf.encode(), csrf.encode())
+            or admin is None
+            or admin.password_hash != expected
+        ):
+            raise InvalidSession
+        admin.username = username
+        admin.password_hash = encoded
+        session.execute(delete(LoginSession))
+        return new_session(session, at=time.time())

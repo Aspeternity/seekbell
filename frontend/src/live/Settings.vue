@@ -1,13 +1,24 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import Icon from '../prototype/components/Icon.vue'
-import { state, account, savePreferences, setSession } from './store'
+import { state, account, savePreferences, saveAdministrator, setSession } from './store'
 const props = defineProps<{ tab?: string }>()
 const emit = defineEmits<{ navigate: [path: string]; dirty: [value: boolean] }>()
 const name = ref(state.settings.workspaceName),
   description = ref(state.settings.workspaceDescription)
 const baseline = ref(JSON.stringify([name.value, description.value]))
-const dirty = computed(() => JSON.stringify([name.value, description.value]) !== baseline.value)
+const username = ref(account.username),
+  currentPassword = ref(''),
+  newPassword = ref(''),
+  confirmPassword = ref('')
+const dirty = computed(() =>
+  props.tab === 'account'
+    ? username.value !== account.username ||
+      !!currentPassword.value ||
+      !!newPassword.value ||
+      !!confirmPassword.value
+    : JSON.stringify([name.value, description.value]) !== baseline.value,
+)
 watch(dirty, (value) => emit('dirty', value))
 const error = ref(''),
   busy = ref(false),
@@ -24,6 +35,31 @@ async function save() {
       workspaceDescription: description.value.trim(),
     })
     baseline.value = JSON.stringify([name.value, description.value])
+    saved.value = true
+  } catch (e) {
+    error.value = (e as Error).message
+  } finally {
+    busy.value = false
+  }
+}
+async function saveAccount() {
+  if (busy.value) return
+  error.value = ''
+  saved.value = false
+  if (newPassword.value !== confirmPassword.value) {
+    error.value = '两次输入的新密码不一致。'
+    return
+  }
+  if (username.value === account.username && !newPassword.value) {
+    error.value = '请修改用户名或填写新密码。'
+    return
+  }
+  busy.value = true
+  try {
+    await saveAdministrator(username.value, currentPassword.value, newPassword.value)
+    currentPassword.value = ''
+    newPassword.value = ''
+    confirmPassword.value = ''
     saved.value = true
   } catch (e) {
     error.value = (e as Error).message
@@ -120,11 +156,66 @@ async function logout() {
         <h2>管理员资料</h2>
         <span class="avatar">{{ account.username.slice(0, 1).toUpperCase() }}</span>
       </div>
-      <div class="form-content form-stack">
-        <p>当前管理员：{{ account.username }}</p>
-        <p class="small-note">管理员资料修改将在后续阶段接入。</p>
-        <button class="button" :disabled="busy" @click="logout">退出登录</button>
-      </div>
+      <form class="form-content form-stack" @submit.prevent="saveAccount">
+        <p class="small-note">
+          修改需验证当前密码。保存后其他浏览器的旧会话失效，当前浏览器继续登录。
+        </p>
+        <label for="admin-username">管理员用户名</label>
+        <input
+          id="admin-username"
+          v-model="username"
+          class="text-input"
+          autocomplete="username"
+          pattern="[A-Za-z0-9_-]{3,32}"
+          minlength="3"
+          maxlength="32"
+          required
+          :disabled="busy"
+        />
+        <p class="small-note">3–32 位字母、数字、下划线或短横线。</p>
+        <label for="current-password">当前密码</label>
+        <input
+          id="current-password"
+          v-model="currentPassword"
+          class="text-input"
+          type="password"
+          autocomplete="current-password"
+          maxlength="128"
+          required
+          :disabled="busy"
+        />
+        <label for="new-password">新密码 <span class="optional">留空保留原密码</span></label>
+        <input
+          id="new-password"
+          v-model="newPassword"
+          class="text-input"
+          type="password"
+          autocomplete="new-password"
+          minlength="8"
+          maxlength="128"
+          :disabled="busy"
+        />
+        <label for="confirm-new-password">确认新密码</label>
+        <input
+          id="confirm-new-password"
+          v-model="confirmPassword"
+          class="text-input"
+          type="password"
+          autocomplete="new-password"
+          minlength="8"
+          maxlength="128"
+          :required="!!newPassword"
+          :disabled="busy"
+        />
+        <p v-if="saved" class="info-note" role="status">管理员资料已保存，旧会话已失效。</p>
+        <div class="inline-form-footer">
+          <span>{{ dirty ? '有未保存的修改' : '资料已保存' }}</span>
+          <button class="button primary" type="submit" :disabled="busy">
+            {{ busy ? '保存中…' : '保存管理员资料' }}
+          </button>
+        </div>
+        <button class="button" type="button" :disabled="busy" @click="logout">退出登录</button>
+      </form>
     </section>
     <section v-else class="panel empty-state">
       <h2>此设置将在后续阶段接入</h2>

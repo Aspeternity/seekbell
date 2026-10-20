@@ -41,6 +41,10 @@ def preauth(request: Request):
         or not hmac.compare_digest(signature.encode(), expected.encode())
     ):
         raise HTTPException(403, "登录页面已过期，请刷新后重试。")
+    rate_limit(request)
+
+
+def rate_limit(request: Request):
     peer = request.client.host if request.client else "unknown"
     if not request.app.state.login_limiter.allow(peer):
         raise HTTPException(429, "尝试过于频繁，请一分钟后重试。", headers={"Retry-After": "60"})
@@ -142,3 +146,29 @@ def logout(request: Request, response: Response):
         )
     response.delete_cookie(COOKIE, path="/")
     return {"ok": True}
+
+
+class AdministratorUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+    username: str = Field(pattern=r"^[A-Za-z0-9_-]{3,32}$")
+    current_password: str = Field(min_length=1, max_length=128, repr=False)
+    new_password: str | None = Field(default=None, min_length=8, max_length=128, repr=False)
+
+
+@router.put("/administrator", dependencies=[Depends(require_admin), Depends(rate_limit)])
+def administrator(values: AdministratorUpdate, request: Request, response: Response):
+    with request.app.state.login_limiter.hash_lock:
+        try:
+            tokens = auth.update_administrator(
+                request.app.state.engine,
+                request.cookies.get(COOKIE, ""),
+                request.headers.get("x-csrf-token", ""),
+                values.username,
+                values.current_password,
+                values.new_password,
+            )
+        except auth.InvalidSession:
+            raise HTTPException(401, "会话已过期，请重新登录。") from None
+        except auth.IncorrectPassword:
+            raise HTTPException(400, "当前密码不正确。") from None
+    return session_response(request, response, values, tokens)

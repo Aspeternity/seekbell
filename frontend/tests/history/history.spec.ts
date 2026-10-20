@@ -50,7 +50,10 @@ test('stored history filters, pages, snapshots, uncertainty and read errors rema
   await page.getByLabel('匹配结果', { exact: true }).selectOption('insufficient_data')
   await expect(page.locator('.content-row')).toHaveCount(1)
   await page.locator('.content-title').click()
-  await expect(page.locator('.history-evaluation')).toContainText(['摘要', '标题'])
+  await expect(page.locator('.history-evaluation').filter({ hasText: '摘要关注' })).toHaveCount(1)
+  await expect(page.locator('.history-evaluation').filter({ hasText: '特别标题关注' })).toHaveCount(
+    1,
+  )
   await expect(page.getByText('来源未提供摘要，无法据此推断完整内容。')).toBeVisible()
   await expect(page.locator('.support-panel')).toContainText('摘要缺失')
   await page.goto('/#/content')

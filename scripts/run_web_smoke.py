@@ -34,8 +34,17 @@ if __name__ == "__main__":
                     seed_history(engine, CredentialVault.open(Path(directory), create=True))
                 finally:
                     engine.dispose()
+        app = create_app(Settings(data_dir=Path(directory), static_dir=static))
+        if args.history:
+            from datetime import UTC, datetime
+
+            from seekbell.api.overview import snapshot_time
+
+            app.dependency_overrides[snapshot_time] = lambda: datetime(
+                2026, 10, 20, tzinfo=UTC
+            ).timestamp()
         uvicorn.run(
-            create_app(Settings(data_dir=Path(directory), static_dir=static)),
+            app,
             host="127.0.0.1",
             port=8012 if args.history else 8011,
             workers=1,

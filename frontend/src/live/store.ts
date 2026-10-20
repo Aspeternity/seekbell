@@ -46,7 +46,10 @@ export async function request<T = any>(path: string, method = 'GET', body?: unkn
   })
   const data = await response.json().catch(() => ({ detail: '服务响应无效，请稍后重试。' }))
   if (!response.ok) {
-    if (response.status === 401 && path.startsWith('manage/')) {
+    if (
+      response.status === 401 &&
+      (path.startsWith('manage/') || path === 'auth/administrator' || path === 'auth/logout')
+    ) {
       signedIn.value = false
       Object.assign(state, empty())
       window.dispatchEvent(new Event('seekbell-session-expired'))
@@ -74,6 +77,18 @@ export async function authenticate(setup: boolean, username: string, password: s
   const info = await request(setup ? 'auth/setup' : 'auth/login', 'POST', { username, password })
   applyAuth(info)
   await refresh()
+}
+export async function saveAdministrator(
+  username: string,
+  currentPassword: string,
+  newPassword: string,
+) {
+  const info = await request('auth/administrator', 'PUT', {
+    username,
+    current_password: currentPassword,
+    ...(newPassword ? { new_password: newPassword } : {}),
+  })
+  applyAuth(info)
 }
 export async function setSession(value: boolean) {
   if (value) return
