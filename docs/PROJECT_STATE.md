@@ -4,7 +4,7 @@
 
 ## 环境与代码
 
-仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发。[入口](DEVELOPMENT_ENVIRONMENT.md)。分支codex/frontend-backend-integration；已验证实现提交34cf1830291240f09071bbb4fb343be3aba4b642已推送，后续仅文档收尾。产品代码仍等同faa991d，本轮改CI/测试设施/文档，无新业务/依赖/迁移。原D盘、Ubuntu工具与全局WSL未改。
+仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发。[入口](DEVELOPMENT_ENVIRONMENT.md)。当前分支main；已普通合并并推送2da8d1d1cd4a05fe5539493e07b89b75cfe8987d，开发分支cb3de42保留。此前实现34cf183的远程证据沿用，新增发布校验需对合并SHA完整复验。产品代码仍等同faa991d，本轮改CI/测试设施/文档，无新业务/依赖/迁移。原D盘、Ubuntu工具与全局WSL未改。
 
 ## 本阶段与证据
 
@@ -22,7 +22,7 @@ native-images只读复用工作流由开发分支push的完整CI及手动images�
 
 ## 下一步与恢复
 
-本轮已获合并/GHCR授权，正在核对私有包权限。现有Git凭据无包读取scope，包API404不作为不存在证据；新增发布job短期令牌的前后私有/仓库关联检查。未提交：images.yml、check_ghcr_package与专项、镜像说明、本状态及合并发布证据。新增包校验及发布工具54项0.32秒、workflow格式/actionlint1.7.12通过；发布后再按固定digest拉取amd64禁外网复验，随后合并main并手动发布，记录真实digest；再进入M5授权PVE、真实RSS/四渠道、Safari/真机、运行观察和用户验收，确认后正式发布。[阶段顺序](ROADMAP.md)。目标环境/域名证书、GHCR实际写入、跨版本加密恢复未验证；原生CI不等同用户设备验收。恢复/回退可能重复发送，保留原卷，不直接降级新库。
+本轮已获合并/GHCR授权，正在核对私有包权限。现有Git凭据无包读取scope，包API404不作为不存在证据；新增发布job短期令牌的前后私有/仓库关联检查。代码/镜像说明已合并main；失败后新增临时只读package-metadata工作流及状态/证据待提交，诊断完成移除。新增包校验及发布工具54项0.32秒、workflow格式/actionlint1.7.12通过；发布后再按固定digest拉取amd64禁外网复验，主分支已合并，发布开关原先缺失，现已仅为本次设true并对2da8d1d手动dispatch（publish=true），发布run39482339606已通过preflight（含短期令牌访问/私有目的地检查），完整baseline后端493项/浏览器64项及原生amd64/arm64全通过，发布job118840575654已上传并校验双平台索引sha256:aabfe5e27d5d942f2f9a91e5986da8b52462561b78c96f387cc438a5867d110b，包private检查通过但仓库关联检查失败；固定digest拉取未执行，不能记整轮成功，正在核对元数据。首次失败后已删除本轮创建的发布开关，恢复原先缺失状态。准备临时只读包元数据检查，确认失败字段后移除诊断；不改包可见性或权限，记录真实digest；再进入M5授权PVE、真实RSS/四渠道、Safari/真机、运行观察和用户验收，确认后正式发布。[阶段顺序](ROADMAP.md)。目标环境/域名证书、GHCR实际写入、跨版本加密恢复未验证；原生CI不等同用户设备验收。恢复/回退可能重复发送，保留原卷，不直接降级新库。
 
 恢复读AGENTS、本状态、IMAGE_RELEASE及本次证据；按需读三个workflow、proxy_fixture/专项、RELEASES/PROXY_DEPLOYMENT，不全仓重读。仅Markdown收尾标注skip ci，复用34cf183代码证据，不宣称文档HEAD重跑过CI，不为写自身SHA循环提交。
 
