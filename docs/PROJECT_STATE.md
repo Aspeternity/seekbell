@@ -1,10 +1,10 @@
 # 当前状态
 
-更新时间：2026-10-20（Asia/Shanghai）。M1/M2已实现，M3第六小阶段管理操作完成本地自动验证，镜像待检查；M3整体未完成，用户验收未记录。[本轮证据](history/2026-10-20-管理操作接入.md)，前五阶段详证在同目录。
+更新时间：2026-10-20（Asia/Shanghai）。M1/M2已实现，M3第六小阶段管理操作完成本地自动验证及固定SHA镜像检查；M3整体未完成，用户验收未记录。[本轮证据](history/2026-10-20-管理操作接入.md)，前五阶段详证在同目录。
 
 ## 环境与代码
 
-唯一开发环境SeekBell-Dev，/home/dev/projects/seekbell；原Ubuntu显式经wsl.exe执行。[环境入口](DEVELOPMENT_ENVIRONMENT.md)。分支codex/frontend-backend-integration，从9ad8110干净工作区继续，当前实现尚未提交。改动位于backend的API/配置/0007迁移/试算/来源测试/生命周期、frontend编辑器/网站/正式目标页，配套tests/scripts/CI及文档；具体路径git status可查。原D盘、原工具/容器和全局WSL未改。
+唯一开发环境SeekBell-Dev，/home/dev/projects/seekbell；原Ubuntu显式经wsl.exe执行。[环境入口](DEVELOPMENT_ENVIRONMENT.md)。分支codex/frontend-backend-integration，从9ad8110干净工作区继续，实现已本地提交2f57ca141c2887e9f02ec15b3fc7d26e7ecd9089；其后仅补证据文档，未推送/合并main。原D盘、原工具/容器和全局WSL未改。
 
 ## 实现与证据
 
@@ -16,11 +16,13 @@
 
 连接测试需确认，固定官方RSS，复用采集器/来源锁和15秒限制。独立SourceProbe保存最近结果和冷却；不入库、不开启网站，不覆盖采集健康/基线。与调度互相遵守间隔/退避和Retry-After，修改频率/重新添加不能绕过，忙409/冷却429。暂停空转不占操作锁，停止先等待/取消在途测试再关资源。新增0007迁移，失败原子回滚。
 
-SeekBell-Dev后端全量308项通过；末次来源/概览调整后相关41项通过，连接结果DTO调整后管理20项再通过。旧迁移夹具新ORM不兼容、短暂空转锁冲突均已修根因。浏览器原型40、首闭环2、历史/账号4、显式发送2、后台2、管理桌面手机2，共52案例通过，含取消/错误重试、刷新保留/历史不变及320–1440布局；6张合成截图在阶段证据。两入口构建/类型/格式、Ruff、锁/wheel、两个离线CLI通过。隐私/本地固定SHA镜像检查与提交正在收尾，未发布。
+SeekBell-Dev后端全量308项通过；末次来源/概览调整后相关41项通过，连接结果DTO调整后管理20项再通过。旧迁移夹具新ORM不兼容、短暂空转锁冲突均已修根因。浏览器原型40、首闭环2、历史/账号4、显式发送2、后台2、管理桌面手机2，共52案例通过，含取消/错误重试、刷新保留/历史不变及320–1440布局；6张合成截图在阶段证据。两入口构建/类型/格式、Ruff、锁/wheel、两个离线CLI通过。隐私与noreply检查通过。
+
+Rootless/amd64本地镜像seekbell:operations-local，ID sha256:fa8e48c0a94522759408d740942eddda005b32fc41cd2339edbba08b178c36f9，revision为2f57ca1。UID10001、禁用外网通过0007/资源/后台就绪、实例锁、管理新路由/删除依赖、账号/配置重启持久化及两类合成演练；未发布，远程CI未跑。8011–8015临时服务及本轮容器/卷已清理；4175旧原型未改。
 
 ## 下一步与恢复
 
-提交实现后构建本地镜像，检查非root/禁外网、0007/API/资源、实例锁、重启持久化和合成演练，再补证据提交。随后接M3系统保留策略与历史清理，确保SeenPost/DeliveredPost不被清理；告警、M4备份恢复及M5实机验收仍待后续。无开发阻塞。
+下一阶段接M3系统保留策略与历史清理，确保SeenPost/DeliveredPost不被清理；告警、M4备份恢复及M5实机验收仍待后续。无开发阻塞。
 
 恢复核对发行版/目录/分支/HEAD/工作区，读AGENTS、本状态及本阶段记录，按需读SPEC测试/保留章节、ARCHITECTURE第六子阶段、configuration/rule_trial/source_probe、collection/runtime及管理操作测试。全部证据合成，不等于已部署或真实源/接收端验证；Safari/真机、PVE/arm64、反代未验。
 
