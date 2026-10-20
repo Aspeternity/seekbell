@@ -39,7 +39,7 @@ pnpm --dir frontend format:check
 pnpm --dir frontend build
 ```
 
-Python 测试使用临时 SQLite 和进程内 HTTP 客户端，并拒绝测试进程的外网连接。CI 执行这些检查及迁移命令、镜像构建；没有发布、远程部署或真实发送步骤。远程 Actions 的执行结果和对应提交见 [PROJECT_STATE](docs/PROJECT_STATE.md)。
+Python 测试使用临时 SQLite 和进程内 HTTP 客户端，并拒绝测试进程的外网连接。普通CI执行这些检查及迁移命令、镜像构建；独立手动双架构候选流程默认不发布，显式启用后可写GHCR，详见[镜像流程](docs/IMAGE_RELEASE.md)。尚无远程部署或真实发送步骤。远程 Actions 的执行结果和对应提交见 [PROJECT_STATE](docs/PROJECT_STATE.md)。
 
 ## M1 离线闭环演示
 

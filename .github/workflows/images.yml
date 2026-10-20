@@ -1,0 +1,158 @@
+name: Native image candidates
+
+on:
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: Full 40-character SHA of the selected branch commit
+        required: true
+        type: string
+      publish:
+        description: Explicitly publish tested candidates to GHCR (requires repository opt-in)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: image-candidate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      repository: ${{ steps.identity.outputs.repository }}
+    steps:
+      - name: Check explicit revision and publication opt-in
+        id: identity
+        env:
+          EXPECTED_REVISION: ${{ inputs.revision }}
+          PUBLISH: ${{ inputs.publish }}
+          ENABLED: ${{ vars.SEEKBELL_GHCR_ENABLED }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          revision = os.environ['EXPECTED_REVISION']
+          assert re.fullmatch('[0-9a-f]{40}', revision), 'Use a full commit SHA'
+          assert revision == os.environ['GITHUB_SHA'], 'Selected branch has a different commit'
+          if os.environ['PUBLISH'] == 'true':
+              assert os.environ['ENABLED'] == 'true', 'GHCR publication is not enabled'
+              assert os.environ['GITHUB_REF'] == 'refs/heads/' + os.environ['DEFAULT_BRANCH'], 'Publish from the default branch only'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('repository=' + os.environ['GITHUB_REPOSITORY'].lower() + '\n')
+          PY
+
+  baseline:
+    needs: preflight
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  native:
+    needs: [preflight, baseline]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - architecture: amd64
+            runner: ubuntu-24.04
+          - architecture: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    env:
+      ARCHITECTURE: ${{ matrix.architecture }}
+      IMAGE_REPOSITORY: ${{ needs.preflight.outputs.repository }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Build native image without registry login or publication
+        run: |
+          test "$(docker version --format '{{.Server.Arch}}')" = "$ARCHITECTURE"
+          docker build --platform "linux/$ARCHITECTURE" \
+            --build-arg VCS_REF="$GITHUB_SHA" \
+            --label "org.opencontainers.image.source=https://github.com/$IMAGE_REPOSITORY" \
+            -t seekbell:candidate .
+      - name: Check packaged service and persistence offline
+        run: python3 scripts/check_container.py seekbell:candidate --revision "$GITHUB_SHA"
+      - name: Rehearse encrypted backup and independent restore offline
+        run: python3 scripts/check_backup_container.py seekbell:candidate --revision "$GITHUB_SHA"
+      - name: Rehearse migrations, volume switch and explicit rollback offline
+        run: python3 scripts/check_release_container.py seekbell:candidate --revision "$GITHUB_SHA"
+      - name: Load pinned proxy image
+        run: docker pull nginx@sha256:970364228b1e4f932abc22d321932816782cca8a20b85a77552a7cfe9acfb3b5
+      - name: Rehearse TLS and streaming without external egress
+        run: python3 scripts/check_proxy_container.py seekbell:candidate --revision "$GITHUB_SHA"
+      - name: Package and verify exact tested image content
+        run: |
+          python3 scripts/release_images.py --revision "$GITHUB_SHA" --repository "$IMAGE_REPOSITORY" \
+            pack --image seekbell:candidate --architecture "$ARCHITECTURE" --output "$RUNNER_TEMP/candidate"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: image-${{ matrix.architecture }}
+          path: ${{ runner.temp }}/candidate/
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+          overwrite: true
+
+  publish:
+    if: ${{ inputs.publish }}
+    needs: [preflight, baseline, native]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE_REPOSITORY: ${{ needs.preflight.outputs.repository }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: image-amd64
+          path: ${{ runner.temp }}/images/amd64
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: image-arm64
+          path: ${{ runner.temp }}/images/arm64
+      - name: Verify both artifacts before registry authentication
+        run: |
+          python3 scripts/release_images.py --revision "$GITHUB_SHA" --repository "$IMAGE_REPOSITORY" \
+            release --artifacts "$RUNNER_TEMP/images" --run "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --report plan.json
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish tested bytes and verify immutable two-platform index
+        run: |
+          python3 scripts/release_images.py --revision "$GITHUB_SHA" --repository "$IMAGE_REPOSITORY" \
+            release --artifacts "$RUNNER_TEMP/images" --run "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --execute --report release.json
+      - name: Record pinned deployment reference
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          report = json.loads(Path('release.json').read_text())
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('Published candidate: `' + report['reference'] + '`\n\n')
+              summary.write('Code: `' + report['revision'] + '`. Deployment and user acceptance remain separate.\n')
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: image-release-receipt
+          path: release.json
+          if-no-files-found: error
+          retention-days: 30
+          overwrite: true

@@ -1,29 +1,29 @@
 # 当前状态
 
-更新时间：2026-10-20（Asia/Shanghai）。M0～M3已交付实现与本地自动验证；当前M4部署恢复，第四子阶段外部HTTPS/部署检查本地验证完成。整体M4和M5实机/用户验收未完成。[本阶段证据](history/2026-10-20-外部HTTPS反代与部署检查.md)，[前阶段](history/2026-10-20-HTTPS开发前状态.md)。
+更新时间：2026-10-21（Asia/Shanghai）。M0～M3实现及本地自动退出已完成；当前M4部署恢复，第五子阶段双架构候选/GHCR流程已实现并完成本地验证。M4远程双架构/GHCR及M5实机/用户验收尚未完成。[本次证据](history/2026-10-21-双架构镜像候选与GHCR流程.md)，[HTTPS前阶段](history/2026-10-20-外部HTTPS反代与部署检查.md)。
 
 ## 环境与代码
 
-只在SeekBell-Dev、/home/dev/projects/seekbell开发，原Ubuntu显式wsl.exe派发。[入口](DEVELOPMENT_ENVIRONMENT.md)。分支codex/frontend-backend-integration；应用/镜像代码faa991d93c45a7bd42cc344ea57ed8efbe93d680，其后仅测试设施/只读检查兼容及验证文档。本次后续提交保留这些修正，无新产品依赖/迁移。原D盘/Ubuntu工具和全局WSL未改。
+只在SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发。[入口](DEVELOPMENT_ENVIRONMENT.md)。分支codex/frontend-backend-integration，本段起点dd4eccf；产品代码仍等同faa991d，本次仅CI/镜像工具/测试和文档，无依赖/迁移/产品UI变化。原D盘、Ubuntu工具及全局WSL未改。
 
 ## 本阶段与证据
 
-精确可信代理IP默认空，禁止通配/CIDR/主机名；ASGI层统一处理，Uvicorn外层关闭代理头及访问日志。Cookie/CSRF按可信HTTPS和Host端口处理，直接HTTP可用。外部Nginx示例支持流式备份、不缓存/重放。部署CLI只读Docker及无会话GET，严格验TLS/版本/健康/Cookie，不登录/改配置/发消息。发布工具切换/回退保留代理配置。[真实命令与边界](PROXY_DEPLOYMENT.md)。
+images.yml仅手动触发，默认不发布；核对完整SHA，复用完整CI后由原生amd64/arm64 runner各自构建、禁外网演练并保存产物。GHCR需单独授权、仓库开关、手动选择、默认分支及全部检查成功；只发布job有packages写权限，不部署。校验归档、平台/版本/source/UID/环境、配置及层；复用测试内容按两个digest合成并重读索引，输出固定部署引用。区分containerd/classic本机ID与配置digest；不解析push人类输出。[操作/失败边界](IMAGE_RELEASE.md)。
 
-独立WSL全量433项108.70秒，新代理20项及后续只读检查补测20项1.16秒通过；Ruff/锁/wheel/前端类型构建格式/隐私noreply通过。真实TLS桌面/手机及退出清理复验2项7.7秒通过；未改其他UI，复用原证据。远程CI未跑。
+34项合成Docker专项0.29秒、全仓Ruff/format、新workflow格式、两个workflow的actionlint1.7.12通过；隐私/noreply已检查，提交前复查。未改产品代码，复用前阶段433项后端及真实隔离TLS/浏览器/备份升级证据。远程CI未执行。
 
-Rootless/amd64镜像seekbell:proxy-local，代码faa991d，image ID sha256:9c4c944742ff7181a00fd8cc8868f34151f52c81c9f116ef374f725946c9717b，未发布。固定Nginx1.30.6 digest见证据：内部无外网路由网络、临时CA、真正TLS终止于Nginx，主机只用回环加密字节中继；严格链/主机名/未知CA拒绝、HTTPS认证/同源/流式备份、伪造头和秘密日志样本通过。浏览器仅临时证书忽略未知CA，不能当生产证书验证。带非空代理设置的禁外网升级/失败/显式回退及网页副本切换也通过，仅清本轮资源。浏览器以SIGTERM/宽限期退出，复验后本轮容器/卷/网络均无残留。
+本机rootless/amd64镜像seekbell:images-local，revision dd4eccf，image ID sha256:ed2fcc2bae3c9f867ccb2af146c6fcf00bf4669faa2f39ecba5c0d7b71567ea8，配置digest和归档SHA见本次证据。实际导出/校验/加载、禁外网服务/重启持久化/实例锁/离线闭环通过，临时归档与容器清理；未发布。只读确认基础镜像声明双架构，本机无arm64执行能力，未装QEMU/改daemon。
 
-## 原验收实例保留
+## 用户验收实例
 
-项目seekbell-acceptance-b45fc2c-20261020，容器后缀-seekbell-1、卷后缀_data，镜像seekbell:backup-local（b45fc2c），http://localhost:18081/。未替换/重置/代用户操作。旧seekbell-acceptance不兼容卷保留、旧容器已停；勿复用旧名/改迁移号或覆盖试验。旧4175/18080未动。[故障记录](history/2026-10-20-本机验收启动修复.md)。
+保留项目seekbell-acceptance-b45fc2c-20261020、容器后缀-seekbell-1、卷后缀_data，镜像seekbell:backup-local（b45fc2c），http://localhost:18081/。只读核对running/重启计数0，未替换/重置/代配置。旧seekbell-acceptance不兼容卷保留、容器已停；勿复用旧名/改迁移号。旧4175/18080未动。[故障记录](history/2026-10-20-本机验收启动修复.md)。
 
 ## 下一步与恢复
 
-下一步M4的GHCR/amd64+arm64构建发布流程与部署核对，无开发阻塞；实际推送/发布/部署另需授权。再进入M5的PVE实机、真实RSS/四渠道收信、Safari/真机页面、运行观察和用户验收；确认后正式发布。[阶段顺序](ROADMAP.md)。实际目标代理/证书、原生arm64、跨版本加密恢复仍未验证。恢复/回退可能重复发送，保留原卷、不得直接降级新库。
+无本地开发阻塞。下一步获远程授权后推送/审阅，先跑publish=false的完整原生双架构候选；核对包权限/可见性后再决定GHCR发布。后续M5：授权PVE实机、真实RSS/四渠道、Safari/真机、运行观察和用户验收，确认后正式发布。[阶段顺序](ROADMAP.md)。实际目标代理/证书、原生arm64、GHCR、跨版本加密恢复未验证；恢复/回退可能重复发送，保留原卷，不直接降级新库。
 
-恢复读AGENTS、本状态、PROXY_DEPLOYMENT；按需读RELEASES、代理/部署/发布脚本和专项测试，不全仓重读。
+恢复读AGENTS、本状态、IMAGE_RELEASE；按需读images.yml/release_images及专项测试、RELEASES/PROXY_DEPLOYMENT，不全仓重读。状态与本段实现同批本地提交，提交基准以git log为准。
 
 ## 授权
 
-用户要求下一步本地开发并说明阶段；沿用独立WSL/noreply。不推送/合并main、不组织多代理，不执行真实发送/远程部署/公开发布/原环境清理/全局WSL变更。用户验收实例及之后配置须保留。
+仅下一步本地开发，沿用独立WSL/noreply；无推送/合并main、远程CI/部署、真实发送/公开发布、原环境清理/全局WSL变更授权。不组织多代理；保留用户验收实例及其配置。
