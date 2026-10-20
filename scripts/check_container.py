@@ -106,6 +106,27 @@ assert request("manage/history/deliveries")["total"] == 0
 assert request("manage/history/tests")["total"] == 0
 assert request("manage/history/manual")["total"] == 0
 assert request("manage/history/options")["websites"][0]["id"] == "nodeseek"
+# Packaged management operations remain local and preserve current configuration.
+trial = request("manage/rules/history", {"website_id": "nodeseek", "rule": {}, "limit": 100})
+assert trial["sample_count"] == trial["available"] == 0
+assert request("manage/websites/nodeseek/connection-test") is None
+import urllib.error
+try:
+    request("manage/websites/nodeseek/connection-test", {"url": "https://receiver.example.test"})
+    raise AssertionError("Connection check accepted an arbitrary URL")
+except urllib.error.HTTPError as error:
+    assert error.code == 422
+try:
+    request("manage/targets/" + target, {}, method="DELETE")
+    raise AssertionError("Target dependency did not block removal")
+except urllib.error.HTTPError as error:
+    assert error.code == 409
+disposable = request("manage/targets", {
+    "name": "Container delete check", "kind": "webhook", "enabled": False,
+    "config": {"url": "https://receiver.example.test/synthetic"},
+})["id"]
+request("manage/targets/" + disposable, {}, method="DELETE")
+assert all(item["id"] != disposable for item in request("manage/workspace")["targets"])
 overview = request("manage/overview?range=7d")
 assert overview["runtime_active"] and not any(overview["window"].values())
 assert request("manage/runtime")["status"] == "running"

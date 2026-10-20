@@ -303,7 +303,7 @@ def test_manual_migration_preserves_existing_data_and_rolls_back(tmp_path):
         assert "manual_deliveries" not in inspect(engine).get_table_names()
         migrate(engine)
         migrate(engine)
-        assert schema_revision(engine) == "0006_manual_delivery"
+        assert schema_revision(engine) == "0007_management_operations"
         with engine.connect() as connection:
             assert list(connection.execute(text("SELECT * FROM source_states"))) == before
     finally:

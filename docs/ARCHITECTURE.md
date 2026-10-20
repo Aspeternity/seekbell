@@ -173,3 +173,16 @@ DeliveryWorker自行认领、发送、完成与有限重试，沿用同帖×目�
 来源HTTP/解析可预期错误只影响来源；actor意外退出/异常则置failed、停止另一actor且不在进程内盲目重启。日志只记固定collection/delivery标签与代码，不记录异常文本、参数、URL或凭据。GET /api/manage/runtime返回active/status/code，workspace/overview也携带实际进程状态，/health/ready同时检查数据库和两个actor；actor失效503，/health/live仍报告进程存在。running表示循环存活，不替代外部RSS/渠道健康，来源错误/退避另行显示。前端每5秒仅刷新轻量运行状态，不轮询配置覆盖编辑草稿；概览仍手动刷新历史统计，新增下次可尝试时间。
 
 测试默认以构造依赖隔离旧CRUD/历史用例，独立runtime用例使用真实Runtime和MockTransport/模拟Notifier，产品无关闭后台/模拟结果环境开关。8014浏览器临时服务在真实10秒间隔中关闭浏览器、停止所有API轮询，再观察后台新投递；生产默认构造与Rootless镜像运行另有检查。runtime_demo是独立临时库/合成服务演练，和日常数据无关。细节及证据见[本阶段记录](history/2026-10-20-后台生命周期接入.md)。
+
+
+## M3管理操作补全（2026-10-20，第六子阶段）
+
+0007_management_operations给NotificationTarget增加deleted_at，删除保留身份与已有不可变快照，仅清空当前密文、禁用并提升版本。Configuration.delete_target在BEGIN IMMEDIATE中读取所有未删除任务的当前版本；包括暂停任务在内，仍引用目标则409，不能强制删除或自动重写规则。新建/修改任务与删除使用同一串行写事务，防止悬空依赖。删除取消pending/retry；leased标cancel_requested，保留租约和在途/迟到接受回执。当前目标列表/概览排除已删除；配置更新、重新启用、新测试/重发拒绝已删除目标。已建立显式操作可完成或沿用ID查询，不重复发送；删除不能撤回在途消息。最后一个当前配置删除后，启动仍检查历史密文并要求原密钥，不能静默换钥。
+
+POST /api/manage/rules/history接受内置website_id、当前草稿Rule及1–100条上限。仅在显式BEGIN只读快照内统计本地Post，并按first_seen_at和身份倒序取最近样本（包括基线），通过纯RuleEngine试算。返回本地总数、样本数、首次发现时间范围和逐条三值原因/警告；缺失摘要与空摘要保持不同。不补抓网页，不引用旧判定冒充当前草稿结果，不保存规则、判定/命中或身份/回执，不触碰队列。前端20/50/100选择、空历史/错误与过期草稿响应分别处理；模拟入口维持合成样本。
+
+GET/POST /api/manage/websites/nodeseek/connection-test复用认证和CSRF。POST接受空对象，拒绝额外URL配置；使用Runtime持有的同一个SourceRunner锁和RSS客户端，15秒获取/解析等待、1MiB、固定官方地址、不跟随重定向/环境代理。暂停/未到期的调度轮次在锁外只读检查，真正到期后锁内再次核对状态；显式检查与正式采集绝不重叠。来源忙409，间隔/退避429并带Retry-After。未安装或后台未运行拒绝操作。
+
+新SourceProbe每来源仅存最近一次开始/完成时间、结果/固定诊断码、有效条目数和下次可请求时间；发请求前先持久化unknown/cooldown，中断不伪称成功。它不写SourceState/SourceRun、Post、基线/命中或账本；网站移除仍保留来源锚点和限频，重新添加不能绕过。检查前同时服从正式来源next_attempt_at/last_attempt_at及既有probe间隔，失败服从Retry-After与SourcePolicy退避。正式采集也服从probe时间；改变间隔不会绕过测试退避，概览显示合并后的有效时间。测试成功不清除正式采集故障或冒充正式采集成功。结果刷新可读，未保存的面板间隔不参与测试；Runtime停止时同时join/cancel在途显式检查，再关闭客户端/数据库。
+
+管理操作浏览器验证使用独立--operations临时库/8015：实际锁/采集器配MockTransport，投递actor隔离，显式通知服务由测试依赖替换。产品无新增模拟开关。证据与命令见[本阶段记录](history/2026-10-20-管理操作接入.md)。

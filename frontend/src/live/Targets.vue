@@ -2,12 +2,38 @@
 import { computed, ref } from 'vue'
 import Icon from '../prototype/components/Icon.vue'
 import Toggle from '../prototype/components/Toggle.vue'
-import { state, channelMeta, setTargetEnabled } from './store'
+import { state, channelMeta, setTargetEnabled, confirmAction, removeTarget, notify } from './store'
+import type { Target } from '../prototype/shared'
 import SendDialog from './SendDialog.vue'
 const emit = defineEmits<{ navigate: [path: string] }>()
 const q = ref(''),
   channel = ref('all'),
   testId = ref('')
+const deleting = ref(false)
+const deleteError = ref('')
+function remove(target: Target) {
+  if (deleting.value) return
+  if (state.tasks.some((task) => task.targets.includes(target.id))) {
+    notify('请先在关联任务中取消选择此目标，包括暂停的任务。')
+    return
+  }
+  confirmAction(
+    '删除「' + target.name + '」？',
+    '删除当前配置并取消等待投递，历史记录保留。在途消息可能已经发出，无法撤回。',
+    async () => {
+      deleting.value = true
+      deleteError.value = ''
+      try {
+        await removeTarget(target)
+      } catch (error) {
+        deleteError.value = (error as Error).message
+      } finally {
+        deleting.value = false
+      }
+    },
+    '删除目标',
+  )
+}
 const targets = computed(() =>
   state.targets.filter(
     (t) =>
@@ -60,6 +86,7 @@ function completed(path: string) {
       <option v-for="(meta, id) in channelMeta" :key="id" :value="id">{{ meta.type }}</option>
     </select>
   </div>
+  <p v-if="deleteError" class="form-errors" role="alert">{{ deleteError }}</p>
   <div class="target-card-grid">
     <article v-for="target in targets" :key="target.id" class="panel notification-card">
       <div class="notification-card-top">
@@ -88,6 +115,7 @@ function completed(path: string) {
         <button class="button" @click="testId = target.id">
           <Icon name="play" :size="14" />测试</button
         ><button class="button" @click="emit('navigate', '/target/' + target.id)">编辑</button>
+        <button class="button" :disabled="deleting" @click="remove(target)">删除</button>
       </div>
     </article>
   </div>

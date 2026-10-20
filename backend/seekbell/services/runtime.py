@@ -8,6 +8,7 @@ import httpx
 from seekbell.collectors.rss import RssCollector
 from seekbell.services.collection import SourceRunner
 from seekbell.services.delivery import DeliveryWorker
+from seekbell.services.source_probe import ProbeConflict, check
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ class Runtime:
         self.worker = DeliveryWorker(engine, notifiers, managed=True, tick=tick)
         self.stop = asyncio.Event()
         self.tasks = {}
+        self.probes = set()
         self.status = "starting"
         self.code = None
         self.shutdown_grace = shutdown_grace
@@ -87,18 +89,29 @@ class Runtime:
         self.status = "running"
         await asyncio.sleep(0)
 
+    async def check_source(self):
+        if not self.active:
+            raise ProbeConflict("后台未运行，请先检查概览。")
+        task = asyncio.current_task()
+        self.probes.add(task)
+        try:
+            return await check(self.source)
+        finally:
+            self.probes.discard(task)
+
     async def aclose(self):
         self.status = "stopping"
         self.stop.set()
         try:
-            if self.tasks:
+            tasks = {*self.tasks.values(), *self.probes}
+            if tasks:
                 _, pending = await asyncio.wait(
-                    self.tasks.values(),
+                    tasks,
                     timeout=self.shutdown_grace,
                 )
                 for task in pending:
                     task.cancel()
-                await asyncio.gather(*self.tasks.values(), return_exceptions=True)
+                await asyncio.gather(*tasks, return_exceptions=True)
         finally:
             # Actors have joined, including any shielded database work.
             await self.client.aclose()

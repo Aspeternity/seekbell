@@ -35,7 +35,7 @@ class TargetTesting:
         self.timeout = timeout
 
     def validate(self, target, revision):
-        if target is None:
+        if target is None or target.deleted_at is not None:
             raise ValueError("Unknown target")
 
     def _start(self, target_id: str, key=None, revision=None):

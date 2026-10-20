@@ -82,11 +82,25 @@ class SourceRun(Base):
     diagnostics: Mapped[list] = mapped_column(JSON, default=list)
 
 
+class SourceProbe(Base):
+    """Last explicit connection check; independent from collection/baseline history."""
+
+    __tablename__ = "source_probes"
+    source_id: Mapped[str] = mapped_column(ForeignKey("sources.id"), primary_key=True)
+    started_at: Mapped[float] = mapped_column(Float)
+    finished_at: Mapped[float | None] = mapped_column(Float)
+    next_attempt_at: Mapped[float] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(String(32))
+    code: Mapped[str | None] = mapped_column(String(80))
+    item_count: Mapped[int | None] = mapped_column(Integer)
+
+
 class NotificationTarget(Base):
     __tablename__ = "notification_targets"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     name: Mapped[str] = mapped_column(String(200))
     kind: Mapped[str] = mapped_column(String(32))
+    deleted_at: Mapped[float | None] = mapped_column(Float)
     config_ciphertext: Mapped[str | None] = mapped_column(Text)
     revision: Mapped[int] = mapped_column(Integer, default=1)
     enabled: Mapped[bool] = mapped_column(Boolean, default=False)

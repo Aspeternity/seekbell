@@ -17,7 +17,6 @@ from seekbell.db.transactions import write_session
 from seekbell.domain.rules import Rule
 from seekbell.main import create_app
 from seekbell.services.authentication import initialize, token_hash
-from seekbell.services.configuration import Configuration
 from sqlalchemy import event, inspect, select, text
 from sqlalchemy.orm import Session
 
@@ -298,10 +297,15 @@ def test_legacy_m2_upgrade_retains_installed_site_tasks_and_source_settings(tmp_
     engine = create_database_engine(Settings(data_dir=tmp_path))
     try:
         migrate(engine, "0003_notifications")
-        configuration = Configuration(engine)
-        key = configuration.create_target("Old synthetic")
-        task_id = "legacy-task"
+        key, task_id = "legacy-target", "legacy-task"
         with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO notification_targets(id,name,kind,revision,enabled) "
+                    "VALUES (:id,'Old synthetic','mock',1,1)"
+                ),
+                {"id": key},
+            )
             connection.execute(
                 text(
                     "INSERT INTO tasks (id,website_id,current_version,enabled,created_at) "
@@ -346,7 +350,7 @@ def test_failed_management_upgrade_rolls_back_and_can_retry(tmp_path):
         with Session(engine) as session:
             assert session.get(Source, "nodeseek-rss")
         migrate(engine)
-        assert schema_revision(engine) == "0006_manual_delivery"
+        assert schema_revision(engine) == "0007_management_operations"
         with Session(engine) as session:
             assert session.get(WebsiteInstallation, "nodeseek")
     finally:

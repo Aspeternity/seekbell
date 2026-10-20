@@ -117,7 +117,12 @@ class DeliveryWorker:
                     continue
                 target = session.get(NotificationTarget, event.target_id)
                 tasks = self._active_tasks(session, event.id)
-                if event.cancel_requested or not target.enabled or not tasks:
+                if (
+                    event.cancel_requested
+                    or target.deleted_at is not None
+                    or not target.enabled
+                    or not tasks
+                ):
                     event.status = "cancelled"
                     event.last_error_code = "delivery_cancelled"
                     self._release(event)
@@ -199,6 +204,7 @@ class DeliveryWorker:
                 event.last_error_code = None
             elif (
                 event.cancel_requested
+                or target.deleted_at is not None
                 or not target.enabled
                 or not self._active_tasks(session, event.id)
             ):

@@ -76,3 +76,15 @@ def synthetic_runtime_factory(engine, notifiers):
 
     scenario.feed = growing
     return scenario.factory(engine, notifiers)
+
+
+def operations_runtime_factory(engine, notifiers):
+    # Seeded history stays immutable; explicit probes use the real lock/collector.
+    scenario = SyntheticScenario()
+    runtime = scenario.factory(engine, notifiers)
+
+    async def idle(stop):
+        await stop.wait()
+
+    runtime.worker.run = idle
+    return runtime

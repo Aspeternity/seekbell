@@ -9,10 +9,18 @@ from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
 from seekbell.collectors.rss import RssCollector
-from seekbell.db.models import Administrator, Source, SourceState, Website, WebsiteInstallation
+from seekbell.db.models import (
+    Administrator,
+    Source,
+    SourceProbe,
+    SourceState,
+    Website,
+    WebsiteInstallation,
+)
 from seekbell.db.transactions import database_call
 from seekbell.domain.errors import SourceFailure
 from seekbell.services.ingestion import Ingestion, IngestReport
+from seekbell.services.source_probe import probe_due
 from seekbell.sites.nodeseek import BUILTIN_ADAPTERS
 
 
@@ -53,6 +61,7 @@ class SourceRunner:
             state = session.get(SourceState, self.source_id)
             if source is None or state is None:
                 raise ValueError("Unknown source")
+            probe = session.get(SourceProbe, self.source_id)
             website = session.get(Website, source.website_id)
             return {
                 "enabled": source.enabled
@@ -66,11 +75,30 @@ class SourceRunner:
                 ),
                 "website_id": source.website_id,
                 "url": source.url,
-                "next_attempt_at": state.next_attempt_at,
+                "next_attempt_at": max(
+                    state.next_attempt_at, probe_due(probe, source.interval_seconds)
+                ),
                 "interval_seconds": source.interval_seconds,
             }
 
+    async def fetch_batch(self, adapter):
+        try:
+            async with asyncio.timeout(self.fetch_timeout):
+                feed = await self.collector.fetch(adapter.rss_url)
+        except TimeoutError:
+            raise SourceFailure("timeout") from None
+        return await asyncio.to_thread(adapter.normalize, feed)
+
     async def run_once(self) -> PollOutcome:
+        if self._lock.locked():
+            return PollOutcome("overlap")
+        # Paused/backoff wakes do not occupy the network operation lock. A
+        # second snapshot under the lock validates a due poll against changes.
+        snapshot = await database_call(self._snapshot)
+        if not snapshot["enabled"]:
+            return PollOutcome("paused")
+        if self.clock() < snapshot["next_attempt_at"]:
+            return PollOutcome("backoff")
         if self._lock.locked():
             return PollOutcome("overlap")
         async with self._lock:
@@ -83,12 +111,7 @@ class SourceRunner:
                 adapter = BUILTIN_ADAPTERS.get(snapshot["website_id"])
                 if adapter is None or snapshot["url"] != adapter.rss_url:
                     raise SourceFailure("unsupported_source")
-                try:
-                    async with asyncio.timeout(self.fetch_timeout):
-                        feed = await self.collector.fetch(adapter.rss_url)
-                except TimeoutError:
-                    raise SourceFailure("timeout") from None
-                batch = await asyncio.to_thread(adapter.normalize, feed)
+                batch = await self.fetch_batch(adapter)
             except SourceFailure as exc:
                 await database_call(
                     self.ingestion.record_failure,

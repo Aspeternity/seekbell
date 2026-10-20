@@ -189,7 +189,7 @@ class Ingestion:
                     hit_count += 1
                     for target_id in version.target_ids:
                         target = session.get(NotificationTarget, target_id)
-                        if target is not None and target.enabled:
+                        if target is not None and target.deleted_at is None and target.enabled:
                             target_hits.setdefault(target_id, []).append((hit, version))
 
                 for target_id, hits in target_hits.items():

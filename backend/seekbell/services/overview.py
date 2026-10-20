@@ -10,6 +10,7 @@ from seekbell.db.models import (
     Outbox,
     Post,
     Source,
+    SourceProbe,
     SourceRun,
     SourceState,
     Task,
@@ -18,6 +19,7 @@ from seekbell.db.models import (
     WebsiteInstallation,
 )
 from seekbell.services.history import decisions, error_code, post_key, read_session
+from seekbell.services.source_probe import probe_due
 
 
 def overview(engine, range_name="24h", *, at=None):
@@ -63,7 +65,10 @@ def overview(engine, range_name="24h", *, at=None):
                     "enabled": website.enabled and source.enabled,
                     "last_attempt_at": state.last_attempt_at,
                     "last_success_at": state.last_success_at,
-                    "next_attempt_at": state.next_attempt_at,
+                    "next_attempt_at": max(
+                        state.next_attempt_at,
+                        probe_due(session.get(SourceProbe, source.id), source.interval_seconds),
+                    ),
                     "failures": state.failures,
                     "error_code": error_code(state.last_error_code),
                     "possible_gap": state.possible_gap,
@@ -119,7 +124,7 @@ def overview(engine, range_name="24h", *, at=None):
                 "websites": total(WebsiteInstallation),
                 "tasks": total(Task, Task.deleted_at.is_(None)),
                 "enabled_tasks": total(Task, Task.deleted_at.is_(None), Task.enabled.is_(True)),
-                "targets": total(NotificationTarget),
+                "targets": total(NotificationTarget, NotificationTarget.deleted_at.is_(None)),
             },
             "window": {
                 "posts": total(Post, Post.first_seen_at >= start, Post.first_seen_at < end),

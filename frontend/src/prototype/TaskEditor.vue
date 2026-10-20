@@ -5,7 +5,7 @@ import Toggle from './components/Toggle.vue'
 import TagInput from './components/TagInput.vue'
 import { evaluate, historySamples, statusLabel } from './model'
 import type { Sample, Task } from './model'
-import { state, websiteName, isLive, evaluateTask } from '@workspace'
+import { state, websiteName, isLive, evaluateTask, trialHistory, formatTime } from '@workspace'
 const targets = computed(() => state.targets)
 const props = withDefaults(
   defineProps<{ task: Task; returnLabel?: string; saving?: boolean; saveError?: string }>(),
@@ -27,7 +27,13 @@ const testing = ref(false),
 const testMode = ref('manual')
 const testResult = ref<ReturnType<typeof evaluate> | null>(null)
 const historyResults = ref<{ sample: Sample; result: ReturnType<typeof evaluate> }[] | null>(null)
-const sample = reactive({ ...historySamples[0]!, summary: historySamples[0]!.summary || '' })
+const sample = reactive(
+  isLive
+    ? { title: '', summary: '', author: '', category: '' }
+    : { ...historySamples[0]!, summary: historySamples[0]!.summary || '' },
+)
+const historyLimit = ref(20)
+const historyMeta = ref<Awaited<ReturnType<typeof trialHistory>> | null>(null)
 const missingSummary = ref(false)
 const section = ref('basic')
 const unrestricted = computed(
@@ -57,6 +63,7 @@ watch(
     emit('dirty', JSON.stringify(draft) !== baseline)
     testResult.value = null
     historyResults.value = null
+    historyMeta.value = null
   },
   { deep: true },
 )
@@ -67,6 +74,10 @@ watch(
   },
   { deep: true },
 )
+function clearHistory() {
+  historyResults.value = null
+  historyMeta.value = null
+}
 function save() {
   if (props.saving) return
   errors.value = []
@@ -96,6 +107,7 @@ async function runTest() {
     sample,
     missingSummary: missingSummary.value,
     testMode: testMode.value,
+    historyLimit: historyLimit.value,
   })
   try {
     const task = JSON.parse(JSON.stringify(draft))
@@ -113,16 +125,13 @@ async function runTest() {
           sample,
           missingSummary: missingSummary.value,
           testMode: testMode.value,
+          historyLimit: historyLimit.value,
         })
       )
         testResult.value = result
     } else {
-      const results = await Promise.all(
-        historySamples.map(async (item) => ({
-          sample: item,
-          result: await evaluateTask(task, item),
-        })),
-      )
+      const batch = await trialHistory(task, historyLimit.value)
+      const results = batch.items
       if (
         snapshot ===
         JSON.stringify({
@@ -130,9 +139,12 @@ async function runTest() {
           sample,
           missingSummary: missingSummary.value,
           testMode: testMode.value,
+          historyLimit: historyLimit.value,
         })
-      )
+      ) {
         historyResults.value = results
+        historyMeta.value = batch
+      }
     }
   } catch (e) {
     testError.value = (e as Error).message
@@ -254,7 +266,7 @@ function jump(id: string) {
           >
             {{
               isLive
-                ? '网站配置已暂停，可以保存任务；采集调度尚未接入。'
+                ? '网站已暂停，可以保存任务；启用网站后才会采集新帖。'
                 : '该网站已暂停。任务可以保存，启用网站后才会采集新帖。'
             }}
           </p>
@@ -539,6 +551,21 @@ function jump(id: string) {
             /></label>
           </div>
         </div>
+        <div v-else-if="isLive" class="history-intro">
+          <strong>本地已保存帖子</strong>
+          <p>使用当前草稿，按首次发现时间选取最近样本（含基线）。不会联网补齐历史。</p>
+          <label class="field-label" for="history-limit">最多试算条数</label>
+          <select
+            id="history-limit"
+            v-model="historyLimit"
+            :disabled="testing"
+            @change="clearHistory"
+          >
+            <option :value="20">20 条</option>
+            <option :value="50">50 条</option>
+            <option :value="100">100 条</option>
+          </select>
+        </div>
         <div v-else class="history-intro">
           <span class="icon-tile purple"><Icon name="inbox" /></span
           ><strong>5 条合成历史样本</strong>
@@ -547,7 +574,7 @@ function jump(id: string) {
         <p v-if="testError" class="form-errors" role="alert">{{ testError }}</p>
         <button type="button" class="button test-button" :disabled="testing" @click="runTest">
           <Icon name="play" :size="15" />{{
-            testMode === 'manual' ? '试匹配这条帖子' : '试匹配 5 条样本'
+            testMode === 'manual' ? '试匹配这条帖子' : isLive ? '试匹配本地历史' : '试匹配 5 条样本'
           }}
         </button>
         <div
@@ -572,8 +599,18 @@ function jump(id: string) {
         </div>
         <div v-if="testMode === 'history' && historyResults" class="history-results" role="status">
           <div class="history-result-summary">
-            命中 {{ historyResults.filter((r) => r.result.status === 'yes').length }} / 5 条
+            命中 {{ historyResults.filter((r) => r.result.status === 'yes').length }} /
+            {{ historyResults.length }} 条
           </div>
+          <p v-if="isLive && historyMeta">
+            本地共 {{ historyMeta.available }} 条；本次 {{ historyMeta.sampleCount }} 条。
+            <template v-if="historyMeta.sampleCount"
+              >首次发现时间：{{ formatTime(historyMeta.fromAt) }}–{{
+                formatTime(historyMeta.toAt)
+              }}。</template
+            >
+            <template v-else>暂无本地历史样本。</template>
+          </p>
           <article v-for="(item, i) in historyResults" :key="i">
             <div>
               <span class="result-pill" :class="item.result.status">{{
@@ -602,7 +639,7 @@ function jump(id: string) {
         <span class="status-dot" /><span
           >{{ draft.enabled ? '保存后任务为启用状态' : '保存后任务保持暂停'
           }}<small>{{
-            isLive ? '保存到服务端；采集调度尚未接入' : '仅保存在当前浏览器'
+            isLive ? '保存到服务端；后台按网站启停状态运行' : '仅保存在当前浏览器'
           }}</small></span
         >
       </div>

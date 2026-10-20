@@ -15,7 +15,12 @@ class MissingSend(LookupError):
 
 
 def validate_target(target, revision=None, *, enabled=False):
-    if target is None or target.kind == "mock" or not target.config_ciphertext:
+    if (
+        target is None
+        or target.deleted_at is not None
+        or target.kind == "mock"
+        or not target.config_ciphertext
+    ):
         raise MissingSend("通知目标不存在或未配置。")
     if enabled and not target.enabled:
         raise OperationConflict("请先启用对应通知目标。")

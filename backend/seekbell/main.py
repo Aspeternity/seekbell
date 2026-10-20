@@ -18,13 +18,37 @@ from seekbell.api.sending import install_errors
 from seekbell.api.sending import router as sending_router
 from seekbell.api.system import router
 from seekbell.config import Settings
-from seekbell.db.models import NotificationTarget
+from seekbell.db.models import ManualDelivery, NotificationTarget, Outbox, TargetTestAttempt
 from seekbell.db.runtime import create_database_engine, instance_lock, migrate
 from seekbell.notifiers.credentials import CredentialError, CredentialVault
 from seekbell.notifiers.registry import NotifierRegistry
 from seekbell.services.authentication import LoginLimiter
 from seekbell.services.manual_sending import ConfiguredTargetTesting, ManualSending
 from seekbell.services.runtime import Runtime
+
+
+def stored_credentials(session):
+    values = list(
+        session.execute(
+            select(
+                NotificationTarget.id, NotificationTarget.kind, NotificationTarget.config_ciphertext
+            ).where(NotificationTarget.config_ciphertext.is_not(None))
+        ).all()
+    )
+    if not values:
+        # Deleting the last current config must not silently reconstruct a key
+        # beside retained encrypted delivery evidence. One snapshot verifies
+        # the same installation key without scanning the full history.
+        for model in (Outbox, TargetTestAttempt, ManualDelivery):
+            snapshot = session.scalar(
+                select(model.target_snapshot)
+                .where(model.target_snapshot["config_ciphertext"].as_string().is_not(None))
+                .limit(1)
+            )
+            if snapshot:
+                values.append((snapshot["id"], snapshot["kind"], snapshot["config_ciphertext"]))
+                break
+    return values
 
 
 def create_app(settings: Settings | None = None, *, runtime_factory=None) -> FastAPI:
@@ -40,23 +64,14 @@ def create_app(settings: Settings | None = None, *, runtime_factory=None) -> Fas
                 app.state.engine = engine
                 key_path = settings.data_dir.resolve() / "credentials.key"
                 with Session(engine) as session:
-                    encrypted = session.scalar(
-                        select(NotificationTarget.id)
-                        .where(NotificationTarget.config_ciphertext.is_not(None))
-                        .limit(1)
-                    )
+                    encrypted = stored_credentials(session)
                 if not key_path.exists() and not encrypted:
                     app.state.vault = CredentialVault.open(settings.data_dir.resolve(), create=True)
                 else:
                     app.state.vault = CredentialVault.open(settings.data_dir.resolve())
-                # Validate existing ciphertext now, fail closed on lost/wrong keys.
-                with Session(engine) as session:
-                    for target in session.scalars(
-                        select(NotificationTarget).where(
-                            NotificationTarget.config_ciphertext.is_not(None)
-                        )
-                    ):
-                        app.state.vault.unseal(target.id, target.kind, target.config_ciphertext)
+                # Validate current credentials, or retained snapshots after deletion.
+                for key, kind, ciphertext in encrypted:
+                    app.state.vault.unseal(key, kind, ciphertext)
                 registry = NotifierRegistry(app.state.vault)
                 try:
                     app.state.target_testing = ConfiguredTargetTesting(engine, registry.notifiers)

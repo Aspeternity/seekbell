@@ -731,3 +731,22 @@ export async function evaluateTask(task: Task, sample: Sample) {
 }
 
 export const runtime = { active: false, status: 'demo', code: null as string | null }
+
+// Live-only shared page contracts; the prototype keeps its existing local controls.
+export async function getWebsiteTest(
+  _id: string,
+): Promise<import('./shared').ConnectionCheck | null> {
+  return null
+}
+export async function testWebsite(_id: string): Promise<import('./shared').ConnectionCheck> {
+  throw new Error('演示入口使用模拟连接测试。')
+}
+export async function trialHistory(task: Task, _limit: number) {
+  return {
+    available: historySamples.length,
+    sampleCount: historySamples.length,
+    fromAt: '',
+    toAt: '',
+    items: historySamples.map((sample) => ({ sample, result: evaluate(task, sample) })),
+  }
+}

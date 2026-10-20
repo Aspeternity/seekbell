@@ -13,8 +13,11 @@ import {
   addWebsite,
   removeWebsite,
   loadExampleWorkspace,
+  getWebsiteTest,
+  testWebsite,
 } from '@workspace'
 import { websiteCatalog, websiteDefinition } from '../websites'
+import type { ConnectionCheck } from '../shared'
 import type { InstalledWebsite } from '../websites'
 const emit = defineEmits<{ dirty: [value: boolean]; navigate: [path: string] }>()
 const mutating = ref(false)
@@ -30,6 +33,10 @@ const baseline = ref(10),
   testing = ref(false),
   scenario = ref('success'),
   testResult = ref('')
+const connection = ref<ConnectionCheck | null>(null)
+const connectionError = ref('')
+let connectionRead = 0
+const connectionTime = (value: number) => formatTime(new Date(value * 1000).toISOString())
 const selected = computed(() => state.websites.find((w) => w.id === selectedId.value))
 const definition = computed(() => websiteDefinition(selected.value?.adapterId || ''))
 const dirty = computed(() => !!selected.value && draft.interval !== baseline.value)
@@ -85,6 +92,9 @@ function detail(w: InstalledWebsite) {
   error.value = ''
   testResult.value = ''
   scenario.value = 'success'
+  connection.value = null
+  connectionError.value = ''
+  if (isLive) loadTest(w.id)
   show()
 }
 function close() {
@@ -164,9 +174,42 @@ function toggle(w: InstalledWebsite, enabled: boolean) {
       '暂停网站',
     )
 }
+async function loadTest(id: string) {
+  const read = ++connectionRead
+  try {
+    const result = await getWebsiteTest(id)
+    if (selectedId.value === id && read === connectionRead) connection.value = result
+  } catch (error) {
+    if (selectedId.value === id && read === connectionRead)
+      connectionError.value = (error as Error).message
+  }
+}
+async function runLiveTest(id: string) {
+  if (testing.value) return
+  ++connectionRead
+  testing.value = true
+  connectionError.value = ''
+  try {
+    const result = await testWebsite(id)
+    if (selectedId.value === id) connection.value = result
+  } catch (error) {
+    if (selectedId.value === id) connectionError.value = (error as Error).message
+  } finally {
+    testing.value = false
+  }
+}
 async function test() {
   const w = selected.value
   if (!w || testing.value) return
+  if (isLive) {
+    confirmAction(
+      '测试 NodeSeek 官方 RSS 连接？',
+      '将请求一次官方 RSS，使用已保存的采集间隔并遵守退避。不会启用网站、保存草稿间隔或创建帖子、命中及通知。',
+      () => runLiveTest(w.id),
+      '确认测试连接',
+    )
+    return
+  }
   const result = scenario.value
   testing.value = true
   testResult.value = ''
@@ -507,15 +550,22 @@ onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
               </p>
             </div>
           </section>
-          <section v-if="!isLive" class="drawer-section">
+          <section class="drawer-section">
             <div class="drawer-section-title">
               <h3>连接测试</h3>
-              <span class="small-badge neutral">模拟</span>
+              <span class="small-badge neutral">{{ isLive ? '不采集入库' : '模拟' }}</span>
             </div>
-            <p class="field-help">只验证连接状态的界面反馈，不请求真实网站，不开启采集。</p>
+            <p class="field-help">
+              {{
+                isLive
+                  ? '仅检查官方 RSS 的连接与解析，不开启采集，不改变历史、基线和去重。'
+                  : '只验证连接状态的界面反馈，不请求真实网站，不开启采集。'
+              }}
+            </p>
             <div class="website-test-row">
-              <label class="sr-only" for="source-scenario">模拟场景</label
+              <label v-if="!isLive" class="sr-only" for="source-scenario">模拟场景</label
               ><select
+                v-if="!isLive"
                 id="source-scenario"
                 v-model="scenario"
                 class="text-input"
@@ -525,19 +575,41 @@ onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
                 <option value="error">服务暂时不可用</option></select
               ><button class="button" :disabled="testing" @click="test">
                 <Icon name="refresh" :size="16" :class="{ spinning: testing }" />{{
-                  testing ? '测试中…' : '测试连接（模拟）'
+                  testing ? '测试中…' : isLive ? '测试连接' : '测试连接（模拟）'
                 }}
               </button>
             </div>
             <div
-              v-if="testResult"
+              v-if="!isLive && testResult"
               class="match-result"
               :class="selected.health === 'healthy' ? 'yes' : 'unknown'"
               role="status"
             >
               {{ testResult }}
             </div>
-            <p class="small-note">最近测试：{{ formatTime(selected.lastTest) }}</p>
+            <p v-if="connectionError" class="form-errors" role="alert">{{ connectionError }}</p>
+            <div
+              v-if="isLive && connection"
+              class="match-result"
+              :class="connection.status === 'success' ? 'yes' : 'unknown'"
+              role="status"
+            >
+              <strong>{{
+                connection.status === 'success'
+                  ? 'RSS 连接与解析成功'
+                  : connection.status === 'failure'
+                    ? '连接测试失败'
+                    : '连接测试结果未知'
+              }}</strong>
+              <p v-if="connection.status === 'success'">
+                有效帖子 {{ connection.item_count }} 条，仅检查，未入库。
+              </p>
+              <p v-else>诊断代码：{{ connection.code }}</p>
+              <p>最近测试：{{ connectionTime(connection.started_at) }}</p>
+              <p>下次可请求时间：{{ connectionTime(connection.next_attempt_at) }}</p>
+            </div>
+            <p v-else-if="isLive" class="small-note">尚无连接测试记录。</p>
+            <p v-else class="small-note">最近测试：{{ formatTime(selected.lastTest) }}</p>
           </section>
           <section class="drawer-section">
             <div class="drawer-section-title">

@@ -100,3 +100,12 @@ export function newTarget(channel: Channel = 'telegram'): Target {
     lastTest: '',
   }
 }
+
+export interface ConnectionCheck {
+  started_at: number
+  finished_at: number | null
+  next_attempt_at: number
+  status: 'success' | 'failure' | 'unknown'
+  code: string | null
+  item_count: number | null
+}

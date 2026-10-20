@@ -192,12 +192,30 @@ def test_legacy_migration_preserves_known_hits_and_unknown_missing_decisions(tmp
     try:
         migrate(engine, "0004_management")
         from seekbell.domain.rules import Rule
-        from seekbell.services.configuration import Configuration
 
-        config = Configuration(engine)
-        target = config.create_target("legacy mock")
-        task = config.create_task("Old version name", Rule(), [target], at=1)
+        # Seed the historical schema directly; current ORM includes later columns.
+        task = "legacy-task"
         with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO notification_targets(id,name,kind,revision,enabled) "
+                    "VALUES ('legacy-target','legacy mock','mock',1,1)"
+                )
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO tasks(id,website_id,current_version,enabled,created_at) "
+                    "VALUES (:id,'nodeseek',1,1,1)"
+                ),
+                {"id": task},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO task_versions(task_id,version,name,rule,target_ids,created_at) "
+                    "VALUES (:id,1,'Old version name',:rule,:targets,1)"
+                ),
+                {"id": task, "rule": Rule().model_dump_json(), "targets": '["legacy-target"]'},
+            )
             for key in ("7001", "7002"):
                 connection.execute(
                     text("INSERT INTO seen_posts VALUES ('nodeseek',:id,1)"), {"id": key}
@@ -246,7 +264,7 @@ def test_history_migration_failure_rolls_back_columns_and_revision(tmp_path):
         assert schema_revision(engine) == "0004_management"
         assert "baseline" not in {c["name"] for c in inspect(engine).get_columns("posts")}
         migrate(engine)
-        assert schema_revision(engine) == "0006_manual_delivery"
+        assert schema_revision(engine) == "0007_management_operations"
     finally:
         engine.dispose()
 

@@ -36,6 +36,10 @@ def target_snapshot(target: NotificationTarget) -> dict:
     }
 
 
+class TargetInUse(ValueError):
+    pass
+
+
 class Configuration:
     def __init__(self, engine: Engine, vault: CredentialVault | None = None):
         self.engine = engine
@@ -53,7 +57,11 @@ class Configuration:
         target_ids = list(dict.fromkeys(target_ids))
         if not target_ids or len(target_ids) > 64:
             raise ValueError("Select between 1 and 64 configured targets")
-        if any(session.get(NotificationTarget, key) is None for key in target_ids):
+        if any(
+            (target := session.get(NotificationTarget, key)) is None
+            or target.deleted_at is not None
+            for key in target_ids
+        ):
             raise ValueError("Unknown notification target")
         return target_ids
 
@@ -91,7 +99,7 @@ class Configuration:
     ) -> int:
         with write_session(self.engine) as session:
             target = session.get(NotificationTarget, key)
-            if target is None or target.kind == "mock":
+            if target is None or target.deleted_at is not None or target.kind == "mock":
                 raise ValueError("Unknown configured target")
             vault = self._vault()
             current = vault.unseal(key, target.kind, target.config_ciphertext)
@@ -108,7 +116,7 @@ class Configuration:
         """Safe presentation contract: secret values are never returned."""
         with Session(self.engine) as session:
             target = session.get(NotificationTarget, key)
-            if target is None:
+            if target is None or target.deleted_at is not None:
                 raise ValueError("Unknown target")
             config, configured = {}, []
             if target.kind != "mock":
@@ -134,14 +142,16 @@ class Configuration:
         }
         with Session(self.engine) as session:
             target = session.get(NotificationTarget, key)
-            if target is None or target.kind not in fields:
+            if target is None or target.deleted_at is not None or target.kind not in fields:
                 return []
             vault = self._vault()
             original = vault.unseal(key, target.kind, target.config_ciphertext)
             duplicates = []
             for other in session.scalars(
                 select(NotificationTarget).where(
-                    NotificationTarget.kind == target.kind, NotificationTarget.id != key
+                    NotificationTarget.kind == target.kind,
+                    NotificationTarget.id != key,
+                    NotificationTarget.deleted_at.is_(None),
                 )
             ):
                 values = vault.unseal(other.id, other.kind, other.config_ciphertext)
@@ -280,10 +290,34 @@ class Configuration:
             task.enabled = False
             self._cancel_contributions(session, key)
 
+    def delete_target(self, key: str, *, at: float) -> None:
+        with write_session(self.engine) as session:
+            target = session.get(NotificationTarget, key)
+            if target is None or target.kind == "mock":
+                raise ValueError("Unknown configured target")
+            if target.deleted_at is not None:
+                return
+            versions = session.scalars(
+                select(TaskVersion)
+                .join(
+                    Task,
+                    (Task.id == TaskVersion.task_id)
+                    & (Task.current_version == TaskVersion.version),
+                )
+                .where(Task.deleted_at.is_(None))
+            )
+            if any(key in version.target_ids for version in versions):
+                raise TargetInUse("请先在所有关联任务中取消选择此目标，包括暂停的任务。")
+            self._target_enabled(session, target, False)
+            target.revision += 1
+            target.deleted_at = at
+            target.config_ciphertext = None
+            # Identity and immutable encrypted delivery snapshots remain as evidence.
+
     def set_target_enabled(self, key: str, enabled: bool) -> None:
         with write_session(self.engine) as session:
             target = session.get(NotificationTarget, key)
-            if target is None:
+            if target is None or target.deleted_at is not None:
                 raise ValueError("Unknown target")
             self._target_enabled(session, target, enabled)
 

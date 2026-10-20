@@ -3,7 +3,7 @@ import type { Task, Sample } from '../prototype/model'
 import { emptyTask } from '../prototype/model'
 import { createWebsite, websiteDefinition } from '../prototype/websites'
 import type { InstalledWebsite } from '../prototype/websites'
-import type { DemoState, Target } from '../prototype/shared'
+import type { ConnectionCheck, DemoState, Target } from '../prototype/shared'
 import { channelMeta, clone, newTarget } from '../prototype/shared'
 export * from '../prototype/shared'
 export const isLive = true
@@ -236,6 +236,55 @@ export async function setTargetEnabled(target: Target, value: boolean) {
     notify((error as Error).message)
   }
 }
+export async function removeTarget(target: Target) {
+  await request('manage/targets/' + target.id, 'DELETE')
+  await refresh()
+  notify('目标已删除，历史记录保留。')
+}
+export async function getWebsiteTest(id: string) {
+  return request<ConnectionCheck | null>('manage/websites/' + id + '/connection-test')
+}
+export async function testWebsite(id: string) {
+  return request<ConnectionCheck>('manage/websites/' + id + '/connection-test', 'POST', {})
+}
+export async function trialHistory(task: Task, limit: number) {
+  const data = await request('manage/rules/history', 'POST', {
+    website_id: task.websiteId,
+    rule: rule(task),
+    limit,
+  })
+  return {
+    available: data.available as number,
+    sampleCount: data.sample_count as number,
+    fromAt: data.from_at ? new Date(data.from_at * 1000).toISOString() : '',
+    toAt: data.to_at ? new Date(data.to_at * 1000).toISOString() : '',
+    items: data.items.map((item: any) => ({
+      sample: item.sample as Sample,
+      result: matchResult(item.result),
+    })),
+  }
+}
+function matchResult(data: any) {
+  return {
+    status: ({ match: 'yes', no_match: 'no', insufficient_data: 'unknown' } as const)[
+      data.status as 'match' | 'no_match' | 'insufficient_data'
+    ],
+    reasons: [
+      ...data.reasons.map((reason: any) => {
+        const truth: Record<string, string> = { true: '满足', false: '不满足', unknown: '字段缺失' }
+        return (
+          [reason.group ? '条件组 ' + reason.group : '', reason.code, reason.term]
+            .filter(Boolean)
+            .join('：') +
+          '（' +
+          (truth[reason.truth] || reason.truth) +
+          '）'
+        )
+      }),
+      ...(data.warnings?.includes('all_new_posts') ? ['未设置筛选条件，匹配全部帖子。'] : []),
+    ] as string[],
+  }
+}
 export async function savePreferences(settings: DemoState['settings']) {
   await request('manage/workspace', 'PUT', {
     name: settings.workspaceName,
@@ -245,12 +294,7 @@ export async function savePreferences(settings: DemoState['settings']) {
 }
 export async function evaluateTask(task: Task, sample: Sample) {
   const data = await request('manage/rules/evaluate', 'POST', { rule: rule(task), post: sample })
-  return {
-    status: ({ match: 'yes', no_match: 'no', insufficient_data: 'unknown' } as const)[
-      data.status as 'match' | 'no_match' | 'insufficient_data'
-    ],
-    reasons: data.reasons.map((r: any) => [r.code, r.term].filter(Boolean).join('：')) as string[],
-  }
+  return matchResult(data)
 }
 export const formatTime = (value: string) =>
   value

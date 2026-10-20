@@ -20,8 +20,10 @@ from seekbell.db.models import (
 from seekbell.db.transactions import write_session
 from seekbell.domain.posts import PostFields
 from seekbell.domain.rules import Rule, evaluate
-from seekbell.services.configuration import Configuration
+from seekbell.services.configuration import Configuration, TargetInUse
+from seekbell.services.rule_trial import trial_history
 from seekbell.services.runtime import status as runtime_status
+from seekbell.services.source_probe import ProbeConflict, get_probe
 
 router = APIRouter(prefix="/api/manage", dependencies=[Depends(require_admin)])
 
@@ -126,7 +128,11 @@ def workspace(request: Request):
     with Session(engine) as session:
         preferences = session.get(WorkspacePreferences, 1)
         target_ids = list(
-            session.scalars(select(NotificationTarget.id).where(NotificationTarget.kind != "mock"))
+            session.scalars(
+                select(NotificationTarget.id).where(
+                    NotificationTarget.kind != "mock", NotificationTarget.deleted_at.is_(None)
+                )
+            )
         )
         result = {
             "websites": websites(session),
@@ -222,7 +228,12 @@ def validate_task(values, request, key=None):
                 raise HTTPException(409, "已有任务不能更换所属网站。")
         for target_id in values.target_ids:
             target = session.get(NotificationTarget, target_id)
-            if target is None or target.kind == "mock" or not target.config_ciphertext:
+            if (
+                target is None
+                or target.deleted_at is not None
+                or target.kind == "mock"
+                or not target.config_ciphertext
+            ):
                 raise HTTPException(422, "请选择已配置的通知目标。")
 
 
@@ -288,3 +299,51 @@ def evaluate_rule(values: RuleTest):
 @router.get("/runtime")
 def runtime(request: Request):
     return runtime_status(request)
+
+
+@router.delete("/targets/{key}")
+def delete_target(key: str, request: Request):
+    try:
+        config(request).delete_target(key, at=time.time())
+    except TargetInUse as error:
+        raise HTTPException(409, str(error)) from None
+    return {"ok": True}
+
+
+class HistoryTrial(BaseModel):
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+    website_id: Literal["nodeseek"]
+    rule: Rule
+    limit: int = Field(default=20, ge=1, le=100, strict=True)
+
+
+@router.post("/rules/history")
+def evaluate_history(values: HistoryTrial, request: Request):
+    with Session(request.app.state.engine) as session:
+        installed(session, values.website_id)
+    return trial_history(request.app.state.engine, values.website_id, values.rule, values.limit)
+
+
+@router.get("/websites/{key}/connection-test")
+def connection_result(key: Literal["nodeseek"], request: Request):
+    with Session(request.app.state.engine) as session:
+        installed(session, key)
+    try:
+        return get_probe(request.app.state.engine, key)
+    except ProbeConflict as error:
+        raise HTTPException(409, str(error)) from None
+
+
+class ConnectionInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+
+
+@router.post("/websites/{key}/connection-test")
+async def connection_test(key: Literal["nodeseek"], values: ConnectionInput, request: Request):
+    try:
+        return await request.app.state.runtime.check_source()
+    except ProbeConflict as error:
+        headers = {"Retry-After": str(error.retry_after)} if error.retry_after else None
+        raise HTTPException(
+            429 if error.retry_after else 409, str(error), headers=headers
+        ) from None

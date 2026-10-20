@@ -25,6 +25,7 @@
     "playwright.live.config.ts",
     "playwright.history.config.ts",
     "playwright.sending.config.ts",
-    "playwright.runtime.config.ts"
+    "playwright.runtime.config.ts",
+    "playwright.operations.config.ts"
   ]
 }

@@ -15,11 +15,16 @@ if __name__ == "__main__":
     group.add_argument("--history", action="store_true")
     group.add_argument("--sending", action="store_true")
     group.add_argument("--runtime", action="store_true")
+    group.add_argument("--operations", action="store_true")
     args = parser.parse_args()
-    seeded = args.history or args.sending
+    seeded = args.history or args.sending or args.operations
     root = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(root))
-    from tests.runtime_helpers import PassiveRuntime, synthetic_runtime_factory
+    from tests.runtime_helpers import (
+        PassiveRuntime,
+        operations_runtime_factory,
+        synthetic_runtime_factory,
+    )
 
     static = root / "frontend" / "dist"
     if not (static / "index.html").is_file():
@@ -42,7 +47,13 @@ if __name__ == "__main__":
                     engine.dispose()
         app = create_app(
             Settings(data_dir=Path(directory), static_dir=static),
-            runtime_factory=synthetic_runtime_factory if args.runtime else PassiveRuntime,
+            runtime_factory=(
+                operations_runtime_factory
+                if args.operations
+                else synthetic_runtime_factory
+                if args.runtime
+                else PassiveRuntime
+            ),
         )
         if seeded:
             from datetime import UTC, datetime
@@ -52,14 +63,22 @@ if __name__ == "__main__":
             app.dependency_overrides[snapshot_time] = lambda: datetime(
                 2026, 10, 20, tzinfo=UTC
             ).timestamp()
-        if args.sending:
+        if args.sending or args.operations:
             from tests.sending_helpers import install_synthetic_sending
 
             install_synthetic_sending(app)
         uvicorn.run(
             app,
             host="127.0.0.1",
-            port=8014 if args.runtime else 8013 if args.sending else 8012 if args.history else 8011,
+            port=8015
+            if args.operations
+            else 8014
+            if args.runtime
+            else 8013
+            if args.sending
+            else 8012
+            if args.history
+            else 8011,
             workers=1,
             proxy_headers=False,
             access_log=False,
