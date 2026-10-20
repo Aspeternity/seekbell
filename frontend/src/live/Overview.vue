@@ -38,9 +38,6 @@ function setRange(value: '24h' | '7d') {
       <h1 tabindex="-1">留意你关心的<span class="heading-dot">。</span></h1>
       <p class="subtitle">采集、命中与通知，都有迹可循。</p>
     </div>
-    <button class="button primary" @click="emit('navigate', '/task/new')">
-      <Icon name="plus" :size="18" />新建任务
-    </button>
   </section>
   <div class="overview-meta">
     <span>服务端历史统计 · {{ state.settings.timezone }}</span>

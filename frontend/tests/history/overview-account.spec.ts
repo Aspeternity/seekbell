@@ -21,6 +21,7 @@ test('real overview and administrator forms preserve records and rotate sessions
   await page
     .getByRole('button', { name: initialized ? '登录工作空间' : '创建管理员并进入' })
     .click()
+  await expect(page.getByRole('button', { name: '新建任务', exact: true })).toHaveCount(0)
   await expect(page.getByTestId('overview-matches')).toHaveText('24条')
   await expect(page.getByTestId('overview-delivered')).toHaveText('2次')
   await expect(page.getByTestId('overview-attention')).toHaveText('3次')

@@ -13,7 +13,6 @@ import type { Task } from './model'
 const props = defineProps<{ tasks: Task[] }>()
 const emit = defineEmits<{
   edit: [id: string]
-  create: []
   toggle: [id: string]
   notice: [message: string]
   navigate: [path: string]
@@ -95,9 +94,6 @@ const activities = [
       <h1 tabindex="-1">每一条在意的，都不错过<span class="heading-dot">。</span></h1>
       <p class="subtitle">让 SeekBell 留意新帖，把时间留给更重要的事。</p>
     </div>
-    <button class="button primary" @click="emit('create')">
-      <Icon name="plus" :size="18" />新建任务
-    </button>
   </section>
   <div class="overview-meta">
     <span

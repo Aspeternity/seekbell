@@ -235,6 +235,7 @@ test('catalog is centered on desktop and configuration remains a separate right 
   await page.getByRole('button', { name: '配置 NodeSeek', exact: true }).click()
   const bounds = await dialog.boundingBox()
   expect(Math.abs(bounds!.x + bounds!.width - 1440)).toBeLessThan(2)
-  expect(bounds!.width).toBe(580)
+  expect(bounds!.width).toBeCloseTo(638, 0)
+  expect(Math.abs(bounds!.height - 900)).toBeLessThan(2)
   await expect(dialog).not.toHaveClass(/website-catalog-modal/)
 })

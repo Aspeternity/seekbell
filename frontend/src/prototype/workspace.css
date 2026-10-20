@@ -2498,3 +2498,25 @@ h1[tabindex='-1']:focus-visible {
 .workspace-settings-fields .small-note {
   margin: 0;
 }
+
+/* Use 110% desktop content size. zoom participates in layout;
+   viewport-sized overlays need unscaled bounds. */
+@media (min-width: 761px) {
+  #main-content {
+    --content-scale: 1.1;
+    zoom: var(--content-scale);
+  }
+  #main-content .save-bar {
+    left: calc(var(--sidebar) / var(--content-scale));
+  }
+  #main-content .website-drawer {
+    max-width: calc(100vw / var(--content-scale));
+    height: calc(100dvh / var(--content-scale));
+    max-height: calc(100dvh / var(--content-scale));
+  }
+  #main-content .website-catalog-modal {
+    max-width: calc(100vw / var(--content-scale) - 48px);
+    height: min(720px, calc(85dvh / var(--content-scale)));
+    max-height: calc(85dvh / var(--content-scale));
+  }
+}

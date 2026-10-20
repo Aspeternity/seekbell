@@ -396,7 +396,6 @@ function showInfo() {
           v-else-if="page === 'overview'"
           :tasks="state.tasks"
           @edit="(id) => navigate('/task/' + id)"
-          @create="navigate('/task/new')"
           @toggle="toggle"
           @notice="notify"
           @navigate="navigate"
