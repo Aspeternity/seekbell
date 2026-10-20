@@ -4,7 +4,7 @@
 
 ## 环境与代码
 
-唯一开发环境SeekBell-Dev，/home/dev/projects/seekbell；原Ubuntu显式经wsl.exe执行，D盘交接副本、原工具/容器与全局WSL未改。[环境入口](DEVELOPMENT_ENVIRONMENT.md)。沿用codex/frontend-backend-integration，从95b7daa干净工作区继续；首闭环实现99115b0，v0.4基准44c5359。本轮实现尚待本地提交，未提交路径为backend历史API/服务/0005迁移/判定保存、frontend正式历史页与适配、测试/CI脚本及对应文档；未推送或合并main。
+唯一开发环境SeekBell-Dev，/home/dev/projects/seekbell；原Ubuntu显式经wsl.exe执行，D盘交接副本、原工具/容器与全局WSL未改。[环境入口](DEVELOPMENT_ENVIRONMENT.md)。沿用codex/frontend-backend-integration，从95b7daa干净工作区继续；首闭环实现99115b0，v0.4基准44c5359。本轮实现272f0e8acc3e5db09964a9fc19e20979088dd8a0，其后仅文档证据归档；本地提交，未推送或合并main，提交后核对工作区。
 
 ## 已实现与证据
 
@@ -14,13 +14,13 @@
 
 正式内容/判定、自动投递及独立测试历史支持数据库筛选/分页/详情与交叉入口。显示当时的任务/目标快照、尝试和迟到结果，成功后仍保留曾未知标记；正文清理后投递快照可读。读取不生成消息，不回传密文、凭据或租约令牌；空态/加载失败/缺失记录区分，过期请求响应丢弃。概览仍只配置数，尚未启用采集或发送。
 
-SeekBell-Dev本轮工作区（基于95b7daa）通过后端244项、原型浏览器40项、真实首闭环2项、历史桌面/手机2项；含旧库/失败回滚、只读对比、WAL并发、DST、快照及迟到结果，320–1440布局与HTML文本安全。两入口构建/类型、Ruff/格式、锁与wheel通过，隐私/单容器待提交收尾。4张历史截图与复现命令见阶段证据。旧镜像只证明99115b0，不作本轮证据；本轮远程CI未执行。
+SeekBell-Dev实现272f0e8通过后端244项、原型浏览器40项、真实首闭环2项、历史桌面/手机2项；含旧库/失败回滚、只读对比、WAL并发、DST、快照及迟到结果，320–1440布局与HTML文本安全。两入口构建/类型、Ruff/格式、锁与wheel通过，隐私检查通过。Rootless Docker/amd64、UID10001、禁用外网验证0005迁移、API/资源、历史空页无演示数据、实例锁、离线核心与重启配置持久化通过；本地镜像ID sha256:2e97917f2ec94c8b41d4ecb441f30d69c5daedfef7778ba3ffa700da7ac9fb1d，未发布。4张历史截图与复现命令见阶段证据。首闭环旧证据仍以99115b0为基准；本轮远程CI未执行。
 
 ## 下一步与恢复
 
 下一小阶段接入真实概览统计、管理员修改，再接目标测试/手动操作及采集/投递生命周期。目标删除、生产备份恢复、保留清理/告警仍待接；TaskEvaluation属于普通历史，清理策略不能误删独立身份/回执。当前不能宣称关闭浏览器后已在监控。
 
-恢复核对发行版/目录/分支/HEAD/工作区，读AGENTS、本状态和本阶段记录；按需读ARCHITECTURE历史查询契约、services/history.py与ingestion.py、api/history.py、frontend/src/live及相关测试。无开发阻塞。Safari/真机、PVE/arm64、真实RSS/通知及生产验收未验证。4175旧原型预览恢复时核对进程；8011/8012测试服务用临时库，不读开发数据。
+恢复核对发行版/目录/分支/HEAD/工作区，读AGENTS、本状态和本阶段记录；按需读ARCHITECTURE历史查询契约、services/history.py与ingestion.py、api/history.py、frontend/src/live及相关测试。无开发阻塞。Safari/真机、PVE/arm64、真实RSS/通知及生产验收未验证。4175旧原型预览恢复时核对进程；8011/8012测试服务与临时容器/卷已退出/清理，均不读写日常开发数据。
 
 ## 授权
 
