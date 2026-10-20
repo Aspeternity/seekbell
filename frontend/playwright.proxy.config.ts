@@ -17,7 +17,8 @@ export default defineConfig({
     { name: 'mobile', use: { ...devices['iPhone 13'], defaultBrowserType: 'chromium' } },
   ],
   webServer: {
-    command: 'cd .. && uv run --frozen python scripts/run_proxy_smoke.py',
+    command: 'cd .. && exec uv run --frozen python scripts/run_proxy_smoke.py',
+    gracefulShutdown: { signal: 'SIGTERM', timeout: 10000 },
     url: 'https://127.0.0.1:8020/health/ready',
     ignoreHTTPSErrors: true,
     reuseExistingServer: false,

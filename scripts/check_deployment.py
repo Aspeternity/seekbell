@@ -145,7 +145,7 @@ def container_report(info, revision):
         raise CheckError("请使用标准单入口及关闭访问日志的固定镜像命令。")
     trusted = environment.get("SEEKBELL_TRUSTED_PROXY_IPS", "")
     for item in trusted.split(",") if trusted else []:
-        address = ipaddress.ip_address(item)
+        address = ipaddress.ip_address(item.strip())
         if address.is_unspecified or address.is_multicast or "%" in item:
             raise CheckError("可信代理须为明确IP，不能通配。")
     return {

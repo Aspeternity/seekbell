@@ -144,6 +144,9 @@ def test_preflight_container_guards_detect_exposed_ports_and_unsafe_runtime():
         "RestartCount": 0,
     }
     assert tool.container_report(info, "a" * 40)["proxy_headers"] == "disabled"
+    explicit = copy.deepcopy(info)
+    explicit["Config"]["Env"].append("SEEKBELL_TRUSTED_PROXY_IPS=192.0.2.10, ::1")
+    assert tool.container_report(explicit, "a" * 40)["proxy_headers"] == "explicit"
     mutations = [
         lambda item: item["HostConfig"]["PortBindings"]["8000/tcp"][0].update(HostIp="0.0.0.0"),
         lambda item: item["HostConfig"].update(ReadonlyRootfs=False),

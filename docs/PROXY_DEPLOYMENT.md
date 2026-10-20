@@ -55,6 +55,6 @@ python3 scripts/check_proxy_container.py "$SEEKBELL_IMAGE" --revision "$SEEKBELL
 SEEKBELL_IMAGE="$SEEKBELL_IMAGE" SEEKBELL_REVISION="$SEEKBELL_REVISION" pnpm --dir frontend test:proxy
 ~~~
 
-演练独立Nginx1.30.6、一次性应用/数据卷，network internal无外网路由、发布端口仅本机；临时CA/私钥由cryptography生成在临时卷，CA不装系统信任库、私钥不写Git。Python检查通过指定CA验证真实TLS，并验证未知CA拒绝；浏览器只在该本机临时证书场景使用ignoreHTTPSErrors，不能据此宣称浏览器已验证生产证书。检查包括真实HTTPS初始化/登录/同源拒绝/退出、流式备份往返、直连伪造代理头忽略及样本秘密不进日志。桌面/手机分别验证Secure Cookie、刷新/保存/重登。finally只清本轮资源，不接触现有验收实例。
+演练独立Nginx1.30.6、一次性应用/数据卷，network internal无外网路由；Docker的internal网络不发布端口，因此测试以仅绑定127.0.0.1的字节中继经docker exec连接Nginx，TLS仍在Nginx终止，不开放容器外网。临时CA/私钥由cryptography生成在临时卷，CA不装系统信任库、私钥不写Git。Python检查通过指定CA验证真实TLS，并验证未知CA拒绝；浏览器只在该本机临时证书场景使用ignoreHTTPSErrors，不能据此宣称浏览器已验证生产证书。检查包括真实HTTPS初始化/登录/同源拒绝/退出、流式备份往返、直连伪造代理头忽略及样本秘密不进日志。桌面/手机分别验证Secure Cookie、刷新/保存/重登。finally只清本轮资源，不接触现有验收实例。
 
 依据：[Uvicorn代理头](https://www.uvicorn.org/deployment/)、[Nginx转发/缓冲](https://nginx.org/en/docs/http/ngx_http_proxy_module.html)、[Nginx上传大小](https://nginx.org/en/docs/http/ngx_http_core_module.html#client_max_body_size)、[Nginx TLS](https://nginx.org/en/docs/http/ngx_http_ssl_module.html)。具体行为以本仓锁定版本与自动证据为准。

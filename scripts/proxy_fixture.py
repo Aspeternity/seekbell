@@ -2,11 +2,17 @@
 
 import ipaddress
 import json
+import os
+import socket
+import socketserver
 import ssl
+import subprocess
 import tempfile
+import threading
 import time
 import urllib.request
 import uuid
+from contextlib import suppress
 from pathlib import Path
 
 from check_container import docker
@@ -14,6 +20,7 @@ from check_container import docker
 ROOT = Path(__file__).resolve().parents[1]
 PROXY_IMAGE = "nginx@sha256:970364228b1e4f932abc22d321932816782cca8a20b85a77552a7cfe9acfb3b5"
 CERTIFICATE = r"""
+from contextlib import suppress
 from pathlib import Path
 from datetime import datetime,timedelta,timezone
 import os,ipaddress
@@ -43,6 +50,78 @@ os.chown(root/'server.key',101,101)
 """
 
 
+class TLSRelay:
+    """Opaque TCP bytes through exec; Docker internal networks do not publish ports.
+
+    TLS still terminates in Nginx. No external route or host CA installation.
+    """
+
+    def __init__(self, container, port):
+        self.active, self.lock = set(), threading.Lock()
+        owner = self
+
+        class Handler(socketserver.BaseRequestHandler):
+            def handle(self):
+                connection = self.request
+                connection.settimeout(30)
+                process = subprocess.Popen(
+                    ["docker", "exec", "-i", container, "nc", "127.0.0.1", "8443"],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    bufsize=0,
+                )
+                with owner.lock:
+                    owner.active.add((process, connection))
+
+                def receive():
+                    try:
+                        while block := os.read(process.stdout.fileno(), 65536):
+                            connection.sendall(block)
+                    except OSError:
+                        pass
+                    finally:
+                        with suppress(OSError):
+                            connection.shutdown(socket.SHUT_RDWR)
+
+                threading.Thread(target=receive, daemon=True).start()
+                try:
+                    while block := connection.recv(4096):
+                        process.stdin.write(block)
+                except OSError:
+                    pass
+                finally:
+                    process.stdin.close()
+                    if process.poll() is None:
+                        process.terminate()
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait()
+                    process.stdout.close()
+                    with owner.lock:
+                        owner.active.discard((process, connection))
+
+        class Server(socketserver.ThreadingTCPServer):
+            daemon_threads = True
+            allow_reuse_address = False
+
+        self.server = Server(("127.0.0.1", port), Handler)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.port = self.server.server_address[1]
+
+    def close(self):
+        self.server.shutdown()
+        self.server.server_close()
+        with self.lock:
+            for process, connection in self.active:
+                with suppress(OSError):
+                    connection.shutdown(socket.SHUT_RDWR)
+                if process.poll() is None:
+                    process.terminate()
+
+
 class ProxyFixture:
     def __init__(self, image, revision, *, port=0, proxy_image=PROXY_IMAGE):
         details = json.loads(docker("image", "inspect", image).stdout)[0]
@@ -60,6 +139,7 @@ class ProxyFixture:
         self.data, self.files = self.name + "-data", self.name + "-files"
         self.network = self.name + "-network"
         self.temporary = None
+        self.relay = None
 
     def __enter__(self):
         try:
@@ -83,7 +163,9 @@ class ProxyFixture:
             config = (
                 "worker_processes 1;pid /tmp/nginx.pid;error_log stderr crit;"
                 "events {worker_connections 128;}http {access_log off;"
-                "client_body_temp_path /tmp/client;proxy_temp_path /tmp/proxy;" + server + "}"
+                "client_body_temp_path /tmp/client;proxy_temp_path /tmp/proxy;"
+                "fastcgi_temp_path /tmp/fastcgi;uwsgi_temp_path /tmp/uwsgi;"
+                "scgi_temp_path /tmp/scgi;" + server + "}"
             )
             docker(
                 "run",
@@ -183,8 +265,6 @@ class ProxyFixture:
                 "101:101",
                 "--security-opt",
                 "no-new-privileges:true",
-                "-p",
-                "127.0.0.1:" + (str(self.port) if self.port else "") + ":8443",
                 "-v",
                 self.files + ":/fixture:ro",
                 "--entrypoint",
@@ -195,8 +275,8 @@ class ProxyFixture:
                 "-g",
                 "daemon off;",
             )
-            proxy = json.loads(docker("container", "inspect", self.proxy).stdout)[0]
-            self.port = int(proxy["NetworkSettings"]["Ports"]["8443/tcp"][0]["HostPort"])
+            self.relay = TLSRelay(self.proxy, self.port)
+            self.port = self.relay.port
             self.url = "https://127.0.0.1:" + str(self.port)
             deadline = time.monotonic() + 30
             while time.monotonic() < deadline:
@@ -214,6 +294,8 @@ class ProxyFixture:
             raise
 
     def __exit__(self, *args):
+        if self.relay:
+            self.relay.close()
         docker("rm", "--force", self.proxy, self.app, check=False)
         docker("volume", "rm", self.files, self.data, check=False)
         docker("network", "rm", self.network, check=False)
