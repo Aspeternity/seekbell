@@ -23,6 +23,9 @@ jobs:
   preflight:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    permissions:
+      contents: read
+      packages: read
     outputs:
       repository: ${{ steps.identity.outputs.repository }}
     steps:
@@ -47,6 +50,16 @@ jobs:
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write('repository=' + os.environ['GITHUB_REPOSITORY'].lower() + '\n')
           PY
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: ${{ inputs.publish }}
+        with:
+          persist-credentials: false
+      - name: Check package access and private destination before building a publication candidate
+        if: ${{ inputs.publish }}
+        env:
+          IMAGE_REPOSITORY: ${{ steps.identity.outputs.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/check_ghcr_package.py --repository "$IMAGE_REPOSITORY" --allow-missing
 
   baseline:
     needs: preflight

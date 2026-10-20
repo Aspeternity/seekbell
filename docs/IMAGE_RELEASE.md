@@ -24,7 +24,7 @@
 
 开关检查失败会直接报错，不伪装成发布成功。未配置环境审核门禁；私有仓库的environment/reviewer功能受GitHub账户计划限制，不能假定存在自动人工审批。上述显式开关、手动选择和默认分支限制用于减少误操作，不能替代仓库写权限管理与实际授权；不配置/提升账户计划或权限来绕过限制。
 
-只有publish job获得`packages: write`，用短期`GITHUB_TOKEN`登录GHCR，不要求长期PAT，不向build job提供registry写权限。包名固定为`ghcr.io/<小写owner>/<小写repo>`，不接受外部registry/命名空间输入。发布job在写registry前用短期令牌检查仓库私有、已有包私有且关联本仓库；404仅允许继续尝试创建，不当作“包不存在”的证明，不改变他包权限。首次推送按GHCR默认私有创建，成功后再次确认私有/仓库关联并保存package.json；未知/公开/其他仓库包均失败停止，不自动改可见性。首次包或已有包的Actions写权限、可见性和访问继承须核对；工作流不改变包可见性、不创建GitHub Release、不更新latest或语义版本标签，也不自动部署。
+发布前preflight仅有packages读取权限，先核对目的包访问，失败不浪费后续构建；只有publish job获得`packages: write`，用短期`GITHUB_TOKEN`登录GHCR，不要求长期PAT，不向build job提供registry写权限。包名固定为`ghcr.io/<小写owner>/<小写repo>`，不接受外部registry/命名空间输入。发布job在写registry前用短期令牌检查仓库私有、已有包私有且关联本仓库；404仅允许继续尝试创建，不当作“包不存在”的证明，不改变他包权限。首次推送按GHCR默认私有创建，成功后再次确认私有/仓库关联并保存package.json；未知/公开/其他仓库包均失败停止，不自动改可见性。首次包或已有包的Actions写权限、可见性和访问继承须核对；工作流不改变包可见性、不创建GitHub Release、不更新latest或语义版本标签，也不自动部署。
 
 ## 发布行为与失败处理
 
