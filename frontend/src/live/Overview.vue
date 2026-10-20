@@ -111,11 +111,11 @@ function setRange(value: '24h' | '7d') {
         <p>自动投递按时段内回执；同帖与目标去重</p>
       </article>
       <article class="stat-card">
-        <div class="stat-label">当前待关注投递<Icon name="alert" :size="18" /></div>
+        <div class="stat-label">当前待关注自动投递<Icon name="alert" :size="18" /></div>
         <div class="stat-value" data-testid="overview-attention">
           {{ data.current.attention }}<span>次</span>
         </div>
-        <p>全部保留记录：失败、重试或曾未知，按事件去重</p>
+        <p>全部自动记录：失败、重试或曾未知，按事件去重</p>
         <button class="text-link" @click="emit('navigate', '/notifications/deliveries')">
           查看投递记录
         </button>
@@ -132,8 +132,9 @@ function setRange(value: '24h' | '7d') {
         <span>采集失败次数</span><strong>{{ data.window.source_failures }}</strong>
       </div>
       <p>
-        当前等待 {{ data.current.queue.pending || 0 }} · 重试 {{ data.current.queue.retry || 0 }} ·
-        在途 {{ data.current.queue.leased || 0 }} · 曾未知 {{ data.current.uncertain }}
+        自动队列：等待 {{ data.current.queue.pending || 0 }} · 重试
+        {{ data.current.queue.retry || 0 }} · 在途 {{ data.current.queue.leased || 0 }} · 曾未知
+        {{ data.current.uncertain }}
       </p>
     </div>
     <div class="overview-columns">
