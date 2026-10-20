@@ -156,7 +156,7 @@ function setRange(value: '24h' | '7d') {
         <div class="chart-wrap">
           <div class="chart-y">
             <span>{{ maximum }}</span
-            ><span>{{ Math.round(maximum / 2) }}</span
+            ><span>{{ maximum / 2 }}</span
             ><span>0</span>
           </div>
           <svg
