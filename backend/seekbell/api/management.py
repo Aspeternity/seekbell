@@ -7,7 +7,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from seekbell.api.auth import require_admin
+from seekbell.api.history import Paging
 from seekbell.db.models import (
+    AlertSettings,
     NotificationTarget,
     RetentionPolicy,
     Source,
@@ -21,7 +23,9 @@ from seekbell.db.models import (
 from seekbell.db.transactions import write_session
 from seekbell.domain.posts import PostFields
 from seekbell.domain.rules import Rule, evaluate
+from seekbell.services import alerts
 from seekbell.services.configuration import Configuration, TargetInUse
+from seekbell.services.display import DisplayConflict, get_display, update_display
 from seekbell.services.retention import PolicyConflict, get_policy, update_policy
 from seekbell.services.rule_trial import trial_history
 from seekbell.services.runtime import status as runtime_status
@@ -143,6 +147,9 @@ def workspace(request: Request):
                 "workspaceName": preferences.name,
                 "workspaceDescription": preferences.description,
                 "retention": session.get(RetentionPolicy, 1).days,
+                "timezone": preferences.timezone,
+                "alertTargets": session.get(AlertSettings, 1).target_ids,
+                "recoveryAlerts": session.get(AlertSettings, 1).enabled,
             },
         }
     result["targets"] = [config(request).get_target(key) for key in target_ids]
@@ -368,3 +375,60 @@ def save_retention(values: RetentionInput, request: Request):
         return update_policy(request.app.state.engine, values.days, values.revision)
     except PolicyConflict as error:
         raise HTTPException(409, str(error)) from None
+
+
+class DisplayInput(Input):
+    timezone: str = Field(min_length=1, max_length=80)
+    revision: int = Field(ge=1)
+
+
+@router.get("/display")
+def display_settings(request: Request):
+    return get_display(request.app.state.engine)
+
+
+@router.put("/display")
+def save_display(values: DisplayInput, request: Request):
+    try:
+        return update_display(request.app.state.engine, values.timezone, values.revision)
+    except DisplayConflict as error:
+        raise HTTPException(409, str(error)) from None
+
+
+class AlertInput(Input):
+    enabled: bool
+    target_ids: list[str] = Field(max_length=64)
+    revision: int = Field(ge=1)
+
+
+@router.get("/alerts")
+def alert_settings(request: Request):
+    return alerts.get_settings(request.app.state.engine)
+
+
+@router.put("/alerts")
+def save_alerts(values: AlertInput, request: Request):
+    try:
+        return alerts.update_settings(
+            request.app.state.engine, values.enabled, values.target_ids, values.revision
+        )
+    except alerts.AlertConflict as error:
+        raise HTTPException(409, str(error)) from None
+
+
+@router.get("/alerts/state")
+def alert_states(request: Request, params: Paging):
+    return alerts.states(request.app.state.engine, **params)
+
+
+@router.get("/alerts/history")
+def alert_history(request: Request, params: Paging):
+    return alerts.history(request.app.state.engine, **params)
+
+
+@router.get("/alerts/history/{key}")
+def alert_detail(key: str, request: Request, params: Paging):
+    try:
+        return alerts.detail(request.app.state.engine, key, **params)
+    except LookupError as error:
+        raise HTTPException(404, str(error)) from None

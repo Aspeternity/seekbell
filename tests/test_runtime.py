@@ -179,7 +179,7 @@ def test_paused_long_interval_observes_enable_and_shorter_frequency_promptly(tmp
         assert saved.next_attempt_at == saved.last_attempt_at + 3600
 
 
-@pytest.mark.parametrize("actor", ["source", "worker", "retention"])
+@pytest.mark.parametrize("actor", ["source", "worker", "retention", "alerts"])
 def test_actor_failure_is_redacted_and_marks_runtime_and_readiness_failed(tmp_path, caplog, actor):
     scenario = SyntheticScenario()
 
@@ -199,7 +199,12 @@ def test_actor_failure_is_redacted_and_marks_runtime_and_readiness_failed(tmp_pa
         authenticate(client)
         status = client.get("/api/manage/runtime").json()
         assert not status["active"] and status["status"] == "failed"
-        assert status["code"] in ("collection_stopped", "delivery_stopped", "retention_stopped")
+        assert status["code"] in (
+            "collection_stopped",
+            "delivery_stopped",
+            "retention_stopped",
+            "alerts_stopped",
+        )
         assert not client.get("/api/manage/overview").json()["runtime_active"]
         assert "synthetic-private" not in caplog.text
     assert all(t.done() for t in app.state.runtime.tasks.values())

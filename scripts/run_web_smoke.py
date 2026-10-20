@@ -17,8 +17,9 @@ if __name__ == "__main__":
     group.add_argument("--runtime", action="store_true")
     group.add_argument("--operations", action="store_true")
     group.add_argument("--retention", action="store_true")
+    group.add_argument("--system", action="store_true")
     args = parser.parse_args()
-    seeded = args.history or args.sending or args.operations or args.retention
+    seeded = args.history or args.sending or args.operations or args.retention or args.system
     root = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(root))
     from tests.retention_helpers import retention_runtime_factory, seed_retention
@@ -27,6 +28,7 @@ if __name__ == "__main__":
         operations_runtime_factory,
         synthetic_runtime_factory,
     )
+    from tests.system_helpers import seed_system, system_runtime_factory
 
     static = root / "frontend" / "dist"
     if not (static / "index.html").is_file():
@@ -44,7 +46,9 @@ if __name__ == "__main__":
                 engine = create_database_engine(settings)
                 try:
                     migrate(engine)
-                    if args.retention:
+                    if args.system:
+                        seed_system(engine)
+                    elif args.retention:
                         seed_retention(engine)
                     else:
                         seed_history(engine, CredentialVault.open(Path(directory), create=True))
@@ -53,7 +57,9 @@ if __name__ == "__main__":
         app = create_app(
             Settings(data_dir=Path(directory), static_dir=static),
             runtime_factory=(
-                retention_runtime_factory
+                system_runtime_factory
+                if args.system
+                else retention_runtime_factory
                 if args.retention
                 else operations_runtime_factory
                 if args.operations
@@ -77,7 +83,9 @@ if __name__ == "__main__":
         uvicorn.run(
             app,
             host="127.0.0.1",
-            port=8016
+            port=8017
+            if args.system
+            else 8016
             if args.retention
             else 8015
             if args.operations

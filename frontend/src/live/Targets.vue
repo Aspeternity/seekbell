@@ -17,6 +17,10 @@ function remove(target: Target) {
     notify('请先在关联任务中取消选择此目标，包括暂停的任务。')
     return
   }
+  if (state.settings.alertTargets.includes(target.id)) {
+    notify('请先在系统告警设置中取消选择此目标。')
+    return
+  }
   confirmAction(
     '删除「' + target.name + '」？',
     '删除当前配置并取消等待投递，历史记录保留。在途消息可能已经发出，无法撤回。',

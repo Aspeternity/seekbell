@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from seekbell.db.models import (
     Administrator,
+    AlertDelivery,
     DeliveryAttempt,
     ManualDelivery,
     Outbox,
@@ -17,6 +18,7 @@ from seekbell.db.models import (
     RetentionPolicy,
     RuleHit,
     SourceRun,
+    SystemEvent,
     TargetTestAttempt,
     TaskEvaluation,
 )
@@ -116,6 +118,8 @@ class HistoryRetention:
                     "tests",
                     "manual",
                     "source_runs",
+                    "system_events",
+                    "alerts",
                 ),
                 0,
             )
@@ -247,6 +251,31 @@ class HistoryRetention:
                 )
                 counts[label] = remove(session, model, model.id.in_(keys)) if keys else 0
                 full |= len(keys) == self.batch_size
+
+            keys = list(
+                session.scalars(
+                    select(SystemEvent.id)
+                    .where(
+                        SystemEvent.at < cutoff,
+                        ~exists(
+                            select(AlertDelivery.id).where(
+                                AlertDelivery.event_id == SystemEvent.id,
+                                or_(
+                                    AlertDelivery.result == "pending",
+                                    AlertDelivery.finished_at.is_(None),
+                                    AlertDelivery.finished_at >= cutoff,
+                                ),
+                            )
+                        ),
+                    )
+                    .order_by(SystemEvent.at, SystemEvent.id)
+                    .limit(self.batch_size)
+                )
+            )
+            if keys:
+                counts["alerts"] = remove(session, AlertDelivery, AlertDelivery.event_id.in_(keys))
+                counts["system_events"] = remove(session, SystemEvent, SystemEvent.id.in_(keys))
+            full |= len(keys) == self.batch_size
 
             policy.last_run_at, policy.last_counts = at, counts
             policy.next_run_at = at + (self.tick if full else self.interval)

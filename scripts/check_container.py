@@ -112,6 +112,16 @@ if policy["days"] != 45:
     policy = request("manage/retention", {"days": 45, "revision": policy["revision"]}, method="PUT")
 assert policy["days"] == 45
 assert request("manage/workspace")["settings"]["retention"] == 45
+display = request("manage/display")
+if display["timezone"] != "America/Los_Angeles":
+    display = request(
+        "manage/display", {"timezone": "America/Los_Angeles", "revision": display["revision"]},
+        method="PUT",
+    )
+assert request("manage/workspace")["settings"]["timezone"] == "America/Los_Angeles"
+assert not request("manage/alerts")["enabled"]
+assert request("manage/alerts/state")["total"] == 0
+assert request("manage/alerts/history")["total"] == 0
 trial = request("manage/rules/history", {"website_id": "nodeseek", "rule": {}, "limit": 100})
 assert trial["sample_count"] == trial["available"] == 0
 assert request("manage/websites/nodeseek/connection-test") is None
@@ -140,7 +150,7 @@ assert len(overview["buckets"]) == 7 and overview["recent_matches"] == []
 print(json.dumps({
     "website": workspace["websites"][0]["id"], "task": workspace["tasks"][0]["id"],
     "target": workspace["targets"][0]["id"], "note": workspace["tasks"][0]["description"],
-    "retention_days": policy["days"],
+    "retention_days": policy["days"], "timezone": display["timezone"],
 }))
 """
 
@@ -205,6 +215,7 @@ def main() -> None:
             docker("exec", container, "python", "-m", "seekbell.services.runtime_demo").stdout
         )
         assert lifecycle["mode"] == "offline_synthetic" and lifecycle["sends"] == 1
+        assert lifecycle["system_alert_sends"] == 2 and lifecycle["alert_history_removed"]
         assert (
             lifecycle["baseline_silent"]
             and lifecycle["cleanup_history_removed"]

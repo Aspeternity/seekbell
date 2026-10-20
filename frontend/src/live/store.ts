@@ -79,7 +79,11 @@ export async function authenticate(setup: boolean, username: string, password: s
     await refresh()
     return
   }
-  const info = await request(setup ? 'auth/setup' : 'auth/login', 'POST', { username, password })
+  const info = await request(setup ? 'auth/setup' : 'auth/login', 'POST', {
+    username,
+    password,
+    ...(setup ? { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' } : {}),
+  })
   applyAuth(info)
   await refresh()
 }
@@ -296,17 +300,23 @@ export async function evaluateTask(task: Task, sample: Sample) {
   const data = await request('manage/rules/evaluate', 'POST', { rule: rule(task), post: sample })
   return matchResult(data)
 }
-export const formatTime = (value: string) =>
-  value
-    ? new Intl.DateTimeFormat('zh-CN', {
-        timeZone: state.settings.timezone,
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      }).format(new Date(value))
-    : '尚未记录'
+export function formatTime(value: string) {
+  if (!value) return '尚未记录'
+  const format = (timeZone: string) =>
+    new Intl.DateTimeFormat('zh-CN', {
+      timeZone,
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(new Date(value))
+  try {
+    return format(state.settings.timezone)
+  } catch {
+    return format('UTC') + ' UTC'
+  }
+}
 export const confirmation = ref<{
   title: string
   body: string

@@ -8,6 +8,7 @@ export default defineConfig({
     '**/runtime/**',
     '**/operations/**',
     '**/retention/**',
+    '**/system/**',
   ],
   fullyParallel: true,
   workers: 4,

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from seekbell.config import Settings
 from seekbell.db.models import (
+    AlertDelivery,
     DeliveredPost,
     Outbox,
     Post,
@@ -19,6 +20,7 @@ from seekbell.db.models import (
     Source,
     SourceItem,
     SourceState,
+    SystemEvent,
     Website,
     WebsiteInstallation,
 )
@@ -26,6 +28,7 @@ from seekbell.db.transactions import database_call, write_session
 from seekbell.domain.delivery import SendResult
 from seekbell.domain.rules import Rule
 from seekbell.main import create_app
+from seekbell.services.alerts import observe, update_settings
 from seekbell.services.authentication import initialize
 from seekbell.services.configuration import Configuration
 from seekbell.services.demo import SyntheticStream
@@ -57,6 +60,7 @@ async def exercise(directory):
         )
         actor.source.clock = actor.worker.clock = lambda: clock[0]
         actor.retention.clock = lambda: cleanup_clock[0]
+        actor.alerts.clock = lambda: clock[0]
         return actor
 
     app = create_app(Settings(data_dir=directory), runtime_factory=factory)
@@ -79,8 +83,9 @@ async def exercise(directory):
                 session.add(WebsiteInstallation(website_id="nodeseek"))
                 session.get(Website, "nodeseek").enabled = True
                 session.get(Source, "nodeseek-rss").enabled = True
+            return target
 
-        await database_call(prepare)
+        target = await database_call(prepare)
 
         def initialized():
             with Session(engine) as session:
@@ -103,6 +108,36 @@ async def exercise(directory):
         assert len(sends[0]["matched_tasks"]) == 2
         assert len(polls) == 2
 
+        def create_system_events():
+            update_settings(engine, True, [target], 1)
+            with write_session(engine) as session:
+                observe(
+                    session,
+                    "runtime:offline_demo",
+                    True,
+                    label="合成系统事件",
+                    code="synthetic_failure",
+                    at=111,
+                )
+                observe(session, "runtime:offline_demo", False, label="合成系统事件", at=112)
+
+        def alerts_delivered():
+            with Session(engine) as session:
+                return (
+                    session.scalar(
+                        select(func.count())
+                        .select_from(AlertDelivery)
+                        .where(AlertDelivery.result == "success")
+                    )
+                    == 2
+                )
+
+        await database_call(create_system_events)
+        await wait_for(alerts_delivered)
+        assert [
+            message["alert"]["phase"] for message in sends if message.get("type") == "system_alert"
+        ] == ["fault", "recovery"]
+
         def schedule_cleanup():
             with write_session(engine) as session:
                 session.get(RetentionPolicy, 1).next_run_at = 0
@@ -121,12 +156,18 @@ async def exercise(directory):
             assert session.scalar(select(func.count()).select_from(SeenPost)) == 2
             assert session.scalar(select(func.count()).select_from(SourceItem)) == 2
             assert session.scalar(select(func.count()).select_from(DeliveredPost)) == 1
+            assert session.scalar(select(func.count()).select_from(SystemEvent)) == 0
+            assert session.scalar(select(func.count()).select_from(AlertDelivery)) == 0
     assert app.state.runtime.client.is_closed
     assert all(task.done() for task in app.state.runtime.tasks.values())
     return {
         "mode": "offline_synthetic",
         "polls": len(polls),
-        "sends": len(sends),
+        "sends": len([message for message in sends if message.get("type") != "system_alert"]),
+        "system_alert_sends": len(
+            [message for message in sends if message.get("type") == "system_alert"]
+        ),
+        "alert_history_removed": True,
         "merged_tasks": len(sends[0]["matched_tasks"]),
         "baseline_silent": True,
         "cleanup_history_removed": True,

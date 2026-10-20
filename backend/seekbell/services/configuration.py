@@ -5,6 +5,8 @@ from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
 from seekbell.db.models import (
+    AlertDelivery,
+    AlertSettings,
     NotificationTarget,
     Outbox,
     OutboxContribution,
@@ -310,6 +312,9 @@ class Configuration:
             )
             if any(key in version.target_ids for version in versions):
                 raise TargetInUse("请先在所有关联任务中取消选择此目标，包括暂停的任务。")
+            alerts = session.get(AlertSettings, 1)
+            if alerts and key in alerts.target_ids:
+                raise TargetInUse("请先在系统告警设置中取消选择此目标。")
             self._target_enabled(session, target, False, at=at)
             target.revision += 1
             target.deleted_at = at
@@ -341,6 +346,13 @@ class Configuration:
                     item.status = "cancelled"
                     item.completed_at = time.time() if at is None else at
                     item.last_error_code = "target_disabled"
+            for item in session.scalars(
+                select(AlertDelivery).where(
+                    AlertDelivery.target_id == target.id, AlertDelivery.result == "pending"
+                )
+            ):
+                item.result, item.error_code = "cancelled", "target_disabled"
+                item.finished_at = time.time() if at is None else at
         # Re-enabling never uncancels old messages.
 
     def set_source_enabled(self, key: str, enabled: bool, *, at: float) -> None:

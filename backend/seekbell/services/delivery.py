@@ -21,6 +21,7 @@ from seekbell.db.models import (
 from seekbell.db.transactions import database_call, write_session
 from seekbell.domain.delivery import DeliveryPolicy, SendResult
 from seekbell.notifiers.base import Notifier
+from seekbell.services.alerts import observe
 from seekbell.services.configuration import identifier
 
 
@@ -168,6 +169,22 @@ class DeliveryWorker:
             )
             if event is None or attempt is None:
                 return False
+            target = session.get(NotificationTarget, event.target_id)
+            if (
+                event.status == "leased"
+                and event.lease_token == claim.token
+                and target.deleted_at is None
+                and target.enabled
+                and target.revision == claim.target_snapshot.get("revision")
+            ):
+                observe(
+                    session,
+                    "delivery:" + target.id,
+                    result.status != "success",
+                    label="自动通知：" + target.name,
+                    code=result.code,
+                    at=at,
+                )
             key = (event.website_id, event.external_post_id, event.target_id)
             if result.status == "success" and session.get(DeliveredPost, key) is None:
                 session.add(

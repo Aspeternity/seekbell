@@ -67,12 +67,17 @@ def new_session(session, *, at: float) -> tuple[str, str]:
     return token, csrf
 
 
-def initialize(engine, username: str, password: str) -> tuple[str, str]:
+def initialize(engine, username: str, password: str, *, timezone: str = "UTC") -> tuple[str, str]:
+    from seekbell.db.models import WorkspacePreferences
+    from seekbell.services.display import timezone_name
+
+    timezone_name(timezone)
     encoded = password_hash(password)
     with write_session(engine) as session:
         if session.get(Administrator, 1):
             raise ValueError("管理员已创建，请登录。")
         session.add(Administrator(id=1, username=username, password_hash=encoded))
+        session.get(WorkspacePreferences, 1).timezone = timezone
         return new_session(session, at=time.time())
 
 

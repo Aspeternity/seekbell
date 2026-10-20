@@ -318,6 +318,10 @@ class WorkspacePreferences(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(24))
     description: Mapped[str] = mapped_column(String(40))
+    timezone: Mapped[str] = mapped_column(
+        String(80), default="Asia/Shanghai", server_default="Asia/Shanghai"
+    )
+    display_revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
 
 
 class TaskEvaluation(Base):
@@ -378,3 +382,62 @@ class RetentionPolicy(Base):
     next_run_at: Mapped[float] = mapped_column(Float, default=0)
     last_run_at: Mapped[float | None] = mapped_column(Float)
     last_counts: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class AlertSettings(Base):
+    __tablename__ = "alert_settings"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_alert_settings_singleton"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    target_ids: Mapped[list] = mapped_column(JSON, default=list)
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+
+
+class SystemState(Base):
+    """Transition anchor survives ordinary event-history retention."""
+
+    __tablename__ = "system_states"
+    component: Mapped[str] = mapped_column(String(120), primary_key=True)
+    fault: Mapped[bool] = mapped_column(Boolean, default=False)
+    generation: Mapped[int] = mapped_column(Integer, default=0)
+    label: Mapped[str] = mapped_column(String(200))
+    code: Mapped[str | None] = mapped_column(String(80))
+    updated_at: Mapped[float] = mapped_column(Float)
+
+
+class SystemEvent(Base):
+    __tablename__ = "system_events"
+    __table_args__ = (
+        UniqueConstraint("component", "generation", "phase", name="uq_system_transition"),
+        CheckConstraint("phase IN ('fault','recovery')", name="ck_system_phase"),
+        Index("ix_system_events_at", "at", "id"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    component: Mapped[str] = mapped_column(ForeignKey("system_states.component"))
+    generation: Mapped[int] = mapped_column(Integer)
+    phase: Mapped[str] = mapped_column(String(16))
+    label: Mapped[str] = mapped_column(String(200))
+    code: Mapped[str | None] = mapped_column(String(80))
+    at: Mapped[float] = mapped_column(Float)
+
+
+class AlertDelivery(Base):
+    __tablename__ = "alert_deliveries"
+    __table_args__ = (
+        UniqueConstraint("event_id", "target_id", name="uq_alert_target"),
+        CheckConstraint(
+            "result IN ('pending','unknown','success','transient_error',"
+            "'permanent_error','cancelled')",
+            name="ck_alert_result",
+        ),
+        Index("ix_alert_deliveries_event", "event_id"),
+        Index("ix_alert_deliveries_pending", "result", "id"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    event_id: Mapped[str] = mapped_column(ForeignKey("system_events.id"))
+    target_id: Mapped[str] = mapped_column(ForeignKey("notification_targets.id"))
+    target_snapshot: Mapped[dict] = mapped_column(JSON)
+    result: Mapped[str] = mapped_column(String(32), default="pending")
+    error_code: Mapped[str | None] = mapped_column(String(80))
+    started_at: Mapped[float | None] = mapped_column(Float)
+    finished_at: Mapped[float | None] = mapped_column(Float)

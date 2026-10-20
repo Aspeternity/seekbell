@@ -18,7 +18,13 @@ from seekbell.api.sending import install_errors
 from seekbell.api.sending import router as sending_router
 from seekbell.api.system import router
 from seekbell.config import Settings
-from seekbell.db.models import ManualDelivery, NotificationTarget, Outbox, TargetTestAttempt
+from seekbell.db.models import (
+    AlertDelivery,
+    ManualDelivery,
+    NotificationTarget,
+    Outbox,
+    TargetTestAttempt,
+)
 from seekbell.db.runtime import create_database_engine, instance_lock, migrate
 from seekbell.notifiers.credentials import CredentialError, CredentialVault
 from seekbell.notifiers.registry import NotifierRegistry
@@ -39,7 +45,7 @@ def stored_credentials(session):
         # Deleting the last current config must not silently reconstruct a key
         # beside retained encrypted delivery evidence. One snapshot verifies
         # the same installation key without scanning the full history.
-        for model in (Outbox, TargetTestAttempt, ManualDelivery):
+        for model in (Outbox, TargetTestAttempt, ManualDelivery, AlertDelivery):
             snapshot = session.scalar(
                 select(model.target_snapshot)
                 .where(model.target_snapshot["config_ciphertext"].as_string().is_not(None))

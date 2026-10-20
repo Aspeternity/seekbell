@@ -10,7 +10,7 @@ from email.message import EmailMessage
 from email.utils import format_datetime
 
 from seekbell.domain.delivery import SendResult
-from seekbell.notifiers.rendering import clip, line, render
+from seekbell.notifiers.rendering import clip, line, message_title, render
 
 
 class SMTPNotifier:
@@ -31,7 +31,7 @@ class SMTPNotifier:
             message = EmailMessage()
             message["From"] = config["from_address"]
             message["To"] = config["to_address"]
-            message["Subject"] = clip(line(payload["post"]["title"]), 200)
+            message["Subject"] = clip(line(message_title(payload)), 200)
             message["Message-ID"] = "<" + payload["event_id"] + "@seekbell.invalid>"
             message["Date"] = format_datetime(datetime.now(UTC))
             message.set_content(render(payload, config))

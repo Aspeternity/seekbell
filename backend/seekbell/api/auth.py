@@ -3,12 +3,13 @@ import hmac
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import delete
 
 from seekbell.db.models import LoginSession
 from seekbell.db.transactions import write_session
 from seekbell.services import authentication as auth
+from seekbell.services.display import timezone_name
 
 router = APIRouter(prefix="/api/auth")
 COOKIE = "seekbell_session"
@@ -81,6 +82,13 @@ class Credentials(BaseModel):
 
 
 class SetupCredentials(Credentials):
+    timezone: str = Field(default="UTC", max_length=80)
+
+    @field_validator("timezone")
+    @classmethod
+    def valid_timezone(cls, value):
+        return timezone_name(value)
+
     password: str = Field(min_length=8, max_length=128, repr=False)
 
 
@@ -115,7 +123,10 @@ def setup(credentials: SetupCredentials, request: Request, response: Response):
     with request.app.state.login_limiter.hash_lock:
         try:
             tokens = auth.initialize(
-                request.app.state.engine, credentials.username, credentials.password
+                request.app.state.engine,
+                credentials.username,
+                credentials.password,
+                timezone=credentials.timezone,
             )
         except ValueError:
             raise HTTPException(409, "管理员已创建，请登录。") from None

@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import DisplaySettings from './DisplaySettings.vue'
+import AlertsSettings from './AlertsSettings.vue'
 import RetentionSettings from './RetentionSettings.vue'
 import Icon from '../prototype/components/Icon.vue'
 import { state, account, savePreferences, saveAdministrator, setSession } from './store'
 const props = defineProps<{ tab?: string }>()
 const emit = defineEmits<{ navigate: [path: string]; dirty: [value: boolean] }>()
 const retentionDirty = ref(false)
+const auxiliaryDirty = ref(false)
 const name = ref(state.settings.workspaceName),
   description = ref(state.settings.workspaceDescription)
 const baseline = ref(JSON.stringify([name.value, description.value]))
@@ -14,14 +17,16 @@ const username = ref(account.username),
   newPassword = ref(''),
   confirmPassword = ref('')
 const dirty = computed(() =>
-  props.tab === 'retention'
-    ? retentionDirty.value
-    : props.tab === 'account'
-      ? username.value !== account.username ||
-        !!currentPassword.value ||
-        !!newPassword.value ||
-        !!confirmPassword.value
-      : JSON.stringify([name.value, description.value]) !== baseline.value,
+  ['display', 'alerts'].includes(props.tab || '')
+    ? auxiliaryDirty.value
+    : props.tab === 'retention'
+      ? retentionDirty.value
+      : props.tab === 'account'
+        ? username.value !== account.username ||
+          !!currentPassword.value ||
+          !!newPassword.value ||
+          !!confirmPassword.value
+        : JSON.stringify([name.value, description.value]) !== baseline.value,
 )
 watch(dirty, (value) => emit('dirty', value))
 const error = ref(''),
@@ -101,6 +106,8 @@ async function logout() {
         { id: 'preferences', label: '工作空间' },
         { id: 'account', label: '管理员' },
         { id: 'retention', label: '保留策略' },
+        { id: 'display', label: '时区' },
+        { id: 'alerts', label: '系统告警' },
       ]"
       :key="item.id"
       :class="{ active: tab === item.id }"
@@ -223,6 +230,8 @@ async function logout() {
       </form>
     </section>
     <RetentionSettings v-else-if="props.tab === 'retention'" @dirty="retentionDirty = $event" />
+    <DisplaySettings v-else-if="props.tab === 'display'" @dirty="auxiliaryDirty = $event" />
+    <AlertsSettings v-else-if="props.tab === 'alerts'" @dirty="auxiliaryDirty = $event" />
     <section v-else class="panel empty-state">
       <h2>此设置将在后续阶段接入</h2>
       <p>当前可保存工作空间名称与说明，或管理登录会话。</p>

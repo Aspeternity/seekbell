@@ -26,6 +26,8 @@ const labels: Record<string, string> = {
   tests: '目标测试',
   manual: '手动重发',
   source_runs: '采集记录',
+  system_events: '系统事件',
+  alerts: '告警投递',
 }
 const time = (value: number | null) =>
   value ? formatTime(new Date(value * 1000).toISOString()) : '尚未执行'
@@ -115,7 +117,9 @@ onMounted(load)
         <Icon name="shield" :size="18" />
         <p>独立去重记录始终保留，旧帖子再次出现在 RSS 中也不会重新自动发送。</p>
       </div>
-      <p>超过期限的帖子、判定、命中、已完成投递及尝试、已完成测试/手动重发和采集记录会自动清理。</p>
+      <p>
+        超过期限的帖子、判定、命中、已完成投递及尝试、已完成测试/手动重发、采集记录和已完成的系统事件告警会自动清理。
+      </p>
       <p class="small-note">
         待发送、重试、在途、未完成操作及其依赖暂不清理。投递从进入终态或最近结果留证起计算保留期。旧版本升级时已有终态投递会额外保留完整周期。
       </p>

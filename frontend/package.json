@@ -24,7 +24,8 @@
     "test:sending": "playwright test --config playwright.sending.config.ts",
     "test:runtime": "playwright test --config playwright.runtime.config.ts",
     "test:operations": "playwright test --config playwright.operations.config.ts",
-    "test:retention": "playwright test --config playwright.retention.config.ts"
+    "test:retention": "playwright test --config playwright.retention.config.ts",
+    "test:system": "playwright test --config playwright.system.config.ts"
   },
   "dependencies": {
     "naive-ui": "2.45.3",
