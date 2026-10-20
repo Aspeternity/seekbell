@@ -1,27 +1,25 @@
 # 当前状态
 
-更新时间：2026-10-21（Asia/Shanghai）。M0～M3实现/本地自动检查完成，M4工程退出通过；当前M5由用户在Portainer自行部署验收，反馈RSS测试间隔问题。Codex未操作用户部署或真实采集/发送。[阶段顺序](ROADMAP.md)。
+更新时间：2026-10-21（Asia/Shanghai）。M0～M3实现/本地自动检查完成，M4工程退出通过；当前M5由用户在Portainer自行部署验收。RSS连接测试独立计时修复已公开交付，待用户更新反馈。Codex未部署其环境、真实采集或发送。[阶段顺序](ROADMAP.md)。
 
 ## 环境与代码
 
-仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。当前codex/rss-connection-independent，实现10cf4e7f05cd12c1e8321985af1d80b83c4ea672；本轮待提交发布helper/专项、images.yml短标签输入、37秒场景、Portainer模板及相关文档；不改变已验证RSS业务代码。分支未推送/合并main，main/origin仍fc8f95b，旧开发分支cb3de42保留。原D盘/Ubuntu工具与全局WSL未改。
+仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。main/origin实现基准e658b465159a24800887c30de5a645831615301b，已普通合并/推送；本地修复分支f94eae8保留。当前收尾仅状态/镜像说明/验收/history回执文档，与状态同次提交，不改已测实现。原D盘/Ubuntu工具及全局WSL未改。
 
-## 当前修复与证据
+## 当前交付与证据
 
-截图网站启用/10秒间隔，测试一直被本地429拦截；用户概览05:06最后尝试、连续失败0、下次05:06，尚缺完整版本/最近成功时间。旧测试与正常采集共用到期窗口，容易长期被后台抢先，不能据此判为远端限流。
+用户反馈启用网站/10秒配置时测试一直被本地429拦截，概览连续失败0；明确要求手动诊断独立于正常采集周期。后台按网站保存的间隔运行，10秒仅默认，已补10/37/3600秒场景；测试独立2秒防连点，成功测试不延后后台，保留在途互斥/实际错误退避。兼容旧成功probe长计时，不改健康/基线/历史/账本，无依赖/迁移。预约等待旧方案已移除并归档。
 
-用户进一步明确要求测试独立于正常采集间隔，刚采集完也应立即测试，已回写SPEC/架构。最终实现独立2秒防连点：成功采集不阻塞测试，成功测试不延后后台；仅共享在途互斥与实际错误退避。兼容旧成功probe长计时，不改正式健康/基线/历史/账本，无依赖/迁移。预约等待方案已从代码移除，其未发布证据只归档。
+[39502064791](https://github.com/Aspeternity/seekbell/actions/runs/39502064791)对e658b46整体success：后端528项188.19秒、浏览器64项，格式/锁/隐私/构建/迁移、容器/加密备份独立恢复/新卷升级回退/真实TLS全过；amd64/arm64各原生构建/运行/归档通过，无QEMU。发布复用已测产物，公开包/两个manifest/config/索引及固定digest拉取复验通过。
 
-新契约先在旧方案取得7失败/1通过19.90秒；新实现针对性46项17.77秒、全量后端514项117.02秒、前端类型/构建及桌面/手机操作浏览器2项8.4秒通过。Ruff全仓/171文件格式通过。10cf4e7本机amd64镜像seekbell:rss-probe-independent-local（ID e4938963...）禁外网服务/重启/持久化/锁及合成Runtime通过。[完整证据和复验命令](history/2026-10-21-RSS测试独立限频.md)。旧d167356/513项证据不替代新实现检查。尚未远程CI/原生arm64/发布或用户环境验证。
+短标签：`ghcr.io/aspeternity/seekbell:rss-fix-1`。固定digest：`sha256:4fa567debf73686fa0486eacee2fd4e53e415178ae3084c25d86de25f2a7d463`。短标签在完整验证后复制同一索引并重读核对，不更新latest；空凭据匿名pull amd64、两平台索引及镜像版本e658b46核对通过。源码API仍private，包public/visibility_verified=true；repository可选字段记not-reported。[完整记录](history/2026-10-21-RSS修复镜像发布.md)、[发布回执](history/2026-10-21-RSS修复镜像发布回执.json)、[匿名证据](history/2026-10-21-RSS修复匿名拉取.json)。回执ZIP SHA与Actions上传日志一致，artifact仅30天。临时发布开关恢复缺失，cache恢复记录移除。
 
-## 既有镜像与实例
+## 部署交接与保留
 
-现有公开镜像代码d55ee70，固定引用`ghcr.io/aspeternity/seekbell@sha256:afab58706a30d2b01617f600ab36d09f82f427470a9e4e6bf2bc6f995470dbd4`，不含新修复。[39485766557](https://github.com/Aspeternity/seekbell/actions/runs/39485766557)496后端/64浏览器、原生双架构及digest拉取通过；[回执](history/2026-10-21-GHCR-release-receipt.json)。用户亲自改Public，空凭据匿名拉取/双平台索引验证通过，源码仍private，[公开记录](history/2026-10-21-GHCR公开与匿名拉取.md)。main发布检查显式public，67专项通过；开关恢复缺失。首轮部分发布/可选repository字段、原型/IPAM失败根因见历史，不重复诊断。
+交付deploy/compose.portainer.yaml，使用rss-fix-1和seekbell_data卷键，Compose config通过；用户在原Stack更新并沿用原端口/数据卷，Codex未代升级。下一步用户确认版本e658b46，核对刚完成正常采集即可测试、配置间隔持续运行、真实RSS/四渠道、HTTPS/Safari/真机、重启/恢复及观察；不能把CI等同用户验收。跨版本加密恢复仍未验证，回退可能重复发送，保留原卷、不降级新库。
 
-保留本机18081项目seekbell-acceptance-b45fc2c-20261020、-seekbell-1容器、_data卷和backup-local镜像；最近running/重启0，勿替换/重置。旧不兼容卷、4175/18080、ci-34cf183及旧本地候选保留，完整ID见归档。
+旧公开afab5870...及首轮部分发布保留，旧本地候选/ci-34cf183均保留，指纹见历史。18081本机验收项目seekbell-acceptance-b45fc2c-20261020、-seekbell-1容器、_data卷、backup-local镜像不动；最近running/重启0。旧不兼容卷及4175/18080保留。
 
-## 下一步与授权
+## 恢复与授权
 
-用户现明确授权“发布镜像并给Compose”，后台按配置时间、10秒仅默认；本轮已补37秒场景和可选短标签rss-fix-1、Portainer模板，89项专项/actionlint通过，正在提交。合并/发布后按精确SHA完整CI/两架构、公开元数据/索引/匿名拉取检查，再由用户更新Portainer。真实RSS/四渠道、HTTPS/Safari/真机、运行观察及完整用户验收待反馈；跨版本加密恢复未验证。回退可能重复发送，保留原卷、不降级新库。
-
-此前单次main合并/GHCR发布及镜像公开授权均已完成，非永久发布授权。本轮新修复合并main/公开GHCR及短标签已授权，允许仅为本次临时开启发布后恢复；无远程部署、真实发送、源码公开、正式Release或旧环境/全局WSL变更授权。不组织多代理。恢复读AGENTS、本状态和独立限频记录；发布时再读IMAGE_RELEASE/相关workflow。仅文档收尾skip ci复用10cf4e7，不循环写自身SHA。
+用户本轮明确授权修复合并/公开镜像及Compose交付，临时开关恢复已完成；沿用独立WSL/noreply，不组织多代理。无远程部署、真实发送、源码公开、正式GitHub Release或旧环境/全局WSL变更授权。恢复读AGENTS、本状态、本轮发布及独立限频记录，部署按需读IMAGE_RELEASE/PROXY_DEPLOYMENT/RELEASES。仅文档收尾skip ci复用e658b46，不循环写自身SHA。

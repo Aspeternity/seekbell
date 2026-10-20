@@ -1,0 +1,125 @@
+{
+  "date": "2026-10-21",
+  "run_url": "https://github.com/Aspeternity/seekbell/actions/runs/39502064791",
+  "code_sha": "e658b465159a24800887c30de5a645831615301b",
+  "conclusion": "success",
+  "artifact_id": 12303142025,
+  "artifact_zip_sha256": "a38f96947e57d0c6b3246f60c815c2944d86b84483f423694fe86b961e73553b",
+  "release.json": {
+    "revision": "e658b465159a24800887c30de5a645831615301b",
+    "tag": "ghcr.io/aspeternity/seekbell:sha-e658b465159a24800887c30de5a645831615301b-39502064791-1",
+    "published": true,
+    "images": {
+      "amd64": {
+        "schema": 1,
+        "architecture": "amd64",
+        "revision": "e658b465159a24800887c30de5a645831615301b",
+        "source": "https://github.com/aspeternity/seekbell",
+        "image_id": "sha256:17893f5478f9c96ffd9581e60c2ac093cd026f8fa3c86338dc6df67ece7cd8a3",
+        "archive_tag": "seekbell-artifact:sha-e658b465159a24800887c30de5a645831615301b-amd64",
+        "config_digest": "sha256:17893f5478f9c96ffd9581e60c2ac093cd026f8fa3c86338dc6df67ece7cd8a3",
+        "archive_sha256": "acefeba125db36150239f1c40847c5be683b9cae7c3187151e61d4c353ad677e",
+        "loaded_id": "sha256:17893f5478f9c96ffd9581e60c2ac093cd026f8fa3c86338dc6df67ece7cd8a3"
+      },
+      "arm64": {
+        "schema": 1,
+        "architecture": "arm64",
+        "revision": "e658b465159a24800887c30de5a645831615301b",
+        "source": "https://github.com/aspeternity/seekbell",
+        "image_id": "sha256:05c3092ca3478baa6045d363aa2672f624607523cf8628f03627fcd1319c37a3",
+        "archive_tag": "seekbell-artifact:sha-e658b465159a24800887c30de5a645831615301b-arm64",
+        "config_digest": "sha256:05c3092ca3478baa6045d363aa2672f624607523cf8628f03627fcd1319c37a3",
+        "archive_sha256": "3fcea19194660e0b7833050faf5ddaf992fd42c7979e79b04decc21cb0097b2a",
+        "loaded_id": "sha256:05c3092ca3478baa6045d363aa2672f624607523cf8628f03627fcd1319c37a3"
+      }
+    },
+    "digest": "sha256:4fa567debf73686fa0486eacee2fd4e53e415178ae3084c25d86de25f2a7d463",
+    "reference": "ghcr.io/aspeternity/seekbell@sha256:4fa567debf73686fa0486eacee2fd4e53e415178ae3084c25d86de25f2a7d463",
+    "manifests": {
+      "amd64": "sha256:49c69e46dade3abea6030a6f30230fc77f029355c43a152c7468d456403e6b47",
+      "arm64": "sha256:476dbc3f7a3949469a530d4995ce752eea55152996c354e0b5862ab7c4dec6ce"
+    }
+  },
+  "package.json": {
+    "package": "ghcr.io/aspeternity/seekbell",
+    "repository": "aspeternity/seekbell",
+    "visibility": "public",
+    "visibility_verified": true,
+    "private_verified": false,
+    "repository_binding": "not-reported"
+  },
+  "alias.json": {
+    "revision": "e658b465159a24800887c30de5a645831615301b",
+    "tag": "ghcr.io/aspeternity/seekbell:rss-fix-1",
+    "reference": "ghcr.io/aspeternity/seekbell@sha256:4fa567debf73686fa0486eacee2fd4e53e415178ae3084c25d86de25f2a7d463",
+    "digest": "sha256:4fa567debf73686fa0486eacee2fd4e53e415178ae3084c25d86de25f2a7d463",
+    "published": true
+  },
+  "publish_job_id": 118907987725,
+  "publish_steps": [
+    {
+      "name": "Set up job",
+      "conclusion": "success"
+    },
+    {
+      "name": "Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+      "conclusion": "success"
+    },
+    {
+      "name": "Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
+      "conclusion": "success"
+    },
+    {
+      "name": "Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
+      "conclusion": "success"
+    },
+    {
+      "name": "Verify both artifacts before registry authentication",
+      "conclusion": "success"
+    },
+    {
+      "name": "Verify private source repository and public package before any registry write",
+      "conclusion": "success"
+    },
+    {
+      "name": "Run docker/login-action@dbcb813823bdd20940b903addbd779551569679f",
+      "conclusion": "success"
+    },
+    {
+      "name": "Publish tested bytes and verify immutable two-platform index",
+      "conclusion": "success"
+    },
+    {
+      "name": "Confirm published package remains public and record reported linkage",
+      "conclusion": "success"
+    },
+    {
+      "name": "Pull immutable registry image and check it without external networking",
+      "conclusion": "success"
+    },
+    {
+      "name": "Add explicit short tag after all image checks",
+      "conclusion": "success"
+    },
+    {
+      "name": "Record pinned deployment reference",
+      "conclusion": "success"
+    },
+    {
+      "name": "Run actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+      "conclusion": "success"
+    },
+    {
+      "name": "Post Run docker/login-action@dbcb813823bdd20940b903addbd779551569679f",
+      "conclusion": "success"
+    },
+    {
+      "name": "Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+      "conclusion": "success"
+    },
+    {
+      "name": "Complete job",
+      "conclusion": "success"
+    }
+  ]
+}

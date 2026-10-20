@@ -1,0 +1,19 @@
+{
+  "date": "2026-10-21",
+  "environment": "SeekBell-Dev rootless Docker, empty temporary Docker config, no registry login",
+  "tag": "ghcr.io/aspeternity/seekbell:rss-fix-1",
+  "reference": "ghcr.io/aspeternity/seekbell@sha256:4fa567debf73686fa0486eacee2fd4e53e415178ae3084c25d86de25f2a7d463",
+  "digest": "sha256:4fa567debf73686fa0486eacee2fd4e53e415178ae3084c25d86de25f2a7d463",
+  "revision": "e658b465159a24800887c30de5a645831615301b",
+  "manifests": {
+    "amd64": "sha256:49c69e46dade3abea6030a6f30230fc77f029355c43a152c7468d456403e6b47",
+    "arm64": "sha256:476dbc3f7a3949469a530d4995ce752eea55152996c354e0b5862ab7c4dec6ce"
+  },
+  "anonymous_index": "passed",
+  "anonymous_pull": "linux/amd64 passed",
+  "image_revision": "passed",
+  "image_user": "10001:10001",
+  "source_repository_private": true,
+  "publication_opt_in": "restored to absent",
+  "receipt_zip_hash": "matches Actions upload log"
+}

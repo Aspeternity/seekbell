@@ -1,6 +1,6 @@
 # 双架构镜像候选与GHCR流程（M4第五子阶段）
 
-本流程准备可审阅的镜像候选，不部署服务。`.github/workflows/images.yml`只有`workflow_dispatch`入口；普通push/PR不登录或写GHCR；codex/开发分支的push在完整CI成功后调用同一原生双架构检查，便于合并主分支前验证。新流程默认`publish=false`，分别使用`ubuntu-24.04`和`ubuntu-24.04-arm`原生构建Linux amd64/arm64，不安装QEMU或修改本机Docker。私有仓库使用账户Actions额度，runner/额度是否可用须实际运行确认。
+当前已发布的RSS修复候选为`ghcr.io/aspeternity/seekbell:rss-fix-1`，精确版本/两平台digest和匿名拉取见[本轮证据](history/2026-10-21-RSS修复镜像发布.md)；Portainer使用[模板](../deploy/compose.portainer.yaml)。本流程不部署服务。`.github/workflows/images.yml`只有`workflow_dispatch`入口；普通push/PR不登录或写GHCR；codex/开发分支的push在完整CI成功后调用同一原生双架构检查，便于合并主分支前验证。新流程默认`publish=false`，分别使用`ubuntu-24.04`和`ubuntu-24.04-arm`原生构建Linux amd64/arm64，不安装QEMU或修改本机Docker。私有仓库使用账户Actions额度，runner/额度是否可用须实际运行确认。
 
 ## 候选检查与产物
 
@@ -8,7 +8,7 @@
 
 检查全部通过才从固定image ID建立私有产物标签并保存`image.tar`和`image.json`，保存后再核对配置及层指纹，上传`image-amd64`、`image-arm64`，保存3天。JSON记录平台、完整SHA、source、image ID、运行配置digest和归档SHA256；证据包括对应Actions日志。归档只含构建镜像，不含演练数据卷/会话/备份。产物可用于候选审阅，不能把工作流定义或本地amd64检查当作远程CI/arm64运行已通过。
 
-两平台使用各自原生Python环境构建虚拟环境；不跨平台复制本机`.venv`。前端和Python依赖使用现有锁文件，基础镜像沿用当前Dockerfile；标签构建的基础镜像可能更新，重新构建同一代码SHA不保证逐字节一致。因此实际部署固定最终registry digest，发布复用已测试归档，不重新构建。现阶段无镜像签名、SBOM或独立供应链证明，产物校验和用于传输一致性，不等同密码学来源签名。
+两平台使用各自原生Python环境构建虚拟环境；不跨平台复制本机`.venv`。前端和Python依赖使用现有锁文件，基础镜像沿用当前Dockerfile；标签构建的基础镜像可能更新，重新构建同一代码SHA不保证逐字节一致。因此镜像真实身份以最终registry digest为准；可用已核对的短候选标签便于Portainer部署，回执保留digest及代码SHA。发布复用已测试归档，不重新构建。现阶段无镜像签名、SBOM或独立供应链证明，产物校验和用于传输一致性，不等同密码学来源签名。
 
 ## 实际执行前的授权与开关
 
@@ -55,7 +55,7 @@ python3 scripts/release_images.py --revision "$SEEKBELL_REVISION" --repository a
 
 依据核对于2026-10-21：[Docker多平台原生runner](https://docs.docker.com/build/ci/github-actions/multi-platform/)、[GitHub私有仓库runner](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)、[GHCR认证与包权限](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)、[environment功能限制](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments)。新工作流第三方Actions固定完整提交，版本标签解析记录见本阶段history。
 
-## 已执行候选
+## 最初执行候选（后续修复见文首）
 
 2026-10-21已按用户授权完成main d55ee70的私有候选发布，完整CI、两种原生架构及发布后固定digest拉取检查通过。部署候选引用为`ghcr.io/aspeternity/seekbell@sha256:afab58706a30d2b01617f600ab36d09f82f427470a9e4e6bf2bc6f995470dbd4`。回执/两平台指纹和首次后置误判根因见[记录](history/2026-10-21-主分支合并与GHCR候选发布.md)。临时发布开关已恢复原先缺失，不代表永久发布或部署授权。
 
@@ -66,7 +66,7 @@ python3 scripts/release_images.py --revision "$SEEKBELL_REVISION" --repository a
 PVE部署可跳过原说明中的Token、docker login/logout，直接执行：
 
 ~~~bash
-docker pull ghcr.io/aspeternity/seekbell@sha256:afab58706a30d2b01617f600ab36d09f82f427470a9e4e6bf2bc6f995470dbd4
+docker pull ghcr.io/aspeternity/seekbell:rss-fix-1
 ~~~
 
-Compose继续固定同一digest、pull_policy=never，数据卷与现有实例不变。操作者是否加sudo取决于目标Docker权限。
+仓库维护compose.yaml的pull_policy=never仍要求预先拉取；Portainer模板直接使用已发布短标签，首次部署会拉取。更新应保留原Stack/端口/数据卷。操作者是否加sudo取决于目标Docker权限。
