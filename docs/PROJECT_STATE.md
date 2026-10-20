@@ -1,29 +1,31 @@
 # 当前状态
 
-更新时间：2026-10-21（Asia/Shanghai）。M0～M3实现及本地自动退出已完成；当前M4部署恢复，第五子阶段双架构候选/GHCR流程已实现并完成本地验证。M4远程双架构/GHCR及M5实机/用户验收尚未完成。[本次证据](history/2026-10-21-双架构镜像候选与GHCR流程.md)，[HTTPS前阶段](history/2026-10-20-外部HTTPS反代与部署检查.md)。
+更新时间：2026-10-21（Asia/Shanghai）。M0～M3实现及本地自动退出已完成；当前M4部署恢复，原生双架构CI与产物往返已通过。GHCR实际发布及M5实机/用户验收未完成。[本次证据](history/2026-10-21-远程CI与原生双架构验证.md)，[镜像流程](IMAGE_RELEASE.md)。
 
 ## 环境与代码
 
-只在SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发。[入口](DEVELOPMENT_ENVIRONMENT.md)。分支codex/frontend-backend-integration，本段起点dd4eccf；产品代码仍等同faa991d，本次仅CI/镜像工具/测试和文档，无依赖/迁移/产品UI变化。原D盘、Ubuntu工具及全局WSL未改。
+仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发。[入口](DEVELOPMENT_ENVIRONMENT.md)。分支codex/frontend-backend-integration；已验证实现提交34cf1830291240f09071bbb4fb343be3aba4b642已推送，后续仅文档收尾。产品代码仍等同faa991d，本轮改CI/测试设施/文档，无新业务/依赖/迁移。原D盘、Ubuntu工具与全局WSL未改。
 
 ## 本阶段与证据
 
-images.yml仅手动触发，默认不发布；核对完整SHA，复用完整CI后由原生amd64/arm64 runner各自构建、禁外网演练并保存产物。GHCR需单独授权、仓库开关、手动选择、默认分支及全部检查成功；只发布job有packages写权限，不部署。校验归档、平台/版本/source/UID/环境、配置及层；复用测试内容按两个digest合成并重读索引，输出固定部署引用。区分containerd/classic本机ID与配置digest；不解析push人类输出。[操作/失败边界](IMAGE_RELEASE.md)。
+native-images只读复用工作流由开发分支push的完整CI及手动images流程调用，支持合并前原生双架构验证；默认不发布。手动入口未进入main，不能假定可直接派发。GHCR仍需单独授权、仓库开关、手动选择、默认分支和全部检查成功；仅独立发布job有packages写权限，不部署。
 
-34项合成Docker专项0.29秒、全仓Ruff/format、新workflow格式、两个workflow的actionlint1.7.12通过；隐私/noreply已检查，提交前复查。未改产品代码，复用前阶段433项后端及真实隔离TLS/浏览器/备份升级证据。本轮d3c44803da35f4dcf817ccc05e5780c9253c44fd已推送开发分支；首轮远程CI 39460104809：后端全量/离线演示、前端类型构建通过；prototype套件错误收集backup/proxy专项目录，40过4失败，native按门禁跳过。正修复原型收集为tests根目录正向匹配，避免以后新增专项再误收；SeekBell-Dev本机40项39.9秒复验通过，列表确认原型40/备份2/HTTPS2各自独立；修复5906a896fa3a4773a12eab10ec8aec75411c1b30已推送，第二轮CI 39461357138后端/全部浏览器/容器备份升级通过，但HTTPS演练创建带静态IP的容器被Docker拒绝，native跳过。修复fixture为Docker自动分配可用子网后显式声明IPAM，仅改唯一临时网络；专项26项1.14秒、真实TLS/备份往返及HTTPS浏览器2项6.6秒本机通过，待推送第三轮CI。
+已修两处真实CI问题：原型改为根目录正向收集，避免误跑backup/proxy；TLS fixture先由Docker选可用池再显式声明internal子网，兼容静态IP，不改全局网络。失败日志、排除路线及本机40项原型/26项代理/2项HTTPS证据见本次记录。
 
-本机rootless/amd64镜像seekbell:images-local，revision dd4eccf，image ID sha256:ed2fcc2bae3c9f867ccb2af146c6fcf00bf4669faa2f39ecba5c0d7b71567ea8，配置digest和归档SHA见本次证据。实际导出/校验/加载、禁外网服务/重启持久化/实例锁/离线闭环通过，临时归档与容器清理；未发布。只读确认基础镜像声明双架构，本机无arm64执行能力，未装QEMU/改daemon。
+[远程CI 39463442124](https://github.com/Aspeternity/seekbell/actions/runs/39463442124)整体success：后端473项184.52秒、浏览器64项、格式/锁/隐私/构建/迁移/容器重启、备份恢复/升级回退/真实TLS通过。ubuntu-24.04 amd64和ubuntu-24.04-arm均原生构建/服务/备份升级/TLS/归档全过，无QEMU。产物下载后ZIP及归档校验、两平台版本/配置/层及本机加载预检通过，published=false。
+
+本机保留seekbell:ci-34cf183-amd64（image ID 8ffd0690...）和-arm64（62fc22b9...）；完整ID、配置digest、归档/ZIP SHA及artifact ID见证据。CI classic ID与本机containerd ID不同已实际验证；这些不是GHCR发布digest。临时归档/容器清理，无真实发送。
 
 ## 用户验收实例
 
-保留项目seekbell-acceptance-b45fc2c-20261020、容器后缀-seekbell-1、卷后缀_data，镜像seekbell:backup-local（b45fc2c），http://localhost:18081/。只读核对running/重启计数0，未替换/重置/代配置。旧seekbell-acceptance不兼容卷保留、容器已停；勿复用旧名/改迁移号。旧4175/18080未动。[故障记录](history/2026-10-20-本机验收启动修复.md)。
+保留项目seekbell-acceptance-b45fc2c-20261020、容器后缀-seekbell-1、卷后缀_data，seekbell:backup-local（b45fc2c），http://localhost:18081/。最终只读running/重启计数0，未替换/重置/代配置。旧seekbell-acceptance不兼容卷保留、容器已停，勿复用旧名/改迁移号；旧4175/18080未动。[故障记录](history/2026-10-20-本机验收启动修复.md)。
 
 ## 下一步与恢复
 
-本轮推进中：已提交d3c4480/5906a89并推送；手动入口未在默认分支，抽出只读native-images复用流程，由开发分支push在完整CI后调用，未合并main。下一步跟踪[当前远程CI](https://github.com/Aspeternity/seekbell/actions/runs/39461357138)并修复实际失败，核对两平台产物；待提交为TLS fixture/IPAM专项、README/镜像说明及状态/远程证据文档，意图为CI兼容修复与记录结果。核对包权限/可见性后再决定GHCR发布。后续M5：授权PVE实机、真实RSS/四渠道、Safari/真机、运行观察和用户验收，确认后正式发布。[阶段顺序](ROADMAP.md)。实际目标代理/证书、原生arm64、GHCR、跨版本加密恢复未验证；恢复/回退可能重复发送，保留原卷，不直接降级新库。
+无开发阻塞。下一步审阅本次证据，经授权处理main合并及GHCR候选发布，先核对包权限/可见性并取得真实registry digest；再进入M5授权PVE、真实RSS/四渠道、Safari/真机、运行观察和用户验收，确认后正式发布。[阶段顺序](ROADMAP.md)。目标环境/域名证书、GHCR实际写入、跨版本加密恢复未验证；原生CI不等同用户设备验收。恢复/回退可能重复发送，保留原卷，不直接降级新库。
 
-恢复读AGENTS、本状态、IMAGE_RELEASE；按需读images.yml/release_images及专项测试、RELEASES/PROXY_DEPLOYMENT，不全仓重读。状态与本段实现同批本地提交，提交基准以git log为准。
+恢复读AGENTS、本状态、IMAGE_RELEASE及本次证据；按需读三个workflow、proxy_fixture/专项、RELEASES/PROXY_DEPLOYMENT，不全仓重读。仅Markdown收尾标注skip ci，复用34cf183代码证据，不宣称文档HEAD重跑过CI，不为写自身SHA循环提交。
 
 ## 授权
 
-用户在明确下一步为推送及远程构建验证后要求继续，本轮据此执行当前开发分支推送和不发布的远程CI；沿用独立WSL/noreply。不授权合并main、GHCR写入、远程部署、真实发送/公开发布、原环境清理/全局WSL变更。不组织多代理；保留用户验收实例及其配置。
+本轮用户在明确下一步为推送/CI后要求继续，已执行开发分支普通推送和无发布远程CI。沿用独立WSL/noreply；无main合并、GHCR写入、远程部署、真实发送/公开发布、原环境清理/全局WSL变更授权。不组织多代理；保留用户验收实例及配置。
