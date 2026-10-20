@@ -1,10 +1,10 @@
 # 当前状态
 
-更新时间：2026-10-20（Asia/Shanghai）。M1/M2已实现，M3九阶段接入及本地自动退出核对完成，用户/真实服务验收未做。M4第一阶段本地Compose与停服加密备份/独立恢复已实现，375项后端及相关4项浏览器通过；固定SHA容器/Compose检查待做。[本阶段证据](history/2026-10-20-Compose与加密备份恢复.md)，M3详证见同目录版本信息与退出核对。
+更新时间：2026-10-20（Asia/Shanghai）。M1/M2已实现，M3九阶段接入及本地自动退出核对完成，用户/真实服务验收未做。M4第一阶段本地Compose与停服加密备份/独立恢复已实现，375项后端及相关4项浏览器通过；固定SHA容器/Compose检查通过。[本阶段证据](history/2026-10-20-Compose与加密备份恢复.md)，M3详证见同目录版本信息与退出核对。
 
 ## 环境与代码
 
-唯一开发环境SeekBell-Dev，/home/dev/projects/seekbell，原Ubuntu显式经wsl.exe执行。[环境入口](DEVELOPMENT_ENVIRONMENT.md)。分支codex/frontend-backend-integration，起点9a98fd2535193b99058ecd915926c19b2d7358dd干净。当前backup.py、backup_demo、Compose/维护覆盖、容器检查/CI、备份测试、正式提示及文档/ignore待同批提交；无迁移/依赖变更。原D盘/原WSL工具容器和全局设置未改。
+唯一开发环境SeekBell-Dev，/home/dev/projects/seekbell，原Ubuntu显式经wsl.exe执行。[环境入口](DEVELOPMENT_ENVIRONMENT.md)。分支codex/frontend-backend-integration，起点9a98fd2535193b99058ecd915926c19b2d7358dd干净。实现提交b45fc2c82a12cb8ecffe94026d271e90aec36691；固定SHA镜像/Compose检查通过，其后仅补交接证据。无迁移/依赖变更。原D盘/原WSL工具容器和全局设置未改。
 
 ## 实现与证据
 
@@ -18,11 +18,13 @@ python -m seekbell.backup create/restore：备份与服务/迁移共用实例锁
 
 恢复保留启停、队列/租约/退避和三类身份/回执账本；启动恢复实例前须停原实例。时间点备份不含之后回执，重新运行可能重复发送，不承诺exactly-once。跨迁移版本、原卷切换/覆盖、升级/失败回退、网页恢复及实机部署仍未交付。[真实命令/格式](BACKUP_RESTORE.md)。
 
-SeekBell-Dev全量375项通过89.38秒，新增31项25.14秒，含WAL、全表/账本/待投递保留、重登/旧会话撤销、口令/篡改/版本/结构/钥失败、并发不覆盖及伪终端交互无密码回显。备份离线演练成功，恢复后实际模拟续发1条、保留2条pending告警。Ruff/锁/wheel通过。前端构建/类型/格式及正式桌面手机4项17秒通过；其余UI行为未改，复用M3共60项证据。隐私/固定版本打包与Compose检查待完成，远程CI未跑。
+SeekBell-Dev全量375项通过89.38秒，新增31项25.14秒，含WAL、全表/账本/待投递保留、重登/旧会话撤销、口令/篡改/版本/结构/钥失败、并发不覆盖及伪终端交互无密码回显。备份离线演练成功，恢复后实际模拟续发1条、保留2条pending告警。Ruff/锁/wheel通过。前端构建/类型/格式及正式桌面手机4项17秒通过；其余UI行为未改，复用M3共60项证据。隐私/noreply检查通过，远程CI未跑。
+
+Rootless/amd64镜像seekbell:backup-local，ID sha256:ed2bf35a1cb282140cb7855a5645da7df53379825319cb4035c21c9ea9034f3b，revision为b45fc2c。禁外网、UID10001、0009/版本/资源、健康/实例锁、账号配置与策略/时区重启、既有两类离线演练通过。Compose实际只读根/禁网启动、运行中拒绝备份、停服整库/原钥加密备份、新目录恢复、恢复服务重登/配置保持通过。镜像内backup_demo也通过。镜像未发布；本轮容器/项目/卷及临时端口清理，旧4175/18080未改。
 
 ## 下一步与恢复
 
-先提交、固定SHA镜像/禁外网Compose恢复演练并补证。随后接M4网页备份下载/恢复编排，再补原卷切换及升级/失败回退；M4整体未完成，无开发阻塞。
+第一阶段本地验证完成。下一阶段接M4网页备份下载/恢复编排，再补原卷切换及升级/失败回退；M4整体未完成，无开发阻塞。
 
 恢复核对发行版/目录/分支/HEAD/工作区，读AGENTS、本状态、阶段证据及BACKUP_RESTORE，按需读ARCHITECTURE部署/备份、ACCEPTANCE P02/P03、backup及runtime/认证与测试。不得把备份丢弃会话误作丢失账号；不得用真实数据/原卷做恢复试验。PVE/arm64、反代、Safari/真机、真实RSS/通知和用户验收未做。
 

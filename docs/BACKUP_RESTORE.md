@@ -37,9 +37,13 @@ docker compose -p seekbell-test stop
 `compose.maintenance.yaml` 叠加后禁用网络/端口，将上述两个已存在目录挂载至 /backup、/restore，不会自动创建错误的宿主路径。要求 Compose 支持 !reset（本机 v5.6.0 已验证）。首次用同一 Rootless/rootful Docker 上下文准备容器 UID 10001 的目录所有权；不要对已有日常目录使用此初始化命令：
 
 ~~~bash
-docker compose -p seekbell-test -f compose.yaml -f compose.maintenance.yaml   run --rm --no-deps -T --user 0 --cap-add CHOWN seekbell python -c   "import os; [(os.chmod(p,0o700),os.chown(p,10001,10001)) for p in ('/backup','/restore')]"
+docker compose -p seekbell-test -f compose.yaml -f compose.maintenance.yaml \
+  run --rm --no-deps -T --user 0 --cap-add CHOWN seekbell python -c \
+  "import os; [(os.chmod(p,0o700),os.chown(p,10001,10001)) for p in ('/backup','/restore')]"
 
-docker compose -p seekbell-test -f compose.yaml -f compose.maintenance.yaml   run --rm --no-deps seekbell python -m seekbell.backup create   --output /backup/before-update.sbbackup
+docker compose -p seekbell-test -f compose.yaml -f compose.maintenance.yaml \
+  run --rm --no-deps seekbell python -m seekbell.backup create \
+  --output /backup/before-update.sbbackup
 ~~~
 
 在真实交互终端运行最后一条命令，输入并确认备份口令。不要添加 -T，不要把口令写进命令或 shell 历史。输出文件必须不存在；最终文件 0600，原子发布、从不覆盖。数据库上限 2 GiB，流式处理；同一私有文件系统预留约数据库体积 3 倍并留余量的暂存/输出空间。暂存目录 0700、明文文件 0600，正常成功或失败清理；强制终止可能留下私有暂存文件，不承诺文件系统级安全擦除。备份目录也必须放可信私有磁盘。
@@ -50,7 +54,9 @@ Rootless 下宿主看到的是映射 UID。需要带走加密文件时，可用�
 (
   umask 077
   set -C
-  docker compose -p seekbell-test -f compose.yaml -f compose.maintenance.yaml     run --rm --no-deps -T seekbell cat /backup/before-update.sbbackup     > "$HOME/seekbell-before-update.sbbackup"
+  docker compose -p seekbell-test -f compose.yaml -f compose.maintenance.yaml \
+    run --rm --no-deps -T seekbell cat /backup/before-update.sbbackup \
+    > "$HOME/seekbell-before-update.sbbackup"
 )
 ~~~
 
@@ -61,9 +67,14 @@ Rootless 下宿主看到的是映射 UID。需要带走加密文件时，可用�
 目标必须是**尚不存在的新目录**，不能等于当前 SEEKBELL_DATA_DIR；已有文件、空/非空目录和符号链接一律拒绝。首次恢复仅支持备份和程序的迁移版本完全一致。先完成加密认证再解释清单/SQLite；验证数据库版本/结构/摘要/关联、备份中的管理员用户名及当时密码、原钥和全部凭据快照。失败不发布目标、不改变原库；并发恢复只能有一个成功。
 
 ~~~bash
-docker compose -p seekbell-test -f compose.yaml -f compose.maintenance.yaml   run --rm --no-deps seekbell python -m seekbell.backup restore   --archive /backup/before-update.sbbackup   --destination /restore/recovered-before-update
+docker compose -p seekbell-test -f compose.yaml -f compose.maintenance.yaml \
+  run --rm --no-deps seekbell python -m seekbell.backup restore \
+  --archive /backup/before-update.sbbackup \
+  --destination /restore/recovered-before-update
 
-docker compose -p seekbell-test -f compose.yaml -f compose.maintenance.yaml   run --rm --no-deps -T -e SEEKBELL_DATA_DIR=/restore/recovered-before-update   seekbell python -m seekbell.db check
+docker compose -p seekbell-test -f compose.yaml -f compose.maintenance.yaml \
+  run --rm --no-deps -T -e SEEKBELL_DATA_DIR=/restore/recovered-before-update \
+  seekbell python -m seekbell.db check
 ~~~
 
 交互输入备份口令、备份时管理员用户名/密码。校验通过后仅清除恢复副本的旧登录会话，其余表保持原样，再同步并通过 Linux RENAME_NOREPLACE 原子发布新目录；不运行迁移、不启动采集或通知。源数据不变；恢复文件 0600、目录 0700，使用执行命令的 UID（容器中 10001）。后续启动会加载原钥并要求重新登录。
