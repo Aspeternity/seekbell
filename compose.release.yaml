@@ -1,0 +1,9 @@
+# Host maintenance tool supplies a matched, pinned image + EXISTING volume pair.
+services:
+  seekbell:
+    environment:
+      SEEKBELL_DATA_DIR: ${SEEKBELL_RELEASE_DATA_DIR:?Set the matched data directory}
+volumes:
+  data:
+    external: true
+    name: ${SEEKBELL_RELEASE_VOLUME:?Set the existing matched data volume}

@@ -67,3 +67,5 @@ jobs:
         run: python scripts/check_container.py seekbell:ci --revision "$GITHUB_SHA"
       - name: Rehearse Compose and independent encrypted restore offline
         run: python scripts/check_backup_container.py seekbell:ci --revision "$GITHUB_SHA"
+      - name: Rehearse isolated volume switch and explicit rollback offline
+        run: python scripts/check_release_container.py seekbell:ci --revision "$GITHUB_SHA"

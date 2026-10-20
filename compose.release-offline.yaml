@@ -1,0 +1,5 @@
+# Disposable rehearsal only. Never grants Docker access to the application.
+services:
+  seekbell:
+    network_mode: none
+    ports: !reset []

@@ -197,6 +197,26 @@ def decrypt_file(archive, plain, password):
                 raise BackupError("备份口令错误或文件损坏。") from None
 
 
+def snapshot_database(source_path, database):
+    """Copy committed SQLite state including WAL; source is always read-only."""
+    with private_file(database):
+        pass
+    deadline = time.monotonic() + 120
+
+    def progress(status, remaining, total):
+        if total * page_size > MAX_DATABASE:
+            raise BackupError("数据库超过 2 GiB 限制。")
+        if time.monotonic() > deadline:
+            raise BackupError("数据库快照超时，请停止其他写入后重试。")
+
+    with (
+        closing(readonly(source_path)) as source,
+        closing(sqlite3.connect(database)) as snapshot,
+    ):
+        page_size = source.execute("PRAGMA page_size").fetchone()[0]
+        source.backup(snapshot, pages=256, progress=progress)
+
+
 def create_backup(settings, destination, *, password):
     # Offline callers must still acquire the same exclusive process lock.
     with instance_lock(settings.data_dir.resolve()):
@@ -217,22 +237,7 @@ def snapshot_backup(settings, destination, *, password):
     with tempfile.TemporaryDirectory(prefix=".seekbell-backup-", dir=destination.parent) as temp:
         stage = Path(temp)
         database = stage / "seekbell.sqlite3"
-        with private_file(database):
-            pass
-        deadline = time.monotonic() + 120
-
-        def progress(status, remaining, total):
-            if total * page_size > MAX_DATABASE:
-                raise BackupError("数据库超过 2 GiB 限制。")
-            if time.monotonic() > deadline:
-                raise BackupError("数据库快照超时，请停止其他写入后重试。")
-
-        with (
-            closing(readonly(settings.database_path)) as source,
-            closing(sqlite3.connect(database)) as snapshot,
-        ):
-            page_size = source.execute("PRAGMA page_size").fetchone()[0]
-            source.backup(snapshot, pages=256, progress=progress)
+        snapshot_database(settings.database_path, database)
         validate_database(database)
         key_path = directory / "credentials.key"
         CredentialVault.open(directory)

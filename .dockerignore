@@ -34,3 +34,5 @@ frontend/test-results-retention/
 frontend/test-results-system/
 
 **/*.sbbackup
+
+frontend/test-results-backup/
