@@ -22,7 +22,7 @@
 
 用户要求继续原卷切换与升级失败回退。未提交：backend/release.py离线原卷只读锁/一致快照、新卷迁移/原钥校验/清副本会话/原子发布、来源和候选校验；backup.py提取公共SQLite快照；scripts/manage_release.py宿主机维护CLI、compose.release及离线覆盖、tests/test_release.py、check_release_container.py/CI、维护文档和相应界面说明；.dockerignore补排除浏览器产物。不向网页授予Docker权限；准备须先停服，新卷独立、原卷保留；激活固定镜像与卷对，健康失败停新服务、不自动回退；明确回退需接受切换后的数据丢失。本次未提交代码全量411项104.79秒通过，切换专项15项4.55秒通过；网页备份复验2项9.2秒通过。Ruff/锁/wheel/隐私noreply通过；固定提交镜像及禁外网真实Compose演练待完成，尚未宣布本阶段通过。
 
-后续完成测试、维护命令和交接后本地提交。跨版本备份恢复、PVE/arm64/实际反代/Safari/真机、真实RSS/通知及用户验收仍待完成。恢复读AGENTS、本状态、BACKUP_RESTORE和ARCHITECTURE备份节，再读release/维护脚本及测试；无需全仓重读。
+首轮容器演练在只读WAL源首次读取失败，临时资源已清理，原验收实例未动。正在改为锁内私有物化DB+WAL后再由SQLite生成一致快照；原卷维持只读，不走immutable忽略WAL。实现已本地提交01f4bd6，当前release.py/演练指纹有本轮修正未提交，需重测和新固定镜像。后续补维护命令和交接提交。跨版本备份恢复、PVE/arm64/实际反代/Safari/真机、真实RSS/通知及用户验收仍待完成。恢复读AGENTS、本状态、BACKUP_RESTORE和ARCHITECTURE备份节，再读release/维护脚本及测试；无需全仓重读。
 
 ## 授权
 

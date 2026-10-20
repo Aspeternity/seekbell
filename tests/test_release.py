@@ -281,3 +281,35 @@ def test_operator_activation_failure_stops_only_candidate_and_never_starts_origi
         tool.switch(path, state)
     assert calls == [("stop", "--time", "30", "new-id")]
     assert tool.load(path)["phase"] == "activation_failed"
+
+
+def test_readonly_source_materialization_includes_committed_wal_without_changing_original(
+    source, tmp_path
+):
+    with closing(sqlite3.connect(source.database_path)) as writer:
+        writer.execute("PRAGMA journal_mode=WAL")
+        writer.execute("UPDATE workspace_preferences SET name='Committed WAL release'")
+        writer.commit()
+        wal = source.database_path.with_name("seekbell.sqlite3-wal")
+        assert wal.stat().st_size > 0
+        database_before, wal_before = source.database_path.read_bytes(), wal.read_bytes()
+        target = candidate(source, tmp_path)
+        release.check_source(source, target.data_dir)
+        with closing(backup.readonly(target.database_path)) as connection:
+            assert connection.execute("SELECT name FROM workspace_preferences").fetchone() == (
+                "Committed WAL release",
+            )
+        assert source.database_path.read_bytes() == database_before
+        assert wal.read_bytes() == wal_before
+
+
+def test_symlink_wal_is_rejected_without_publishing(source, tmp_path):
+    # A stopped source with a forged WAL must not read outside the data volume.
+    wal = source.database_path.with_name("seekbell.sqlite3-wal")
+    wal.unlink(missing_ok=True)
+    (tmp_path / "private").write_text("Synthetic-private-not-a-WAL")
+    wal.symlink_to(tmp_path / "private")
+    with pytest.raises(backup.BackupError):
+        release.prepare(source, tmp_path / "candidate")
+    assert not (tmp_path / "candidate").exists()
+    assert (tmp_path / "private").read_text() == "Synthetic-private-not-a-WAL"

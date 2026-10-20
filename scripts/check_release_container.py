@@ -14,12 +14,15 @@ from check_container import MANAGEMENT_PROBE, docker, wait_ready
 
 ROOT = Path(__file__).resolve().parents[1]
 FINGERPRINT = """
-import hashlib,json
+import hashlib
 from pathlib import Path
-from seekbell.services.backup_demo import table_data
 root=Path('/source')
-print(hashlib.sha256(json.dumps(table_data(root/'seekbell.sqlite3'),sort_keys=True).encode()
-      +(root/'credentials.key').read_bytes()).hexdigest())
+digest=hashlib.sha256()
+for name in ('seekbell.sqlite3','seekbell.sqlite3-wal','credentials.key'):
+    path=root/name
+    if path.exists():
+        digest.update(name.encode()+path.read_bytes())
+print(digest.hexdigest())
 """
 
 

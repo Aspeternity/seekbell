@@ -50,6 +50,36 @@ def source_locks(source):
         yield
 
 
+def source_snapshot(settings, destination):
+    """Materialize a stopped DB+WAL privately; never create SHM on the original RO volume.
+
+    Caller owns source_locks. SQLite then recovers committed WAL and makes the
+    authoritative Connection.backup snapshot. Do not use this on a live source.
+    """
+    with tempfile.TemporaryDirectory(prefix=".source-wal-", dir=destination.parent) as temp:
+        materialized = Path(temp) / "seekbell.sqlite3"
+        for suffix in ("", "-wal"):
+            original = settings.database_path.with_name("seekbell.sqlite3" + suffix)
+            if suffix and not os.path.lexists(original):
+                continue
+            if original.is_symlink() or not original.is_file():
+                raise backup.BackupError("来源数据库或WAL文件不可用。")
+            count = 0
+            with (
+                original.open("rb") as source,
+                backup.private_file(Path(str(materialized) + suffix)) as output,
+            ):
+                while block := source.read(backup.CHUNK):
+                    count += len(block)
+                    if count > backup.MAX_DATABASE:
+                        raise backup.BackupError("来源数据库或WAL超过2GiB限制。")
+                    output.write(block)
+        with closing(sqlite3.connect(materialized)) as connection:
+            connection.execute("PRAGMA trusted_schema=OFF")
+            connection.execute("SELECT name FROM sqlite_master LIMIT 1").fetchone()
+        backup.snapshot_database(materialized, destination)
+
+
 def prepare(settings, destination):
     destination = backup.new_path(destination)
     source = settings.data_dir.resolve(strict=True)
@@ -64,7 +94,7 @@ def prepare(settings, destination):
         stage = Path(temp) / "data"
         stage.mkdir(mode=0o700)
         database = stage / "seekbell.sqlite3"
-        backup.snapshot_database(settings.database_path, database)
+        source_snapshot(settings, database)
         with closing(backup.readonly(database)) as connection:
             if connection.execute("PRAGMA quick_check").fetchall() != [("ok",)]:
                 raise backup.BackupError("来源数据库完整性检查失败。")
@@ -147,7 +177,7 @@ def check_source(settings, candidate):
         ) as temporary,
     ):
         snapshot = Path(temporary) / "source.sqlite3"
-        backup.snapshot_database(settings.database_path, snapshot)
+        source_snapshot(settings, snapshot)
         if (
             backup.file_hash(snapshot) != marker["source_database_sha256"]
             or backup.file_hash(source / "credentials.key") != marker["source_key_sha256"]
