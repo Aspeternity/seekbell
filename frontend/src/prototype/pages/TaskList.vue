@@ -2,7 +2,17 @@
 import { computed, ref } from 'vue'
 import Icon from '../components/Icon.vue'
 import Toggle from '../components/Toggle.vue'
-import { state, clone, notify, setTaskEnabled, confirmAction, websiteName } from '../store'
+import {
+  state,
+  isLive,
+  saveTask,
+  removeTask,
+  clone,
+  notify,
+  setTaskEnabled,
+  confirmAction,
+  websiteName,
+} from '@workspace'
 import type { Task } from '../model'
 const emit = defineEmits<{ navigate: [path: string] }>()
 const query = ref(''),
@@ -14,13 +24,22 @@ const list = computed(() =>
       (filter.value === 'all' || t.enabled === (filter.value === 'active')),
   ),
 )
-function copy(task: Task) {
+async function copy(task: Task) {
   const next = clone(task)
-  next.id = 'task-' + crypto.randomUUID()
+  next.id = isLive ? '' : 'task-' + crypto.randomUUID()
   next.name = task.name + ' · 副本'
   next.enabled = false
   next.hits = 0
   next.lastHit = '暂无命中'
+  if (isLive) {
+    try {
+      await saveTask(next)
+      emit('navigate', '/tasks')
+    } catch (e) {
+      notify((e as Error).message)
+    }
+    return
+  }
   state.tasks.push(next)
   notify('任务已复制并保持暂停，可编辑后启用。')
   emit('navigate', '/task/' + next.id)
@@ -29,8 +48,13 @@ function remove(task: Task) {
   confirmAction(
     '删除「' + task.name + '」？',
     '任务将从当前列表移除。已有命中与投递历史仍保留；不会撤回已经发送的通知。',
-    () => {
-      state.tasks = state.tasks.filter((t) => t.id !== task.id)
+    async () => {
+      try {
+        await removeTask(task)
+      } catch (e) {
+        notify((e as Error).message)
+        return
+      }
       notify('任务已删除，历史记录已保留。')
     },
     '删除任务',
@@ -53,7 +77,7 @@ function remove(task: Task) {
       <span>全部任务</span><strong>{{ state.tasks.length }}</strong>
     </div>
     <div>
-      <span>运行中</span
+      <span>{{ isLive ? '已启用配置' : '运行中' }}</span
       ><strong class="positive-text">{{ state.tasks.filter((t) => t.enabled).length }}</strong>
     </div>
     <div>
@@ -67,7 +91,7 @@ function remove(task: Task) {
         <button
           v-for="item in [
             { id: 'all', label: '全部任务' },
-            { id: 'active', label: '运行中' },
+            { id: 'active', label: isLive ? '配置已启用' : '运行中' },
             { id: 'paused', label: '已暂停' },
           ]"
           :key="item.id"
@@ -103,7 +127,7 @@ function remove(task: Task) {
             }}</span>
           </div>
         </div>
-        <div class="management-stat">
+        <div v-if="!isLive" class="management-stat">
           <strong>{{ task.hits }}</strong
           ><span>历史示例命中</span>
         </div>
@@ -112,7 +136,7 @@ function remove(task: Task) {
             :model-value="task.enabled"
             :label="task.name + '启用状态'"
             @update:model-value="(value) => setTaskEnabled(task, value)"
-          /><span>{{ task.enabled ? '运行中' : '已暂停' }}</span>
+          /><span>{{ task.enabled ? (isLive ? '配置已启用' : '运行中') : '已暂停' }}</span>
         </div>
         <div class="row-actions">
           <button

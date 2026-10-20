@@ -4,16 +4,23 @@ import Icon from '../components/Icon.vue'
 import Toggle from '../components/Toggle.vue'
 import {
   state,
+  isLive,
+  runtime,
+  saveWebsite,
   notify,
   formatTime,
   confirmAction,
   addWebsite,
   removeWebsite,
   loadExampleWorkspace,
-} from '../store'
+  getWebsiteTest,
+  testWebsite,
+} from '@workspace'
 import { websiteCatalog, websiteDefinition } from '../websites'
+import type { ConnectionCheck } from '../shared'
 import type { InstalledWebsite } from '../websites'
 const emit = defineEmits<{ dirty: [value: boolean]; navigate: [path: string] }>()
+const mutating = ref(false)
 const search = ref(''),
   filter = ref('all'),
   catalogSearch = ref('')
@@ -26,6 +33,10 @@ const baseline = ref(10),
   testing = ref(false),
   scenario = ref('success'),
   testResult = ref('')
+const connection = ref<ConnectionCheck | null>(null)
+const connectionError = ref('')
+let connectionRead = 0
+const connectionTime = (value: number) => formatTime(new Date(value * 1000).toISOString())
 const selected = computed(() => state.websites.find((w) => w.id === selectedId.value))
 const definition = computed(() => websiteDefinition(selected.value?.adapterId || ''))
 const dirty = computed(() => !!selected.value && draft.interval !== baseline.value)
@@ -33,13 +44,15 @@ watch(dirty, (value) => emit('dirty', value))
 const status = (w: InstalledWebsite) =>
   !w.enabled
     ? '已暂停'
-    : w.health === 'error'
-      ? '连接异常'
-      : w.health === 'healthy'
-        ? '采集正常'
-        : '等待首次采集'
+    : isLive && !runtime.active
+      ? '后台未运行'
+      : w.health === 'error'
+        ? '连接异常'
+        : w.health === 'healthy'
+          ? '采集正常'
+          : '等待首次采集'
 const statusClass = (w: InstalledWebsite) =>
-  !w.enabled ? 'neutral' : w.health === 'healthy' ? 'yes' : 'unknown'
+  !w.enabled || (isLive && !runtime.active) ? 'neutral' : w.health === 'healthy' ? 'yes' : 'unknown'
 const linked = (id: string) => state.tasks.filter((t) => t.websiteId === id)
 const visible = computed(() =>
   state.websites.filter((w) => {
@@ -79,6 +92,9 @@ function detail(w: InstalledWebsite) {
   error.value = ''
   testResult.value = ''
   scenario.value = 'success'
+  connection.value = null
+  connectionError.value = ''
+  if (isLive) loadTest(w.id)
   show()
 }
 function close() {
@@ -98,24 +114,51 @@ function requestClose() {
     )
   else close()
 }
-function install(id: string) {
-  const w = addWebsite(id)
-  if (w) close()
+async function install(id: string) {
+  if (mutating.value) return
+  mutating.value = true
+  error.value = ''
+  try {
+    const w = await addWebsite(id)
+    if (w) close()
+  } catch (e) {
+    error.value = (e as Error).message
+  } finally {
+    mutating.value = false
+  }
 }
-function save() {
+async function save() {
+  if (mutating.value) return
   if (!selected.value) return
   if (!Number.isInteger(draft.interval) || draft.interval < 10 || draft.interval > 3600) {
     error.value = '采集间隔应为 10–3600 之间的整数秒。'
     return
   }
-  selected.value.interval = draft.interval
-  baseline.value = draft.interval
-  error.value = ''
-  notify('网站设置已保存在当前浏览器。')
+  mutating.value = true
+  try {
+    await saveWebsite(selected.value, draft.interval)
+    baseline.value = draft.interval
+    error.value = ''
+    notify(isLive ? '网站配置已保存到服务端，将按启停状态采集。' : '网站设置已保存在当前浏览器。')
+  } catch (e) {
+    error.value = (e as Error).message
+  } finally {
+    mutating.value = false
+  }
 }
 function toggle(w: InstalledWebsite, enabled: boolean) {
-  const apply = () => {
-    w.enabled = enabled
+  const apply = async () => {
+    if (mutating.value) return
+    mutating.value = true
+    try {
+      await saveWebsite(w, w.interval, enabled)
+    } catch (e) {
+      notify((e as Error).message)
+      return
+    } finally {
+      mutating.value = false
+    }
+    if (isLive) return
     notify(
       enabled
         ? '网站已启用，将以当前条目建立基线，不补发历史帖子。'
@@ -131,9 +174,42 @@ function toggle(w: InstalledWebsite, enabled: boolean) {
       '暂停网站',
     )
 }
+async function loadTest(id: string) {
+  const read = ++connectionRead
+  try {
+    const result = await getWebsiteTest(id)
+    if (selectedId.value === id && read === connectionRead) connection.value = result
+  } catch (error) {
+    if (selectedId.value === id && read === connectionRead)
+      connectionError.value = (error as Error).message
+  }
+}
+async function runLiveTest(id: string) {
+  if (testing.value) return
+  ++connectionRead
+  testing.value = true
+  connectionError.value = ''
+  try {
+    const result = await testWebsite(id)
+    if (selectedId.value === id) connection.value = result
+  } catch (error) {
+    if (selectedId.value === id) connectionError.value = (error as Error).message
+  } finally {
+    testing.value = false
+  }
+}
 async function test() {
   const w = selected.value
   if (!w || testing.value) return
+  if (isLive) {
+    confirmAction(
+      '测试 NodeSeek 官方 RSS 连接？',
+      '将请求一次官方 RSS，使用已保存的采集间隔并遵守退避。不会启用网站、保存草稿间隔或创建帖子、命中及通知。',
+      () => runLiveTest(w.id),
+      '确认测试连接',
+    )
+    return
+  }
   const result = scenario.value
   testing.value = true
   testResult.value = ''
@@ -162,8 +238,16 @@ function remove() {
   confirmAction(
     '移除 ' + definition.value?.name + '？',
     '移除该网站的采集配置，已有内容与投递历史保留。之后可以从内置网站库重新添加。',
-    () => {
-      if (removeWebsite(w.id)) close()
+    async () => {
+      if (mutating.value) return
+      mutating.value = true
+      try {
+        if (await removeWebsite(w.id)) close()
+      } catch (e) {
+        error.value = (e as Error).message
+      } finally {
+        mutating.value = false
+      }
     },
     '确认移除',
   )
@@ -315,7 +399,11 @@ onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
         >当前可添加 NodeSeek；更多网站将在完成适配后加入内置库。</span
       >
     </p>
-    <button v-if="!state.websites.length" class="text-link" @click="loadExampleWorkspace">
+    <button
+      v-if="!isLive && !state.websites.length"
+      class="text-link"
+      @click="loadExampleWorkspace"
+    >
       载入示例工作台
     </button>
   </div>
@@ -344,6 +432,7 @@ onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
           <Icon name="close" :size="21" />
         </button>
       </header>
+      <p v-if="error && mode === 'catalog'" class="form-errors" role="alert">{{ error }}</p>
       <div v-if="mode === 'catalog'" class="website-drawer-body">
         <p class="drawer-intro">选择你真正关注的网站。添加后可独立调整采集频率，随时暂停或移除。</p>
         <label class="search-input catalog-search"
@@ -373,7 +462,7 @@ onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
               <span><Icon name="rss" :size="15" />{{ item.sourceLabel }}</span
               ><button
                 class="button primary"
-                :disabled="state.websites.some((w) => w.adapterId === item.id)"
+                :disabled="mutating || state.websites.some((w) => w.adapterId === item.id)"
                 @click="install(item.id)"
               >
                 {{
@@ -453,19 +542,30 @@ onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
             <div class="info-note">
               <Icon name="shield" :size="17" />
               <p>
-                首次启用或暂停后恢复时建立当前基线，不推送已有帖子。请求不重叠，异常时退避重试。
+                {{
+                  isLive
+                    ? '启用后由服务端采集官方 RSS。首次启用或暂停后恢复时只建立基线，不补发历史；关闭浏览器仍会运行。'
+                    : '首次启用或暂停后恢复时建立当前基线，不推送已有帖子。请求不重叠，异常时退避重试。'
+                }}
               </p>
             </div>
           </section>
           <section class="drawer-section">
             <div class="drawer-section-title">
               <h3>连接测试</h3>
-              <span class="small-badge neutral">模拟</span>
+              <span class="small-badge neutral">{{ isLive ? '不采集入库' : '模拟' }}</span>
             </div>
-            <p class="field-help">只验证连接状态的界面反馈，不请求真实网站，不开启采集。</p>
+            <p class="field-help">
+              {{
+                isLive
+                  ? '仅检查官方 RSS 的连接与解析，不开启采集，不改变历史、基线和去重。'
+                  : '只验证连接状态的界面反馈，不请求真实网站，不开启采集。'
+              }}
+            </p>
             <div class="website-test-row">
-              <label class="sr-only" for="source-scenario">模拟场景</label
+              <label v-if="!isLive" class="sr-only" for="source-scenario">模拟场景</label
               ><select
+                v-if="!isLive"
                 id="source-scenario"
                 v-model="scenario"
                 class="text-input"
@@ -475,19 +575,41 @@ onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
                 <option value="error">服务暂时不可用</option></select
               ><button class="button" :disabled="testing" @click="test">
                 <Icon name="refresh" :size="16" :class="{ spinning: testing }" />{{
-                  testing ? '测试中…' : '测试连接（模拟）'
+                  testing ? '测试中…' : isLive ? '测试连接' : '测试连接（模拟）'
                 }}
               </button>
             </div>
             <div
-              v-if="testResult"
+              v-if="!isLive && testResult"
               class="match-result"
               :class="selected.health === 'healthy' ? 'yes' : 'unknown'"
               role="status"
             >
               {{ testResult }}
             </div>
-            <p class="small-note">最近测试：{{ formatTime(selected.lastTest) }}</p>
+            <p v-if="connectionError" class="form-errors" role="alert">{{ connectionError }}</p>
+            <div
+              v-if="isLive && connection"
+              class="match-result"
+              :class="connection.status === 'success' ? 'yes' : 'unknown'"
+              role="status"
+            >
+              <strong>{{
+                connection.status === 'success'
+                  ? 'RSS 连接与解析成功'
+                  : connection.status === 'failure'
+                    ? '连接测试失败'
+                    : '连接测试结果未知'
+              }}</strong>
+              <p v-if="connection.status === 'success'">
+                有效帖子 {{ connection.item_count }} 条，仅检查，未入库。
+              </p>
+              <p v-else>诊断代码：{{ connection.code }}</p>
+              <p>最近测试：{{ connectionTime(connection.started_at) }}</p>
+              <p>下次可请求时间：{{ connectionTime(connection.next_attempt_at) }}</p>
+            </div>
+            <p v-else-if="isLive" class="small-note">尚无连接测试记录。</p>
+            <p v-else class="small-note">最近测试：{{ formatTime(selected.lastTest) }}</p>
           </section>
           <section class="drawer-section">
             <div class="drawer-section-title">
@@ -529,7 +651,7 @@ onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
         <footer class="website-drawer-footer">
           <span>{{ dirty ? '有未保存的修改' : '设置已保存' }}</span
           ><button class="button" @click="requestClose">关闭</button
-          ><button class="button primary" @click="save">
+          ><button class="button primary" :disabled="mutating" @click="save">
             <Icon name="check" :size="16" />保存设置
           </button>
         </footer>

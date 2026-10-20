@@ -23,6 +23,7 @@ def create_database_engine(settings: Settings) -> Engine:
     engine = create_engine(
         URL.create("sqlite", database=str(settings.database_path)),
         connect_args={"check_same_thread": False, "timeout": 5},
+        hide_parameters=True,
     )
 
     @event.listens_for(engine, "connect")
@@ -40,6 +41,9 @@ def migrate(engine: Engine, revision: str = "head") -> None:
     config = migration_config()
     with engine.connect() as connection:
         connection.exec_driver_sql("BEGIN IMMEDIATE")
+        config.attributes["upgrading_existing"] = (
+            MigrationContext.configure(connection).get_current_revision() is not None
+        )
         config.attributes["connection"] = connection
         try:
             command.upgrade(config, revision)
@@ -66,7 +70,7 @@ def instance_lock(data_dir: Path):
     # Linux is the supported service runtime. Hold the descriptor for the entire lifespan.
     import fcntl
 
-    data_dir.mkdir(parents=True, exist_ok=True)
+    data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     with (data_dir / ".instance.lock").open("a") as handle:
         try:
             fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)

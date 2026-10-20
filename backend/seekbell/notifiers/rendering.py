@@ -20,6 +20,19 @@ def line(value) -> str:
 
 
 def render(payload: dict, config: dict, *, limit: int = 4000) -> str:
+    if payload.get("type") == "system_alert":
+        alert = payload["alert"]
+        return clip(
+            "\n".join(
+                [
+                    message_title(payload),
+                    "状态：" + ("故障" if alert["phase"] == "fault" else "恢复"),
+                    "时间：" + datetime.fromtimestamp(alert["at"], UTC).isoformat(),
+                    "诊断代码：" + line(alert.get("code") or "recovered"),
+                ]
+            ),
+            limit,
+        )
     post = payload["post"]
     timestamp = post.get("published_at")
     if not timestamp and post.get("first_seen_at") is not None:
@@ -38,7 +51,26 @@ def render(payload: dict, config: dict, *, limit: int = 4000) -> str:
     return clip("\n".join(lines), limit)
 
 
+def message_title(payload):
+    if payload.get("type") == "system_alert":
+        return (
+            "SeekBell 系统故障：" if payload["alert"]["phase"] == "fault" else "SeekBell 系统恢复："
+        ) + line(payload["alert"]["label"])
+    return payload["post"]["title"]
+
+
+def message_url(payload):
+    return None if payload.get("type") == "system_alert" else payload["post"]["url"]
+
+
 def webhook_payload(payload: dict, config: dict) -> dict:
+    if payload.get("type") == "system_alert":
+        return {
+            "schema_version": 2,
+            "event_id": payload["event_id"],
+            "type": "system_alert",
+            "alert": dict(payload["alert"]),
+        }
     post = dict(payload["post"])
     post["summary"] = (
         clip(post["summary"], config["summary_limit"])

@@ -18,7 +18,16 @@
     "build:prototype": "pnpm typecheck && vite build --config vite.prototype.config.ts",
     "preview:prototype": "vite preview --config vite.prototype.config.ts --host 127.0.0.1 --port 5174",
     "test:prototype": "playwright test",
-    "serve:prototype": "node serve-prototype.mjs"
+    "serve:prototype": "node serve-prototype.mjs",
+    "test:live": "playwright test --config playwright.live.config.ts",
+    "test:history": "playwright test --config playwright.history.config.ts",
+    "test:sending": "playwright test --config playwright.sending.config.ts",
+    "test:runtime": "playwright test --config playwright.runtime.config.ts",
+    "test:operations": "playwright test --config playwright.operations.config.ts",
+    "test:retention": "playwright test --config playwright.retention.config.ts",
+    "test:system": "playwright test --config playwright.system.config.ts",
+    "test:backup": "playwright test --config playwright.backup.config.ts",
+    "test:proxy": "playwright test --config playwright.proxy.config.ts"
   },
   "dependencies": {
     "naive-ui": "2.45.3",

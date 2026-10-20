@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import contextmanager
 
 from sqlalchemy import Engine
@@ -15,3 +16,13 @@ def write_session(engine: Engine):
         except BaseException:
             session.rollback()
             raise
+
+
+async def database_call(action, *args, **kwargs):
+    """A cancelled actor must join its SQLite thread before engine disposal."""
+    task = asyncio.create_task(asyncio.to_thread(action, *args, **kwargs))
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        await task
+        raise

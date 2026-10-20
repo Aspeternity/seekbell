@@ -112,6 +112,156 @@ Codex 可在授权 SSH 范围内部署测试环境；没有 SSH 则提供含固�
 
 新浏览器/重置默认为空工作空间；示例只能主动载入。存储v3白名单化网站与关联字段；v2单一隐含来源迁移成已添加NodeSeek并保留任务、记录和设置，旧备份同样迁移；不清空用户旧数据。实际目录仍只注册NodeSeek，测试中临时注入多个合成目录项验证独立配置，不随产品交付额外适配器。
 
-后端尚保留M1种子NodeSeek网站/关闭来源的实现，未因UI改动执行数据库迁移。正式接入时必须区分内置目录与已添加实例，让首次安装无实例；旧部署需保留已有配置/身份账本。不能仅隐藏种子行或直接删除旧来源数据来伪装实现这一需求。
+v0.3原型阶段未迁移后端。M3首个接入阶段通过独立WebsiteInstallation表达安装实例，保留Website/Source作为适配器身份与历史锚点；新库无安装记录，旧部署保留原实例/配置/身份账本，具体迁移契约见下节。
 
 2026-10-20 v0.4：网站目录选择以居中原生dialog展示，配置仍右侧面板；添加完成关闭选择器，不自动切换或叠加配置。偏好新增workspaceName/workspaceDescription普通字段，App侧栏读取已保存值，Settings保留草稿和预览；沿用v3兼容格式，对缺失新字段的v2/v3数据及备份补默认值，校验长度并白名单导出，不修改账号模型或后端。
+
+
+## M3首个真实接入契约（2026-10-20）
+
+默认生产入口复用v0.4页面与样式，Vite的@workspace别名分别选择live或模拟store。共享纯类型/渠道元数据位于prototype/shared.ts；正式Bootstrap传入正式概览/设置视图，模拟构建不导入live模块。正式状态来自/api/manage/workspace，不迁移演示账号/浏览器备份，不写演示localStorage。保留独立prototype.html及dist-prototype。
+
+0004_management增加单例Administrator、LoginSession、WebsiteInstallation、WorkspacePreferences；TaskVersion增加最多160字符description。SQLite迁移入口持BEGIN IMMEDIATE后识别空库/既有迁移版本：空库安装实例表为空，从既有M0/M1/M2升级保留原网站实例。适配器身份行不是用户已安装实例；移除实例仅删除安装关系、禁用来源并重建后续基线，保留历史身份。活跃任务依赖阻止移除；创建任务在同一配置写事务检查安装关系。任务所属网站固定，备注随规则版本留证。
+
+初始化的管理员和会话同事务创建，管理员主键限制id=1，不使用初始化令牌。密码为独立随机盐scrypt(N=2^17,r=8,p=1)。不透明随机会话令牌仅以SHA-256摘要存入服务端，12小时过期，退出删除。Cookie为HttpOnly/SameSite=Strict，可信HTTPS请求标Secure。登录/初始化使用进程密钥签名的预会话CSRF，管理写入验证会话CSRF及Origin；不信任未配置的代理。API no-store，验证错误不包含输入，SQL日志隐藏参数。认证来源每分钟10次/全局30次，内存限速且哈希串行；重启重置限速，不是多副本方案。参考[OWASP密码存储](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)及[CSRF](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)。
+
+M3配置API复用Configuration及CredentialVault，启动创建/加载私有密钥；已有密文缺钥/错钥直接停止。目标新增/编辑/启停和配置读写已接入，留空敏感字段保留，不回显值；目标更新与停用取消在同一事务。为满足任务至少一个已配置目标的规格，首闭环支持四渠道配置，但不启用测试发送或采集/投递生命周期。规则试算使用原RuleEngine。工作空间名称/说明单例存储，不扩展多用户或多工作空间。
+
+本子阶段不宣称M3完成：正式概览仅配置数量，历史/投递/统计、管理员修改、目标删除/测试及备份/保留/告警仍待接入，不执行模拟成功。离线核心服务维持已有语义；SourceRunner/DeliveryWorker尚不由FastAPI启动。检查与复现见本阶段证据及README。
+
+
+## M3历史查询与判定快照（2026-10-20，第二子阶段）
+
+接续首闭环，正式入口现已接内容/判定、自动投递及独立目标测试的只读历史。0005_history新增TaskEvaluation（task_id/task_version/website_id/external_post_id四元主键、三值结果/原因/时间）及Post.baseline可空列，和新帖子/RuleHit/outbox同事务保存。基线不匹配，重复摄取不重写。旧baseline保持NULL，不回填缺失负面判定；旧RuleHit与新结果按四元键去重读取，不调用当前规则重算。TaskEvaluation属于普通历史，未来清理不得影响SeenPost/DeliveredPost精简账本。
+
+services/history.py仅数据库读取，api/history.py复用管理员会话/no-store。总数、聚合和分页使用显式BEGIN的WAL读快照，不获取BEGIN IMMEDIATE写锁；固定时间+身份排序，默认20/最大100条。内容按首次发现、意图按建立、测试按开始日期，IANA时区午夜到次日午夜处理DST。列表只返回摘要和少量任务标签；判定、关联投递、尝试与任务快照均分页。详情链接使用网站/帖子复合身份的规范base64url键。
+
+结果聚合为命中优先、其次信息不足、其次不命中；无判定的基线/无适用任务与旧版本未记录结果明确区分。按任务筛选时仅使用该任务的历史结果。规则名称/版本/原因取不可变TaskVersion和判定；目标/消息名取outbox快照，删除或改名不重写。uncertain独立于投递状态，sent仍可标为曾未知；尝试和迟到结果分别展示，读接口不自动过期租约或调度。Post清理不影响outbox消息快照与回执读取。
+
+读取按白名单构建DTO，不返回目标密文/连接字段或lease_token；HTML仍为文本，原帖链接通过NodeSeek身份校验后规范化。查询失败、空结果、缺失记录分开；新查询及组件卸载丢弃旧响应。正式组件通过Bootstrap注入，独立模拟入口保持隔离。测试合成历史只在scripts/run_web_smoke.py --history的临时库/本机8012生成，不提供产品种子接口；应用生命周期仍不启动采集/投递。细节、命令和证据见[本阶段记录](history/2026-10-20-历史查询接入.md)。
+
+## M3概览与管理员修改（2026-10-20，第三子阶段）
+
+GET /api/manage/overview?range=24h|7d复用认证/no-store与显式BEGIN只读快照。UTC滚动窗口左闭右开，分别24个一小时桶、7个24小时桶；显示时区仅负责时间格式，不将滚动24小时冒充日历日。首次发现数限仍保留的Post；命中/信息不足取判定账本，兼容旧RuleHit且按四元键去重，包含已删除任务及历史版本。趋势/最近5条与汇总同窗，最近名称取TaskVersion，内容已清理时明确无原文入口。不会访问网络或执行规则。
+
+渠道确认接受按DeliveredPost.delivered_at统计帖子×目标唯一回执，重试/迟到结果不重复计数，不包含独立目标测试，不推断进入收件箱。当前队列及待关注使用全部保留Outbox，不跟随窗口：failed/retry/uncertain取并集，曾未知即便后续sent仍保留。来源仅列安装实例对应的数据库状态（最后尝试/成功、连续失败、可能缺口）；配置启用与运行状态分开，应用生命周期仍未启动采集/发送。
+
+PUT /api/auth/administrator接受username、current_password及可选new_password，复用会话CSRF/Origin、认证限速与串行scrypt；当前密码错误400、会话失效401、格式或无修改422。新用户名沿用3–32位ASCII字母/数字/下划线/短横线，新密码8–128字符；省略新密码保留密码。昂贵哈希在写锁外，写事务再次核对会话存在/过期、CSRF及凭据哈希，原子更新单例管理员、删除全部旧会话并建立新Cookie/CSRF。仅改用户名也换随机盐，防止改名往返后旧凭据验证继续生效；登录在哈希后写事务重查用户名/哈希，阻止密码修改竞态重新发出旧密码会话。无需新增迁移。
+
+正式设置等待服务端成功后才同步账号并清空密码草稿，错误保留编辑、支持未保存保护，不写浏览器持久存储。浏览器统计与管理员表单测试仍复用history临时库；固定时钟只通过测试入口依赖覆盖，不提供生产时间参数或模拟数据开关。接口口径、自动证据及未完成范围见[阶段记录](history/2026-10-20-概览与管理员接入.md)。
+
+## M3独立通知操作（2026-10-20，第四子阶段）
+
+应用生命周期创建/关闭NotifierRegistry，供受保护的显式测试/重发使用，仍不启动SourceRunner或DeliveryWorker。GET /api/manage/targets/{id}/test-preview与/deliveries/{id}/resend-preview只返回目标名称/渠道/版本及消息标题；POST对应/test、/resend要求会话CSRF/Origin、request_id UUID和确认的目标revision。仅支持四种已配置渠道；目标测试允许暂停目标，重发要求目标启用、原意图为sent/failed/cancelled，避免与pending/retry/leased自动投递并行。确认后配置版本变化返回409，界面需重新打开确认。
+
+沿用TargetTesting的先持久化后网络、单次10秒上限及未知留证，新增ConfiguredTargetTesting验证入口和ManualSending。每次界面操作生成随机UUID，结果响应丢失后的重试沿用同一UUID：记录存在时返回已有结果，不再次发送；同一UUID绑定原目标/原投递，不能用于另一对象。SQLite写事务串行检查和建立记录，覆盖并发重复请求；记录存续期间实现此幂等，不承诺渠道端exactly-once。进程内显式操作最多2个并发，满额429，未建立新记录。取消/退出/重启中断可留下finished_at为空的unknown，刷新可读，绝不自动重试或把未知当成功。SMTP线程和HTTP渠道沿用M2边界。
+
+0006_manual_delivery仅增加manual_deliveries及开始/目标/来源索引；保存原自动事件ID、当前目标的加密配置快照、原消息快照、开始/完成时间及结果。原ID不是外键，原自动可读历史清理不破坏独立留证；目标身份仍为外键。重发使用当前目标配置及原消息内容/任务快照，生成新消息事件ID，不重写原outbox、attempt、贡献、SeenPost或DeliveredPost，不重新执行规则；不会因手动成功修改自动去重，不进入自动队列或重试。明确接受/拒绝/临时错误/未知均单独记录。
+
+GET /api/manage/history/manual及/{id}复用只读快照、分页/日期/目标/状态/目标名筛选；支持source_event_id查询关联记录。详情含当前操作时目标名称/配置版本、消息/任务快照分页和原记录入口，只按白名单返回，无密文/地址/租约。概览回执指标明确为自动投递，独立测试与手动重发不计入。正式目标列表/确认弹窗通过Bootstrap注入；原型保留模拟行为。弹窗确认前无发送，取消不改变数据，未知明确提示可能重复；普通HTTP也可生成操作UUID，不依赖secure-context的randomUUID。
+
+浏览器发送验证使用独立--sending临时库/8013及测试依赖覆盖，全部渠道替换为合成Notifier，产品无模拟渠道开关；正常生产端只在管理员确认POST时调用真实适配器。离线CLI演练增加显式操作，仍只用临时库、合成配置及模拟发送。检查、授权和限制见[阶段证据](history/2026-10-20-通知测试与手动重发.md)。
+
+## M3服务端运行生命周期（2026-10-20，第五子阶段）
+
+FastAPI lifespan在数据目录实例锁内完成迁移/密钥校验，再建立唯一Runtime：一个NodeSeek SourceRunner、一个DeliveryWorker，共享既有NotifierRegistry，线程化SQLite操作。首版不创建多进程/副本或任务级采集器；初始化前不采集/发送，来源还需已安装实例、网站及来源启用。空库仍无网站，启用后首次成功仅建立基线；关闭浏览器或退出登录不停止服务，进程重启保留初始化/已见/回执、退避和队列。无需新增迁移。
+
+SourceRunner的持久next_attempt_at决定网络频率，循环每秒检查启停/配置，不因旧3600秒间隔长睡眠；跳过未到期轮次，不补抓错过的时刻、不重叠请求。成功采集/入库后按当前间隔排下次；修改正常来源间隔按last_attempt_at重排，缩短可及时生效、延长不会先按旧短间隔额外抓取。失败已有退避不因改频率或重新启用而缩短，更长间隔可延后。RSS总获取/解析等待上限15秒，沿用1MiB、无重定向/环境代理和固定官方URL，错误落来源状态/退避，不误记成功空源。暂停后恢复重建基线；仅重启不重建。网站暂停停止新采集，已生成消息仍按任务/目标和原贡献规则处理。
+
+DeliveryWorker自行认领、发送、完成与有限重试，沿用同帖×目标唯一、不可变快照、租约及未知留证。后台和显式操作共享真实渠道实例，保持SMTP发送锁。停止先设置stop、唤醒等待并等待在途轮次；16秒宽限后取消未完成actor，未完成自动认领保留租约/尝试，重启至租约过期后记unknown并按原政策恢复，不能伪称撤回或exactly-once。统一database_call屏蔽单次取消、等待SQLite线程完成，再关闭RSS/渠道客户端、dispose引擎并释放实例锁；因此16秒不是强杀数据库线程的硬截止。纯RSS解析线程不持数据库或发通知。
+
+来源HTTP/解析可预期错误只影响来源；actor意外退出/异常则置failed、停止另一actor且不在进程内盲目重启。日志只记固定collection/delivery标签与代码，不记录异常文本、参数、URL或凭据。GET /api/manage/runtime返回active/status/code，workspace/overview也携带实际进程状态，/health/ready同时检查数据库和两个actor；actor失效503，/health/live仍报告进程存在。running表示循环存活，不替代外部RSS/渠道健康，来源错误/退避另行显示。前端每5秒仅刷新轻量运行状态，不轮询配置覆盖编辑草稿；概览仍手动刷新历史统计，新增下次可尝试时间。
+
+测试默认以构造依赖隔离旧CRUD/历史用例，独立runtime用例使用真实Runtime和MockTransport/模拟Notifier，产品无关闭后台/模拟结果环境开关。8014浏览器临时服务在真实10秒间隔中关闭浏览器、停止所有API轮询，再观察后台新投递；生产默认构造与Rootless镜像运行另有检查。runtime_demo是独立临时库/合成服务演练，和日常数据无关。细节及证据见[本阶段记录](history/2026-10-20-后台生命周期接入.md)。
+
+
+## M3管理操作补全（2026-10-20，第六子阶段）
+
+0007_management_operations给NotificationTarget增加deleted_at，删除保留身份与已有不可变快照，仅清空当前密文、禁用并提升版本。Configuration.delete_target在BEGIN IMMEDIATE中读取所有未删除任务的当前版本；包括暂停任务在内，仍引用目标则409，不能强制删除或自动重写规则。新建/修改任务与删除使用同一串行写事务，防止悬空依赖。删除取消pending/retry；leased标cancel_requested，保留租约和在途/迟到接受回执。当前目标列表/概览排除已删除；配置更新、重新启用、新测试/重发拒绝已删除目标。已建立显式操作可完成或沿用ID查询，不重复发送；删除不能撤回在途消息。最后一个当前配置删除后，启动仍检查历史密文并要求原密钥，不能静默换钥。
+
+POST /api/manage/rules/history接受内置website_id、当前草稿Rule及1–100条上限。仅在显式BEGIN只读快照内统计本地Post，并按first_seen_at和身份倒序取最近样本（包括基线），通过纯RuleEngine试算。返回本地总数、样本数、首次发现时间范围和逐条三值原因/警告；缺失摘要与空摘要保持不同。不补抓网页，不引用旧判定冒充当前草稿结果，不保存规则、判定/命中或身份/回执，不触碰队列。前端20/50/100选择、空历史/错误与过期草稿响应分别处理；模拟入口维持合成样本。
+
+GET/POST /api/manage/websites/nodeseek/connection-test复用认证和CSRF。POST接受空对象，拒绝额外URL配置；使用Runtime持有的同一个SourceRunner锁和RSS客户端，15秒获取/解析等待、1MiB、固定官方地址、不跟随重定向/环境代理。暂停/未到期的调度轮次在锁外只读检查，真正到期后锁内再次核对状态；显式检查与正式采集绝不重叠。来源忙409，间隔/退避429并带Retry-After。未安装或后台未运行拒绝操作。
+
+新SourceProbe每来源仅存最近一次开始/完成时间、结果/固定诊断码、有效条目数和下次可请求时间；发请求前先持久化unknown/cooldown，中断不伪称成功。它不写SourceState/SourceRun、Post、基线/命中或账本；网站移除仍保留来源锚点和限频，重新添加不能绕过。检查前同时服从正式来源next_attempt_at/last_attempt_at及既有probe间隔，失败服从Retry-After与SourcePolicy退避。正式采集也服从probe时间；改变间隔不会绕过测试退避，概览显示合并后的有效时间。测试成功不清除正式采集故障或冒充正式采集成功。结果刷新可读，未保存的面板间隔不参与测试；Runtime停止时同时join/cancel在途显式检查，再关闭客户端/数据库。
+
+管理操作浏览器验证使用独立--operations临时库/8015：实际锁/采集器配MockTransport，投递actor隔离，显式通知服务由测试依赖替换。产品无新增模拟开关。证据与命令见[本阶段记录](history/2026-10-20-管理操作接入.md)。
+
+
+## M3保留策略与历史清理（2026-10-20，第七子阶段）
+
+0008_retention新增单例RetentionPolicy：days（1–365，默认30）、revision、next_run_at、last_run_at及last_counts；只修改保留天数时提升版本。GET/PUT /api/manage/retention沿用管理员会话/no-store和写入CSRF/Origin；PUT严格校验天数/期望revision，过期版本409，不能覆盖另一个页面的新策略。GET和保存请求不执行清理；更改天数将next_run_at置0，由服务端actor处理。workspace返回实际retention天数。正式设置新增独立保留策略页，确认清理不可逆、保存成功后更新基准；失败/409保留草稿，可明确重新读取，沿用导航未保存保护。原型保持原有模拟保存。
+
+新HistoryRetention与采集、投递同属唯一Runtime，初始化前不工作；无需网站启用或浏览器保持打开。默认每小时完成一次检查，候选达到每类100个父项时每秒续批，不补跑错过的轮次。未到期/初始化前的唤醒只读；真正清理持BEGIN IMMEDIATE，同事务重查策略/到期并删除依赖、父项及更新检查点。与摄取/认领/完成/配置取消串行，避免检查后被另一写入改变。停止复用database_call的屏蔽取消/join规则，先等待数据库线程，再dispose；actor意外失败使用固定retention_stopped代码并降低就绪，日志不输出异常/SQL参数。
+
+按UTC连续86400秒/天，严格早于cutoff才过期，边界时刻保留。Outbox只清sent/failed/cancelled，要求created_at与completed_at均过期，且所有尝试已结束、开始/完成/迟到结果都过期；pending/retry/leased和未完成尝试始终受保护。先删除该批DeliveryAttempt与OutboxContribution，再删Outbox；只有不再有任何保留Outbox的过期Post才与对应TaskEvaluation/RuleHit同批清理。旧版已经没有Post的孤立过期判定/命中另行有界清理，贡献仍有引用则不删。已完成目标测试/手动重发按finished_at清理，finished_at为空的未知/未完成记录保留；SourceRun按at清理。ManualDelivery原事件ID不是FK，原自动记录过期不损坏仍保留的手动消息快照，详情标示原记录已清理。显式操作同ID幂等仅在对应记录保留期间成立。
+
+SeenPost、DeliveredPost和SourceItem均为独立身份/回执账本，不参与普通历史清理；SourceState/SourceProbe、安装关系、管理员、任务/版本和通知配置也不在清理范围。不因Post/outbox消失重新入库旧帖或补发，迟到结果/未知状态在受保护或保留周期内继续可追踪。清理不执行VACUUM，不承诺SQLite文件立即缩小；版本清理、备份恢复和账本主动删除不在本阶段。
+
+Outbox新增completed_at和清理索引，正常完成、认领时确认终态、任务/目标取消等待意图，以及终态收到迟到结果均记录当前时间；不会仅凭很久以前的created_at清掉刚完成的重试或取消。旧库原来没有终态时间，迁移时仅对已有终态设升级时刻，额外保留完整周期，不猜测历史完成时间；队列/租约原样保留。给采集历史/判定/命中/显式操作增加清理时间索引，ORM与迁移一致，失败DDL/数据/版本整体回滚。
+
+普通历史清理会影响内容/命中/采集统计窗口；自动投递数量继续取独立回执，概览说明两种口径。最近一批数量与下次检查时间可读取，不将它冒充永久累计值。只在独立临时库/模拟依赖验证；--retention浏览器服务8016仅启用实际清理actor，源与通知actor使用测试注入隔离，产品无模拟开关。runtime_demo增加真实后台清理与保留两条已见/来源身份及一条回执的离线检查。证据见[本阶段记录](history/2026-10-20-保留策略与清理接入.md)。
+
+
+## M3显示时区与系统告警（2026-10-20，第八子阶段）
+
+0009_display_alerts给WorkspacePreferences增加timezone/display_revision。旧库保留原Asia/Shanghai显示；新管理员与会话创建事务中写入浏览器IANA时区，缺省UTC，之后登录不覆盖。服务端zoneinfo校验并返回可选目录，GET/PUT /api/manage/display使用认证、CSRF和期望revision，冲突409。时间戳仍存UTC，内容/投递/概览/事件共享保存时区，日历日筛选沿用历史API的时区参数；客户端不支持保存时区则明确回退UTC。设置草稿、错误、重新读取/导航保护以及离开页面后的迟到响应均不能覆盖新页面设置。
+
+AlertSettings单例默认关闭，独立选择最多64个已配置目标，版本冲突409；开启需至少一个目标。保存只影响之后的事件，不回填旧故障。SystemState是每组件永久状态/代次锚点；首次失败产生fault，新故障代次递增，持续失败不重复事件，实际成功产生同代recovery。SystemEvent按组件/代次/阶段唯一，AlertDelivery按事件/目标唯一，生成时固定加密目标快照。正式RSS记录失败/成功与observe同事务；自动渠道仅当前有效租约、目标启用且配置revision相同时更新，旧租约/旧配置回调不回退当前健康。显式来源测试、目标测试、手动重发均不改变正式故障状态；暂停/改配置自身不伪称恢复。
+
+独立AlertWorker先将pending持久化为unknown/started_at再在事务外发送，单次上限10秒；每事件×目标只尝试一次，临时失败和中断未知也不自动重发，不承诺远端exactly-once。重新启动不认领unknown；失败不触发递归告警。生成和认领均检查目标状态，禁用/取消选择取消尚未开始的pending，恢复不倾倒旧告警；在途无法撤回。删除目标前必须解除告警选择（关闭设置也仍保留依赖）。只有历史告警密文仍存时也必须加载原凭据密钥，不能换钥。
+
+Runtime增加独立alert_stop；其他actor意外失败降低就绪并停止采集/自动投递/清理，告警actor继续处理持久化事件。固定标签异步报告任务由Runtime追踪并在退出时join；正常启动循环后才恢复已有runtime故障，RSS/渠道仍要求自身实际成功。告警actor自身故障可留诊断，无法保证当时发送；整进程退出、数据库不可写或所有通道失效均不能由同进程保证外部通知。本功能不是外部看门狗。关停先停止所有actor/报告/探测，再关闭网络客户端和引擎。
+
+系统消息使用独立schema_version=2、type=system_alert及alert对象，无伪造Post或任务；Webhook投递ID同时作稳定event_id/Idempotency-Key，普通帖子v1保持原约定。TG/Bark/SMTP复用既有凭据解密、网络限制和纯文本边界；Bark系统消息不带原帖url。固定故障代码不含远端错误/配置。GET /api/manage/alerts/state、/history及/history/{id}只读快照分页（上限100）返回白名单诊断/结果，不返回密文或接收地址。未知与失败可见，但本阶段不加手动重发系统告警入口。
+
+普通保留清理可删过期SystemEvent及其全部已结束、完成时间过期的AlertDelivery；pending或未结束unknown保护整个事件。SystemState代次锚点不删，历史清空不重新发持续故障。新表、索引与ORM一致，迁移整体回滚。独立--system/8017浏览器服务使用临时库、真实Runtime及模拟HTTP/Notifier；产品无模拟开关。验证与边界见[阶段记录](history/2026-10-20-时区与系统告警接入.md)。
+
+
+## M3版本信息与退出核对（2026-10-20，第九子阶段）
+
+正式设置AboutSettings复用/api/version、/health/ready及受认证/api/manage/runtime，不新增后端或数据库结构。api.ts分离版本/就绪读取及协议校验，两者各自限8秒/禁止缓存；就绪503仍允许显示可读版本，非约定健康响应显示读取错误。原独立状态入口loadSystemInfo仍要求就绪。界面保留完整构建版本，development标明未固定提交，迁移null不冒充管理员未初始化；真实Runtime状态另行读取，401沿用会话过期处理。共享useRemote忽略过期/卸载响应，手动刷新/重试不写配置或发送消息。就绪只说明数据库与运行循环，不作为外部RSS可用或实际收信的证明。
+
+正式导航提供版本信息；生产备份恢复按M4，既有备份直达地址明确未可用，不提供模拟导入/导出。未知设置地址404，正式空态与帮助说明以已接入范围为准；模拟原型独立。M3操作/路由核对及证据见[退出矩阵](history/2026-10-20-版本信息与M3退出核对.md)，用户验收与真实服务验证另记。
+
+
+## M4本地Compose与停服加密备份（2026-10-20，第一子阶段）
+
+compose.yaml显式要求SEEKBELL_IMAGE，pull_policy=never；单实例/10001、只读根、/data命名卷、/tmp、cap_drop ALL/no-new-privileges和30秒stop_grace_period，默认只绑定127.0.0.1。维护覆盖文件禁外网/端口，私有/backup及/restore绑定路径必须已存在；首次目录初始化仅对新的空目录由临时root+CHOWN准备UID10001，不改变业务权限。检查脚本为每次创建唯一项目/卷，禁外网执行并清理，不接触日常卷。
+
+backup.py只提供交互式本地维护CLI，没有未经认证的备份HTTP接口。create复用instance_lock要求停服，通过sqlite3.Connection.backup复制已提交WAL的一致快照；先校验迁移/SQLAlchemy结构、quick_check/外键、管理员及全量当前/历史密文原钥可解密。格式v1用固定参数scrypt(N=2^17,r=8,p=1,256位输出)、随机salt/96位nonce、AES-256-GCM流式加密；头作AAD、128位tag，完整认证前不解析。元信息/原密钥/数据库全部加密，无可控路径解包；JSON清单上限16KiB/数据库2GiB。原子独占发布0600备份；私有暂存目录0700，成功/异常清理，不宣称强制终止后的安全擦除。
+
+restore仅当前迁移版本，独立新目录，先解密认证、版本/结构/摘要/凭据检查及备份管理员重新验证；不运行迁移。只删除副本LoginSession，管理员/全部业务表/任务版本/来源与队列/租约/账本保留，原库不变；同步文件/目录后Linux renameat2(RENAME_NOREPLACE)发布，竞争创建的空目标也拒绝，无覆盖回退。启动仍需原钥，恢复登录不得沿用备份会话。CLI口令只getpass，不接受参数/环境/管道；错误只输出固定应用消息或脱敏错误，不输出异常参数/SQL/秘密。
+
+备份是时间点状态，不含之后的送达回执；切换前停原实例，恢复实例按原启停/退避/租约执行，不能承诺外部exactly-once。普通配置导出不在本阶段；Web备份/恢复、跨版本/升级/失败回退与正式数据卷切换后续实施。格式、真实命令及依据见[维护说明](BACKUP_RESTORE.md)，自动证据见[本阶段记录](history/2026-10-20-Compose与加密备份恢复.md)。
+
+
+## M4网页加密下载与独立恢复候选（2026-10-20，第二子阶段）
+
+运行中应用已持有整个生命周期的instance_lock，因此复用snapshot_backup做SQLite一致快照，后台继续运行、原钥在本生命周期不轮换；快照中全部密文独立校验。create_backup仍为停服CLI包装，另一个进程必须取得同一锁，未增加跳过锁的CLI选项。进度检查限制数据库2GiB及120秒快照等待，不把单文件裸复制当备份。
+
+/api/manage/backups全部要求管理员会话，写操作继承CSRF/来源检查和认证限速；特权操作再验当前密码及哈希期间的会话/账号有效性。单个asyncio门禁覆盖创建、上传、验证及完整下载传输；下载Response在结束/取消时清理并释放。昂贵验证/数据库/文件写入用database_call，取消先join线程再清理。0700暂存目录放数据卷，0600文件；API/附件no-store，错误固定脱敏，无新依赖/迁移。
+
+上传以8KiB内UTF-8 JSON行传验证字段，换行后流式接收加密字节，限制实际累计大小和300秒上传；口令不进URL/头或浏览器存储。认证与CLI相同，恢复只发布固定data_dir/web-restore，拒绝已有路径（含符号链接），不接受用户路径。仅副本旧会话撤销，原库不改；不接管原实例、不启动恢复actor，数据库版本须一致。一个候选最多保留一份，无网页覆盖/删除/启用接口；正式切换及升级回退留下一子阶段。GET状态用于重新连接后识别已发布候选，不能把候选存在解释为当前恢复已生效。浏览器下载形成Blob，大库走CLI。接口、磁盘/内存和复验边界见BACKUP_RESTORE。
+
+
+## M4保留原卷的切换与显式回退（2026-10-20，第三子阶段）
+
+宿主机scripts/manage_release.py负责Docker/Compose编排，应用Web无Docker socket/升级接口。只接受本机Unix socket、标准命名卷/10001/只读根/本机端口或禁外网实例。准备须已停服务；目标固定镜像在network none维护容器中将原卷只读挂载，以相同锁inode的只读描述符持独占flock，SQLite一致快照到全新卷。已知旧迁移只在候选执行；验证全量结构/账号/原钥/密文后清副本会话、生成带构建/迁移/文件摘要的准备记录，原子发布。原库不迁移，未知迁移失败；普通加密恢复仍要求匹配版本，不混为跨版本恢复。
+
+状态以固定image ID/volume/data_dir成对保存。激活前核对daemon、Compose指纹、原容器身份/启动时刻、原快照及候选摘要；external卷必须已存在，避免误建空库。单用户本地项目文件锁及0700/0600原子状态，保留preparing/prepared/activating/active等阶段与失败状态；status同时报告实际实例，崩溃中间态不得解释为成功。失败启动停止匹配的新实例，无自动回退；显式rollback需accept-data-loss，才停止当前匹配实例并启动原镜像/原卷，绝不downgrade新库或合并数据。原卷/失败候选不自动清理。真实队列在启用后按原配置执行，回退/时间点恢复可能重复发送。
+
+--restored把已验证web-restore从原卷复制到独立新卷，再同样准备/切换，源父实例锁及已有副本锁均受保护。只提供受控维护工具，不能承诺任意自定义Compose/跨主机/其他用户或外部手动Docker并发的协调。维护命令与故障边界见RELEASES；CI以唯一禁外网项目和合成未来迁移/启动失败镜像验证，不交付合成迁移。
+
+
+## M4外部HTTPS反代与部署检查（2026-10-20，第四子阶段）
+
+Settings新增精确可信代理IP（默认空、最多32个，拒绝*/CIDR/hostname/未指定/组播/zone）；统一在ASGI层使用已锁定Uvicorn ProxyHeadersMiddleware，网络入口保持no-proxy-headers避免重复解释。可信peer才影响scheme/client，Host保留端口，同源校验及Secure Cookie仍用实际请求上下文；直接HTTP可用。应用/native关闭访问日志，固定业务诊断保留，不记录请求体/凭据。无新依赖或迁移。
+
+提供外部Nginx模板，单边缘覆盖转发头、保留Host端口、清除其他转发头、TLS由外部终止，备份上传/下载不缓存/不重放，2049MiB及超时配合应用总量校验。无代理服务加入产品Compose，应用仍单容器。宿主机只读部署CLI分别核对容器权限/卷/本机端口及HTTPS证书/版本/健康/Cookie，拒绝URL秘密、跳转和环境代理，不触发认证写入/网络采集。发布维护对保存代理配置并在切换/回退重放，空值兼容旧状态；配置文件指纹保护仍生效。
+
+本地以独立内部Docker网络、固定Nginx1.30.6 digest和临时CA验证真实TLS/认证/流式备份/伪造代理头与日志样本，桌面手机验证HTTPS会话。临时CA不入系统信任库，浏览器仅测试证书场景忽略未知CA，Python端严格验证链/主机名与未知CA拒绝。实际目标证书/代理/PVE/GHCR/双架构与用户验收另记。命令及信任边界见PROXY_DEPLOYMENT。
+
+## M4镜像候选与发布边界
+
+双架构采用原生amd64/arm64 runner，分别构建与禁业务外网演练后保存镜像归档；只读可复用工作流由codex/开发分支push的完整CI及手动候选流程共同调用，支持合并前验证；手动流程默认只生成候选，显式仓库开关和手动发布选择、默认分支及完整CI通过后才授予独立job的GHCR写权限。发布复用测试产物，核对运行配置digest与层指纹，再以两个单平台digest合成索引并固定索引digest部署。区分classic/containerd的本机image ID、运行配置digest和registry manifest/index digest；不以代码SHA标签推定逐字节可重现或标签不可改写。没有自动部署/自动真实发送。[具体流程与限制](IMAGE_RELEASE.md)。

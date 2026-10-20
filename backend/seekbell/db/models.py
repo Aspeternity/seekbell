@@ -68,6 +68,7 @@ class SourceState(Base):
 
 class SourceRun(Base):
     __tablename__ = "source_runs"
+    __table_args__ = (Index("ix_source_runs_retention", "at"),)
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     source_id: Mapped[str] = mapped_column(ForeignKey("sources.id"), index=True)
     at: Mapped[float] = mapped_column(Float)
@@ -82,11 +83,25 @@ class SourceRun(Base):
     diagnostics: Mapped[list] = mapped_column(JSON, default=list)
 
 
+class SourceProbe(Base):
+    """Last explicit connection check; independent from collection/baseline history."""
+
+    __tablename__ = "source_probes"
+    source_id: Mapped[str] = mapped_column(ForeignKey("sources.id"), primary_key=True)
+    started_at: Mapped[float] = mapped_column(Float)
+    finished_at: Mapped[float | None] = mapped_column(Float)
+    next_attempt_at: Mapped[float] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(String(32))
+    code: Mapped[str | None] = mapped_column(String(80))
+    item_count: Mapped[int | None] = mapped_column(Integer)
+
+
 class NotificationTarget(Base):
     __tablename__ = "notification_targets"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     name: Mapped[str] = mapped_column(String(200))
     kind: Mapped[str] = mapped_column(String(32))
+    deleted_at: Mapped[float | None] = mapped_column(Float)
     config_ciphertext: Mapped[str | None] = mapped_column(Text)
     revision: Mapped[int] = mapped_column(Integer, default=1)
     enabled: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -107,6 +122,7 @@ class TaskVersion(Base):
     task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id"), primary_key=True)
     version: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(String(160), default="", server_default="")
     rule: Mapped[dict] = mapped_column(JSON)
     target_ids: Mapped[list] = mapped_column(JSON)
     created_at: Mapped[float] = mapped_column(Float)
@@ -138,6 +154,7 @@ class Post(Base):
     url: Mapped[str] = mapped_column(String(2048))
     published_at: Mapped[float | None] = mapped_column(Float)
     first_seen_at: Mapped[float] = mapped_column(Float, index=True)
+    baseline: Mapped[bool | None] = mapped_column(Boolean)
 
 
 class SourceItem(Base):
@@ -168,6 +185,8 @@ class RuleHit(Base):
         UniqueConstraint(
             "task_id", "task_version", "website_id", "external_post_id", name="uq_task_hit"
         ),
+        Index("ix_rule_hits_post", "website_id", "external_post_id"),
+        Index("ix_rule_hits_retention", "matched_at"),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     task_id: Mapped[str] = mapped_column(String(36), index=True)
@@ -199,6 +218,8 @@ class Outbox(Base):
             name="ck_outbox_lease",
         ),
         Index("ix_outbox_available", "status", "available_at"),
+        Index("ix_outbox_created_at", "created_at", "id"),
+        Index("ix_outbox_completed", "status", "completed_at"),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     website_id: Mapped[str] = mapped_column(String(80))
@@ -216,6 +237,7 @@ class Outbox(Base):
     last_result: Mapped[str | None] = mapped_column(String(32))
     last_error_code: Mapped[str | None] = mapped_column(String(80))
     created_at: Mapped[float] = mapped_column(Float)
+    completed_at: Mapped[float | None] = mapped_column(Float)
 
 
 class OutboxContribution(Base):
@@ -260,6 +282,7 @@ class DeliveredPost(Base):
 
 class TargetTestAttempt(Base):
     __tablename__ = "target_test_attempts"
+    __table_args__ = (Index("ix_target_test_attempts_retention", "finished_at"),)
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     target_id: Mapped[str] = mapped_column(ForeignKey("notification_targets.id"), index=True)
     target_snapshot: Mapped[dict] = mapped_column(JSON)
@@ -267,3 +290,154 @@ class TargetTestAttempt(Base):
     finished_at: Mapped[float | None] = mapped_column(Float)
     result: Mapped[str] = mapped_column(String(32))
     error_code: Mapped[str | None] = mapped_column(String(80))
+
+
+class Administrator(Base):
+    __tablename__ = "administrators"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_administrator_singleton"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    username: Mapped[str] = mapped_column(String(32))
+    password_hash: Mapped[str] = mapped_column(String(256))
+
+
+class LoginSession(Base):
+    __tablename__ = "login_sessions"
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    csrf: Mapped[str] = mapped_column(String(80))
+    expires_at: Mapped[float] = mapped_column(Float)
+
+
+class WebsiteInstallation(Base):
+    __tablename__ = "website_installations"
+    website_id: Mapped[str] = mapped_column(ForeignKey("websites.id"), primary_key=True)
+
+
+class WorkspacePreferences(Base):
+    __tablename__ = "workspace_preferences"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_workspace_singleton"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(24))
+    description: Mapped[str] = mapped_column(String(40))
+    timezone: Mapped[str] = mapped_column(
+        String(80), default="Asia/Shanghai", server_default="Asia/Shanghai"
+    )
+    display_revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+
+
+class TaskEvaluation(Base):
+    """Immutable outcome for a task version when a post is first discovered."""
+
+    __tablename__ = "task_evaluations"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["task_id", "task_version"], ["task_versions.task_id", "task_versions.version"]
+        ),
+        ForeignKeyConstraint(
+            ["website_id", "external_post_id"],
+            ["seen_posts.website_id", "seen_posts.external_post_id"],
+        ),
+        CheckConstraint(
+            "status IN ('match','no_match','insufficient_data')", name="ck_evaluation_status"
+        ),
+        Index("ix_evaluations_post_status", "website_id", "external_post_id", "status"),
+        Index("ix_task_evaluations_retention", "evaluated_at"),
+    )
+    task_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    task_version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    website_id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    external_post_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    status: Mapped[str] = mapped_column(String(32))
+    result: Mapped[dict] = mapped_column(JSON)
+    evaluated_at: Mapped[float] = mapped_column(Float)
+
+
+class ManualDelivery(Base):
+    __tablename__ = "manual_deliveries"
+    __table_args__ = (
+        Index("ix_manual_started", "started_at", "id"),
+        Index("ix_manual_source", "source_event_id"),
+        Index("ix_manual_target", "target_id"),
+        Index("ix_manual_deliveries_retention", "finished_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    source_event_id: Mapped[str] = mapped_column(String(36))
+    target_id: Mapped[str] = mapped_column(ForeignKey("notification_targets.id"))
+    target_snapshot: Mapped[dict] = mapped_column(JSON)
+    payload: Mapped[dict] = mapped_column(JSON)
+    started_at: Mapped[float] = mapped_column(Float)
+    finished_at: Mapped[float | None] = mapped_column(Float)
+    result: Mapped[str] = mapped_column(String(32))
+    error_code: Mapped[str | None] = mapped_column(String(80))
+
+
+class RetentionPolicy(Base):
+    __tablename__ = "retention_policy"
+    __table_args__ = (
+        CheckConstraint("id = 1", name="ck_retention_singleton"),
+        CheckConstraint("days BETWEEN 1 AND 365", name="ck_retention_days"),
+    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    days: Mapped[int] = mapped_column(Integer, default=30)
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    next_run_at: Mapped[float] = mapped_column(Float, default=0)
+    last_run_at: Mapped[float | None] = mapped_column(Float)
+    last_counts: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class AlertSettings(Base):
+    __tablename__ = "alert_settings"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_alert_settings_singleton"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    target_ids: Mapped[list] = mapped_column(JSON, default=list)
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+
+
+class SystemState(Base):
+    """Transition anchor survives ordinary event-history retention."""
+
+    __tablename__ = "system_states"
+    component: Mapped[str] = mapped_column(String(120), primary_key=True)
+    fault: Mapped[bool] = mapped_column(Boolean, default=False)
+    generation: Mapped[int] = mapped_column(Integer, default=0)
+    label: Mapped[str] = mapped_column(String(200))
+    code: Mapped[str | None] = mapped_column(String(80))
+    updated_at: Mapped[float] = mapped_column(Float)
+
+
+class SystemEvent(Base):
+    __tablename__ = "system_events"
+    __table_args__ = (
+        UniqueConstraint("component", "generation", "phase", name="uq_system_transition"),
+        CheckConstraint("phase IN ('fault','recovery')", name="ck_system_phase"),
+        Index("ix_system_events_at", "at", "id"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    component: Mapped[str] = mapped_column(ForeignKey("system_states.component"))
+    generation: Mapped[int] = mapped_column(Integer)
+    phase: Mapped[str] = mapped_column(String(16))
+    label: Mapped[str] = mapped_column(String(200))
+    code: Mapped[str | None] = mapped_column(String(80))
+    at: Mapped[float] = mapped_column(Float)
+
+
+class AlertDelivery(Base):
+    __tablename__ = "alert_deliveries"
+    __table_args__ = (
+        UniqueConstraint("event_id", "target_id", name="uq_alert_target"),
+        CheckConstraint(
+            "result IN ('pending','unknown','success','transient_error',"
+            "'permanent_error','cancelled')",
+            name="ck_alert_result",
+        ),
+        Index("ix_alert_deliveries_event", "event_id"),
+        Index("ix_alert_deliveries_pending", "result", "id"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    event_id: Mapped[str] = mapped_column(ForeignKey("system_events.id"))
+    target_id: Mapped[str] = mapped_column(ForeignKey("notification_targets.id"))
+    target_snapshot: Mapped[dict] = mapped_column(JSON)
+    result: Mapped[str] = mapped_column(String(32), default="pending")
+    error_code: Mapped[str | None] = mapped_column(String(80))
+    started_at: Mapped[float | None] = mapped_column(Float)
+    finished_at: Mapped[float | None] = mapped_column(Float)

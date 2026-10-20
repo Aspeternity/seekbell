@@ -3,6 +3,7 @@ import socket
 import pytest
 
 from tests.core_helpers import core  # noqa: F401
+from tests.runtime_helpers import PassiveRuntime
 
 
 @pytest.fixture(autouse=True)
@@ -16,3 +17,8 @@ def forbid_external_network(monkeypatch):
         return original_connect(sock, address)
 
     monkeypatch.setattr(socket.socket, "connect", guarded_connect)
+
+
+@pytest.fixture(autouse=True)
+def isolate_background_actors(monkeypatch):
+    monkeypatch.setattr("seekbell.main.Runtime", PassiveRuntime)

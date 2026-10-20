@@ -1,9 +1,12 @@
+import time
 from uuid import uuid4
 
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
 from seekbell.db.models import (
+    AlertDelivery,
+    AlertSettings,
     NotificationTarget,
     Outbox,
     OutboxContribution,
@@ -13,6 +16,7 @@ from seekbell.db.models import (
     Task,
     TaskVersion,
     Website,
+    WebsiteInstallation,
 )
 from seekbell.db.transactions import write_session
 from seekbell.domain.rules import Rule
@@ -35,6 +39,10 @@ def target_snapshot(target: NotificationTarget) -> dict:
     }
 
 
+class TargetInUse(ValueError):
+    pass
+
+
 class Configuration:
     def __init__(self, engine: Engine, vault: CredentialVault | None = None):
         self.engine = engine
@@ -52,7 +60,11 @@ class Configuration:
         target_ids = list(dict.fromkeys(target_ids))
         if not target_ids or len(target_ids) > 64:
             raise ValueError("Select between 1 and 64 configured targets")
-        if any(session.get(NotificationTarget, key) is None for key in target_ids):
+        if any(
+            (target := session.get(NotificationTarget, key)) is None
+            or target.deleted_at is not None
+            for key in target_ids
+        ):
             raise ValueError("Unknown notification target")
         return target_ids
 
@@ -85,10 +97,12 @@ class Configuration:
             )
         return key
 
-    def update_target(self, key: str, *, name: str, config: dict) -> int:
+    def update_target(
+        self, key: str, *, name: str, config: dict, enabled: bool | None = None
+    ) -> int:
         with write_session(self.engine) as session:
             target = session.get(NotificationTarget, key)
-            if target is None or target.kind == "mock":
+            if target is None or target.deleted_at is not None or target.kind == "mock":
                 raise ValueError("Unknown configured target")
             vault = self._vault()
             current = vault.unseal(key, target.kind, target.config_ciphertext)
@@ -96,6 +110,8 @@ class Configuration:
             target.config_ciphertext = vault.seal(key, target.kind, values)
             target.name = self._name(name)
             target.revision += 1
+            if enabled is not None:
+                self._target_enabled(session, target, enabled)
             # Already queued notifications retain their original encrypted snapshot.
             return target.revision
 
@@ -103,7 +119,7 @@ class Configuration:
         """Safe presentation contract: secret values are never returned."""
         with Session(self.engine) as session:
             target = session.get(NotificationTarget, key)
-            if target is None:
+            if target is None or target.deleted_at is not None:
                 raise ValueError("Unknown target")
             config, configured = {}, []
             if target.kind != "mock":
@@ -129,14 +145,16 @@ class Configuration:
         }
         with Session(self.engine) as session:
             target = session.get(NotificationTarget, key)
-            if target is None or target.kind not in fields:
+            if target is None or target.deleted_at is not None or target.kind not in fields:
                 return []
             vault = self._vault()
             original = vault.unseal(key, target.kind, target.config_ciphertext)
             duplicates = []
             for other in session.scalars(
                 select(NotificationTarget).where(
-                    NotificationTarget.kind == target.kind, NotificationTarget.id != key
+                    NotificationTarget.kind == target.kind,
+                    NotificationTarget.id != key,
+                    NotificationTarget.deleted_at.is_(None),
                 )
             ):
                 values = vault.unseal(other.id, other.kind, other.config_ciphertext)
@@ -153,12 +171,22 @@ class Configuration:
         at: float,
         website_id: str = "nodeseek",
         enabled: bool = True,
+        description: str = "",
+        managed: bool = False,
     ) -> str:
         if website_id not in BUILTIN_ADAPTERS:
             raise ValueError("Unsupported website")
         key = identifier()
         with write_session(self.engine) as session:
+            if managed and session.get(WebsiteInstallation, website_id) is None:
+                raise ValueError("Website is not installed")
             targets = self._targets(session, target_ids)
+            if managed and any(
+                session.get(NotificationTarget, item).kind == "mock"
+                or not session.get(NotificationTarget, item).config_ciphertext
+                for item in targets
+            ):
+                raise ValueError("Select configured notification targets")
             session.add(
                 Task(
                     id=key,
@@ -174,6 +202,7 @@ class Configuration:
                     task_id=key,
                     version=1,
                     name=self._name(name),
+                    description=description,
                     rule=rule.model_dump(mode="json"),
                     target_ids=targets,
                     created_at=at,
@@ -181,12 +210,26 @@ class Configuration:
             )
         return key
 
-    def update_task(self, key: str, name: str, rule: Rule, target_ids, *, at: float) -> int:
+    def update_task(
+        self,
+        key: str,
+        name: str,
+        rule: Rule,
+        target_ids,
+        *,
+        at: float,
+        description: str = "",
+        enabled: bool | None = None,
+    ) -> int:
         with write_session(self.engine) as session:
             task = session.get(Task, key)
             if task is None or task.deleted_at is not None:
                 raise ValueError("Unknown active task")
             targets = self._targets(session, target_ids)
+            if enabled is not None:
+                task.enabled = enabled
+                if not enabled:
+                    self._cancel_contributions(session, key, at=at)
             task.current_version += 1
             version = task.current_version
             session.add(
@@ -194,6 +237,7 @@ class Configuration:
                     task_id=key,
                     version=version,
                     name=self._name(name),
+                    description=description,
                     rule=rule.model_dump(mode="json"),
                     target_ids=targets,
                     created_at=at,
@@ -203,7 +247,7 @@ class Configuration:
         return version
 
     @staticmethod
-    def _cancel_contributions(session, task_id: str) -> None:
+    def _cancel_contributions(session, task_id: str, *, at: float | None = None) -> None:
         hit_ids = select(RuleHit.id).where(RuleHit.task_id == task_id)
         contributions = session.scalars(
             select(OutboxContribution)
@@ -229,16 +273,17 @@ class Configuration:
                 event.cancel_requested = True
                 if event.status != "leased":
                     event.status = "cancelled"
+                    event.completed_at = time.time() if at is None else at
                     event.last_error_code = "task_contributions_removed"
 
-    def set_task_enabled(self, key: str, enabled: bool) -> None:
+    def set_task_enabled(self, key: str, enabled: bool, *, at: float | None = None) -> None:
         with write_session(self.engine) as session:
             task = session.get(Task, key)
             if task is None or task.deleted_at is not None:
                 raise ValueError("Unknown active task")
             task.enabled = enabled
             if not enabled:
-                self._cancel_contributions(session, key)
+                self._cancel_contributions(session, key, at=at)
 
     def delete_task(self, key: str, *, at: float) -> None:
         with write_session(self.engine) as session:
@@ -247,27 +292,68 @@ class Configuration:
                 raise ValueError("Unknown task")
             task.deleted_at = at
             task.enabled = False
-            self._cancel_contributions(session, key)
+            self._cancel_contributions(session, key, at=at)
 
-    def set_target_enabled(self, key: str, enabled: bool) -> None:
+    def delete_target(self, key: str, *, at: float) -> None:
         with write_session(self.engine) as session:
             target = session.get(NotificationTarget, key)
-            if target is None:
+            if target is None or target.kind == "mock":
+                raise ValueError("Unknown configured target")
+            if target.deleted_at is not None:
+                return
+            versions = session.scalars(
+                select(TaskVersion)
+                .join(
+                    Task,
+                    (Task.id == TaskVersion.task_id)
+                    & (Task.current_version == TaskVersion.version),
+                )
+                .where(Task.deleted_at.is_(None))
+            )
+            if any(key in version.target_ids for version in versions):
+                raise TargetInUse("请先在所有关联任务中取消选择此目标，包括暂停的任务。")
+            alerts = session.get(AlertSettings, 1)
+            if alerts and key in alerts.target_ids:
+                raise TargetInUse("请先在系统告警设置中取消选择此目标。")
+            self._target_enabled(session, target, False, at=at)
+            target.revision += 1
+            target.deleted_at = at
+            target.config_ciphertext = None
+            # Identity and immutable encrypted delivery snapshots remain as evidence.
+
+    def set_target_enabled(self, key: str, enabled: bool, *, at: float | None = None) -> None:
+        with write_session(self.engine) as session:
+            target = session.get(NotificationTarget, key)
+            if target is None or target.deleted_at is not None:
                 raise ValueError("Unknown target")
-            if target.enabled != enabled:
-                target.revision += 1
-            target.enabled = enabled
-            if not enabled:
-                for item in session.scalars(
-                    select(Outbox).where(
-                        Outbox.target_id == key, Outbox.status.in_(("pending", "retry", "leased"))
-                    )
-                ):
-                    item.cancel_requested = True
-                    if item.status != "leased":
-                        item.status = "cancelled"
-                        item.last_error_code = "target_disabled"
-            # Re-enabling never uncancels old messages.
+            self._target_enabled(session, target, enabled, at=at)
+
+    @staticmethod
+    def _target_enabled(
+        session, target: NotificationTarget, enabled: bool, *, at: float | None = None
+    ):
+        if target.enabled != enabled:
+            target.revision += 1
+        target.enabled = enabled
+        if not enabled:
+            for item in session.scalars(
+                select(Outbox).where(
+                    Outbox.target_id == target.id, Outbox.status.in_(("pending", "retry", "leased"))
+                )
+            ):
+                item.cancel_requested = True
+                if item.status != "leased":
+                    item.status = "cancelled"
+                    item.completed_at = time.time() if at is None else at
+                    item.last_error_code = "target_disabled"
+            for item in session.scalars(
+                select(AlertDelivery).where(
+                    AlertDelivery.target_id == target.id, AlertDelivery.result == "pending"
+                )
+            ):
+                item.result, item.error_code = "cancelled", "target_disabled"
+                item.finished_at = time.time() if at is None else at
+        # Re-enabling never uncancels old messages.
 
     def set_source_enabled(self, key: str, enabled: bool, *, at: float) -> None:
         with write_session(self.engine) as session:

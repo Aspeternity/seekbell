@@ -5,11 +5,14 @@ import Toggle from './components/Toggle.vue'
 import TagInput from './components/TagInput.vue'
 import { evaluate, historySamples, statusLabel } from './model'
 import type { Sample, Task } from './model'
-import { state, websiteName } from './store'
+import { state, websiteName, isLive, evaluateTask, trialHistory, formatTime } from '@workspace'
 const targets = computed(() => state.targets)
-const props = withDefaults(defineProps<{ task: Task; returnLabel?: string }>(), {
-  returnLabel: '返回概览',
-})
+const props = withDefaults(
+  defineProps<{ task: Task; returnLabel?: string; saving?: boolean; saveError?: string }>(),
+  {
+    returnLabel: '返回概览',
+  },
+)
 const emit = defineEmits<{
   save: [task: Task]
   cancel: []
@@ -19,10 +22,18 @@ const emit = defineEmits<{
 const draft = reactive<Task>(JSON.parse(JSON.stringify(props.task)))
 const baseline = JSON.stringify(draft)
 const errors = ref<string[]>([])
+const testing = ref(false),
+  testError = ref('')
 const testMode = ref('manual')
 const testResult = ref<ReturnType<typeof evaluate> | null>(null)
 const historyResults = ref<{ sample: Sample; result: ReturnType<typeof evaluate> }[] | null>(null)
-const sample = reactive({ ...historySamples[0]!, summary: historySamples[0]!.summary || '' })
+const sample = reactive(
+  isLive
+    ? { title: '', summary: '', author: '', category: '' }
+    : { ...historySamples[0]!, summary: historySamples[0]!.summary || '' },
+)
+const historyLimit = ref(20)
+const historyMeta = ref<Awaited<ReturnType<typeof trialHistory>> | null>(null)
 const missingSummary = ref(false)
 const section = ref('basic')
 const unrestricted = computed(
@@ -52,6 +63,7 @@ watch(
     emit('dirty', JSON.stringify(draft) !== baseline)
     testResult.value = null
     historyResults.value = null
+    historyMeta.value = null
   },
   { deep: true },
 )
@@ -62,7 +74,12 @@ watch(
   },
   { deep: true },
 )
+function clearHistory() {
+  historyResults.value = null
+  historyMeta.value = null
+}
 function save() {
+  if (props.saving) return
   errors.value = []
   if (!state.websites.some((w) => w.id === draft.websiteId))
     errors.value.push('请选择已添加的监控网站。')
@@ -81,19 +98,59 @@ function toggleCategory(category: string) {
     ? draft.categories.filter((c) => c !== category)
     : [...draft.categories, category]
 }
-function runTest() {
-  if (testMode.value === 'manual')
-    testResult.value = evaluate(draft, {
-      ...sample,
-      summary: missingSummary.value ? null : sample.summary,
-      author: sample.author || null,
-      category: sample.category || null,
-    })
-  else
-    historyResults.value = historySamples.map((item) => ({
-      sample: item,
-      result: evaluate(draft, item),
-    }))
+async function runTest() {
+  if (testing.value) return
+  testing.value = true
+  testError.value = ''
+  const snapshot = JSON.stringify({
+    draft,
+    sample,
+    missingSummary: missingSummary.value,
+    testMode: testMode.value,
+    historyLimit: historyLimit.value,
+  })
+  try {
+    const task = JSON.parse(JSON.stringify(draft))
+    if (testMode.value === 'manual') {
+      const result = await evaluateTask(task, {
+        ...sample,
+        summary: missingSummary.value ? null : sample.summary,
+        author: sample.author || null,
+        category: sample.category || null,
+      })
+      if (
+        snapshot ===
+        JSON.stringify({
+          draft,
+          sample,
+          missingSummary: missingSummary.value,
+          testMode: testMode.value,
+          historyLimit: historyLimit.value,
+        })
+      )
+        testResult.value = result
+    } else {
+      const batch = await trialHistory(task, historyLimit.value)
+      const results = batch.items
+      if (
+        snapshot ===
+        JSON.stringify({
+          draft,
+          sample,
+          missingSummary: missingSummary.value,
+          testMode: testMode.value,
+          historyLimit: historyLimit.value,
+        })
+      ) {
+        historyResults.value = results
+        historyMeta.value = batch
+      }
+    }
+  } catch (e) {
+    testError.value = (e as Error).message
+  } finally {
+    testing.value = false
+  }
 }
 function jump(id: string) {
   section.value = id
@@ -115,7 +172,11 @@ function jump(id: string) {
       </div>
       <span class="autosave-note"
         ><span class="status-dot" />{{
-          JSON.stringify(draft) === baseline ? '仅使用模拟数据' : '有未保存的修改'
+          JSON.stringify(draft) === baseline
+            ? isLive
+              ? '配置保存到服务端'
+              : '仅使用模拟数据'
+            : '有未保存的修改'
         }}</span
       >
     </div>
@@ -137,6 +198,7 @@ function jump(id: string) {
       <Icon name="play" :size="14" />试匹配
     </button>
   </nav>
+  <p v-if="saveError" class="form-errors" role="alert">{{ saveError }}</p>
   <div v-if="errors.length" data-form-errors class="form-errors" tabindex="-1" role="alert">
     <Icon name="alert" :size="20" />
     <div>
@@ -202,7 +264,11 @@ function jump(id: string) {
             v-if="!state.websites.find((w) => w.id === draft.websiteId)?.enabled"
             class="warning-note"
           >
-            该网站已暂停。任务可以保存，启用网站后才会采集新帖。
+            {{
+              isLive
+                ? '网站已暂停，可以保存任务；启用网站后才会采集新帖。'
+                : '该网站已暂停。任务可以保存，启用网站后才会采集新帖。'
+            }}
           </p>
         </div>
       </section>
@@ -306,7 +372,13 @@ function jump(id: string) {
                 {{ category }}
               </button>
             </div>
-            <p class="field-help">演示版块；正式版使用来源提供的版块名称。</p>
+            <p class="field-help">
+              {{
+                isLive
+                  ? '按RSS提供的版块名称精确匹配；没有可靠版块时建议不限制。'
+                  : '演示版块；正式版使用来源提供的版块名称。'
+              }}
+            </p>
           </fieldset>
           <details class="advanced">
             <summary>
@@ -356,6 +428,15 @@ function jump(id: string) {
           <span class="small-badge neutral">已选 {{ draft.targets.length }}</span>
         </div>
         <div class="form-content">
+          <p v-if="!targets.length" class="warning-note">请先添加一个通知目标。</p>
+          <button
+            v-if="!targets.length"
+            type="button"
+            class="button"
+            @click="emit('navigate', '/target/new')"
+          >
+            添加通知目标
+          </button>
           <div class="target-options">
             <label
               v-for="target in targets"
@@ -470,14 +551,30 @@ function jump(id: string) {
             /></label>
           </div>
         </div>
+        <div v-else-if="isLive" class="history-intro">
+          <strong>本地已保存帖子</strong>
+          <p>使用当前草稿，按首次发现时间选取最近样本（含基线）。不会联网补齐历史。</p>
+          <label class="field-label" for="history-limit">最多试算条数</label>
+          <select
+            id="history-limit"
+            v-model="historyLimit"
+            :disabled="testing"
+            @change="clearHistory"
+          >
+            <option :value="20">20 条</option>
+            <option :value="50">50 条</option>
+            <option :value="100">100 条</option>
+          </select>
+        </div>
         <div v-else class="history-intro">
           <span class="icon-tile purple"><Icon name="inbox" /></span
           ><strong>5 条合成历史样本</strong>
           <p>2026/10/19 · 09:00–14:30<br />包含命中、排除与字段缺失场景。</p>
         </div>
-        <button type="button" class="button test-button" @click="runTest">
+        <p v-if="testError" class="form-errors" role="alert">{{ testError }}</p>
+        <button type="button" class="button test-button" :disabled="testing" @click="runTest">
           <Icon name="play" :size="15" />{{
-            testMode === 'manual' ? '试匹配这条帖子' : '试匹配 5 条样本'
+            testMode === 'manual' ? '试匹配这条帖子' : isLive ? '试匹配本地历史' : '试匹配 5 条样本'
           }}
         </button>
         <div
@@ -502,8 +599,18 @@ function jump(id: string) {
         </div>
         <div v-if="testMode === 'history' && historyResults" class="history-results" role="status">
           <div class="history-result-summary">
-            命中 {{ historyResults.filter((r) => r.result.status === 'yes').length }} / 5 条
+            命中 {{ historyResults.filter((r) => r.result.status === 'yes').length }} /
+            {{ historyResults.length }} 条
           </div>
+          <p v-if="isLive && historyMeta">
+            本地共 {{ historyMeta.available }} 条；本次 {{ historyMeta.sampleCount }} 条。
+            <template v-if="historyMeta.sampleCount"
+              >首次发现时间：{{ formatTime(historyMeta.fromAt) }}–{{
+                formatTime(historyMeta.toAt)
+              }}。</template
+            >
+            <template v-else>暂无本地历史样本。</template>
+          </p>
           <article v-for="(item, i) in historyResults" :key="i">
             <div>
               <span class="result-pill" :class="item.result.status">{{
@@ -515,7 +622,11 @@ function jump(id: string) {
           </article>
         </div>
         <p class="test-footnote">
-          仅在本地试算，不发送通知、不改变历史。正式接入后由后端统一判断。
+          {{
+            isLive
+              ? '由服务端规则引擎试算，不发送通知、不改变历史。'
+              : '仅在本地试算，不发送通知、不改变历史。正式接入后由后端统一判断。'
+          }}
         </p>
       </section>
       <div class="editor-tip">
@@ -527,12 +638,14 @@ function jump(id: string) {
       <div>
         <span class="status-dot" /><span
           >{{ draft.enabled ? '保存后任务为启用状态' : '保存后任务保持暂停'
-          }}<small>仅保存在当前浏览器</small></span
+          }}<small>{{
+            isLive ? '保存到服务端；后台按网站启停状态运行' : '仅保存在当前浏览器'
+          }}</small></span
         >
       </div>
       <div class="save-actions">
         <button class="button" type="button" @click="emit('cancel')">取消</button
-        ><button class="button primary" type="submit">
+        ><button class="button primary" type="submit" :disabled="saving">
           <Icon name="check" :size="17" />保存任务
         </button>
       </div>

@@ -5,14 +5,45 @@ export interface VersionInfo {
   database_revision: string | null
 }
 
-export async function loadSystemInfo(): Promise<VersionInfo> {
-  const signal = AbortSignal.timeout(8000)
-  const [version, ready] = await Promise.all([
-    fetch('/api/version', { signal, cache: 'no-store' }),
-    fetch('/health/ready', { signal, cache: 'no-store' }),
-  ])
-  if (!version.ok || !ready.ok) {
-    throw new Error('服务暂未就绪，请检查后端运行状态后重试。')
+const options = () => ({
+  signal: AbortSignal.timeout(8000),
+  cache: 'no-store' as const,
+  credentials: 'same-origin' as const,
+})
+
+export async function loadVersionInfo(): Promise<VersionInfo> {
+  try {
+    const response = await fetch('/api/version', options())
+    if (!response.ok) throw new Error()
+    const data = await response.json()
+    if (
+      data?.name !== 'SeekBell' ||
+      typeof data.version !== 'string' ||
+      typeof data.build_revision !== 'string' ||
+      !(typeof data.database_revision === 'string' || data.database_revision === null)
+    )
+      throw new Error()
+    return data as VersionInfo
+  } catch {
+    throw new Error('无法读取版本信息，请检查服务后重试。')
   }
-  return version.json() as Promise<VersionInfo>
+}
+
+export async function loadReadiness(): Promise<'ok' | 'unavailable'> {
+  try {
+    const response = await fetch('/health/ready', options())
+    const data = await response.json()
+    if (response.status === 200 && data?.status === 'ok') return 'ok'
+    if (response.status === 503 && data?.status === 'unavailable') return 'unavailable'
+    throw new Error()
+  } catch {
+    throw new Error('无法读取就绪状态，请检查连接后重试。')
+  }
+}
+
+// Retain the original standalone status entry's contract.
+export async function loadSystemInfo(): Promise<VersionInfo> {
+  const [version, ready] = await Promise.all([loadVersionInfo(), loadReadiness()])
+  if (ready !== 'ok') throw new Error('服务暂未就绪，请检查后端运行状态后重试。')
+  return version
 }

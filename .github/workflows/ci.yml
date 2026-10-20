@@ -3,6 +3,7 @@ name: Local baseline checks
 on:
   push:
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
@@ -37,6 +38,8 @@ jobs:
       - run: uv run --frozen ruff format --check .
       - run: uv run --frozen pytest -q
       - run: uv run --frozen python -m seekbell.services.demo
+      - run: uv run --frozen python -m seekbell.services.runtime_demo
+      - run: uv run --frozen python -m seekbell.services.backup_demo
       - run: uv build --wheel
       - run: pnpm --dir frontend install --frozen-lockfile
       - run: pnpm --dir frontend format:check
@@ -44,6 +47,14 @@ jobs:
       - run: pnpm --dir frontend build:prototype
       - run: pnpm --dir frontend exec playwright install --with-deps chromium
       - run: pnpm --dir frontend test:prototype
+      - run: pnpm --dir frontend test:live
+      - run: pnpm --dir frontend test:history
+      - run: pnpm --dir frontend test:sending
+      - run: pnpm --dir frontend test:runtime
+      - run: pnpm --dir frontend test:operations
+      - run: pnpm --dir frontend test:retention
+      - run: pnpm --dir frontend test:system
+      - run: pnpm --dir frontend test:backup
       - name: Verify migration commands
         env:
           SEEKBELL_DATA_DIR: ${{ runner.temp }}/seekbell-data
@@ -55,3 +66,23 @@ jobs:
         run: docker build --build-arg VCS_REF="$GITHUB_SHA" -t seekbell:ci .
       - name: Check packaged service without external networking
         run: python scripts/check_container.py seekbell:ci --revision "$GITHUB_SHA"
+      - name: Rehearse Compose and independent encrypted restore offline
+        run: python scripts/check_backup_container.py seekbell:ci --revision "$GITHUB_SHA"
+      - name: Rehearse isolated volume switch and explicit rollback offline
+        run: python scripts/check_release_container.py seekbell:ci --revision "$GITHUB_SHA"
+      - name: Load pinned external proxy for isolated TLS rehearsal
+        run: docker pull nginx@sha256:970364228b1e4f932abc22d321932816782cca8a20b85a77552a7cfe9acfb3b5
+      - name: Rehearse actual HTTPS proxy and streaming without external egress
+        run: python scripts/check_proxy_container.py seekbell:ci --revision "$GITHUB_SHA"
+      - name: Check browser login through actual HTTPS proxy
+        env:
+          SEEKBELL_IMAGE: seekbell:ci
+          SEEKBELL_REVISION: ${{ github.sha }}
+        run: pnpm --dir frontend test:proxy
+
+  native-candidates:
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/codex/') }}
+    needs: baseline
+    uses: ./.github/workflows/native-images.yml
+    permissions:
+      contents: read

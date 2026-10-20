@@ -2,12 +2,13 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import Icon from '../components/Icon.vue'
 import Toggle from '../components/Toggle.vue'
-import { state, channelMeta, clone, newTarget, saveTarget } from '../store'
-import type { Channel, Target } from '../store'
+import { state, isLive, channelMeta, clone, newTarget, saveTarget } from '@workspace'
+import type { Channel, Target } from '@workspace'
 const props = defineProps<{ target: Target }>()
 const emit = defineEmits<{ navigate: [path: string]; dirty: [value: boolean] }>()
 const draft = reactive(clone(props.target)),
-  errors = ref<string[]>([])
+  errors = ref<string[]>([]),
+  busy = ref(false)
 const privateFields = reactive({
   base: '',
   token: '',
@@ -78,7 +79,8 @@ function checkUrl(value: string, label: string, base = false) {
   if (value && !validUrl(value, base))
     errors.value.push(label + '须为 HTTP(S) 地址，不含用户名、密码或片段。')
 }
-function save() {
+async function save() {
+  if (busy.value) return
   errors.value = []
   if (!draft.name.trim()) errors.value.push('请填写目标名称。')
   if (draft.channel === 'telegram') {
@@ -159,10 +161,49 @@ function save() {
     nextTick(() => document.querySelector<HTMLElement>('[data-target-errors]')?.focus())
     return
   }
-  draft.configured = true
-  saveTarget(draft)
-  emit('dirty', false)
-  emit('navigate', '/notifications/targets')
+  busy.value = true
+  try {
+    const connection: Record<string, unknown> = {
+      include_summary: draft.summary,
+      summary_limit: draft.summaryLimit,
+    }
+    const put = (key: string, value: string) => {
+      if (value.trim()) connection[key] = value.trim()
+    }
+    if (draft.channel === 'telegram') {
+      put('base_url', privateFields.base)
+      put('bot_token', privateFields.token)
+      put('chat_id', privateFields.chat)
+      if (threadId.value) connection.message_thread_id = Number(threadId.value)
+    } else if (draft.channel === 'bark') {
+      put('base_url', privateFields.base)
+      put('device_key', privateFields.device)
+      connection.group = draft.group
+    } else if (draft.channel === 'smtp') {
+      put('host', privateFields.host)
+      put('username', privateFields.username)
+      if (privateFields.password) connection.password = privateFields.password
+      put('from_address', privateFields.from)
+      put('to_address', privateFields.to)
+      Object.assign(connection, {
+        port: draft.port,
+        security: draft.security,
+        allow_insecure: insecure.value,
+      })
+    } else {
+      put('url', privateFields.url)
+      if (privateFields.headers.trim()) connection.headers = JSON.parse(privateFields.headers)
+      connection.response_mode = draft.responseMode
+    }
+    await saveTarget({ ...draft, configured: true }, connection)
+    Object.keys(privateFields).forEach((k) => (privateFields[k as keyof typeof privateFields] = ''))
+    emit('dirty', false)
+    emit('navigate', '/notifications/targets')
+  } catch (e) {
+    errors.value = [(e as Error).message]
+  } finally {
+    busy.value = false
+  }
 }
 </script>
 <template>
@@ -231,7 +272,9 @@ function save() {
           <span class="section-number">02</span>
           <div>
             <h2>{{ meta.type }} 连接配置</h2>
-            <p>仅用于交互演示，请使用示例值</p>
+            <p>
+              {{ isLive ? '配置由服务端加密保存，敏感字段不回传' : '仅用于交互演示，请使用示例值' }}
+            </p>
           </div>
           <Icon name="shield" :size="18" />
         </div>
@@ -240,10 +283,13 @@ function save() {
             <Icon name="shield" :size="18" />
             <p>
               {{
-                draft.configured
-                  ? '已配置的字段留空会保留演示配置状态。'
-                  : '填写后可体验校验与保存流程。'
-              }}地址、账号、令牌与请求头仅留在当前表单内存，不持久化、不发送。
+                isLive
+                  ? '地址、账号、令牌与请求头只写入服务端加密配置。已配置的敏感字段留空保留；保存不会发送通知。'
+                  : (draft.configured
+                      ? '已配置的字段留空会保留演示配置状态。'
+                      : '填写后可体验校验与保存流程。') +
+                    '地址、账号、令牌与请求头仅留在当前表单内存，不持久化、不发送。'
+              }}
             </p>
           </div>
           <template v-if="draft.channel === 'telegram'"
@@ -449,19 +495,26 @@ function save() {
       </section>
       <div class="editor-tip">
         <Icon name="shield" :size="18" />
-        <p>此界面仅保存演示配置标记。正式版的连接配置由后端加密保存，敏感字段不回传。</p>
+        <p>
+          {{
+            isLive
+              ? '保存后可用于任务目标选择；可在通知目标页显式运行独立测试。'
+              : '此界面仅保存演示配置标记。正式版的连接配置由后端加密保存，敏感字段不回传。'
+          }}
+        </p>
       </div>
     </aside>
     <div class="save-bar">
       <div>
         <Icon name="shield" :size="15" /><span
-          >凭据仅用于表单演示<small>不会发出真实请求</small></span
+          >{{ isLive ? '配置加密保存到服务端' : '凭据仅用于表单演示'
+          }}<small>{{ isLive ? '不会发送通知' : '不会发出真实请求' }}</small></span
         >
       </div>
       <div class="save-actions">
         <button type="button" class="button" @click="emit('navigate', '/notifications/targets')">
           取消</button
-        ><button type="submit" class="button primary">
+        ><button type="submit" class="button primary" :disabled="busy">
           <Icon name="check" :size="17" />保存目标
         </button>
       </div>

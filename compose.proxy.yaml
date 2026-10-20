@@ -1,0 +1,5 @@
+# External proxy terminates HTTPS. Supply its ACTUAL peer IP as seen by the app.
+services:
+  seekbell:
+    environment:
+      SEEKBELL_TRUSTED_PROXY_IPS: ${SEEKBELL_TRUSTED_PROXY_IPS:?Set exact trusted proxy IPs}

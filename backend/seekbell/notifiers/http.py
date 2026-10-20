@@ -8,7 +8,14 @@ import httpx
 
 from seekbell.domain.delivery import SendResult
 from seekbell.domain.http import retry_after_seconds
-from seekbell.notifiers.rendering import clip, line, render, webhook_payload
+from seekbell.notifiers.rendering import (
+    clip,
+    line,
+    message_title,
+    message_url,
+    render,
+    webhook_payload,
+)
 
 MAX_RESPONSE_BYTES = 64 * 1024
 
@@ -54,11 +61,12 @@ class HTTPNotifier:
             url = config["base_url"] + "/push"
             body = {
                 "device_key": config["device_key"],
-                "title": clip(line(payload["post"]["title"]), 100),
+                "title": clip(line(message_title(payload)), 100),
                 "body": render(payload, config, limit=1800),
-                "url": payload["post"]["url"],
                 "group": config["group"],
             }
+            if message_url(payload):
+                body["url"] = message_url(payload)
         else:
             url = config["url"]
             headers.update(config["headers"])

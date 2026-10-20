@@ -1,0 +1,18 @@
+# Use with compose.yaml AFTER stopping the service.
+# Writable backup/recovery directories must be prepared for UID/GID 10001.
+services:
+  seekbell:
+    restart: "no"
+    network_mode: none
+    ports: !reset []
+    volumes:
+      - type: bind
+        source: ${SEEKBELL_BACKUP_DIR:?Set an absolute private backup directory}
+        target: /backup
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${SEEKBELL_RESTORE_DIR:?Set an absolute private recovery parent directory}
+        target: /restore
+        bind:
+          create_host_path: false

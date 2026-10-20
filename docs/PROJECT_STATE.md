@@ -1,27 +1,31 @@
 # 当前状态
 
-更新时间：2026-10-20（Asia/Shanghai）。M1/M2已实现；M3服务端未完成。v0.4完整模拟前端已交付。用户准备新开对话开展前后端合并，本轮按用户要求将模拟前端分支合并至main，未开始真实接入。详见[前后端接入交接](FRONTEND_BACKEND_HANDOFF.md)。
+更新时间：2026-10-21（Asia/Shanghai）。M0～M3实现及本地自动退出已完成；当前M4部署恢复，原生双架构CI与产物往返已通过。GHCR实际发布及M5实机/用户验收未完成。[本次证据](history/2026-10-21-远程CI与原生双架构验证.md)，[镜像流程](IMAGE_RELEASE.md)。
 
 ## 环境与代码
 
-仅在SeekBell-Dev的/home/dev/projects/seekbell开发；原Ubuntu经wsl.exe执行。D盘交接副本、原环境及全局WSL未改。[环境入口](DEVELOPMENT_ENVIRONMENT.md)。当前分支main；以非快进合并保留codex/ui-prototype历史，来源ac1476b，合并前origin/main为3fc110c，无冲突。v0.4实现44c535995571299e4f54192a5a822674de05516d，v0.3实现fd711e7，v0.2实现7b525bd，M2基准1fdec56。来源分支已推送且保留；本轮合并额外修改仅本状态，main推送后核对本地/远端SHA和工作区。
+仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发。[入口](DEVELOPMENT_ENVIRONMENT.md)。分支codex/frontend-backend-integration；已验证实现提交34cf1830291240f09071bbb4fb343be3aba4b642已推送，后续仅文档收尾。产品代码仍等同faa991d，本轮改CI/测试设施/文档，无新业务/依赖/迁移。原D盘、Ubuntu工具与全局WSL未改。
 
-## 已确认体验与证据
+## 本阶段与证据
 
-添加网站为桌面居中弹窗，配置保留右侧面板，手机都全屏。添加成功返回卡片列表，不连续打开配置。工作空间名称1–24字符必填、说明最多40字符可空，设置预览/保存后同步侧栏；与管理员账号独立，不引入多工作空间。新工作台无网站，只提供NodeSeek内置适配；旧数据保留。额外网站仅测试夹具。
+native-images只读复用工作流由开发分支push的完整CI及手动images流程调用，支持合并前原生双架构验证；默认不发布。手动入口未进入main，不能假定可直接派发。GHCR仍需单独授权、仓库开关、手动选择、默认分支和全部检查成功；仅独立发布job有packages写权限，不部署。
 
-v0.4在SeekBell-Dev通过类型、原型/原生产构建、格式、隐私检查；Chromium桌面/手机40项通过（39.7秒），含新弹窗、自定义保存/刷新/备份和旧数据兼容。长名称窄屏溢出已修复，320–1440验证通过；52张截图、4175静态构建流程通过。截图微调后相关2项复验通过。[阶段证据](history/2026-10-20-添加弹窗与工作空间.md)。本轮不重复本地UI测试；GitHub Actions在ac1476b通过完整流程，含后端检查、前端构建、浏览器测试、迁移及无外网容器检查，[CI证据](https://github.com/Aspeternity/seekbell/actions/runs/39341396427)。main合并提交会另触发CI，其结果以Actions为准。邮箱隐私检查通过，仓库为PRIVATE。
+已修两处真实CI问题：原型改为根目录正向收集，避免误跑backup/proxy；TLS fixture先由Docker选可用池再显式声明internal子网，兼容静态IP，不改全局网络。失败日志、排除路线及本机40项原型/26项代理/2项HTTPS证据见本次记录。
 
-完整包SeekBell-v0.4-complete.zip源码快照100a95c，位置及复现命令见交接。包仍是模拟版，本次不重打包。用户认可此前整体视觉，v0.4本轮验收未记录。
+[远程CI 39463442124](https://github.com/Aspeternity/seekbell/actions/runs/39463442124)整体success：后端473项184.52秒、浏览器64项、格式/锁/隐私/构建/迁移/容器重启、备份恢复/升级回退/真实TLS通过。ubuntu-24.04 amd64和ubuntu-24.04-arm均原生构建/服务/备份升级/TLS/归档全过，无QEMU。产物下载后ZIP及归档校验、两平台版本/配置/层及本机加载预检通过，published=false。
 
-## 下一步与读取清单
+本机保留seekbell:ci-34cf183-amd64（image ID 8ffd0690...）和-arm64（62fc22b9...）；完整ID、配置digest、归档/ZIP SHA及artifact ID见证据。CI classic ID与本机containerd ID不同已实际验证；这些不是GHCR发布digest。临时归档/容器清理，无真实发送。
 
-新对话核对发行版、正式目录、分支/HEAD/工作区，先读AGENTS、本状态和交接；按需读SPEC第1/2/3/6节、ARCHITECTURE网站库/认证/调度、UI_PROTOTYPE与UI_DESIGN及相关代码。建议首个接入闭环：真实初始化/登录→添加内置网站→创建任务→服务端持久化并刷新保留，保留既定界面。
+## 用户验收实例
 
-后端M1仍播种NodeSeek关闭来源；新部署无实例须区分内置目录和用户实例并保留旧数据。JS试算统一后端RuleEngine，备注映射待核实。原生产入口仍为状态页面，最终需接入单容器构建。
+保留项目seekbell-acceptance-b45fc2c-20261020、容器后缀-seekbell-1、卷后缀_data，seekbell:backup-local（b45fc2c），http://localhost:18081/。最终只读running/重启计数0，未替换/重置/代配置。旧seekbell-acceptance不兼容卷保留、容器已停，勿复用旧名/改迁移号；旧4175/18080未动。[故障记录](history/2026-10-20-本机验收启动修复.md)。
 
-无开发阻塞。真实认证/管理API、运行生命周期及采集通知尚未接入UI；浏览器认证非安全边界、模拟统计非实测。Safari/真机、PVE/arm64、生产备份恢复及发布镜像未验证；远程CI仅构建并检查容器，未发布镜像。
+## 下一步与恢复
+
+本轮已获合并/GHCR授权，正在核对私有包权限。现有Git凭据无包读取scope，包API404不作为不存在证据；新增发布job短期令牌的前后私有/仓库关联检查。未提交：images.yml、check_ghcr_package与专项、镜像说明、本状态及合并发布证据。新增包校验及发布工具54项0.32秒、workflow格式/actionlint1.7.12通过；发布后再按固定digest拉取amd64禁外网复验，随后合并main并手动发布，记录真实digest；再进入M5授权PVE、真实RSS/四渠道、Safari/真机、运行观察和用户验收，确认后正式发布。[阶段顺序](ROADMAP.md)。目标环境/域名证书、GHCR实际写入、跨版本加密恢复未验证；原生CI不等同用户设备验收。恢复/回退可能重复发送，保留原卷，不直接降级新库。
+
+恢复读AGENTS、本状态、IMAGE_RELEASE及本次证据；按需读三个workflow、proxy_fixture/专项、RELEASES/PROXY_DEPLOYMENT，不全仓重读。仅Markdown收尾标注skip ci，复用34cf183代码证据，不宣称文档HEAD重跑过CI，不为写自身SHA循环提交。
 
 ## 授权
 
-沿用完整前端、网站改版、本地M3、独立WSL、noreply及既有私有推送授权；本轮用户明确授权将codex/ui-prototype合并至main并推送私有origin；保留来源分支。无公开/GHCR发布、部署、真实发送、原环境清理或全局WSL变更授权，不组织多代理。此前保留4175预览，新会话须核对进程。
+本轮用户在明确下一步为推送/CI后要求继续，已执行开发分支普通推送和无发布远程CI。沿用独立WSL/noreply；2026-10-21用户明确“授权”主分支合并和GHCR镜像发布，本轮按私有候选执行，允许仅为本次运行启用发布开关并事后恢复；无远程部署、真实发送、仓库/包公开、正式GitHub Release、原环境清理/全局WSL变更授权。不组织多代理；保留用户验收实例及配置。

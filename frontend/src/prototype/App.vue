@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import Icon from './components/Icon.vue'
 import Overview from './Overview.vue'
+import type { Component } from 'vue'
 import TaskEditor from './TaskEditor.vue'
 import TaskList from './pages/TaskList.vue'
 import Websites from './pages/Websites.vue'
@@ -14,6 +15,7 @@ import { emptyTask } from './model'
 import type { Task } from './model'
 import {
   state,
+  isLive,
   toast,
   notify,
   account,
@@ -24,7 +26,14 @@ import {
   newTarget,
   confirmation,
   confirmAction,
-} from './store'
+} from '@workspace'
+const liveComponents = defineProps<{
+  overview?: Component
+  settings?: Component
+  content?: Component
+  records?: Component
+  targets?: Component
+}>()
 function normalize(hash: string) {
   try {
     const p = decodeURIComponent(hash.replace(/^#/, '')) || '/'
@@ -41,8 +50,11 @@ const path = ref(normalize(location.hash)),
   dirty = ref(false),
   mobileMenu = ref(false),
   taskReturn = ref('/')
-if (!signedIn.value && !['/login', '/setup'].includes(path.value)) path.value = '/login'
-if (path.value === '/login') setSession(false)
+if (!signedIn.value && !['/login', '/setup'].includes(path.value))
+  path.value = isLive && !account.created ? '/setup' : '/login'
+if (!isLive && path.value === '/login') setSession(false)
+if (isLive && !account.created) path.value = '/setup'
+if (isLive && signedIn.value && path.value === '/login') path.value = '/'
 history.replaceState(null, '', '#' + path.value)
 const parts = computed(() => path.value.split('/').filter(Boolean))
 const page = computed(() => parts.value[0] || 'overview')
@@ -90,9 +102,17 @@ const validPage = computed(
     (page.value !== 'task' || !!editing.value) &&
     (page.value !== 'target' || !!targetEditing.value) &&
     (page.value !== 'settings' ||
-      ['preferences', 'account', 'backup', 'about'].includes(parts.value[1] || '')) &&
+      [
+        'preferences',
+        'account',
+        'backup',
+        'about',
+        ...(isLive ? ['retention', 'display', 'alerts'] : []),
+      ].includes(parts.value[1] || '')) &&
     (page.value !== 'notifications' ||
-      ['targets', 'deliveries', 'tests'].includes(parts.value[1] || '')),
+      ['targets', 'deliveries', 'tests', ...(isLive ? ['manual'] : [])].includes(
+        parts.value[1] || '',
+      )),
 )
 const dialog = ref<HTMLDialogElement>(),
   infoDialog = ref<HTMLDialogElement>(),
@@ -110,12 +130,13 @@ function accept() {
 }
 function applyRoute(next: string, push = true) {
   if (!signedIn.value && !['/login', '/setup'].includes(next)) next = '/login'
-  if (next === '/login') setSession(false)
+  if (!isLive && next === '/login') setSession(false)
   if (next.startsWith('/task/') && !path.value.startsWith('/task/'))
     taskReturn.value = path.value === '/tasks' ? '/tasks' : '/'
   if (push && path.value !== next) history.pushState(null, '', '#' + next)
   else history.replaceState(null, '', '#' + next)
   path.value = next
+  saveError.value = ''
   dirty.value = false
   mobileMenu.value = false
   window.scrollTo(0, 0)
@@ -187,11 +208,29 @@ function menuKey(event: KeyboardEvent) {
     first?.focus()
   }
 }
-function save(task: Task) {
-  saveTask(task)
-  dirty.value = false
-  applyRoute(taskReturn.value)
+const saving = ref(false),
+  saveError = ref('')
+async function save(task: Task) {
+  if (saving.value) return
+  saving.value = true
+  saveError.value = ''
+  try {
+    await saveTask(task)
+    dirty.value = false
+    applyRoute(taskReturn.value)
+  } catch (error) {
+    saveError.value = (error as Error).message
+  } finally {
+    saving.value = false
+  }
 }
+function expired() {
+  dirty.value = false
+  applyRoute('/login')
+}
+window.addEventListener('seekbell-session-expired', expired)
+onBeforeUnmount(() => window.removeEventListener('seekbell-session-expired', expired))
+
 function toggle(id: string) {
   const task = state.tasks.find((t) => t.id === id)
   if (task) setTaskEnabled(task, !task.enabled)
@@ -200,9 +239,12 @@ function focusMain() {
   document.getElementById('main-content')?.focus()
 }
 function showInfo() {
-  infoTitle.value = '完整界面演示 v0.4'
+  infoTitle.value = isLive ? '前后端接入进度' : '完整界面演示 v0.4'
   infoBody.value =
     '所有管理页面已可体验。任务、目标、来源、内容、投递和设置在浏览器内联动；支持演示登录和备份恢复。界面不连接真实后端、不采集 RSS、不发送通知。请使用演示凭据。'
+  if (isLive)
+    infoBody.value =
+      '初始化、登录、配置保存、历史查询、概览统计与管理员修改已接入服务端。独立目标测试与手动重发需明确确认；服务端采集与自动投递随服务运行，关闭浏览器仍会继续。目标删除、保留策略、时区与系统告警已接入；版本信息可在系统设置查看。已提供停服加密备份与独立恢复维护命令；网页支持加密下载和上传生成独立恢复副本，正式切换通过宿主机维护工具执行；真实 RSS/通知与用户验收尚未完成。'
   infoDialog.value?.showModal()
 }
 </script>
@@ -266,7 +308,9 @@ function showInfo() {
           <div class="quiet-symbol"><Icon name="activity" :size="21" /></div>
           <strong>好消息，安静地抵达。</strong>
           <p>你的关注，由 SeekBell 守候。</p>
-          <span><i class="status-dot green-dot" />本地模拟模式</span>
+          <span
+            ><i class="status-dot green-dot" />{{ isLive ? '服务端配置' : '本地模拟模式' }}</span
+          >
         </div>
         <button
           class="sidebar-secondary"
@@ -279,7 +323,7 @@ function showInfo() {
           <span class="avatar">{{ account.username.slice(0, 1).toUpperCase() }}</span
           ><span
             ><strong>{{ account.username }}</strong
-            ><small>演示管理员</small></span
+            ><small>{{ isLive ? '管理员' : '演示管理员' }}</small></span
           ><Icon name="down" :size="15" />
         </button>
       </div>
@@ -301,8 +345,13 @@ function showInfo() {
           ><span>工作空间</span><span class="crumb-slash">/</span><strong>{{ pageTitle }}</strong>
         </div>
         <div class="topbar-right">
-          <span class="demo-badge"><span class="status-dot" />模拟数据</span
-          ><button class="icon-button help-button" aria-label="原型使用说明" @click="showInfo">
+          <span class="demo-badge"
+            ><span class="status-dot" />{{ isLive ? '接入进行中' : '模拟数据' }}</span
+          ><button
+            class="icon-button help-button"
+            :aria-label="isLive ? '接入进度说明' : '原型使用说明'"
+            @click="showInfo"
+          >
             <Icon name="help" :size="19" /></button
           ><button
             class="avatar small avatar-button"
@@ -314,8 +363,37 @@ function showInfo() {
         </div>
       </header>
       <main id="main-content" tabindex="-1">
+        <component
+          :is="liveComponents.overview"
+          v-if="isLive && page === 'overview'"
+          @navigate="navigate"
+        />
+        <component
+          v-else-if="isLive && page === 'notifications' && parts[1] === 'targets'"
+          :is="liveComponents.targets"
+          @navigate="navigate"
+        />
+        <component
+          v-else-if="isLive && page === 'content'"
+          :is="liveComponents.content"
+          :key="path"
+          :selected-id="parts[1]"
+          @navigate="navigate"
+        />
+        <component
+          v-else-if="
+            isLive &&
+            page === 'notifications' &&
+            ['deliveries', 'tests', 'manual'].includes(parts[1] || '')
+          "
+          :is="liveComponents.records"
+          :key="path"
+          :tab="parts[1]"
+          :record-id="parts[2]"
+          @navigate="navigate"
+        />
         <Overview
-          v-if="page === 'overview'"
+          v-else-if="page === 'overview'"
           :tasks="state.tasks"
           @edit="(id) => navigate('/task/' + id)"
           @create="navigate('/task/new')"
@@ -333,15 +411,17 @@ function showInfo() {
           v-else-if="page === 'task' && editing"
           :key="path"
           :task="editing"
+          :saving="saving"
+          :save-error="saveError"
           :return-label="taskReturn === '/tasks' ? '返回任务列表' : '返回概览'"
-          @dirty="(value) => (dirty = value)"
+          @dirty="(value: boolean) => (dirty = value)"
           @save="save"
           @navigate="navigate"
           @cancel="navigate(taskReturn)"
         /><Websites
           v-else-if="page === 'websites'"
           @navigate="navigate"
-          @dirty="(value) => (dirty = value)"
+          @dirty="(value: boolean) => (dirty = value)"
         /><Content
           v-else-if="page === 'content'"
           :key="path"
@@ -357,19 +437,30 @@ function showInfo() {
           v-else-if="page === 'target' && targetEditing"
           :key="path"
           :target="targetEditing"
-          @dirty="(value) => (dirty = value)"
+          @dirty="(value: boolean) => (dirty = value)"
+          @navigate="navigate"
+        /><component
+          :is="liveComponents.settings"
+          v-else-if="isLive && page === 'settings' && validPage"
+          :key="path"
+          :tab="parts[1]"
+          @dirty="(value: boolean) => (dirty = value)"
           @navigate="navigate"
         /><Settings
           v-else-if="page === 'settings' && validPage"
           :key="path"
           :tab="parts[1]"
-          @dirty="(value) => (dirty = value)"
+          @dirty="(value: boolean) => (dirty = value)"
           @navigate="navigate"
         />
         <section v-else class="panel not-found">
           <span class="not-found-number">404</span>
           <h1 tabindex="-1">这条线索暂时不在这里</h1>
-          <p>页面可能不存在，或演示记录已被删除。</p>
+          <p>
+            {{
+              isLive ? '页面可能不存在，或记录已被删除。' : '页面可能不存在，或演示记录已被删除。'
+            }}
+          </p>
           <button class="button primary" @click="navigate('/')">
             返回概览<Icon name="arrow" :size="16" />
           </button>
@@ -379,7 +470,7 @@ function showInfo() {
           class="page-footer"
         >
           <span><Icon name="bell" :size="14" />SeekBell · 留意你关心的</span
-          ><span>完整界面演示 · v0.4</span>
+          ><span>{{ isLive ? '管理界面 · v0.4' : '完整界面演示 · v0.4' }}</span>
         </footer>
       </main>
     </div></template

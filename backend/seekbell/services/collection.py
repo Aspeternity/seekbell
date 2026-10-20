@@ -9,9 +9,18 @@ from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
 from seekbell.collectors.rss import RssCollector
-from seekbell.db.models import Source, SourceState, Website
+from seekbell.db.models import (
+    Administrator,
+    Source,
+    SourceProbe,
+    SourceState,
+    Website,
+    WebsiteInstallation,
+)
+from seekbell.db.transactions import database_call
 from seekbell.domain.errors import SourceFailure
 from seekbell.services.ingestion import Ingestion, IngestReport
+from seekbell.services.source_probe import probe_due
 from seekbell.sites.nodeseek import BUILTIN_ADAPTERS
 
 
@@ -23,7 +32,7 @@ class PollOutcome:
 
 
 class SourceRunner:
-    """One shared source, no overlap or catch-up queue. Construct explicitly; no auto-start."""
+    """One shared source, no overlap or catch-up queue. One actor per service instance."""
 
     def __init__(
         self,
@@ -33,6 +42,9 @@ class SourceRunner:
         source_id: str = "nodeseek-rss",
         clock: Callable[[], float] = time.time,
         jitter: Callable[[], float] | None = None,
+        managed: bool = False,
+        tick: float = 1,
+        fetch_timeout: float = 15,
     ):
         self.engine = engine
         self.collector = collector
@@ -41,7 +53,7 @@ class SourceRunner:
         self.clock = clock
         self.jitter = jitter or (lambda: random.uniform(0, 0.5))
         self._lock = asyncio.Lock()
-        self._interval = 10
+        self.managed, self.tick, self.fetch_timeout = managed, tick, fetch_timeout
 
     def _snapshot(self) -> dict:
         with Session(self.engine) as session:
@@ -49,21 +61,48 @@ class SourceRunner:
             state = session.get(SourceState, self.source_id)
             if source is None or state is None:
                 raise ValueError("Unknown source")
+            probe = session.get(SourceProbe, self.source_id)
             website = session.get(Website, source.website_id)
             return {
-                "enabled": source.enabled and website.enabled,
+                "enabled": source.enabled
+                and website.enabled
+                and (
+                    not self.managed
+                    or (
+                        session.get(Administrator, 1) is not None
+                        and session.get(WebsiteInstallation, website.id) is not None
+                    )
+                ),
                 "website_id": source.website_id,
                 "url": source.url,
-                "next_attempt_at": state.next_attempt_at,
+                "next_attempt_at": max(
+                    state.next_attempt_at, probe_due(probe, source.interval_seconds)
+                ),
                 "interval_seconds": source.interval_seconds,
             }
+
+    async def fetch_batch(self, adapter):
+        try:
+            async with asyncio.timeout(self.fetch_timeout):
+                feed = await self.collector.fetch(adapter.rss_url)
+        except TimeoutError:
+            raise SourceFailure("timeout") from None
+        return await asyncio.to_thread(adapter.normalize, feed)
 
     async def run_once(self) -> PollOutcome:
         if self._lock.locked():
             return PollOutcome("overlap")
+        # Paused/backoff wakes do not occupy the network operation lock. A
+        # second snapshot under the lock validates a due poll against changes.
+        snapshot = await database_call(self._snapshot)
+        if not snapshot["enabled"]:
+            return PollOutcome("paused")
+        if self.clock() < snapshot["next_attempt_at"]:
+            return PollOutcome("backoff")
+        if self._lock.locked():
+            return PollOutcome("overlap")
         async with self._lock:
-            snapshot = await asyncio.to_thread(self._snapshot)
-            self._interval = snapshot["interval_seconds"]
+            snapshot = await database_call(self._snapshot)
             if not snapshot["enabled"]:
                 return PollOutcome("paused")
             if self.clock() < snapshot["next_attempt_at"]:
@@ -72,10 +111,9 @@ class SourceRunner:
                 adapter = BUILTIN_ADAPTERS.get(snapshot["website_id"])
                 if adapter is None or snapshot["url"] != adapter.rss_url:
                     raise SourceFailure("unsupported_source")
-                feed = await self.collector.fetch(adapter.rss_url)
-                batch = await asyncio.to_thread(adapter.normalize, feed)
+                batch = await self.fetch_batch(adapter)
             except SourceFailure as exc:
-                await asyncio.to_thread(
+                await database_call(
                     self.ingestion.record_failure,
                     self.source_id,
                     exc.code,
@@ -84,17 +122,15 @@ class SourceRunner:
                     jitter=self.jitter(),
                 )
                 return PollOutcome("failure", exc.code)
-            report = await asyncio.to_thread(
+            report = await database_call(
                 self.ingestion.ingest, self.source_id, batch, at=self.clock()
             )
             return PollOutcome(report.status, report=report)
 
     async def run(self, stop: asyncio.Event) -> None:
         while not stop.is_set():
-            started = time.monotonic()
             await self.run_once()
-            delay = started + self._interval - time.monotonic()
-            if delay <= 0:
-                delay = self._interval  # Skip missed ticks rather than replaying them.
+            # Persisted next_attempt_at controls network frequency. Short wakes
+            # observe configuration changes without replaying missed polls.
             with suppress(TimeoutError):
-                await asyncio.wait_for(stop.wait(), timeout=delay + self.jitter())
+                await asyncio.wait_for(stop.wait(), timeout=self.tick)

@@ -17,6 +17,7 @@ from seekbell.db.models import (
     SourceRun,
     SourceState,
     Task,
+    TaskEvaluation,
     TaskVersion,
     Website,
 )
@@ -24,6 +25,7 @@ from seekbell.db.transactions import write_session
 from seekbell.domain.delivery import SourcePolicy
 from seekbell.domain.posts import Diagnostic, PostBatch, PostFields
 from seekbell.domain.rules import Rule, evaluate
+from seekbell.services.alerts import observe
 from seekbell.services.configuration import identifier, target_snapshot
 
 
@@ -68,6 +70,9 @@ class Ingestion:
                 self.source_policy.retry_delay(state.failures, retry_after) + max(0, jitter),
             )
             session.add(SourceRun(source_id=source_id, at=at, status="failure", code=code))
+            observe(
+                session, "source:" + source_id, True, label="NodeSeek 官方 RSS", code=code, at=at
+            )
             return state.next_attempt_at
 
     def ingest(self, source_id: str, batch: PostBatch, *, at: float) -> IngestReport:
@@ -151,6 +156,7 @@ class Ingestion:
                         url=post.url,
                         published_at=post.published_at.timestamp() if post.published_at else None,
                         first_seen_at=at,
+                        baseline=baseline,
                     )
                 )
                 if baseline:
@@ -159,6 +165,17 @@ class Ingestion:
                 target_hits: dict[str, list[tuple[RuleHit, TaskVersion]]] = {}
                 for task, version in versions:
                     decision = evaluate(Rule.model_validate(version.rule), post)
+                    session.add(
+                        TaskEvaluation(
+                            task_id=task.id,
+                            task_version=version.version,
+                            website_id=post.website_id,
+                            external_post_id=post.external_post_id,
+                            status=decision.status,
+                            result=decision.model_dump(mode="json"),
+                            evaluated_at=at,
+                        )
+                    )
                     if decision.status == "insufficient_data":
                         insufficient += 1
                     if decision.status != "match":
@@ -176,7 +193,7 @@ class Ingestion:
                     hit_count += 1
                     for target_id in version.target_ids:
                         target = session.get(NotificationTarget, target_id)
-                        if target is not None and target.enabled:
+                        if target is not None and target.deleted_at is None and target.enabled:
                             target_hits.setdefault(target_id, []).append((hit, version))
 
                 for target_id, hits in target_hits.items():
@@ -220,6 +237,7 @@ class Ingestion:
                         session.add(OutboxContribution(event_id=event_id, hit_id=hit.id))
                     queued += 1
 
+            observe(session, "source:" + source_id, False, label="NodeSeek 官方 RSS", at=at)
             state.initialized = True
             state.needs_baseline = False
             state.last_attempt_at = state.last_success_at = at
