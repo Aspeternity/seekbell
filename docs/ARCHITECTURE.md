@@ -186,3 +186,18 @@ GET/POST /api/manage/websites/nodeseek/connection-test复用认证和CSRF。POST
 新SourceProbe每来源仅存最近一次开始/完成时间、结果/固定诊断码、有效条目数和下次可请求时间；发请求前先持久化unknown/cooldown，中断不伪称成功。它不写SourceState/SourceRun、Post、基线/命中或账本；网站移除仍保留来源锚点和限频，重新添加不能绕过。检查前同时服从正式来源next_attempt_at/last_attempt_at及既有probe间隔，失败服从Retry-After与SourcePolicy退避。正式采集也服从probe时间；改变间隔不会绕过测试退避，概览显示合并后的有效时间。测试成功不清除正式采集故障或冒充正式采集成功。结果刷新可读，未保存的面板间隔不参与测试；Runtime停止时同时join/cancel在途显式检查，再关闭客户端/数据库。
 
 管理操作浏览器验证使用独立--operations临时库/8015：实际锁/采集器配MockTransport，投递actor隔离，显式通知服务由测试依赖替换。产品无新增模拟开关。证据与命令见[本阶段记录](history/2026-10-20-管理操作接入.md)。
+
+
+## M3保留策略与历史清理（2026-10-20，第七子阶段）
+
+0008_retention新增单例RetentionPolicy：days（1–365，默认30）、revision、next_run_at、last_run_at及last_counts；只修改保留天数时提升版本。GET/PUT /api/manage/retention沿用管理员会话/no-store和写入CSRF/Origin；PUT严格校验天数/期望revision，过期版本409，不能覆盖另一个页面的新策略。GET和保存请求不执行清理；更改天数将next_run_at置0，由服务端actor处理。workspace返回实际retention天数。正式设置新增独立保留策略页，确认清理不可逆、保存成功后更新基准；失败/409保留草稿，可明确重新读取，沿用导航未保存保护。原型保持原有模拟保存。
+
+新HistoryRetention与采集、投递同属唯一Runtime，初始化前不工作；无需网站启用或浏览器保持打开。默认每小时完成一次检查，候选达到每类100个父项时每秒续批，不补跑错过的轮次。未到期/初始化前的唤醒只读；真正清理持BEGIN IMMEDIATE，同事务重查策略/到期并删除依赖、父项及更新检查点。与摄取/认领/完成/配置取消串行，避免检查后被另一写入改变。停止复用database_call的屏蔽取消/join规则，先等待数据库线程，再dispose；actor意外失败使用固定retention_stopped代码并降低就绪，日志不输出异常/SQL参数。
+
+按UTC连续86400秒/天，严格早于cutoff才过期，边界时刻保留。Outbox只清sent/failed/cancelled，要求created_at与completed_at均过期，且所有尝试已结束、开始/完成/迟到结果都过期；pending/retry/leased和未完成尝试始终受保护。先删除该批DeliveryAttempt与OutboxContribution，再删Outbox；只有不再有任何保留Outbox的过期Post才与对应TaskEvaluation/RuleHit同批清理。旧版已经没有Post的孤立过期判定/命中另行有界清理，贡献仍有引用则不删。已完成目标测试/手动重发按finished_at清理，finished_at为空的未知/未完成记录保留；SourceRun按at清理。ManualDelivery原事件ID不是FK，原自动记录过期不损坏仍保留的手动消息快照，详情标示原记录已清理。显式操作同ID幂等仅在对应记录保留期间成立。
+
+SeenPost、DeliveredPost和SourceItem均为独立身份/回执账本，不参与普通历史清理；SourceState/SourceProbe、安装关系、管理员、任务/版本和通知配置也不在清理范围。不因Post/outbox消失重新入库旧帖或补发，迟到结果/未知状态在受保护或保留周期内继续可追踪。清理不执行VACUUM，不承诺SQLite文件立即缩小；版本清理、备份恢复和账本主动删除不在本阶段。
+
+Outbox新增completed_at和清理索引，正常完成、认领时确认终态、任务/目标取消等待意图，以及终态收到迟到结果均记录当前时间；不会仅凭很久以前的created_at清掉刚完成的重试或取消。旧库原来没有终态时间，迁移时仅对已有终态设升级时刻，额外保留完整周期，不猜测历史完成时间；队列/租约原样保留。给采集历史/判定/命中/显式操作增加清理时间索引，ORM与迁移一致，失败DDL/数据/版本整体回滚。
+
+普通历史清理会影响内容/命中/采集统计窗口；自动投递数量继续取独立回执，概览说明两种口径。最近一批数量与下次检查时间可读取，不将它冒充永久累计值。只在独立临时库/模拟依赖验证；--retention浏览器服务8016仅启用实际清理actor，源与通知actor使用测试注入隔离，产品无模拟开关。runtime_demo增加真实后台清理与保留两条已见/来源身份及一条回执的离线检查。证据见[本阶段记录](history/2026-10-20-保留策略与清理接入.md)。

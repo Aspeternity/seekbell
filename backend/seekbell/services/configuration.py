@@ -1,3 +1,4 @@
+import time
 from uuid import uuid4
 
 from sqlalchemy import Engine, select
@@ -226,7 +227,7 @@ class Configuration:
             if enabled is not None:
                 task.enabled = enabled
                 if not enabled:
-                    self._cancel_contributions(session, key)
+                    self._cancel_contributions(session, key, at=at)
             task.current_version += 1
             version = task.current_version
             session.add(
@@ -244,7 +245,7 @@ class Configuration:
         return version
 
     @staticmethod
-    def _cancel_contributions(session, task_id: str) -> None:
+    def _cancel_contributions(session, task_id: str, *, at: float | None = None) -> None:
         hit_ids = select(RuleHit.id).where(RuleHit.task_id == task_id)
         contributions = session.scalars(
             select(OutboxContribution)
@@ -270,16 +271,17 @@ class Configuration:
                 event.cancel_requested = True
                 if event.status != "leased":
                     event.status = "cancelled"
+                    event.completed_at = time.time() if at is None else at
                     event.last_error_code = "task_contributions_removed"
 
-    def set_task_enabled(self, key: str, enabled: bool) -> None:
+    def set_task_enabled(self, key: str, enabled: bool, *, at: float | None = None) -> None:
         with write_session(self.engine) as session:
             task = session.get(Task, key)
             if task is None or task.deleted_at is not None:
                 raise ValueError("Unknown active task")
             task.enabled = enabled
             if not enabled:
-                self._cancel_contributions(session, key)
+                self._cancel_contributions(session, key, at=at)
 
     def delete_task(self, key: str, *, at: float) -> None:
         with write_session(self.engine) as session:
@@ -288,7 +290,7 @@ class Configuration:
                 raise ValueError("Unknown task")
             task.deleted_at = at
             task.enabled = False
-            self._cancel_contributions(session, key)
+            self._cancel_contributions(session, key, at=at)
 
     def delete_target(self, key: str, *, at: float) -> None:
         with write_session(self.engine) as session:
@@ -308,21 +310,23 @@ class Configuration:
             )
             if any(key in version.target_ids for version in versions):
                 raise TargetInUse("请先在所有关联任务中取消选择此目标，包括暂停的任务。")
-            self._target_enabled(session, target, False)
+            self._target_enabled(session, target, False, at=at)
             target.revision += 1
             target.deleted_at = at
             target.config_ciphertext = None
             # Identity and immutable encrypted delivery snapshots remain as evidence.
 
-    def set_target_enabled(self, key: str, enabled: bool) -> None:
+    def set_target_enabled(self, key: str, enabled: bool, *, at: float | None = None) -> None:
         with write_session(self.engine) as session:
             target = session.get(NotificationTarget, key)
             if target is None or target.deleted_at is not None:
                 raise ValueError("Unknown target")
-            self._target_enabled(session, target, enabled)
+            self._target_enabled(session, target, enabled, at=at)
 
     @staticmethod
-    def _target_enabled(session, target: NotificationTarget, enabled: bool):
+    def _target_enabled(
+        session, target: NotificationTarget, enabled: bool, *, at: float | None = None
+    ):
         if target.enabled != enabled:
             target.revision += 1
         target.enabled = enabled
@@ -335,6 +339,7 @@ class Configuration:
                 item.cancel_requested = True
                 if item.status != "leased":
                     item.status = "cancelled"
+                    item.completed_at = time.time() if at is None else at
                     item.last_error_code = "target_disabled"
         # Re-enabling never uncancels old messages.
 

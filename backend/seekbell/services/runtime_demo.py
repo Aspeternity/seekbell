@@ -10,7 +10,18 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from seekbell.config import Settings
-from seekbell.db.models import DeliveredPost, Source, SourceState, Website, WebsiteInstallation
+from seekbell.db.models import (
+    DeliveredPost,
+    Outbox,
+    Post,
+    RetentionPolicy,
+    SeenPost,
+    Source,
+    SourceItem,
+    SourceState,
+    Website,
+    WebsiteInstallation,
+)
 from seekbell.db.transactions import database_call, write_session
 from seekbell.domain.delivery import SendResult
 from seekbell.domain.rules import Rule
@@ -22,7 +33,7 @@ from seekbell.services.runtime import Runtime
 
 
 async def exercise(directory):
-    clock, polls, sends = [100.0], [], []
+    clock, cleanup_clock, polls, sends = [100.0], [100.0], [], []
 
     def feed(request):
         polls.append(request)
@@ -45,6 +56,7 @@ async def exercise(directory):
             tick=0.02,
         )
         actor.source.clock = actor.worker.clock = lambda: clock[0]
+        actor.retention.clock = lambda: cleanup_clock[0]
         return actor
 
     app = create_app(Settings(data_dir=directory), runtime_factory=factory)
@@ -90,6 +102,25 @@ async def exercise(directory):
         assert app.state.runtime.active and len(sends) == 1
         assert len(sends[0]["matched_tasks"]) == 2
         assert len(polls) == 2
+
+        def schedule_cleanup():
+            with write_session(engine) as session:
+                session.get(RetentionPolicy, 1).next_run_at = 0
+
+        def history_removed():
+            with Session(engine) as session:
+                return (
+                    session.scalar(select(func.count()).select_from(Post)) == 0
+                    and session.scalar(select(func.count()).select_from(Outbox)) == 0
+                )
+
+        cleanup_clock[0] = 110 + 31 * 86400
+        await database_call(schedule_cleanup)
+        await wait_for(history_removed)
+        with Session(engine) as session:
+            assert session.scalar(select(func.count()).select_from(SeenPost)) == 2
+            assert session.scalar(select(func.count()).select_from(SourceItem)) == 2
+            assert session.scalar(select(func.count()).select_from(DeliveredPost)) == 1
     assert app.state.runtime.client.is_closed
     assert all(task.done() for task in app.state.runtime.tasks.values())
     return {
@@ -98,6 +129,8 @@ async def exercise(directory):
         "sends": len(sends),
         "merged_tasks": len(sends[0]["matched_tasks"]),
         "baseline_silent": True,
+        "cleanup_history_removed": True,
+        "cleanup_ledgers_preserved": True,
         "runtime_stopped": app.state.runtime.status == "stopped",
         "http_closed": app.state.runtime.client.is_closed,
     }

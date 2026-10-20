@@ -102,7 +102,9 @@ const validPage = computed(
     (page.value !== 'task' || !!editing.value) &&
     (page.value !== 'target' || !!targetEditing.value) &&
     (page.value !== 'settings' ||
-      ['preferences', 'account', 'backup', 'about'].includes(parts.value[1] || '')) &&
+      ['preferences', 'account', 'backup', 'about', ...(isLive ? ['retention'] : [])].includes(
+        parts.value[1] || '',
+      )) &&
     (page.value !== 'notifications' ||
       ['targets', 'deliveries', 'tests', ...(isLive ? ['manual'] : [])].includes(
         parts.value[1] || '',

@@ -88,7 +88,10 @@ function setRange(value: '24h' | '7d') {
       </button>
     </section>
     <p class="small-note overview-window">
-      统计时段：{{ stamp(data.start) }} 至 {{ stamp(data.end) }}（左闭右开）；以下均为已保存记录。
+      统计时段：{{ stamp(data.start) }} 至
+      {{
+        stamp(data.end)
+      }}（左闭右开）；以下均为已保存记录。内容、命中和采集统计受保留期限影响，自动投递按独立回执统计。
     </p>
     <section class="stats-grid" aria-label="概览统计">
       <article class="stat-card">

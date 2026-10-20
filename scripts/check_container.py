@@ -107,6 +107,11 @@ assert request("manage/history/tests")["total"] == 0
 assert request("manage/history/manual")["total"] == 0
 assert request("manage/history/options")["websites"][0]["id"] == "nodeseek"
 # Packaged management operations remain local and preserve current configuration.
+policy = request("manage/retention")
+if policy["days"] != 45:
+    policy = request("manage/retention", {"days": 45, "revision": policy["revision"]}, method="PUT")
+assert policy["days"] == 45
+assert request("manage/workspace")["settings"]["retention"] == 45
 trial = request("manage/rules/history", {"website_id": "nodeseek", "rule": {}, "limit": 100})
 assert trial["sample_count"] == trial["available"] == 0
 assert request("manage/websites/nodeseek/connection-test") is None
@@ -135,6 +140,7 @@ assert len(overview["buckets"]) == 7 and overview["recent_matches"] == []
 print(json.dumps({
     "website": workspace["websites"][0]["id"], "task": workspace["tasks"][0]["id"],
     "target": workspace["targets"][0]["id"], "note": workspace["tasks"][0]["description"],
+    "retention_days": policy["days"],
 }))
 """
 
@@ -201,6 +207,8 @@ def main() -> None:
         assert lifecycle["mode"] == "offline_synthetic" and lifecycle["sends"] == 1
         assert (
             lifecycle["baseline_silent"]
+            and lifecycle["cleanup_history_removed"]
+            and lifecycle["cleanup_ledgers_preserved"]
             and lifecycle["runtime_stopped"]
             and lifecycle["http_closed"]
         )

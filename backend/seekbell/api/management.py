@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from seekbell.api.auth import require_admin
 from seekbell.db.models import (
     NotificationTarget,
+    RetentionPolicy,
     Source,
     SourceState,
     Task,
@@ -21,6 +22,7 @@ from seekbell.db.transactions import write_session
 from seekbell.domain.posts import PostFields
 from seekbell.domain.rules import Rule, evaluate
 from seekbell.services.configuration import Configuration, TargetInUse
+from seekbell.services.retention import PolicyConflict, get_policy, update_policy
 from seekbell.services.rule_trial import trial_history
 from seekbell.services.runtime import status as runtime_status
 from seekbell.services.source_probe import ProbeConflict, get_probe
@@ -140,6 +142,7 @@ def workspace(request: Request):
             "settings": {
                 "workspaceName": preferences.name,
                 "workspaceDescription": preferences.description,
+                "retention": session.get(RetentionPolicy, 1).days,
             },
         }
     result["targets"] = [config(request).get_target(key) for key in target_ids]
@@ -347,3 +350,21 @@ async def connection_test(key: Literal["nodeseek"], values: ConnectionInput, req
         raise HTTPException(
             429 if error.retry_after else 409, str(error), headers=headers
         ) from None
+
+
+class RetentionInput(Input):
+    days: int = Field(ge=1, le=365)
+    revision: int = Field(ge=1)
+
+
+@router.get("/retention")
+def retention_policy(request: Request):
+    return get_policy(request.app.state.engine)
+
+
+@router.put("/retention")
+def save_retention(values: RetentionInput, request: Request):
+    try:
+        return update_policy(request.app.state.engine, values.days, values.revision)
+    except PolicyConflict as error:
+        raise HTTPException(409, str(error)) from None

@@ -68,6 +68,7 @@ class SourceState(Base):
 
 class SourceRun(Base):
     __tablename__ = "source_runs"
+    __table_args__ = (Index("ix_source_runs_retention", "at"),)
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     source_id: Mapped[str] = mapped_column(ForeignKey("sources.id"), index=True)
     at: Mapped[float] = mapped_column(Float)
@@ -185,6 +186,7 @@ class RuleHit(Base):
             "task_id", "task_version", "website_id", "external_post_id", name="uq_task_hit"
         ),
         Index("ix_rule_hits_post", "website_id", "external_post_id"),
+        Index("ix_rule_hits_retention", "matched_at"),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     task_id: Mapped[str] = mapped_column(String(36), index=True)
@@ -217,6 +219,7 @@ class Outbox(Base):
         ),
         Index("ix_outbox_available", "status", "available_at"),
         Index("ix_outbox_created_at", "created_at", "id"),
+        Index("ix_outbox_completed", "status", "completed_at"),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     website_id: Mapped[str] = mapped_column(String(80))
@@ -234,6 +237,7 @@ class Outbox(Base):
     last_result: Mapped[str | None] = mapped_column(String(32))
     last_error_code: Mapped[str | None] = mapped_column(String(80))
     created_at: Mapped[float] = mapped_column(Float)
+    completed_at: Mapped[float | None] = mapped_column(Float)
 
 
 class OutboxContribution(Base):
@@ -278,6 +282,7 @@ class DeliveredPost(Base):
 
 class TargetTestAttempt(Base):
     __tablename__ = "target_test_attempts"
+    __table_args__ = (Index("ix_target_test_attempts_retention", "finished_at"),)
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     target_id: Mapped[str] = mapped_column(ForeignKey("notification_targets.id"), index=True)
     target_snapshot: Mapped[dict] = mapped_column(JSON)
@@ -331,6 +336,7 @@ class TaskEvaluation(Base):
             "status IN ('match','no_match','insufficient_data')", name="ck_evaluation_status"
         ),
         Index("ix_evaluations_post_status", "website_id", "external_post_id", "status"),
+        Index("ix_task_evaluations_retention", "evaluated_at"),
     )
     task_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     task_version: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -347,6 +353,7 @@ class ManualDelivery(Base):
         Index("ix_manual_started", "started_at", "id"),
         Index("ix_manual_source", "source_event_id"),
         Index("ix_manual_target", "target_id"),
+        Index("ix_manual_deliveries_retention", "finished_at"),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     source_event_id: Mapped[str] = mapped_column(String(36))
@@ -357,3 +364,17 @@ class ManualDelivery(Base):
     finished_at: Mapped[float | None] = mapped_column(Float)
     result: Mapped[str] = mapped_column(String(32))
     error_code: Mapped[str | None] = mapped_column(String(80))
+
+
+class RetentionPolicy(Base):
+    __tablename__ = "retention_policy"
+    __table_args__ = (
+        CheckConstraint("id = 1", name="ck_retention_singleton"),
+        CheckConstraint("days BETWEEN 1 AND 365", name="ck_retention_days"),
+    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    days: Mapped[int] = mapped_column(Integer, default=30)
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    next_run_at: Mapped[float] = mapped_column(Float, default=0)
+    last_run_at: Mapped[float | None] = mapped_column(Float)
+    last_counts: Mapped[dict] = mapped_column(JSON, default=dict)

@@ -16,10 +16,12 @@ if __name__ == "__main__":
     group.add_argument("--sending", action="store_true")
     group.add_argument("--runtime", action="store_true")
     group.add_argument("--operations", action="store_true")
+    group.add_argument("--retention", action="store_true")
     args = parser.parse_args()
-    seeded = args.history or args.sending or args.operations
+    seeded = args.history or args.sending or args.operations or args.retention
     root = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(root))
+    from tests.retention_helpers import retention_runtime_factory, seed_retention
     from tests.runtime_helpers import (
         PassiveRuntime,
         operations_runtime_factory,
@@ -42,13 +44,18 @@ if __name__ == "__main__":
                 engine = create_database_engine(settings)
                 try:
                     migrate(engine)
-                    seed_history(engine, CredentialVault.open(Path(directory), create=True))
+                    if args.retention:
+                        seed_retention(engine)
+                    else:
+                        seed_history(engine, CredentialVault.open(Path(directory), create=True))
                 finally:
                     engine.dispose()
         app = create_app(
             Settings(data_dir=Path(directory), static_dir=static),
             runtime_factory=(
-                operations_runtime_factory
+                retention_runtime_factory
+                if args.retention
+                else operations_runtime_factory
                 if args.operations
                 else synthetic_runtime_factory
                 if args.runtime
@@ -70,7 +77,9 @@ if __name__ == "__main__":
         uvicorn.run(
             app,
             host="127.0.0.1",
-            port=8015
+            port=8016
+            if args.retention
+            else 8015
             if args.operations
             else 8014
             if args.runtime

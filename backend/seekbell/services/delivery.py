@@ -113,6 +113,7 @@ class DeliveryWorker:
                     event.status = "sent"
                     event.last_result = "success"
                     event.last_error_code = None
+                    event.completed_at = at
                     self._release(event)
                     continue
                 target = session.get(NotificationTarget, event.target_id)
@@ -125,11 +126,13 @@ class DeliveryWorker:
                 ):
                     event.status = "cancelled"
                     event.last_error_code = "delivery_cancelled"
+                    event.completed_at = at
                     self._release(event)
                     continue
                 if event.attempt_count >= self.policy.max_attempts:
                     event.status = "failed"
                     event.last_error_code = "attempts_exhausted"
+                    event.completed_at = at
                     self._release(event)
                     continue
 
@@ -185,6 +188,8 @@ class DeliveryWorker:
                     event.status = "sent"
                     event.last_result = "success"
                     event.last_error_code = None
+                if event.status in ("sent", "failed", "cancelled"):
+                    event.completed_at = at
                 return False
 
             attempt.result = result.status
@@ -221,6 +226,8 @@ class DeliveryWorker:
                 event.available_at = at + self.policy.retry_delay(
                     event.attempt_count, result.retry_after
                 )
+            if event.status in ("sent", "failed", "cancelled"):
+                event.completed_at = at
             self._release(event)
             return True
 

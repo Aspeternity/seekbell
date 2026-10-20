@@ -8,6 +8,7 @@ import httpx
 from seekbell.collectors.rss import RssCollector
 from seekbell.services.collection import SourceRunner
 from seekbell.services.delivery import DeliveryWorker
+from seekbell.services.retention import HistoryRetention
 from seekbell.services.source_probe import ProbeConflict, check
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,7 @@ class Runtime:
             fetch_timeout=collector_timeout,
         )
         self.worker = DeliveryWorker(engine, notifiers, managed=True, tick=tick)
+        self.retention = HistoryRetention(engine, tick=tick)
         self.stop = asyncio.Event()
         self.tasks = {}
         self.probes = set()
@@ -84,7 +86,11 @@ class Runtime:
             raise RuntimeError("Runtime already started")
         self.tasks = {
             name: asyncio.create_task(self._actor(name, actor.run), name="seekbell-" + name)
-            for name, actor in (("collection", self.source), ("delivery", self.worker))
+            for name, actor in (
+                ("collection", self.source),
+                ("delivery", self.worker),
+                ("retention", self.retention),
+            )
         }
         self.status = "running"
         await asyncio.sleep(0)
