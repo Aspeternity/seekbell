@@ -1,16 +1,14 @@
-"""Connection checks must get a due slot without bypassing the shared RSS throttle."""
+"""Manual RSS diagnostics have their own cooldown and preserve automatic scheduling."""
 
 import asyncio
-import time
 
 import httpx
 import pytest
 from seekbell.collectors.rss import RssCollector
-from seekbell.db.models import Source, SourceProbe, WebsiteInstallation
+from seekbell.db.models import Source, SourceProbe, SourceState, WebsiteInstallation
 from seekbell.db.transactions import write_session
 from seekbell.services.collection import SourceRunner
-from seekbell.services.source_probe import ProbeConflict, check
-from sqlalchemy.orm import Session
+from seekbell.services.source_probe import ProbeConflict, check, get_probe
 
 from tests.rss_samples import Chunks, rss
 from tests.test_management_operations import tables
@@ -22,104 +20,86 @@ def prepare(core):
         session.add(WebsiteInstallation(website_id="nodeseek"))
 
 
-@pytest.mark.parametrize("backoff", [False, True])
-def test_enabled_check_waits_for_shared_due_slot_and_does_not_ingest(core, backoff):
+def response():
+    return httpx.Response(
+        200,
+        headers={"content-type": "application/rss+xml"},
+        stream=Chunks(rss([{"id": 9002}])),
+    )
+
+
+@pytest.mark.parametrize("interval", [10, 3600])
+def test_recent_successful_collection_does_not_block_manual_check_or_get_rescheduled(
+    core, interval
+):
     prepare(core)
-    due = 110
-    if backoff:
-        core.ingestion.record_failure("nodeseek-rss", "http_429", at=100, retry_after=60)
-        due = 160
-    before = tables(core.engine)
+    with write_session(core.engine) as session:
+        session.get(Source, "nodeseek-rss").interval_seconds = interval
+        session.get(SourceState, "nodeseek-rss").next_attempt_at = 100 + interval
+    before, calls = tables(core.engine), []
+
+    async def exercise():
+        def handler(request):
+            calls.append(request)
+            return response()
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            runner = SourceRunner(core.engine, RssCollector(client), clock=lambda: 100.1)
+            result = await check(runner)
+            assert result["status"] == "success" and result["started_at"] == 100.1
+            assert result["next_attempt_at"] == 102.1
+            assert runner._snapshot()["next_attempt_at"] == 100 + interval
+
+    asyncio.run(exercise())
+    assert len(calls) == 1 and tables(core.engine) == before
+
+
+def test_successful_probe_own_cooldown_does_not_delay_a_due_collection(core):
+    prepare(core)
     calls = []
 
     async def exercise():
-        start = time.monotonic()
-
-        def clock():
-            return due - 0.2 + time.monotonic() - start
+        now = [109.9]
 
         def handler(request):
-            assert clock() >= due
-            calls.append(request)
-            return httpx.Response(
-                200,
-                headers={"content-type": "application/rss+xml"},
-                stream=Chunks(rss([{"id": 9002}])),
-            )
+            calls.append(now[0])
+            return response()
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            runner = SourceRunner(core.engine, RssCollector(client), clock=clock)
-            pending = asyncio.create_task(check(runner))
-            async with asyncio.timeout(2):
-                while not runner._lock.locked():
-                    await asyncio.sleep(0)
-            assert not calls
-            assert (await runner.run_once()).status == "overlap"
-            with pytest.raises(ProbeConflict):
-                await check(runner)
-            result = await pending
-            assert result["status"] == "success" and result["item_count"] == 1, result
-            assert (await runner.run_once()).status == "backoff"
+            runner = SourceRunner(core.engine, RssCollector(client), clock=lambda: now[0])
+            result = await check(runner)
+            assert result["next_attempt_at"] > 110
+            now[0] = 110
+            assert (await runner.run_once()).status == "success"
 
     asyncio.run(exercise())
-    assert len(calls) == 1
-    assert tables(core.engine) == before
+    assert calls == [109.9, 110]
 
 
-def test_saved_interval_is_rechecked_after_waiting(core):
+def test_manual_checks_have_their_own_persistent_double_click_cooldown(core):
     prepare(core)
+    with write_session(core.engine) as session:
+        session.get(Source, "nodeseek-rss").enabled = False
 
     async def exercise():
-        start = time.monotonic()
+        now = [100.1]
+        async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: response())) as client:
 
-        def handler(request):
-            raise AssertionError("Changed interval must prevent the request")
+            def runner():
+                return SourceRunner(core.engine, RssCollector(client), clock=lambda: now[0])
 
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            runner = SourceRunner(
-                core.engine,
-                RssCollector(client),
-                clock=lambda: 109.8 + time.monotonic() - start,
-            )
-            pending = asyncio.create_task(check(runner))
-            async with asyncio.timeout(2):
-                while not runner._lock.locked():
-                    await asyncio.sleep(0)
-                # Let the reservation read finish and enter its bounded wait.
-                await asyncio.sleep(0.05)
-            with write_session(core.engine) as session:
-                session.get(Source, "nodeseek-rss").interval_seconds = 20
-            with pytest.raises(ProbeConflict):
-                await pending
-            assert not runner._lock.locked()
+            await check(runner())
+            with pytest.raises(ProbeConflict) as error:
+                await check(runner())
+            assert error.value.retry_after == 2
+            assert "2" in str(error.value)
+            now[0] = 102.2
+            assert (await check(runner()))["status"] == "success"
 
     asyncio.run(exercise())
-    with Session(core.engine) as session:
-        assert session.get(SourceProbe, "nodeseek-rss") is None
 
 
-def test_cancelled_wait_releases_slot_without_request_or_probe(core):
-    prepare(core)
-
-    async def exercise():
-        async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: None)) as client:
-            runner = SourceRunner(core.engine, RssCollector(client), clock=lambda: 105)
-            pending = asyncio.create_task(check(runner))
-            async with asyncio.timeout(2):
-                while not runner._lock.locked():
-                    await asyncio.sleep(0)
-                await asyncio.sleep(0.02)
-            pending.cancel()
-            with pytest.raises(asyncio.CancelledError):
-                await pending
-            assert not runner._lock.locked()
-
-    asyncio.run(exercise())
-    with Session(core.engine) as session:
-        assert session.get(SourceProbe, "nodeseek-rss") is None
-
-
-def test_real_collection_backoff_reports_cause_and_remaining_wait(core):
+def test_real_collection_backoff_still_reports_cause_and_remaining_wait(core):
     prepare(core)
     core.ingestion.record_failure("nodeseek-rss", "http_429", at=100, retry_after=60)
     before = tables(core.engine)
@@ -136,33 +116,61 @@ def test_real_collection_backoff_reports_cause_and_remaining_wait(core):
     assert tables(core.engine) == before
 
 
-def test_paused_check_does_not_wait_or_bypass_the_interval(core):
+def test_successful_check_does_not_clear_formal_collection_failure(core):
     prepare(core)
-    with write_session(core.engine) as session:
-        session.get(Source, "nodeseek-rss").enabled = False
+    core.ingestion.record_failure("nodeseek-rss", "http_503", at=90)
+    before = tables(core.engine)
 
     async def exercise():
-        async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: None)) as client:
-            runner = SourceRunner(core.engine, RssCollector(client), clock=lambda: 105)
-            with pytest.raises(ProbeConflict) as error:
-                await check(runner)
-            assert error.value.retry_after == 5
+        async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: response())) as client:
+            runner = SourceRunner(core.engine, RssCollector(client), clock=lambda: 101)
+            assert (await check(runner))["status"] == "success"
+            assert runner._snapshot()["next_attempt_at"] == 100
+
+    asyncio.run(exercise())
+    assert tables(core.engine) == before
+
+
+def test_legacy_successful_probe_does_not_retain_the_old_collection_interval(core):
+    prepare(core)
+    with write_session(core.engine) as session:
+        session.add(
+            SourceProbe(
+                source_id="nodeseek-rss",
+                started_at=100,
+                finished_at=100,
+                next_attempt_at=3700,
+                status="success",
+                code=None,
+                item_count=1,
+            )
+        )
+    assert get_probe(core.engine, "nodeseek")["next_attempt_at"] == 102
+
+    async def exercise():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: response())) as client:
+            runner = SourceRunner(core.engine, RssCollector(client), clock=lambda: 103)
+            assert runner._snapshot()["next_attempt_at"] == 110
+            assert (await check(runner))["status"] == "success"
 
     asyncio.run(exercise())
 
 
-def test_long_saved_interval_returns_remaining_time_without_holding_slot(core):
+def test_probe_retry_after_still_blocks_automatic_collection(core):
     prepare(core)
-    with write_session(core.engine) as session:
-        session.get(Source, "nodeseek-rss").interval_seconds = 3600
+    before = tables(core.engine)
 
     async def exercise():
-        async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: None)) as client:
-            runner = SourceRunner(core.engine, RssCollector(client), clock=lambda: 105)
-            with pytest.raises(ProbeConflict) as error:
-                await check(runner)
-            assert error.value.retry_after == 3595
-            assert "3595" in str(error.value)
-            assert not runner._lock.locked()
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(
+                lambda _: httpx.Response(429, headers={"Retry-After": "60"})
+            )
+        ) as client:
+            runner = SourceRunner(core.engine, RssCollector(client), clock=lambda: 101)
+            result = await check(runner)
+            assert result["code"] == "http_429" and result["next_attempt_at"] == 161
+            assert runner._snapshot()["next_attempt_at"] == 161
+            assert (await runner.run_once()).status == "backoff"
 
     asyncio.run(exercise())
+    assert tables(core.engine) == before

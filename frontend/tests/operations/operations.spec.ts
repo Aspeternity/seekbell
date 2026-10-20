@@ -111,7 +111,7 @@ test('draft history trials, confirmed source checks and dependency-safe deletion
   )
   await drawer.getByRole('button', { name: '测试连接', exact: true }).click()
   await page.getByRole('button', { name: '确认测试连接', exact: true }).click()
-  await expect(drawer.getByRole('button', { name: '等待或测试中…', exact: true })).toBeDisabled()
+  await expect(drawer.getByRole('button', { name: '测试中…', exact: true })).toBeDisabled()
   await expect(drawer).toContainText('RSS 连接与解析成功')
   await expect(drawer).toContainText('有效帖子 1 条')
   expect(await (await page.request.get('/api/manage/history/posts?size=100')).json()).toEqual(

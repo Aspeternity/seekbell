@@ -318,7 +318,7 @@ def test_operations_migration_from_0006_rolls_back_atomically_and_preserves_rows
 PROBE = "/api/manage/websites/nodeseek/connection-test"
 
 
-def test_connection_check_is_separate_persistent_and_throttles_scheduled_baseline(tmp_path):
+def test_connection_check_is_separate_persistent_and_keeps_its_own_cooldown(tmp_path):
     scenario = SyntheticScenario()
     now = [1780000000.0]
 
@@ -338,7 +338,7 @@ def test_connection_check_is_separate_persistent_and_throttles_scheduled_baselin
         assert response.status_code == 200, response.text
         result = response.json()
         assert result["status"] == "success" and result["item_count"] == 1
-        assert result["next_attempt_at"] >= now[0] + 10
+        assert result["next_attempt_at"] == now[0] + 2
         assert len(scenario.fetches) == 1
         assert tables(app.state.engine) == before
         assert client.get(PROBE).json() == result
@@ -349,20 +349,21 @@ def test_connection_check_is_separate_persistent_and_throttles_scheduled_baselin
         assert client.get(PROBE).json() == result
         assert client.post(PROBE, json={}).status_code == 429
         website(client, interval=20)
-        now[0] = result["next_attempt_at"] + 1
-        # Increasing the saved interval also applies to previous probes.
-        assert client.get(PROBE).json()["next_attempt_at"] >= result["finished_at"] + 20
-        assert client.post(PROBE, json={}).status_code == 429
-        # API used real wall clock for enable. Mark normal scheduler due only;
-        # the independent probe throttle is still retained.
+        assert client.get(PROBE).json()["next_attempt_at"] == result["next_attempt_at"]
+        # Monitor changes do not alter the test cooldown. A fresh successful
+        # monitor request likewise cannot block the independent explicit check.
         with write_session(restarted.state.engine) as session:
-            session.get(SourceState, "nodeseek-rss").next_attempt_at = 0
+            session.get(SourceState, "nodeseek-rss").next_attempt_at = now[0] + 20
+        now[0] = result["next_attempt_at"] + 1
+        before = tables(restarted.state.engine)
+        assert client.post(PROBE, json={}).status_code == 200
+        assert len(scenario.fetches) == 2 and tables(restarted.state.engine) == before
         assert (
             restarted.state.runtime.source._snapshot()["next_attempt_at"]
-            >= result["finished_at"] + 20
+            == result["started_at"] + 20
         )
-        now[0] += 20
-        until(lambda: len(scenario.fetches) == 2)
+        now[0] = result["started_at"] + 21
+        until(lambda: len(scenario.fetches) == 3)
         until(lambda: bool(client.get("/api/manage/history/posts").json()["total"]))
         with Session(restarted.state.engine) as session:
             assert session.get(Post, ("nodeseek", "9001")).baseline

@@ -20,7 +20,7 @@ from seekbell.db.models import (
 from seekbell.db.transactions import database_call
 from seekbell.domain.errors import SourceFailure
 from seekbell.services.ingestion import Ingestion, IngestReport
-from seekbell.services.source_probe import probe_due
+from seekbell.services.source_probe import probe_backoff
 from seekbell.sites.nodeseek import BUILTIN_ADAPTERS
 
 
@@ -75,9 +75,7 @@ class SourceRunner:
                 ),
                 "website_id": source.website_id,
                 "url": source.url,
-                "next_attempt_at": max(
-                    state.next_attempt_at, probe_due(probe, source.interval_seconds)
-                ),
+                "next_attempt_at": max(state.next_attempt_at, probe_backoff(probe)),
                 "interval_seconds": source.interval_seconds,
             }
 
