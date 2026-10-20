@@ -1,4 +1,4 @@
-"""Stopped-service, encrypted backups and authenticated restore into a NEW directory."""
+"""Consistent encrypted snapshots, stopped-service CLI and isolated authenticated restore."""
 
 import argparse
 import ctypes
@@ -198,15 +198,23 @@ def decrypt_file(archive, plain, password):
 
 
 def create_backup(settings, destination, *, password):
+    # Offline callers must still acquire the same exclusive process lock.
+    with instance_lock(settings.data_dir.resolve()):
+        return snapshot_backup(settings, destination, password=password)
+
+
+def snapshot_backup(settings, destination, *, password):
+    """Consistent snapshot; caller MUST own the application's lifetime instance lock.
+
+    The running single-process app can safely use SQLite's backup API without
+    stopping actors. The installation key is immutable for that lifetime; every
+    credential is validated against the resulting snapshot, never the live DB.
+    """
     destination = new_path(destination)
     directory = settings.data_dir.resolve()
     if settings.database_path.is_symlink() or not settings.database_path.is_file():
         raise BackupError("没有可备份的数据库。")
-    # Same lock as the service and migration CLI: require the service to be stopped.
-    with (
-        instance_lock(directory),
-        tempfile.TemporaryDirectory(prefix=".seekbell-backup-", dir=destination.parent) as temp,
-    ):
+    with tempfile.TemporaryDirectory(prefix=".seekbell-backup-", dir=destination.parent) as temp:
         stage = Path(temp)
         database = stage / "seekbell.sqlite3"
         with private_file(database):
@@ -214,6 +222,8 @@ def create_backup(settings, destination, *, password):
         deadline = time.monotonic() + 120
 
         def progress(status, remaining, total):
+            if total * page_size > MAX_DATABASE:
+                raise BackupError("数据库超过 2 GiB 限制。")
             if time.monotonic() > deadline:
                 raise BackupError("数据库快照超时，请停止其他写入后重试。")
 
@@ -221,6 +231,7 @@ def create_backup(settings, destination, *, password):
             closing(readonly(settings.database_path)) as source,
             closing(sqlite3.connect(database)) as snapshot,
         ):
+            page_size = source.execute("PRAGMA page_size").fetchone()[0]
             source.backup(snapshot, pages=256, progress=progress)
         validate_database(database)
         key_path = directory / "credentials.key"

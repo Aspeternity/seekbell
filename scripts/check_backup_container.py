@@ -47,6 +47,55 @@ print(json.dumps({'all_tables_preserved': True, 'source_unchanged': True,
 """
 
 
+WEB_PROBE = r"""
+import http.cookiejar, json, urllib.request, urllib.error
+from pathlib import Path
+from seekbell.backup import MAGIC
+from seekbell.services.backup_demo import table_data
+jar = http.cookiejar.CookieJar()
+opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+base = 'http://127.0.0.1:8000/api/'
+csrf = ''
+def request(path, data=None, content_type='application/json'):
+    headers = {'Content-Type': content_type, 'X-CSRF-Token': csrf}
+    return opener.open(urllib.request.Request(base + path, data=data, headers=headers), timeout=60)
+csrf = json.load(request('auth/status'))['csrf']
+credentials = {'username': 'container_admin', 'password': 'Synthetic-Container-2026'}
+csrf = json.load(request('auth/login', json.dumps(credentials).encode()))['csrf']
+before = table_data(Path('/data/seekbell.sqlite3'))
+values = {'current_password': credentials['password'], 'password': 'Synthetic-Container-Web-Backup'}
+with request('manage/backups/download', json.dumps(values).encode()) as response:
+    assert response.headers['Cache-Control'] == 'no-store'
+    archive = response.read()
+assert archive.startswith(MAGIC) and b'SQLite format' not in archive
+metadata = {**values, 'username': credentials['username'],
+            'admin_password': credentials['password']}
+body = json.dumps(metadata).encode() + b'\n' + archive
+result = json.load(request('manage/backups/restore', body, 'application/octet-stream'))
+assert result == {'candidate_available': True, 'activated': False}
+assert table_data(Path('/data/seekbell.sqlite3')) == before
+restored = table_data(Path('/data/web-restore/seekbell.sqlite3'))
+assert restored.pop('login_sessions') == []
+before.pop('login_sessions')
+assert restored == before
+original_key = Path('/data/credentials.key').read_bytes()
+assert original_key == Path('/data/web-restore/credentials.key').read_bytes()
+assert Path('/data/web-restore').stat().st_mode & 0o777 == 0o700
+assert json.load(request('auth/status'))['authenticated']
+assert json.load(request('manage/runtime'))['active']
+try:
+    request('manage/backups/restore', body, 'application/octet-stream')
+except urllib.error.HTTPError as error:
+    assert error.code == 409
+else:
+    raise AssertionError('Existing candidate must never be overwritten')
+assert not list(Path('/data').glob('.seekbell-*'))
+print(json.dumps({'encrypted_download': True, 'isolated_restore': True,
+                  'source_unchanged': True, 'runtime_running': True,
+                  'copy_sessions_revoked': True, 'overwrite_refused': True}))
+"""
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("image")
@@ -135,6 +184,7 @@ def main():
             )
             assert info["build_revision"] == args.revision
             before = json.loads(docker("exec", container, "python", "-c", MANAGEMENT_PROBE).stdout)
+            web = json.loads(docker("exec", container, "python", "-c", WEB_PROBE).stdout)
             docker("exec", container, "python", "-c", LOCK_PROBE)
             compose("stop")
             result = compose(
@@ -191,6 +241,7 @@ def main():
                         "network": "none",
                         "compose": "passed",
                         "running_backup_refused": True,
+                        "web_backup": web,
                         "restore": restored,
                         "restored_service_login_and_configuration": "passed",
                         "offline_demo": demo,

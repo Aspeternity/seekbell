@@ -53,6 +53,7 @@ jobs:
       - run: pnpm --dir frontend test:operations
       - run: pnpm --dir frontend test:retention
       - run: pnpm --dir frontend test:system
+      - run: pnpm --dir frontend test:backup
       - name: Verify migration commands
         env:
           SEEKBELL_DATA_DIR: ${{ runner.temp }}/seekbell-data

@@ -40,17 +40,32 @@ export function notify(message: string) {
 }
 let csrf = ''
 export async function request<T = any>(path: string, method = 'GET', body?: unknown): Promise<T> {
+  const response = await sendRequest(
+    path,
+    method,
+    body === undefined ? undefined : JSON.stringify(body),
+    'application/json',
+  )
+  return response.json()
+}
+export async function sendRequest(
+  path: string,
+  method: string,
+  body?: BodyInit,
+  contentType = 'application/octet-stream',
+): Promise<Response> {
   const response = await fetch('/api/' + path, {
     method,
     credentials: 'same-origin',
+    cache: 'no-store',
     headers: {
-      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      ...(body === undefined ? {} : { 'Content-Type': contentType }),
       ...(method === 'GET' ? {} : { 'X-CSRF-Token': csrf }),
     },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    ...(body === undefined ? {} : { body }),
   })
-  const data = await response.json().catch(() => ({ detail: '服务响应无效，请稍后重试。' }))
   if (!response.ok) {
+    const data = await response.json().catch(() => ({ detail: '服务响应无效，请稍后重试。' }))
     if (
       response.status === 401 &&
       (path.startsWith('manage/') || path === 'auth/administrator' || path === 'auth/logout')
@@ -61,7 +76,7 @@ export async function request<T = any>(path: string, method = 'GET', body?: unkn
     }
     throw new Error(typeof data.detail === 'string' ? data.detail : '操作失败，请检查配置后重试。')
   }
-  return data
+  return response
 }
 function applyAuth(info: any) {
   account.created = info.initialized

@@ -18,6 +18,7 @@ if __name__ == "__main__":
     group.add_argument("--operations", action="store_true")
     group.add_argument("--retention", action="store_true")
     group.add_argument("--system", action="store_true")
+    parser.add_argument("--port", type=int, default=None)
     args = parser.parse_args()
     seeded = args.history or args.sending or args.operations or args.retention or args.system
     root = Path(__file__).resolve().parents[1]
@@ -83,19 +84,22 @@ if __name__ == "__main__":
         uvicorn.run(
             app,
             host="127.0.0.1",
-            port=8017
-            if args.system
-            else 8016
-            if args.retention
-            else 8015
-            if args.operations
-            else 8014
-            if args.runtime
-            else 8013
-            if args.sending
-            else 8012
-            if args.history
-            else 8011,
+            port=args.port
+            or (
+                8017
+                if args.system
+                else 8016
+                if args.retention
+                else 8015
+                if args.operations
+                else 8014
+                if args.runtime
+                else 8013
+                if args.sending
+                else 8012
+                if args.history
+                else 8011
+            ),
             workers=1,
             proxy_headers=False,
             access_log=False,

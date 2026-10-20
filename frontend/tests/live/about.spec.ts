@@ -117,8 +117,8 @@ test('version and readiness remain independent, retry safely and perform no conf
   expect(writes).toEqual([])
 
   await page.goto('/#/settings/backup')
-  await expect(page.getByText('网页备份与恢复尚未接入，当前仅提供停服维护命令。')).toBeVisible()
-  await expect(page.getByRole('button', { name: /导出|恢复|备份/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '生成并下载加密备份' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '验证并生成独立恢复副本' })).toBeDisabled()
   await page.goto('/#/settings/unknown')
   await expect(page.getByRole('heading', { name: '这条线索暂时不在这里' })).toBeVisible()
   await page.goto('/#/settings/about')

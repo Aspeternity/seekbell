@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import AboutSettings from './AboutSettings.vue'
+import BackupSettings from './BackupSettings.vue'
 import DisplaySettings from './DisplaySettings.vue'
 import AlertsSettings from './AlertsSettings.vue'
 import RetentionSettings from './RetentionSettings.vue'
@@ -22,7 +23,7 @@ const username = ref(account.username),
   newPassword = ref(''),
   confirmPassword = ref('')
 const dirty = computed(() =>
-  ['display', 'alerts'].includes(props.tab || '')
+  ['display', 'alerts', 'backup'].includes(props.tab || '')
     ? auxiliaryDirty.value
     : props.tab === 'retention'
       ? retentionDirty.value
@@ -113,6 +114,7 @@ async function logout() {
         { id: 'retention', label: '保留策略' },
         { id: 'display', label: '时区' },
         { id: 'alerts', label: '系统告警' },
+        { id: 'backup', label: '备份恢复' },
         { id: 'about', label: '版本信息' },
       ]"
       :key="item.id"
@@ -240,12 +242,6 @@ async function logout() {
     <DisplaySettings v-else-if="props.tab === 'display'" @dirty="auxiliaryDirty = $event" />
     <AlertsSettings v-else-if="props.tab === 'alerts'" @dirty="auxiliaryDirty = $event" />
     <AboutSettings v-else-if="props.tab === 'about'" />
-    <section v-else-if="props.tab === 'backup'" class="panel empty-state">
-      <h2>备份与恢复</h2>
-      <p>网页备份与恢复尚未接入，当前仅提供停服维护命令。</p>
-      <p class="small-note">
-        加密备份包含数据库与原凭据密钥，恢复需备份口令和备份中的管理员验证。演示备份不能用于生产恢复。
-      </p>
-    </section>
+    <BackupSettings v-else-if="props.tab === 'backup'" @dirty="auxiliaryDirty = $event" />
   </div>
 </template>

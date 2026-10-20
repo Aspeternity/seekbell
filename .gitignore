@@ -42,3 +42,6 @@ frontend/test-results-system/
 .seekbell-backup-*/
 .seekbell-restore-*/
 .seekbell-encrypted-*
+
+frontend/test-results-backup/
+.seekbell-web-*/

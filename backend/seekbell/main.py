@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from seekbell.api.auth import router as auth_router
+from seekbell.api.backups import router as backups_router
 from seekbell.api.history import router as history_router
 from seekbell.api.management import router as management_router
 from seekbell.api.overview import router as overview_router
@@ -83,6 +84,7 @@ def create_app(settings: Settings | None = None, *, runtime_factory=None) -> Fas
                     app.state.target_testing = ConfiguredTargetTesting(engine, registry.notifiers)
                     app.state.manual_sending = ManualSending(engine, registry.notifiers)
                     app.state.sending_gate = asyncio.Semaphore(2)
+                    app.state.backup_gate = asyncio.Lock()
                     runtime = (runtime_factory or Runtime)(engine, registry.notifiers)
                     app.state.runtime = runtime
                     try:
@@ -127,6 +129,7 @@ def create_app(settings: Settings | None = None, *, runtime_factory=None) -> Fas
     app.include_router(router)
     app.include_router(auth_router)
     app.include_router(management_router)
+    app.include_router(backups_router)
     app.include_router(history_router)
     app.include_router(overview_router)
     app.include_router(sending_router)

@@ -1,35 +1,29 @@
 # 当前状态
 
-更新时间：2026-10-20（Asia/Shanghai，本机验收启动修复）。M1/M2已实现，M3九阶段及本地自动退出核对完成；M4第一阶段Compose/停服加密备份与独立恢复已验证，整体M4和真实服务/用户验收未完成。[M4证据](history/2026-10-20-Compose与加密备份恢复.md)，[本次修复](history/2026-10-20-本机验收启动修复.md)。
+更新时间：2026-10-20（Asia/Shanghai）。M1/M2、M3本地自动退出已完成；M4第一子阶段Compose/停服加密备份/独立恢复已验证，当前开发第二子阶段网页下载与上传恢复候选。整体M4、真实服务和用户验收未完成。[此前状态](history/2026-10-20-网页备份开发前状态.md)、[M4第一阶段](history/2026-10-20-Compose与加密备份恢复.md)。
 
-## 环境与代码
+## 环境与基准
 
-唯一开发环境SeekBell-Dev，/home/dev/projects/seekbell，原Ubuntu显式经wsl.exe执行。[环境入口](DEVELOPMENT_ENVIRONMENT.md)。分支codex/frontend-backend-integration，本次核对HEAD 40124dfe529d5669a6cc27edb78fc5b5754f7553、工作区干净。实现/镜像基准b45fc2c82a12cb8ecffe94026d271e90aec36691，其后仅文档。本次不改产品代码/依赖/迁移，不重跑未变测试；原D盘/原WSL工具容器和全局设置未改。
+只在SeekBell-Dev的/home/dev/projects/seekbell开发，原Ubuntu显式wsl.exe派发。[环境入口](DEVELOPMENT_ENVIRONMENT.md)。分支codex/frontend-backend-integration，起点HEAD d26f78e6738aff0055c88ebd6032503b6e98c88a，初始干净；比旧状态多一次交接文档提交，产品基准仍b45fc2c。原D盘、原WSL和全局设置未改。
 
-## 当前验收实例（保留运行）
+## 当前交付与证据
 
-用户按此前命令启动后浏览器打不开。固定项目名seekbell-acceptance复用了2026-10-19已有的seekbell-acceptance_data，库迁移号0007_settings不被当前镜像识别，容器循环重启。不是Windows转发问题。已停止旧seekbell-acceptance-seekbell-1；旧卷保留，未删数据、未手改版本或迁移旧库。
+M4第二子阶段已实现，待本地提交及镜像验证：[阶段证据](history/2026-10-20-网页加密备份与独立恢复.md)。网页在持有实例锁的应用进程内做一致快照，后台继续运行；CLI仍要求停服。会话/CSRF/同源/当前密码再验证、限速、单操作门禁、私有暂存和清理；上传元数据8KiB/数据库2GiB/300秒。只恢复到data_dir/web-restore固定新候选，验证备份管理员/原钥/版本并撤销副本会话，不覆盖/切换/启动副本，无跨版本或新迁移/依赖。
 
-确认新名无容器/卷后，已启动项目seekbell-acceptance-b45fc2c-20261020，新卷同名加_data；容器同名加-seekbell-1。镜像seekbell:backup-local，端口127.0.0.1:18081。访问http://localhost:18081/；不要再用旧项目名管理此实例。新容器healthy、重启0，WSL的首页/资源/ready/version为200，Windows的localhost/127.0.0.1 ready和首页也200。版本b45fc2c、迁移0009_display_alerts。核对时为空库未初始化/未登录，没有代用户创建管理员或测试RSS/通知；用户后续操作可能变化，恢复先只读核对，不能重置。旧4175原型、18080旧服务未动。
+独立WSL自动证据：初版31+18共49项；全量393项104.99秒；最后仅补中断/清理边界，网页21项17.79秒通过。桌面/手机备份2项10秒及相关生产页面20项通过；Ruff/锁/wheel/前端类型构建格式/隐私noreply通过。镜像/Compose固定提交复验待补，远程CI未跑。[维护命令与边界](BACKUP_RESTORE.md)。
 
-## 已交付与证据
+未提交路径：backend的backup/api/backups/main；frontend的BackupSettings/Settings/store及帮助、专项/相关测试、配置/package/ignore；scripts运行与Compose检查、CI及本阶段文档。均为本次实现与证据，不含数据、密钥或浏览器产物。
 
-v0.4居中添加弹窗、右侧/手机配置、工作空间自定义保留；认证、网站/任务/四渠道加密目标、规则试算、历史/概览、账号、显式操作、后台采集/投递、保留、时区/告警及版本已接入。备份网页无操作，维护CLI已提供。
+## 保留的验收实例
 
-Compose显式镜像、本机端口、UID10001/只读根/丢弃权限、30秒关停；数据命名卷，up会复用同项目旧卷，项目名并不保证新库。维护覆盖禁外网/端口。[维护说明](BACKUP_RESTORE.md)。
+用户验收实例seekbell-acceptance-b45fc2c-20261020，容器后缀-seekbell-1、新卷后缀_data；镜像seekbell:backup-local（b45fc2c），127.0.0.1:18081，http://localhost:18081/。本次只读确认healthy，不升级/重置/替用户操作。原seekbell-acceptance旧卷迁移号不兼容，旧容器已停止、旧卷保留；不要复用旧项目名或改迁移号。旧4175/18080未动。[故障证据](history/2026-10-20-本机验收启动修复.md)。
 
-备份CLI要求停服，同实例锁+SQLite一致快照含WAL；整库/原钥/元信息由独立口令scrypt/AES-GCM加密，数据库上限2GiB，口令仅交互不回显。恢复先认证并校验当前迁移/结构/完整性/外键/摘要、备份管理员及所有密文原钥，只到不存在的新目录；仅清副本会话，其余表与原库保持，不覆盖/不迁移/不启动网络。文件0600/目录0700，原子发布；启动恢复实例前停原实例，时间点备份不含之后回执，不保证外部exactly-once。
+## 下一步与读取
 
-后端375项89.38秒、新增备份31项25.14秒；备份演练全表/钥/账号/队列一致，模拟续发1、pending告警2。Ruff/锁/wheel通过；前端构建/类型/格式及桌面手机4项17秒通过，未变UI复用M3共60项。隐私/noreply通过，远程CI未跑。
+完成本地提交与固定镜像禁外网核对；之后才补原卷切换、升级/失败回退。独立恢复副本不是恢复已生效；启用副本前必须停原实例，时间点恢复可能重复发送。真实RSS/通知、反代/PVE/arm64/Safari/真机与用户验收仍待完成。
 
-Rootless/amd64镜像ID sha256:ed2bf35a1cb282140cb7855a5645da7df53379825319cb4035c21c9ea9034f3b。原打包/禁外网Compose已验健康/锁、策略/配置重启、运行时拒绝备份、停服备份/独立恢复后服务重登及配置保持；仅临时演练资源已清理，当前用户验收实例保留。镜像未发布。
-
-## 下一步与恢复
-
-先由用户在18081验收；无开发阻塞。后续开发为M4网页备份下载/恢复编排，再补原卷切换和升级/失败回退。须先核对实例锁/Runtime写入边界，不能从运行Web直接调用停服CLI。跨版本恢复、网页恢复、PVE/arm64、实际反代、Safari/真机、真实RSS/通知和用户验收仍待完成。
-
-恢复读AGENTS、本状态、相关阶段证据/BACKUP_RESTORE；按需读架构备份、ACCEPTANCE P02/P03及backup/runtime/认证代码。不得拿旧库试改迁移号或覆盖原卷。
+恢复先读本状态、AGENTS、BACKUP_RESTORE、ARCHITECTURE的备份节；按影响读backup/api/backups/main及对应测试；无需重读全仓。
 
 ## 授权
 
-本次用户自行启动并请求修复，已在本机保留独立验收实例；未触及旧数据。沿用本地开发/独立WSL/noreply，本次仅文档提交，不推送/合并main、不组织多代理。不运行原日常配置；未授权代理真实RSS/通知、远程部署、公开/GHCR发布、原环境清理或全局WSL变更。用户在验收页面自行启用/测试的操作需与代理执行区分。
+沿用本地开发、独立WSL、GitHub noreply；本次用户要求下一阶段开发。不推送/合并main、不组织多代理；不执行真实RSS/通知、远程部署/公开发布、原环境清理或全局WSL变更。当前验收实例及用户后续配置必须保留。
