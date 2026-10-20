@@ -37,3 +37,8 @@ frontend/test-results-operations/
 frontend/test-results-retention/
 
 frontend/test-results-system/
+
+*.sbbackup
+.seekbell-backup-*/
+.seekbell-restore-*/
+.seekbell-encrypted-*

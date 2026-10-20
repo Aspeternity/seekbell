@@ -48,7 +48,7 @@ test('version and readiness remain independent, retry safely and perform no conf
   if (info.project.name === 'desktop') {
     await page.getByRole('button', { name: '接入进度说明', exact: true }).click()
     await expect(page.getByRole('dialog')).toContainText('系统告警已接入')
-    await expect(page.getByRole('dialog')).toContainText('生产备份恢复将在 M4 接入')
+    await expect(page.getByRole('dialog')).toContainText('已提供停服加密备份与独立恢复维护命令')
     await page.getByRole('button', { name: '知道了', exact: true }).click()
   }
 
@@ -117,7 +117,7 @@ test('version and readiness remain independent, retry safely and perform no conf
   expect(writes).toEqual([])
 
   await page.goto('/#/settings/backup')
-  await expect(page.getByText('生产备份与恢复将在 M4 接入，当前尚不可用。')).toBeVisible()
+  await expect(page.getByText('网页备份与恢复尚未接入，当前仅提供停服维护命令。')).toBeVisible()
   await expect(page.getByRole('button', { name: /导出|恢复|备份/ })).toHaveCount(0)
   await page.goto('/#/settings/unknown')
   await expect(page.getByRole('heading', { name: '这条线索暂时不在这里' })).toBeVisible()

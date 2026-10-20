@@ -38,6 +38,7 @@ jobs:
       - run: uv run --frozen pytest -q
       - run: uv run --frozen python -m seekbell.services.demo
       - run: uv run --frozen python -m seekbell.services.runtime_demo
+      - run: uv run --frozen python -m seekbell.services.backup_demo
       - run: uv build --wheel
       - run: pnpm --dir frontend install --frozen-lockfile
       - run: pnpm --dir frontend format:check
@@ -63,3 +64,5 @@ jobs:
         run: docker build --build-arg VCS_REF="$GITHUB_SHA" -t seekbell:ci .
       - name: Check packaged service without external networking
         run: python scripts/check_container.py seekbell:ci --revision "$GITHUB_SHA"
+      - name: Rehearse Compose and independent encrypted restore offline
+        run: python scripts/check_backup_container.py seekbell:ci --revision "$GITHUB_SHA"

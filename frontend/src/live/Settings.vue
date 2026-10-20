@@ -242,8 +242,10 @@ async function logout() {
     <AboutSettings v-else-if="props.tab === 'about'" />
     <section v-else-if="props.tab === 'backup'" class="panel empty-state">
       <h2>备份与恢复</h2>
-      <p>生产备份与恢复将在 M4 接入，当前尚不可用。</p>
-      <p class="small-note">演示备份无法恢复正式数据库、账号或加密凭据。</p>
+      <p>网页备份与恢复尚未接入，当前仅提供停服维护命令。</p>
+      <p class="small-note">
+        加密备份包含数据库与原凭据密钥，恢复需备份口令和备份中的管理员验证。演示备份不能用于生产恢复。
+      </p>
     </section>
   </div>
 </template>
