@@ -10,7 +10,7 @@
 
 images.yml仅手动触发，默认不发布；核对完整SHA，复用完整CI后由原生amd64/arm64 runner各自构建、禁外网演练并保存产物。GHCR需单独授权、仓库开关、手动选择、默认分支及全部检查成功；只发布job有packages写权限，不部署。校验归档、平台/版本/source/UID/环境、配置及层；复用测试内容按两个digest合成并重读索引，输出固定部署引用。区分containerd/classic本机ID与配置digest；不解析push人类输出。[操作/失败边界](IMAGE_RELEASE.md)。
 
-34项合成Docker专项0.29秒、全仓Ruff/format、新workflow格式、两个workflow的actionlint1.7.12通过；隐私/noreply已检查，提交前复查。未改产品代码，复用前阶段433项后端及真实隔离TLS/浏览器/备份升级证据。本轮d3c44803da35f4dcf817ccc05e5780c9253c44fd已推送开发分支；首轮远程CI 39460104809：后端全量/离线演示、前端类型构建通过；prototype套件错误收集backup/proxy专项目录，40过4失败，native按门禁跳过。正修复原型收集为tests根目录正向匹配，避免以后新增专项再误收；SeekBell-Dev本机40项39.9秒复验通过，列表确认原型40/备份2/HTTPS2各自独立；下一步提交并推送修复。
+34项合成Docker专项0.29秒、全仓Ruff/format、新workflow格式、两个workflow的actionlint1.7.12通过；隐私/noreply已检查，提交前复查。未改产品代码，复用前阶段433项后端及真实隔离TLS/浏览器/备份升级证据。本轮d3c44803da35f4dcf817ccc05e5780c9253c44fd已推送开发分支；首轮远程CI 39460104809：后端全量/离线演示、前端类型构建通过；prototype套件错误收集backup/proxy专项目录，40过4失败，native按门禁跳过。正修复原型收集为tests根目录正向匹配，避免以后新增专项再误收；SeekBell-Dev本机40项39.9秒复验通过，列表确认原型40/备份2/HTTPS2各自独立；修复5906a896fa3a4773a12eab10ec8aec75411c1b30已推送，第二轮CI 39461357138后端/全部浏览器/容器备份升级通过，但HTTPS演练创建带静态IP的容器被Docker拒绝，native跳过。修复fixture为Docker自动分配可用子网后显式声明IPAM，仅改唯一临时网络；专项26项1.14秒、真实TLS/备份往返及HTTPS浏览器2项6.6秒本机通过，待推送第三轮CI。
 
 本机rootless/amd64镜像seekbell:images-local，revision dd4eccf，image ID sha256:ed2fcc2bae3c9f867ccb2af146c6fcf00bf4669faa2f39ecba5c0d7b71567ea8，配置digest和归档SHA见本次证据。实际导出/校验/加载、禁外网服务/重启持久化/实例锁/离线闭环通过，临时归档与容器清理；未发布。只读确认基础镜像声明双架构，本机无arm64执行能力，未装QEMU/改daemon。
 
@@ -20,7 +20,7 @@ images.yml仅手动触发，默认不发布；核对完整SHA，复用完整CI�
 
 ## 下一步与恢复
 
-本轮推进中：已提交d3c4480并推送；手动入口未在默认分支，抽出只读native-images复用流程，由开发分支push在完整CI后调用，未合并main。下一步跟踪[远程CI](https://github.com/Aspeternity/seekbell/actions/runs/39460104809)并修复实际失败，核对两平台产物；未提交为prototype测试配置、本状态及远程证据记录，意图为修复CI收集根因。核对包权限/可见性后再决定GHCR发布。后续M5：授权PVE实机、真实RSS/四渠道、Safari/真机、运行观察和用户验收，确认后正式发布。[阶段顺序](ROADMAP.md)。实际目标代理/证书、原生arm64、GHCR、跨版本加密恢复未验证；恢复/回退可能重复发送，保留原卷，不直接降级新库。
+本轮推进中：已提交d3c4480/5906a89并推送；手动入口未在默认分支，抽出只读native-images复用流程，由开发分支push在完整CI后调用，未合并main。下一步跟踪[当前远程CI](https://github.com/Aspeternity/seekbell/actions/runs/39461357138)并修复实际失败，核对两平台产物；待提交为TLS fixture/IPAM专项、README/镜像说明及状态/远程证据文档，意图为CI兼容修复与记录结果。核对包权限/可见性后再决定GHCR发布。后续M5：授权PVE实机、真实RSS/四渠道、Safari/真机、运行观察和用户验收，确认后正式发布。[阶段顺序](ROADMAP.md)。实际目标代理/证书、原生arm64、GHCR、跨版本加密恢复未验证；恢复/回退可能重复发送，保留原卷，不直接降级新库。
 
 恢复读AGENTS、本状态、IMAGE_RELEASE；按需读images.yml/release_images及专项测试、RELEASES/PROXY_DEPLOYMENT，不全仓重读。状态与本段实现同批本地提交，提交基准以git log为准。
 

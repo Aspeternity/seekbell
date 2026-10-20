@@ -14,7 +14,7 @@
 
 本次只实现和本地检查，未推送仓库、未触发Actions、未创建GHCR包、未部署。后续远程操作沿用PROJECT_STATE的授权边界；规格中的GHCR规划不代表已获发布授权。
 
-获授权后先审阅/合并相应代码，并核对GitHub Actions及两个原生runner额度。先对明确SHA手动运行`Native image candidates`，保留`publish=false`；检查完整baseline及两平台日志。GitHub的workflow_dispatch入口须先存在于默认分支；本流程尚未合并时，先推送codex/开发分支，通过普通CI后的native-candidates检查取得两平台产物，不为派发而合并main。合并另获授权后，才可手动选择分支/SHA运行候选或显式发布。
+获授权后先审阅/合并相应代码，并核对GitHub Actions及两个原生runner额度。先对明确SHA手动运行`Native image candidates`，保留`publish=false`；检查完整baseline及两平台日志。[GitHub的workflow_dispatch入口须先存在于默认分支](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)；本流程尚未合并时，先推送codex/开发分支，通过普通CI后的native-candidates检查取得两平台产物，不为派发而合并main。合并另获授权后，才可手动选择分支/SHA运行候选或显式发布。
 
 真正写GHCR还必须同时满足：
 

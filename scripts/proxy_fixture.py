@@ -122,6 +122,30 @@ class TLSRelay:
                     process.terminate()
 
 
+def create_internal_network(name):
+    # Ask Docker for a free, host-compatible subnet, then declare it explicitly.
+    # Older Engines reject --ip on networks with only implicit IPAM configuration.
+    for _ in range(3):
+        docker("network", "create", "--internal", name)
+        try:
+            details = json.loads(docker("network", "inspect", name).stdout)[0]
+            subnets = [ipaddress.ip_network(item["Subnet"]) for item in details["IPAM"]["Config"]]
+            subnet = next((item for item in subnets if item.version == 4), None)
+            if subnet is None or subnet.num_addresses < 32:
+                raise ValueError("TLS fixture needs an IPv4 subnet with at least 32 addresses")
+        finally:
+            docker("network", "rm", name)
+        result = docker(
+            "network", "create", "--internal", "--subnet", str(subnet), name, check=False
+        )
+        if result.returncode == 0:
+            return subnet
+        # Another concurrent creator may reserve the released pool first.
+        if "pool overlaps" not in result.stderr.lower():
+            result.check_returncode()
+    raise RuntimeError("Could not reserve the isolated TLS fixture subnet")
+
+
 class ProxyFixture:
     def __init__(self, image, revision, *, port=0, proxy_image=PROXY_IMAGE):
         details = json.loads(docker("image", "inspect", image).stdout)[0]
@@ -144,9 +168,7 @@ class ProxyFixture:
     def __enter__(self):
         try:
             self.temporary = tempfile.TemporaryDirectory(prefix=self.name)
-            docker("network", "create", "--internal", self.network)
-            network = json.loads(docker("network", "inspect", self.network).stdout)[0]
-            subnet = ipaddress.ip_network(network["IPAM"]["Config"][0]["Subnet"])
+            subnet = create_internal_network(self.network)
             self.proxy_ip, self.app_ip = str(subnet[10]), str(subnet[20])
             for volume in (self.data, self.files):
                 docker("volume", "create", volume)
