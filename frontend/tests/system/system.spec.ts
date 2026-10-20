@@ -149,7 +149,17 @@ test('browser timezone initializes once, settings persist and calendar-day filte
     release()
     await finished
     await page.goto('/#/content')
+    const filtered = page.waitForResponse((response) => {
+      const url = new URL(response.url())
+      return (
+        url.pathname === '/api/manage/history/posts' &&
+        url.searchParams.get('discovered_on') === '2026-10-18'
+      )
+    })
     await page.getByLabel('发现日期', { exact: true }).fill('2026-10-18')
+    const applied = await filtered
+    expect(new URL(applied.url()).searchParams.get('timezone')).toBe('UTC')
+    expect((await applied.json()).total).toBe(0)
     await expect(page.locator('.content-row')).toHaveCount(0)
   } finally {
     release()
