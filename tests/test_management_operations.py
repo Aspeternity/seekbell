@@ -385,6 +385,8 @@ def test_connection_failure_persists_retry_after_without_changing_collection_hea
         assert result["next_attempt_at"] >= result["finished_at"] + 60
         response = client.post(PROBE, json={})
         assert response.status_code == 429 and int(response.headers["retry-after"]) >= 59
+        assert f"http_{failure}" in response.json()["detail"]
+        assert str(response.headers["retry-after"]) in response.json()["detail"]
         assert len(scenario.fetches) == 1 and tables(app.state.engine) == before
         website(client, interval=10)
         assert client.post(PROBE, json={}).status_code == 429

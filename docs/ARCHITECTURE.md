@@ -183,7 +183,7 @@ POST /api/manage/rules/history接受内置website_id、当前草稿Rule及1–10
 
 GET/POST /api/manage/websites/nodeseek/connection-test复用认证和CSRF。POST接受空对象，拒绝额外URL配置；使用Runtime持有的同一个SourceRunner锁和RSS客户端，15秒获取/解析等待、1MiB、固定官方地址、不跟随重定向/环境代理。暂停/未到期的调度轮次在锁外只读检查，真正到期后锁内再次核对状态；显式检查与正式采集绝不重叠。来源忙409，间隔/退避429并带Retry-After。未安装或后台未运行拒绝操作。
 
-新SourceProbe每来源仅存最近一次开始/完成时间、结果/固定诊断码、有效条目数和下次可请求时间；发请求前先持久化unknown/cooldown，中断不伪称成功。它不写SourceState/SourceRun、Post、基线/命中或账本；网站移除仍保留来源锚点和限频，重新添加不能绕过。检查前同时服从正式来源next_attempt_at/last_attempt_at及既有probe间隔，失败服从Retry-After与SourcePolicy退避。正式采集也服从probe时间；改变间隔不会绕过测试退避，概览显示合并后的有效时间。测试成功不清除正式采集故障或冒充正式采集成功。结果刷新可读，未保存的面板间隔不参与测试；Runtime停止时同时join/cancel在途显式检查，再关闭客户端/数据库。
+新SourceProbe每来源仅存最近一次开始/完成时间、结果/固定诊断码、有效条目数和下次可请求时间；发请求前先持久化unknown/cooldown，中断不伪称成功。它不写SourceState/SourceRun、Post、基线/命中或账本；网站移除仍保留来源锚点和限频，重新添加不能绕过。检查前同时服从正式来源next_attempt_at/last_attempt_at及既有probe间隔，失败服从Retry-After与SourcePolicy退避。正式采集也服从probe时间；改变间隔不会绕过测试退避，概览显示合并后的有效时间。测试成功不清除正式采集故障或冒充正式采集成功。启用中的网站若距可请求时刻不超过10秒，显式检查可持来源锁异步等待一次，给测试保留一个到期机会，避免后台采集持续抢先导致测试饥饿；等待期间不持数据库事务，取消即释放锁。到期后重新核对安装/配置/退避，再访问网络；长等待立即返回真实剩余秒数，有故障时附固定诊断码，不提前请求或无限等待。结果刷新可读，未保存的面板间隔不参与测试；Runtime停止时同时join/cancel在途显式检查，再关闭客户端/数据库。
 
 管理操作浏览器验证使用独立--operations临时库/8015：实际锁/采集器配MockTransport，投递actor隔离，显式通知服务由测试依赖替换。产品无新增模拟开关。证据与命令见[本阶段记录](history/2026-10-20-管理操作接入.md)。
 

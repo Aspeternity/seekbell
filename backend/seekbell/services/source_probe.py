@@ -1,11 +1,12 @@
 """Explicit checks share the collector lock and throttle, but never ingest posts."""
 
+import asyncio
 import math
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from seekbell.db.models import Source, SourceProbe, SourceState, WebsiteInstallation
+from seekbell.db.models import Source, SourceProbe, SourceState, Website, WebsiteInstallation
 from seekbell.db.transactions import database_call, write_session
 from seekbell.domain.delivery import SourcePolicy
 from seekbell.domain.errors import SourceFailure
@@ -13,7 +14,8 @@ from seekbell.sites.nodeseek import BUILTIN_ADAPTERS
 
 
 class ProbeConflict(Exception):
-    def __init__(self, message, retry_after=None):
+    def __init__(self, message, retry_after=None, *, wait_seconds=None):
+        self.wait_seconds = wait_seconds
         self.retry_after = math.ceil(retry_after) if retry_after is not None else None
         super().__init__(message)
 
@@ -68,7 +70,21 @@ def reserve(engine, source_id, at):
         probe = session.get(SourceProbe, source_id)
         next_at = source_due(state, source, probe)
         if at < next_at:
-            raise ProbeConflict("来源处于采集间隔或退避中，请稍后测试。", next_at - at)
+            delay = next_at - at
+            website = session.get(Website, source.website_id)
+            # Give an explicit check one bounded slot instead of making it race
+            # the enabled collector on every interval boundary. Never fetch early.
+            wait = delay if source.enabled and website.enabled and delay <= 10 else None
+            reason = "来源请求间隔尚未结束"
+            if state.failures and state.last_error_code:
+                reason = f"最近采集失败（{state.last_error_code}），来源正在退避"
+            elif probe and probe.status == "failure" and probe.code:
+                reason = f"最近连接测试失败（{probe.code}），来源正在退避"
+            raise ProbeConflict(
+                f"{reason}；约 {math.ceil(delay)} 秒后可再次测试。",
+                delay,
+                wait_seconds=wait,
+            )
         if probe is None:
             probe = SourceProbe(source_id=source_id)
             session.add(probe)
@@ -99,9 +115,19 @@ async def check(runner):
     if runner._lock.locked():
         raise ProbeConflict("来源正在采集或测试，请稍后重试。")
     async with runner._lock:
-        website_id, url = await database_call(
-            reserve, runner.engine, runner.source_id, runner.clock()
-        )
+        try:
+            website_id, url = await database_call(
+                reserve, runner.engine, runner.source_id, runner.clock()
+            )
+        except ProbeConflict as error:
+            if error.wait_seconds is None:
+                raise
+            # Keep the source lock, but no SQLite transaction, while waiting.
+            # Recheck installation, interval and backoff after configuration changes.
+            await asyncio.sleep(error.wait_seconds)
+            website_id, url = await database_call(
+                reserve, runner.engine, runner.source_id, runner.clock()
+            )
         try:
             adapter = BUILTIN_ADAPTERS.get(website_id)
             if adapter is None or url != adapter.rss_url:

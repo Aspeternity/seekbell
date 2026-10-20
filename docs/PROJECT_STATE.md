@@ -1,10 +1,10 @@
 # 当前状态
 
-更新时间：2026-10-21（Asia/Shanghai）。M0～M3实现与本地自动检查已完成；M4工程自动退出通过，当前进入M5实机/用户验收准备。[阶段顺序](ROADMAP.md)，[本轮证据](history/2026-10-21-主分支合并与GHCR候选发布.md)。未部署或真实发送。
+更新时间：2026-10-21（Asia/Shanghai）。M0～M3实现与本地自动检查已完成；M4工程自动退出通过，当前进入M5实机/用户验收准备。[阶段顺序](ROADMAP.md)，[本轮证据](history/2026-10-21-主分支合并与GHCR候选发布.md)。用户已通过Portainer自行部署并反馈RSS测试问题；Codex未部署/真实发送。
 
 ## 环境与代码
 
-仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。main已普通合并/推送，既有镜像代码基准d55ee70be475029b11dc5ce30c6cf340c889c349，开发分支cb3de42保留。产品代码仍等同faa991d，近期仅CI/发布/测试/文档，无业务/依赖/迁移变更。原D盘副本、Ubuntu工具与全局WSL未改。本轮scripts/check_ghcr_package.py、专项、images.yml及相关文档/公开证据适配显式public；与状态同次提交，不改镜像内业务。未取得新工具提交的远程CI通过证据，67项针对性检查通过。
+仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。main已普通合并/推送，既有镜像代码基准d55ee70be475029b11dc5ce30c6cf340c889c349，开发分支cb3de42保留。产品代码仍等同faa991d，近期仅CI/发布/测试/文档，无业务/依赖/迁移变更。原D盘副本、Ubuntu工具与全局WSL未改。本轮scripts/check_ghcr_package.py、专项、images.yml及相关文档/公开证据适配显式public；与状态同次提交，不改镜像内业务。67项发布专项通过。本轮RSS修复待提交：source_probe.py、Websites.vue、test_source_probe_scheduling.py及文档；模拟复现3失败/2通过后，45项针对性检查17.48秒通过，正在完整后端/前端构建/操作浏览器回归。见[RSS问题](history/2026-10-21-RSS连接测试等待修复.md)。
 
 ## M4结果与边界
 
@@ -18,7 +18,7 @@
 
 保留seekbell-acceptance-b45fc2c-20261020项目、-seekbell-1容器、_data卷与seekbell:backup-local（b45fc2c），http://localhost:18081/；最近只读running/重启0，未替换/重置/代配置。旧不兼容卷及4175/18080保留，勿复用旧名/改迁移号。[故障说明](history/2026-10-20-本机验收启动修复.md)。两平台ci-34cf183本机候选保留，ID见归档。
 
-用户选择自行PVE部署验收，已给VM/Compose/SSH访问步骤；实际部署未确认。下一步由用户按矩阵检查固定digest、实际域名证书、真实RSS/四渠道、Safari/真机、重启/恢复及观察，反馈验收后确认正式发布；Codex未获远程部署/真实发送授权。以上均未执行；跨版本加密恢复仍未验证。原生CI不替代用户设备验收，回退可能重复发送，保留原卷、不降级新库。
+用户选择自行PVE部署验收，已给VM/Compose/SSH访问步骤；现用户截图及概览证明已部署并在验收；完整版本/网络/渠道验收仍待反馈。下一步由用户按矩阵检查固定digest、实际域名证书、真实RSS/四渠道、Safari/真机、重启/恢复及观察，反馈验收后确认正式发布；Codex未获远程部署/真实发送授权。以上均未执行；跨版本加密恢复仍未验证。原生CI不替代用户设备验收，回退可能重复发送，保留原卷、不降级新库。
 
 ## 恢复与授权
 

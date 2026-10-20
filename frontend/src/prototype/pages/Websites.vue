@@ -204,7 +204,7 @@ async function test() {
   if (isLive) {
     confirmAction(
       '测试 NodeSeek 官方 RSS 连接？',
-      '将请求一次官方 RSS，使用已保存的采集间隔并遵守退避。不会启用网站、保存草稿间隔或创建帖子、命中及通知。',
+      '将请求一次官方 RSS，与后台采集共用间隔并遵守退避；可能先等待最多 10 秒。不会启用网站、保存草稿间隔或创建帖子、命中及通知。',
       () => runLiveTest(w.id),
       '确认测试连接',
     )
@@ -558,7 +558,7 @@ onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
             <p class="field-help">
               {{
                 isLive
-                  ? '仅检查官方 RSS 的连接与解析，不开启采集，不改变历史、基线和去重。'
+                  ? '仅检查官方 RSS 的连接与解析，与后台采集共用间隔；错误时显示原因与剩余等待时间。不改变历史、基线和去重。'
                   : '只验证连接状态的界面反馈，不请求真实网站，不开启采集。'
               }}
             </p>
@@ -575,7 +575,13 @@ onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
                 <option value="error">服务暂时不可用</option></select
               ><button class="button" :disabled="testing" @click="test">
                 <Icon name="refresh" :size="16" :class="{ spinning: testing }" />{{
-                  testing ? '测试中…' : isLive ? '测试连接' : '测试连接（模拟）'
+                  testing
+                    ? isLive
+                      ? '等待或测试中…'
+                      : '测试中…'
+                    : isLive
+                      ? '测试连接'
+                      : '测试连接（模拟）'
                 }}
               </button>
             </div>
