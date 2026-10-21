@@ -1,6 +1,6 @@
 # 双架构镜像候选与GHCR流程（M4第五子阶段）
 
-当前已发布的RSS修复候选为`ghcr.io/aspeternity/seekbell:rss-fix-1`，精确版本/两平台digest和匿名拉取见[本轮证据](history/2026-10-21-RSS修复镜像发布.md)；Portainer使用[模板](../deploy/compose.portainer.yaml)。本流程不部署服务。`.github/workflows/images.yml`只有`workflow_dispatch`入口；普通push/PR不登录或写GHCR；codex/开发分支的push在完整CI成功后调用同一原生双架构检查，便于合并主分支前验证。新流程默认`publish=false`，分别使用`ubuntu-24.04`和`ubuntu-24.04-arm`原生构建Linux amd64/arm64，不安装QEMU或修改本机Docker。私有仓库使用账户Actions额度，runner/额度是否可用须实际运行确认。
+当前已发布的UI/通知修复候选为`ghcr.io/aspeternity/seekbell:ui-fix-1`，精确版本/两平台digest和匿名拉取见[本轮证据](history/2026-10-21-UI通知修复镜像发布.md)；Portainer使用[模板](../deploy/compose.portainer.yaml)。本流程不部署服务。`.github/workflows/images.yml`只有`workflow_dispatch`入口；普通push/PR不登录或写GHCR；codex/开发分支的push在完整CI成功后调用同一原生双架构检查，便于合并主分支前验证。新流程默认`publish=false`，分别使用`ubuntu-24.04`和`ubuntu-24.04-arm`原生构建Linux amd64/arm64，不安装QEMU或修改本机Docker。私有仓库使用账户Actions额度，runner/额度是否可用须实际运行确认。
 
 ## 候选检查与产物
 
@@ -26,7 +26,7 @@
 
 发布前preflight仅有packages读取权限；只有publish job获得`packages: write`，用短期`GITHUB_TOKEN`登录GHCR，不要求长期PAT，不向build job提供registry写权限。包名固定为`ghcr.io/<小写owner>/<小写repo>`，不接受外部registry/命名空间输入。用户已明确选择公开镜像、保留私有源码仓库：三个元数据检查均显式传`--visibility public`，写前后核对私有源仓库和既有公开包；包不可读/缺失、私有/internal/未知可见性均停止，不尝试先创建默认私有包。工作流只校验、不改变可见性，首次新包须操作者另行准备并公开。
 
-GitHub包repository字段可选/可空，缺失记not-reported；报告时必须匹配私有源仓库。镜像source/config/层仍独立核对已测归档。回执记录实际visibility、visibility_verified及private_verified；公开包不会记成private_verified=true。工具默认保留private模式用于历史/其他显式调用，本仓工作流固定public，不提供手动降级参数。工作流不公开源码、不创建GitHub Release、不自动更新latest/语义标签，也不自动部署。可在已授权的手动发布中显式填写可选tag（本次rss-fix-1）；仅在完整检查、双架构索引及发布后容器验证通过后，为同一固定索引添加短候选标签，并重读核对digest/两个平台，保存alias.json。空tag不添加标签，latest被拒绝；标签仍可被有写权限者改写，长期身份以digest回执为准。
+GitHub包repository字段可选/可空，缺失记not-reported；报告时必须匹配私有源仓库。镜像source/config/层仍独立核对已测归档。回执记录实际visibility、visibility_verified及private_verified；公开包不会记成private_verified=true。工具默认保留private模式用于历史/其他显式调用，本仓工作流固定public，不提供手动降级参数。工作流不公开源码、不创建GitHub Release、不自动更新latest/语义标签，也不自动部署。可在已授权的手动发布中显式填写可选tag（例如ui-fix-1）；仅在完整检查、双架构索引及发布后容器验证通过后，为同一固定索引添加短候选标签，并重读核对digest/两个平台，保存alias.json。空tag不添加标签，latest被拒绝；标签仍可被有写权限者改写，长期身份以digest回执为准。
 
 ## 发布行为与失败处理
 
@@ -66,7 +66,7 @@ python3 scripts/release_images.py --revision "$SEEKBELL_REVISION" --repository a
 PVE部署可跳过原说明中的Token、docker login/logout，直接执行：
 
 ~~~bash
-docker pull ghcr.io/aspeternity/seekbell:rss-fix-1
+docker pull ghcr.io/aspeternity/seekbell:ui-fix-1
 ~~~
 
 仓库维护compose.yaml的pull_policy=never仍要求预先拉取；Portainer模板直接使用已发布短标签，首次部署会拉取。更新应保留原Stack/端口/数据卷。操作者是否加sudo取决于目标Docker权限。

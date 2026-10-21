@@ -1,0 +1,19 @@
+{
+  "date": "2026-10-21",
+  "environment": "SeekBell-Dev rootless Docker, empty temporary Docker config, no registry login",
+  "tag": "ghcr.io/aspeternity/seekbell:ui-fix-1",
+  "reference": "ghcr.io/aspeternity/seekbell@sha256:909818de6963aecf5ad46f14429856826a30559e45bf6b6a5f5b823566bc481b",
+  "digest": "sha256:909818de6963aecf5ad46f14429856826a30559e45bf6b6a5f5b823566bc481b",
+  "revision": "e09d0532882ad3ead4d1729257959ecf252cab26",
+  "manifests": {
+    "amd64": "sha256:3dcf48df99cd1c05a83cf573f9dee20a8f8215c555754efdfe28cb5abd900727",
+    "arm64": "sha256:8c89cbb2611c3dfdf5e8e6445b90a1fae050c6bb4e92897bbf4e69b80d2597dc"
+  },
+  "anonymous_index": "passed",
+  "anonymous_pull": "linux/amd64 passed",
+  "image_revision": "passed",
+  "image_user": "10001:10001",
+  "source_repository_private": true,
+  "publication_opt_in": "restored to absent",
+  "receipt_zip_hash": "matches Actions upload log"
+}
