@@ -1,25 +1,23 @@
 # 当前状态
 
-更新时间：2026-10-21（Asia/Shanghai）。M0～M3实现/本地自动检查完成，M4工程退出通过；当前M5由用户在Portainer自行部署验收。RSS连接测试独立计时修复已公开交付，待用户更新反馈。Codex未部署其环境、真实采集或发送。[阶段顺序](ROADMAP.md)。
+更新时间：2026-10-21（Asia/Shanghai）。M0～M3实现/本地检查完成，M4工程退出通过；当前M5用户Portainer实测修正。本轮四项体验调整已按用户审批实现，铅笔明确保留；自动检查通过，用户现明确要求发布新镜像后自行更新测试；新标签ui-fix-1发布准备中，尚未发布或用户验收。
 
 ## 环境与代码
 
-仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。main/origin实现基准e658b465159a24800887c30de5a645831615301b，已普通合并/推送；本地修复分支f94eae8保留。当前收尾仅状态/镜像说明/验收/history回执文档，与状态同次提交，不改已测实现。原D盘/Ubuntu工具及全局WSL未改。
+仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。codex/ui-content-readability基于main/origin e7b5d81；a42b02d为主内容1.1倍/概览移除创建，f7f84ca为入口收敛/账号退出，9810ba0为通知时区/Telegram排版。本轮代码/测试/SPEC/UI_DESIGN/ARCHITECTURE与本状态同提交，未推送/合并。原D盘、全局WSL和18081验收实例未动。
 
-## 当前交付与证据
+## 最新交付与证据
 
-用户反馈启用网站/10秒配置时测试一直被本地429拦截，概览连续失败0；明确要求手动诊断独立于正常采集周期。后台按网站保存的间隔运行，10秒仅默认，已补10/37/3600秒场景；测试独立2秒防连点，成功测试不延后后台，保留在途互斥/实际错误退避。兼容旧成功probe长计时，不改健康/基线/历史/账本，无依赖/迁移。预约等待旧方案已移除并归档。
+用户批准四项但要求铅笔先保留：TG正文日期时间按保存时区转换、不附IANA名称，包含普通/测试/重发/告警；Bark/SMTP仍标时区，Webhook/UTC数据不变。任务统计/筛选/行状态统一已启用/已暂停，独立固定状态列/开关/操作列，手机卡片底部独立状态位。菜单概览→监控网站→通知管理→监控任务→内容与命中，设置/账号留底。点击任务信息/空白编辑，开关/编辑/复制/删除独立，标题支持键盘，铅笔保留。未改采集/启停/去重语义，无依赖/迁移。
 
-[39502064791](https://github.com/Aspeternity/seekbell/actions/runs/39502064791)对e658b46整体success：后端528项188.19秒、浏览器64项，格式/锁/隐私/构建/迁移、容器/加密备份独立恢复/新卷升级回退/真实TLS全过；amd64/arm64各原生构建/运行/归档通过，无QEMU。发布复用已测产物，公开包/两个manifest/config/索引及固定digest拉取复验通过。
+后端相关111项10.58秒通过；原演示40项通过、新任务交互桌面/手机2项修正统计文案遗漏后定向通过（最终9.7秒），生产集成6项36.8秒通过，共48种浏览器场景；非一次42项全绿。新检查量测320～1440宽度开关切换前后x/y差<0.5px、无状态/操作重叠或横溢，四种按钮与行点击/键盘不串联，真实配置进入正确任务。类型检查/Vite构建、Ruff/Prettier/diff通过。合成截图已核对，不等同Telegram客户端实测。[完整实现/命令/限制](history/2026-10-21-任务交互与通知时间精简.md)。
 
-短标签：`ghcr.io/aspeternity/seekbell:rss-fix-1`。固定digest：`sha256:4fa567debf73686fa0486eacee2fd4e53e415178ae3084c25d86de25f2a7d463`。短标签在完整验证后复制同一索引并重读核对，不更新latest；空凭据匿名pull amd64、两平台索引及镜像版本e658b46核对通过。源码API仍private，包public/visibility_verified=true；repository可选字段记not-reported。[完整记录](history/2026-10-21-RSS修复镜像发布.md)、[发布回执](history/2026-10-21-RSS修复镜像发布回执.json)、[匿名证据](history/2026-10-21-RSS修复匿名拉取.json)。回执ZIP SHA与Actions上传日志一致，artifact仅30天。临时发布开关恢复缺失，cache恢复记录移除。
+9810ba0的通知呈现上下文覆盖旧队列/测试/重发/告警，不改原消息快照，TG用安全bold实体/原帖按钮/可选摘要；原214项及system4项未受影响部分复用，[通知记录](history/2026-10-21-通知时区与Telegram排版.md)。UI尺寸、去重入口/真实注销既有证据见[尺寸记录](history/2026-10-21-内容区尺寸与概览入口.md)、[入口记录](history/2026-10-21-入口收敛与侧栏退出.md)。无真实RSS/通知操作。
 
-## 部署交接与保留
+## 镜像与保留
 
-交付deploy/compose.portainer.yaml，使用rss-fix-1和seekbell_data卷键，Compose config通过；用户在原Stack更新并沿用原端口/数据卷，Codex未代升级。下一步用户确认版本e658b46，核对刚完成正常采集即可测试、配置间隔持续运行、真实RSS/四渠道、HTTPS/Safari/真机、重启/恢复及观察；不能把CI等同用户验收。跨版本加密恢复仍未验证，回退可能重复发送，保留原卷、不降级新库。
+公开ghcr.io/aspeternity/seekbell:rss-fix-1代码e658b465159a24800887c30de5a645831615301b，此前Compose指此版本；本次模板已准备ui-fix-1（尚未发布），包含本轮UI/通知修改。digest/完整CI/双平台原生/TLS/匿名拉取见[发布记录](history/2026-10-21-RSS修复镜像发布.md)。发布开关恢复缺失、源码private。18081项目seekbell-acceptance-b45fc2c-20261020及其容器/卷/backup-local保留；旧卷、4175/18080和已有镜像不动。
 
-旧公开afab5870...及首轮部分发布保留，旧本地候选/ci-34cf183均保留，指纹见历史。18081本机验收项目seekbell-acceptance-b45fc2c-20261020、-seekbell-1容器、_data卷、backup-local镜像不动；最近running/重启0。旧不兼容卷及4175/18080保留。
+## 下一步与授权
 
-## 恢复与授权
-
-用户本轮明确授权修复合并/公开镜像及Compose交付，临时开关恢复已完成；沿用独立WSL/noreply，不组织多代理。无远程部署、真实发送、源码公开、正式GitHub Release或旧环境/全局WSL变更授权。恢复读AGENTS、本状态、本轮发布及独立限频记录，部署按需读IMAGE_RELEASE/PROXY_DEPLOYMENT/RELEASES。仅文档收尾skip ci复用e658b46，不循环写自身SHA。
+执行本轮公开GHCR新镜像发布，使用现有默认分支完整CI/两架构原生流程，成功后验证匿名拉取并交付Portainer模板；真实Telegram/其他渠道/PVE、Safari/真机待验收。四项已审批并完成，不能再删铅笔或重复索要同项审批。用户“发布为新镜像，我更新之后测试一下”授权本轮合并main、公开GHCR新候选及临时发布开关恢复；无远程部署/真实发送/源码公开/正式Release授权。源码API仍private/main，发布开关原先缺失。独立WSL/noreply，不组织多代理。恢复读AGENTS、本状态、本轮任务交互记录，按需读TaskList/菜单/CSS及Telegram渲染。

@@ -45,7 +45,8 @@ def test_wire_contract_and_acceptance(kind, body):
             assert data["link_preview_options"] == {"is_disabled": True}
             assert "parse_mode" not in data
             assert "<b>合成消息</b>" in data["text"]
-            assert event["post"]["url"] in data["text"]
+            assert data["reply_markup"]["inline_keyboard"][0][0]["url"] == event["post"]["url"]
+            assert data["entities"][0]["type"] == "bold"
             assert "synthetic summary" not in data["text"]
         elif kind == "bark":
             assert str(request.url) == "http://192.168.1.2:8080/bark/push"

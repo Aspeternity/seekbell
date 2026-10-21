@@ -13,7 +13,6 @@ import type { Task } from './model'
 const props = defineProps<{ tasks: Task[] }>()
 const emit = defineEmits<{
   edit: [id: string]
-  create: []
   toggle: [id: string]
   notice: [message: string]
   navigate: [path: string]
@@ -95,9 +94,6 @@ const activities = [
       <h1 tabindex="-1">每一条在意的，都不错过<span class="heading-dot">。</span></h1>
       <p class="subtitle">让 SeekBell 留意新帖，把时间留给更重要的事。</p>
     </div>
-    <button class="button primary" @click="emit('create')">
-      <Icon name="plus" :size="18" />新建任务
-    </button>
   </section>
   <div class="overview-meta">
     <span
@@ -277,12 +273,7 @@ const activities = [
         <h3>还没有监控网站</h3>
         <p>添加后，在这里查看各个网站的状态。</p>
       </div>
-      <button
-        v-for="w in state.websites"
-        :key="w.id"
-        class="overview-website-row"
-        @click="emit('navigate', '/websites')"
-      >
+      <div v-for="w in state.websites" :key="w.id" class="overview-website-row">
         <span class="icon-tile orange"><Icon name="globe" :size="18" /></span
         ><span
           ><strong>{{ websiteName(w.id) }}</strong
@@ -300,7 +291,7 @@ const activities = [
                   : '待采集'
           }}</span
         >
-      </button>
+      </div>
       <p class="source-note"><Icon name="shield" :size="15" />各网站独立配置，同站任务共享采集</p>
     </section>
   </div>

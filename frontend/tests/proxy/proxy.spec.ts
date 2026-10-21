@@ -42,7 +42,7 @@ test('real TLS proxy preserves secure sessions, configuration and logout', async
   })
   expect(rejected.status()).toBe(403)
   await page.getByRole('button', { name: '管理员', exact: true }).click()
-  await page.getByRole('button', { name: '退出登录', exact: true }).click()
+  await page.locator('#main-content').getByRole('button', { name: '退出登录', exact: true }).click()
   await expect(page.getByRole('heading', { name: '欢迎回来' })).toBeVisible()
   await page.getByLabel('管理员用户名').fill(credentials.username)
   await page.getByLabel('密码', { exact: true }).fill(credentials.password)

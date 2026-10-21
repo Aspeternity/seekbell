@@ -73,6 +73,79 @@ test('all pages render without errors, remain responsive and provide review scre
   expect(errors).toEqual([])
 })
 
+test('task rows keep status controls fixed and separate editing from actions', async ({
+  page,
+}, info) => {
+  await go(page, '/tasks')
+  await expect(page.locator('.sidebar nav button > span:first-of-type')).toHaveText([
+    '概览',
+    '监控网站',
+    '通知管理',
+    '监控任务',
+    '内容与命中',
+  ])
+  await expect(page.locator('.metric-strip > div > span')).toHaveText([
+    '全部任务',
+    '已启用',
+    '已暂停',
+  ])
+  const filters = page.locator('.panel-heading .segmented')
+  await expect(filters.getByRole('button')).toHaveText(['全部任务', '已启用', '已暂停'])
+  const row = page.locator('.task-management-row').first()
+  const toggle = row.getByRole('switch')
+  await expect(toggle).toBeChecked()
+  for (const width of [320, 390, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 900 })
+    const enabled = await toggle.boundingBox()
+    await toggle.click()
+    await expect(toggle).not.toBeChecked()
+    await expect(row.locator('.task-status > span')).toHaveText('已暂停')
+    await expect(page).toHaveURL(/#\/tasks$/)
+    const paused = await toggle.boundingBox()
+    expect(Math.abs(enabled!.x - paused!.x), 'fixed switch x at ' + width).toBeLessThan(0.5)
+    expect(Math.abs(enabled!.y - paused!.y), 'fixed switch y at ' + width).toBeLessThan(0.5)
+    const actions = await row.locator('.row-actions').boundingBox()
+    const status = await row.locator('.task-status').boundingBox()
+    expect(status!.x + status!.width).toBeLessThanOrEqual(actions!.x)
+    await toggle.click()
+    await expect(toggle).toBeChecked()
+    await expect(row.locator('.task-status > span')).toHaveText('已启用')
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  }
+  await page.setViewportSize(
+    info.project.name === 'mobile' ? { width: 390, height: 844 } : { width: 1440, height: 1000 },
+  )
+  await filters.getByRole('button', { name: '已暂停', exact: true }).click()
+  await expect(page.locator('.task-management-row')).toHaveCount(1)
+  await expect(page.locator('.task-status > span')).toHaveText('已暂停')
+  await filters.getByRole('button', { name: '全部任务', exact: true }).click()
+  const name = (await row.locator('.task-title').textContent())!.trim()
+  const closeToast = page.getByRole('button', { name: '关闭提示', exact: true })
+  if (await closeToast.isVisible()) await closeToast.click()
+  await page.screenshot({ path: info.outputPath('tasks-stable-controls.png'), fullPage: true })
+  await row.getByRole('button', { name: '删除' + name, exact: true }).click()
+  await expect(page.getByRole('dialog')).toContainText('删除')
+  await expect(page).toHaveURL(/#\/tasks$/)
+  await page.getByRole('button', { name: '取消', exact: true }).click()
+  await row.getByRole('button', { name: '复制' + name, exact: true }).click()
+  await expect(page.getByLabel('任务名称')).toHaveValue(name + ' · 副本')
+  await page.getByRole('button', { name: '取消', exact: true }).click()
+  await expect(page).toHaveURL(/#\/tasks$/)
+  await row.getByRole('button', { name: '编辑' + name, exact: true }).click()
+  await expect(page.getByLabel('任务名称')).toHaveValue(name)
+  await page.getByRole('button', { name: '取消', exact: true }).click()
+  await row.locator('.management-copy > p').click()
+  await expect(page.getByLabel('任务名称')).toHaveValue(name)
+  await page.getByRole('button', { name: '取消', exact: true }).click()
+  const bounds = await row.boundingBox()
+  await row.click({ position: { x: bounds!.width / 2, y: bounds!.height - 3 } })
+  await expect(page.getByLabel('任务名称')).toHaveValue(name)
+  await page.getByRole('button', { name: '取消', exact: true }).click()
+  await row.locator('.task-title').focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByLabel('任务名称')).toHaveValue(name)
+})
+
 test('task list copies, saves, deletes and preserves historical snapshots', async ({ page }) => {
   await go(page, '/tasks')
   await page.getByRole('button', { name: '复制好价服务器雷达', exact: true }).click()

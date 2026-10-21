@@ -1,7 +1,7 @@
 # Portainer standalone Docker Stack. Update the existing stack to retain its volume.
 services:
   seekbell:
-    image: ghcr.io/aspeternity/seekbell:rss-fix-1
+    image: ghcr.io/aspeternity/seekbell:ui-fix-1
     restart: unless-stopped
     init: true
     ports:

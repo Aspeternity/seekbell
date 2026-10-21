@@ -99,6 +99,16 @@ test('real setup, login, website, task, workspace and a fresh browser retain ser
   await expect(page.locator('.management-row')).toContainText('真实任务-' + info.project.name)
   await page.reload()
   await expect(page.locator('.management-row')).toContainText('此备注必须由数据库保留')
+  const taskRow = page
+    .locator('.task-management-row')
+    .filter({ hasText: '真实任务-' + info.project.name })
+  await expect(
+    taskRow.getByRole('button', { name: '编辑真实任务-' + info.project.name, exact: true }),
+  ).toBeVisible()
+  await taskRow.locator('.management-copy > p').click()
+  await expect(page.getByLabel('任务名称')).toHaveValue('真实任务-' + info.project.name)
+  await page.getByRole('button', { name: '取消', exact: true }).click()
+  await expect(page).toHaveURL(/#\/tasks$/)
   await page.goto('/#/settings/preferences')
   const workspace = '我的关注空间-' + info.project.name
   await page.getByLabel('工作空间名称').fill(workspace)
@@ -123,7 +133,7 @@ test('real setup, login, website, task, workspace and a fresh browser retain ser
   ).toBe(false)
   expect(await page.evaluate(() => document.cookie)).not.toContain('seekbell_session')
   await page.goto('/#/settings/account')
-  await page.getByRole('button', { name: '退出登录', exact: true }).click()
+  await page.locator('#main-content').getByRole('button', { name: '退出登录', exact: true }).click()
   await expect(page.getByRole('heading', { name: '欢迎回来' })).toBeVisible()
   expect((await page.request.get('/api/manage/workspace')).status()).toBe(401)
   const context = await browser.newContext()

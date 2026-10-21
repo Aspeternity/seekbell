@@ -44,6 +44,18 @@ async function copy(task: Task) {
   notify('任务已复制并保持暂停，可编辑后启用。')
   emit('navigate', '/task/' + next.id)
 }
+function openTask(event: MouseEvent, task: Task) {
+  const target = event.target
+  if (
+    event.defaultPrevented ||
+    event.button !== 0 ||
+    (target instanceof Element &&
+      target.closest('button, a, input, select, textarea, .task-status, .row-actions')) ||
+    window.getSelection()?.toString()
+  )
+    return
+  emit('navigate', '/task/' + task.id)
+}
 function remove(task: Task) {
   confirmAction(
     '删除「' + task.name + '」？',
@@ -77,7 +89,7 @@ function remove(task: Task) {
       <span>全部任务</span><strong>{{ state.tasks.length }}</strong>
     </div>
     <div>
-      <span>{{ isLive ? '已启用配置' : '运行中' }}</span
+      <span>已启用</span
       ><strong class="positive-text">{{ state.tasks.filter((t) => t.enabled).length }}</strong>
     </div>
     <div>
@@ -91,7 +103,7 @@ function remove(task: Task) {
         <button
           v-for="item in [
             { id: 'all', label: '全部任务' },
-            { id: 'active', label: isLive ? '配置已启用' : '运行中' },
+            { id: 'active', label: '已启用' },
             { id: 'paused', label: '已暂停' },
           ]"
           :key="item.id"
@@ -110,7 +122,13 @@ function remove(task: Task) {
       /></label>
     </div>
     <div class="management-list">
-      <article v-for="task in list" :key="task.id" class="management-row">
+      <article
+        v-for="task in list"
+        :key="task.id"
+        class="management-row task-management-row"
+        :class="{ 'with-example-stats': !isLive }"
+        @click="(event) => openTask(event, task)"
+      >
         <span class="icon-tile" :class="task.color"><Icon :name="task.icon" /></span>
         <div class="management-copy">
           <button class="text-link task-title" @click="emit('navigate', '/task/' + task.id)">
@@ -136,7 +154,7 @@ function remove(task: Task) {
             :model-value="task.enabled"
             :label="task.name + '启用状态'"
             @update:model-value="(value) => setTaskEnabled(task, value)"
-          /><span>{{ task.enabled ? (isLive ? '配置已启用' : '运行中') : '已暂停' }}</span>
+          /><span>{{ task.enabled ? '已启用' : '已暂停' }}</span>
         </div>
         <div class="row-actions">
           <button

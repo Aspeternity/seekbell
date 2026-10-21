@@ -36,6 +36,8 @@ test('overview search, filters, toggle, range and local persistence', async ({ p
 })
 
 test('create, validation, tags, targets and reload', async ({ page }) => {
+  await expect(page.getByRole('button', { name: '新建任务', exact: true })).toHaveCount(0)
+  await page.goto('/prototype.html#/tasks')
   await page.getByRole('button', { name: '新建任务', exact: true }).click()
   await expect(page.getByRole('heading', { name: '新建监控任务' })).toBeVisible()
   await page.getByRole('button', { name: '保存任务', exact: true }).click()
@@ -46,6 +48,8 @@ test('create, validation, tags, targets and reload', async ({ page }) => {
   await page.getByLabel('条件组1全部包含', { exact: true }).press('Enter')
   await page.getByRole('checkbox', { name: '家庭服务 Webhook' }).check()
   await page.getByRole('button', { name: '保存任务', exact: true }).click()
+  await expect(page).toHaveURL(/#\/tasks$/)
+  await page.goto('/prototype.html#/')
   await expect(page.getByRole('heading', { level: 1 })).toContainText('每一条在意的')
   await page.reload()
   await expect(page.locator('.task-row')).toHaveCount(5)

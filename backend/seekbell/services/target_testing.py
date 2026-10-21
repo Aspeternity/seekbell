@@ -12,6 +12,7 @@ from seekbell.db.transactions import database_call, write_session
 from seekbell.domain.delivery import SendResult
 from seekbell.notifiers.base import Notifier
 from seekbell.services.configuration import identifier, target_snapshot
+from seekbell.services.display import notification_context
 
 
 class OperationConflict(ValueError):
@@ -49,6 +50,7 @@ class TargetTesting:
             target = session.get(NotificationTarget, target_id)
             self.validate(target, revision)
             snapshot = target_snapshot(target)
+            context = notification_context(session, {})
             session.add(
                 TargetTestAttempt(
                     id=key,
@@ -60,6 +62,7 @@ class TargetTesting:
                 )
             )
         payload = {
+            **context,
             "schema_version": 1,
             "event_id": key,
             "post": {

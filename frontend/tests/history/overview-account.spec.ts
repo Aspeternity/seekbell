@@ -21,6 +21,7 @@ test('real overview and administrator forms preserve records and rotate sessions
   await page
     .getByRole('button', { name: initialized ? '登录工作空间' : '创建管理员并进入' })
     .click()
+  await expect(page.getByRole('button', { name: '新建任务', exact: true })).toHaveCount(0)
   await expect(page.getByTestId('overview-matches')).toHaveText('24条')
   await expect(page.getByTestId('overview-delivered')).toHaveText('2次')
   await expect(page.getByTestId('overview-attention')).toHaveText('3次')
@@ -103,7 +104,10 @@ test('real overview and administrator forms preserve records and rotate sessions
       await expect(page.getByLabel('管理员用户名')).toHaveValue(credentials.username)
       expect((await (await page.request.get('/api/manage/history/posts')).json()).total).toBe(27)
       await page.screenshot({ path: info.outputPath('administrator.png'), fullPage: true })
-      await page.getByRole('button', { name: '退出登录', exact: true }).click()
+      await page
+        .locator('#main-content')
+        .getByRole('button', { name: '退出登录', exact: true })
+        .click()
       await expect(page.getByRole('button', { name: '登录工作空间' })).toBeVisible()
       await page.getByLabel('管理员用户名').fill(credentials.username)
       await page.getByLabel('密码', { exact: true }).fill(credentials.password)

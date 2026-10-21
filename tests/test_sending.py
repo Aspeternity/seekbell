@@ -88,7 +88,11 @@ def test_manual_uses_current_credentials_original_message_and_independent_idempo
     assert "lease_token" not in response.text
     assert client.post(base, json=body).json()["id"] == data["id"]
     assert len(probe.calls) == 1
-    assert probe.calls[0][1] == {**original_payload, "event_id": data["id"]}
+    assert probe.calls[0][1] == {
+        **original_payload,
+        "event_id": data["id"],
+        "display_timezone": "UTC",
+    }
     assert probe.calls[0][0]["name"] == "当前目标名称"
     with Session(app.state.engine) as session:
         original = session.get(Outbox, ids["sent"])
@@ -331,3 +335,19 @@ def test_manual_evidence_survives_service_restart_without_repeating_send(tmp_pat
         assert response.status_code == 200
         assert response.json() == original
         assert len(probe.calls) == 1
+
+
+def test_manual_resend_reads_saved_timezone_without_changing_original_snapshot(sending):
+    from seekbell.services.display import get_display, update_display
+
+    app, client, ids, probe = sending
+    with Session(app.state.engine) as session:
+        original = copy.deepcopy(session.get(Outbox, ids["sent"]).payload)
+    update_display(app.state.engine, "Asia/Shanghai", get_display(app.state.engine)["revision"])
+    base, body = intent(client, ids["sent"], manual=True)
+    assert client.post(base, json=body).json()["result"] == "success"
+    assert probe.calls[0][1]["display_timezone"] == "Asia/Shanghai"
+    assert probe.calls[0][1]["post"] == original["post"]
+    with Session(app.state.engine) as session:
+        assert session.get(Outbox, ids["sent"]).payload == original
+        assert "display_timezone" not in session.get(ManualDelivery, body["request_id"]).payload

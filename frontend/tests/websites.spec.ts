@@ -186,7 +186,8 @@ test('workspace identity saves, validates, persists and upgrades older settings'
   await page.screenshot({ path: info.outputPath('workspace-settings.png'), fullPage: true })
   if ((page.viewportSize()?.width || 0) < 761)
     await page.getByRole('button', { name: '打开导航' }).click()
-  await page.getByRole('button', { name: '设置工作空间', exact: true }).click()
+  await expect(page.getByRole('button', { name: '设置工作空间', exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: '系统设置', exact: true }).click()
   await expect(page).toHaveURL(/#\/settings\/preferences$/)
   await page
     .getByLabel('工作空间名称', { exact: true })
@@ -235,6 +236,7 @@ test('catalog is centered on desktop and configuration remains a separate right 
   await page.getByRole('button', { name: '配置 NodeSeek', exact: true }).click()
   const bounds = await dialog.boundingBox()
   expect(Math.abs(bounds!.x + bounds!.width - 1440)).toBeLessThan(2)
-  expect(bounds!.width).toBe(580)
+  expect(bounds!.width).toBeCloseTo(638, 0)
+  expect(Math.abs(bounds!.height - 900)).toBeLessThan(2)
   await expect(dialog).not.toHaveClass(/website-catalog-modal/)
 })

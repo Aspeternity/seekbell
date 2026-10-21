@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from seekbell.db.models import ManualDelivery, NotificationTarget, Outbox
 from seekbell.db.transactions import write_session
 from seekbell.services.configuration import identifier, target_snapshot
+from seekbell.services.display import notification_context
 from seekbell.services.target_testing import OperationConflict, TargetTesting
 
 
@@ -72,6 +73,7 @@ class ManualSending(TargetTesting):
             snapshot = target_snapshot(target)
             payload = copy.deepcopy(event.payload)
             payload["event_id"] = key
+            message = notification_context(session, payload)
             session.add(
                 ManualDelivery(
                     id=key,
@@ -84,7 +86,7 @@ class ManualSending(TargetTesting):
                     error_code="send_not_completed",
                 )
             )
-        return key, snapshot, payload
+        return key, snapshot, message
 
 
 class ConfiguredTargetTesting(TargetTesting):

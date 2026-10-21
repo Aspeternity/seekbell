@@ -19,6 +19,7 @@ from seekbell.db.models import (
 from seekbell.db.transactions import database_call, write_session
 from seekbell.domain.delivery import SendResult
 from seekbell.services.configuration import identifier, target_snapshot
+from seekbell.services.display import notification_context
 from seekbell.services.history import read_session
 
 
@@ -281,7 +282,9 @@ class AlertWorker:
             return (
                 item.id,
                 dict(item.target_snapshot),
-                payload(session.get(SystemEvent, item.event_id), item.id),
+                notification_context(
+                    session, payload(session.get(SystemEvent, item.event_id), item.id)
+                ),
             )
 
     def _finish(self, key, result):

@@ -38,9 +38,6 @@ function setRange(value: '24h' | '7d') {
       <h1 tabindex="-1">留意你关心的<span class="heading-dot">。</span></h1>
       <p class="subtitle">采集、命中与通知，都有迹可循。</p>
     </div>
-    <button class="button primary" @click="emit('navigate', '/task/new')">
-      <Icon name="plus" :size="18" />新建任务
-    </button>
   </section>
   <div class="overview-meta">
     <span>服务端历史统计 · {{ state.settings.timezone }}</span>
@@ -228,7 +225,7 @@ function setRange(value: '24h' | '7d') {
           <p>添加后查看已保存的采集状态。</p>
         </div>
         <div v-for="source in data.sources" :key="source.source_id" class="overview-source">
-          <button class="overview-website-row" @click="emit('navigate', '/websites')">
+          <div class="overview-website-row">
             <span class="icon-tile orange"><Icon name="globe" :size="18" /></span
             ><span
               ><strong>{{ source.name }}</strong
@@ -236,7 +233,7 @@ function setRange(value: '24h' | '7d') {
             ><span class="result-pill" :class="source.failures ? 'no' : 'neutral'">{{
               !source.enabled ? '配置已暂停' : source.failures ? '最近采集失败' : '配置已启用'
             }}</span>
-          </button>
+          </div>
           <p class="small-note">
             最后尝试：{{ stamp(source.last_attempt_at) }} · 连续失败 {{ source.failures
             }}{{ source.error_code ? ' · ' + source.error_code : '' }}
