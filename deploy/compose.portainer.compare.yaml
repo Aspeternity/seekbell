@@ -2,7 +2,7 @@
 # Keep the existing Stack and its data volume; this instance starts with an empty volume.
 services:
   seekbell:
-    image: ghcr.io/aspeternity/seekbell:ui-restore-1
+    image: ghcr.io/aspeternity/seekbell:ui-restore-2
     restart: unless-stopped
     init: true
     ports:

@@ -116,8 +116,8 @@ test('existing v2 work migrates without loss and attached tasks prevent removal'
   await page.getByRole('button', { name: '管理任务', exact: true }).click()
   await expect(page.locator('.management-row')).toHaveCount(4)
   await page.getByRole('button', { name: '保留我的旧任务', exact: true }).click()
-  await expect(page.getByLabel('监控网站', { exact: true })).toHaveValue('nodeseek')
-  await expect(page.getByLabel('监控网站', { exact: true })).toBeDisabled()
+  await expect(page.locator('.task-website-picker')).toContainText('NodeSeek')
+  await expect(page.getByRole('combobox', { name: '监控网站', exact: true })).toBeDisabled()
 })
 
 test('future built-in adapters keep independent settings in the same card layout', async ({
@@ -162,6 +162,22 @@ test('future built-in adapters keep independent settings in the same card layout
     await page.setViewportSize({ width, height: 900 })
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   }
+  await page.goto('/prototype.html#/task/new')
+  const picker = page.locator('.task-website-picker')
+  await picker.click()
+  const menu = page.locator('.task-website-menu')
+  await expect(menu.getByRole('option')).toHaveCount(4)
+  await menu.getByRole('option', { name: '适配测试 2', exact: true }).click()
+  await expect(picker).toContainText('适配测试 2')
+  await picker.click()
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('Enter')
+  await expect(picker).toContainText('适配测试 3')
+  await picker.click()
+  await page.keyboard.press('Escape')
+  await expect(menu).not.toBeVisible()
+  await page.locator('#task-name').click()
+  await expect(menu).not.toBeVisible()
 })
 
 test('workspace identity saves, validates, persists and upgrades older settings', async ({

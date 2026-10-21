@@ -1,6 +1,8 @@
 """Snapshot statistics from persisted records; never collect, evaluate or send."""
 
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import Integer, and_, cast, func, or_, select
 
@@ -9,6 +11,7 @@ from seekbell.db.models import (
     NotificationTarget,
     Outbox,
     Post,
+    SeenPost,
     Source,
     SourceProbe,
     SourceRun,
@@ -17,8 +20,9 @@ from seekbell.db.models import (
     TaskVersion,
     Website,
     WebsiteInstallation,
+    WorkspacePreferences,
 )
-from seekbell.services.history import decisions, error_code, post_key, read_session
+from seekbell.services.history import date_window, decisions, error_code, post_key, read_session
 from seekbell.services.source_probe import probe_backoff
 
 
@@ -49,6 +53,17 @@ def overview(engine, range_name="24h", *, at=None):
         queue = dict(
             session.execute(select(Outbox.status, func.count()).group_by(Outbox.status)).all()
         )
+        preferences = session.get(WorkspacePreferences, 1)
+        timezone = preferences.timezone if preferences else "UTC"
+        local_day = datetime.fromtimestamp(end, ZoneInfo(timezone)).date()
+        day_start, _ = date_window(local_day, timezone)
+        today_posts = dict(
+            session.execute(
+                select(SeenPost.website_id, func.count())
+                .where(SeenPost.first_seen_at >= day_start, SeenPost.first_seen_at < end)
+                .group_by(SeenPost.website_id)
+            ).all()
+        )
         sources = []
         for website, source, state in session.execute(
             select(Website, Source, SourceState)
@@ -57,12 +72,34 @@ def overview(engine, range_name="24h", *, at=None):
             .join(SourceState, SourceState.source_id == Source.id)
             .order_by(Website.id, Source.id)
         ):
+            # Source identity index includes the integer row ID in SQLite. Read
+            # the last persisted attempts without sorting all retained history.
+            recent_runs = list(
+                session.scalars(
+                    select(SourceRun)
+                    .where(SourceRun.source_id == source.id, SourceRun.at < end)
+                    .order_by(SourceRun.id.desc())
+                    .limit(30)
+                )
+            )
             sources.append(
                 {
                     "website_id": website.id,
                     "name": website.name,
                     "source_id": source.id,
                     "enabled": website.enabled and source.enabled,
+                    "interval_seconds": source.interval_seconds,
+                    "today_posts": today_posts.get(website.id, 0),
+                    "recent_runs": [
+                        {
+                            "id": run.id,
+                            "at": run.at,
+                            "status": run.status
+                            if run.status in ("success", "failure")
+                            else "unknown",
+                        }
+                        for run in reversed(recent_runs)
+                    ],
                     "last_attempt_at": state.last_attempt_at,
                     "last_success_at": state.last_success_at,
                     "next_attempt_at": max(
@@ -142,6 +179,7 @@ def overview(engine, range_name="24h", *, at=None):
             "end": end,
             # Database-only view; API adds the in-process actor status.
             "runtime_active": False,
+            "today": {"start": day_start, "end": end, "timezone": timezone},
             "configuration": {
                 "websites": total(WebsiteInstallation),
                 "tasks": total(Task, Task.deleted_at.is_(None)),

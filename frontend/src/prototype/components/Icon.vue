@@ -21,6 +21,8 @@ const paths: Record<string, string> = {
   arrow: 'M5 12h14m-5-5 5 5-5 5',
   back: 'M19 12H5m5-5-5 5 5 5',
   down: 'm6 9 6 6 6-6',
+  previous: 'm15 6-6 6 6 6',
+  next: 'm9 6 6 6-6 6',
   plus: 'M12 5v14M5 12h14',
   search: 'M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Zm-2 5 6 6',
   check: 'm5 12 4 4L19 6',

@@ -3,6 +3,7 @@ export interface OverviewData {
   start: number
   end: number
   runtime_active: boolean
+  today: { start: number; end: number; timezone: string }
   runtime: { active: boolean; status: string; code: string | null }
   configuration: { websites: number; tasks: number; enabled_tasks: number; targets: number }
   window: {
@@ -20,6 +21,9 @@ export interface OverviewData {
     name: string
     source_id: string
     enabled: boolean
+    interval_seconds: number
+    today_posts: number
+    recent_runs: { id: number; at: number; status: 'success' | 'failure' | 'unknown' }[]
     last_attempt_at: number | null
     next_attempt_at: number
     last_success_at: number | null
