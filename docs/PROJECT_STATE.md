@@ -1,10 +1,10 @@
 # 当前状态
 
-更新时间：2026-10-22（Asia/Shanghai）。M0～M3实现/本地检查完成，M4工程退出通过；当前M5用户实测修正。用户要求“网页UI使用我确认的原UI，不能私自改动”，本轮正式网页恢复已实现/本地验证完成，尚未合并/推送/发布或用户验收。
+更新时间：2026-10-22（Asia/Shanghai）。M0～M3实现/本地检查完成，M4工程退出通过；当前M5用户实测修正。用户要求“网页UI使用我确认的原UI，不能私自改动”，本轮正式网页恢复cf2706f已实现/本地验证完成；用户现授权发布独立新镜像并用8001端口与旧版并行比较，尚未完成本轮发布或用户验收。
 
 ## 环境与代码
 
-仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。当前codex/restore-approved-ui基于b1c224a（前分支导航110%）；main/origin仍2934a91。修复代码、测试、UI_DESIGN/ARCHITECTURE、审计/修复记录与本状态同提交。未改依赖/迁移、采集/规则/队列/通知语义，noreply、不组织多代理。
+仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。当前codex/restore-approved-ui实现cf2706f，基于b1c224a（导航110%）；main/origin仍2934a91。发布准备仅新增对比Compose与状态，未再改UI。修复代码、测试、UI_DESIGN/ARCHITECTURE、审计/修复记录与本状态同提交。未改依赖/迁移、采集/规则/队列/通知语义，noreply、不组织多代理。
 
 ## 修复与验证
 
@@ -16,10 +16,10 @@
 
 ## 镜像与保留
 
-公开镜像仍ghcr.io/aspeternity/seekbell:ui-fix-1，代码e09d0532882ad3ead4d1729257959ecf252cab26，digest sha256:909818de6963aecf5ad46f14429856826a30559e45bf6b6a5f5b823566bc481b，未含本轮恢复或b1c导航放大；Compose仍指此标签。旧发布39613556988/回执/匿名证据见[记录](history/2026-10-21-UI通知修复镜像发布.md)，开关恢复缺失、源码private/包public。旧镜像/标签、18081验收项目seekbell-acceptance-b45fc2c-20261020及容器/卷/backup-local、旧卷/4175/18080保留；未动原D盘/Ubuntu/全局WSL和用户实例。
+公开镜像仍ghcr.io/aspeternity/seekbell:ui-fix-1，代码e09d0532882ad3ead4d1729257959ecf252cab26，digest sha256:909818de6963aecf5ad46f14429856826a30559e45bf6b6a5f5b823566bc481b，未含本轮恢复或b1c导航放大；原Portainer模板保留此标签/8000。新deploy/compose.portainer.compare.yaml计划ui-restore-1、8001:8000和独立seekbell_compare_data卷；新Stack需初始化，不能共用运行中的SQLite卷。旧发布39613556988/回执/匿名证据见[记录](history/2026-10-21-UI通知修复镜像发布.md)，开关恢复缺失、源码private/包public。旧镜像/标签、18081验收项目seekbell-acceptance-b45fc2c-20261020及容器/卷/backup-local、旧卷/4175/18080保留；未动原D盘/Ubuntu/全局WSL和用户实例。
 
 ## 授权与下一步
 
-用户明确授权恢复原UI及必要修复，不得借接入擅改视觉/入口。前次发布授权已完成，本轮无新合并/公开发布/远程部署、真实发送、源码公开或正式Release授权。当前无开发阻塞，真实环境/Safari/真机和本轮远程CI/双架构/新容器尚未验证。
+用户明确授权本轮发布新镜像并映射8001进行对比；沿既定流程执行必要主分支合并/推送、临时GHCR开关、精确SHA手动完整CI/原生双架构/公开发布和匿名拉取，完成后恢复开关原先缺失。旧标签/Stack/卷保留；用户自行部署。本轮未授权融合UI、远程部署、真实发送、源码公开或正式Release，不替用户决定最终UI。
 
-下一步交付正式页面预览，由用户核对；如用户要求发布，按IMAGE_RELEASE执行精确SHA完整CI/原生双架构和匿名验证再交付。恢复读AGENTS、本状态、修复记录，按反馈读对应模板；不能把旧审计未执行状态当成当前，不能再索要原UI恢复授权。
+下一步使用未占用短标签ui-restore-1发布，保存回执/索引/匿名证据，交付独立Portainer模板及8001地址。发布前源码private、Actions变量为空、短标签匿名404已核对。真实环境/Safari/真机仍待用户比较验收。恢复读AGENTS、本状态、IMAGE_RELEASE和修复记录；不再索要已有发布授权。
