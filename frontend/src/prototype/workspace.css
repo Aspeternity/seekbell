@@ -40,9 +40,6 @@
   font-family: ui-monospace, SFMono-Regular, monospace;
   overflow-wrap: anywhere;
 }
-.avatar-button {
-  cursor: pointer;
-}
 .sidebar-secondary.selected {
   background: #f9ebe2;
   color: #a4562d;
@@ -2416,13 +2413,6 @@ h1[tabindex='-1']:focus-visible {
   width: calc(100% - 4px);
   background: #fdfdfd;
   text-align: left;
-  transition:
-    border-color 0.15s,
-    background 0.15s;
-}
-.workspace-label:hover {
-  background: #fcf8f4;
-  border-color: #dfc6b5;
 }
 .workspace-label .workspace-icon,
 .workspace-label .workspace-dot,

@@ -318,11 +318,6 @@ svg {
   font-size: 13px;
   font-weight: 600;
 }
-.avatar.small {
-  width: 29px;
-  height: 29px;
-  font-size: 12px;
-}
 .profile strong {
   display: block;
   font-size: 12px;
@@ -334,9 +329,31 @@ svg {
   color: var(--muted);
   margin-top: 2px;
 }
-.profile > svg {
-  margin-left: auto;
-  color: #6f7885;
+.profile-copy {
+  flex: 1;
+  min-width: 0;
+}
+.profile-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.profile .avatar {
+  flex-shrink: 0;
+}
+.profile .profile-logout {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  color: #796455;
+  border: 1px solid #eee6dd;
+  border-radius: 10px;
+  background: #fcf9f5;
+}
+.profile .profile-logout:hover {
+  color: var(--accent);
+  background: #f9ebe2;
+  border-color: #e4c4aa;
 }
 .app-main {
   margin-left: var(--sidebar);

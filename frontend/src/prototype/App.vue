@@ -170,6 +170,34 @@ function hashChange() {
     navigate(next)
   } else applyRoute(next, false)
 }
+const loggingOut = ref(false)
+function logout() {
+  if (loggingOut.value) return
+  if (dirty.value) {
+    confirmAction(
+      '退出登录？',
+      '当前有尚未保存的修改。退出后，这些修改将丢失。',
+      () => void finishLogout(),
+      '退出并放弃修改',
+      '继续编辑',
+    )
+  } else void finishLogout()
+}
+async function finishLogout() {
+  loggingOut.value = true
+  try {
+    await setSession(false)
+    dirty.value = false
+    applyRoute('/login')
+  } catch (error) {
+    if (!signedIn.value) {
+      dirty.value = false
+      applyRoute('/login')
+    } else notify('退出登录失败：' + (error as Error).message)
+  } finally {
+    loggingOut.value = false
+  }
+}
 function beforeUnload(event: BeforeUnloadEvent) {
   if (dirty.value) {
     event.preventDefault()
@@ -271,11 +299,7 @@ function showInfo() {
       >
         <Icon name="close" />
       </button>
-      <button
-        class="workspace-label"
-        aria-label="设置工作空间"
-        @click="navigate('/settings/preferences')"
-      >
+      <div class="workspace-label">
         <span class="workspace-icon" aria-hidden="true">{{
           state.settings.workspaceName === '个人工作空间'
             ? 'S'
@@ -289,7 +313,7 @@ function showInfo() {
             >{{ state.settings.workspaceDescription }}</small
           ></span
         ><span class="workspace-dot" aria-hidden="true" />
-      </button>
+      </div>
       <p class="nav-label">工作空间</p>
       <nav>
         <button
@@ -318,14 +342,26 @@ function showInfo() {
           :aria-current="page === 'settings' ? 'page' : undefined"
           @click="navigate('/settings/preferences')"
         >
-          <Icon name="settings" :size="19" />系统设置</button
-        ><button class="profile" @click="navigate('/settings/account')">
-          <span class="avatar">{{ account.username.slice(0, 1).toUpperCase() }}</span
-          ><span
-            ><strong>{{ account.username }}</strong
-            ><small>{{ isLive ? '管理员' : '演示管理员' }}</small></span
-          ><Icon name="down" :size="15" />
+          <Icon name="settings" :size="19" />系统设置
         </button>
+        <div class="profile">
+          <span class="avatar">{{ account.username.slice(0, 1).toUpperCase() }}</span>
+          <span class="profile-copy">
+            <strong :title="account.username">{{ account.username }}</strong>
+            <small>{{ isLive ? '管理员' : '演示管理员' }}</small>
+          </span>
+          <button
+            class="icon-button profile-logout"
+            type="button"
+            :aria-label="loggingOut ? '正在退出登录' : '退出登录'"
+            :title="loggingOut ? '正在退出登录' : '退出登录'"
+            :disabled="loggingOut"
+            :aria-busy="loggingOut"
+            @click="logout"
+          >
+            <Icon name="logout" :size="19" />
+          </button>
+        </div>
       </div>
     </aside>
     <div class="app-main" :inert="mobileMenu">
@@ -352,13 +388,7 @@ function showInfo() {
             :aria-label="isLive ? '接入进度说明' : '原型使用说明'"
             @click="showInfo"
           >
-            <Icon name="help" :size="19" /></button
-          ><button
-            class="avatar small avatar-button"
-            aria-label="管理员设置"
-            @click="navigate('/settings/account')"
-          >
-            {{ account.username.slice(0, 1).toUpperCase() }}
+            <Icon name="help" :size="19" />
           </button>
         </div>
       </header>

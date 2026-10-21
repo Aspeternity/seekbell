@@ -123,7 +123,7 @@ test('real setup, login, website, task, workspace and a fresh browser retain ser
   ).toBe(false)
   expect(await page.evaluate(() => document.cookie)).not.toContain('seekbell_session')
   await page.goto('/#/settings/account')
-  await page.getByRole('button', { name: '退出登录', exact: true }).click()
+  await page.locator('#main-content').getByRole('button', { name: '退出登录', exact: true }).click()
   await expect(page.getByRole('heading', { name: '欢迎回来' })).toBeVisible()
   expect((await page.request.get('/api/manage/workspace')).status()).toBe(401)
   const context = await browser.newContext()
