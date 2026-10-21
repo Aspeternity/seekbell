@@ -267,7 +267,7 @@ function focusMain() {
   document.getElementById('main-content')?.focus()
 }
 function showInfo() {
-  infoTitle.value = isLive ? '前后端接入进度' : '完整界面演示 v0.4'
+  infoTitle.value = isLive ? '使用说明' : '完整界面演示 v0.4'
   infoBody.value =
     '所有管理页面已可体验。任务、目标、来源、内容、投递和设置在浏览器内联动；支持演示登录和备份恢复。界面不连接真实后端、不采集 RSS、不发送通知。请使用演示凭据。'
   if (isLive)
@@ -332,9 +332,6 @@ function showInfo() {
           <div class="quiet-symbol"><Icon name="activity" :size="21" /></div>
           <strong>好消息，安静地抵达。</strong>
           <p>你的关注，由 SeekBell 守候。</p>
-          <span
-            ><i class="status-dot green-dot" />{{ isLive ? '服务端配置' : '本地模拟模式' }}</span
-          >
         </div>
         <button
           class="sidebar-secondary"
@@ -382,10 +379,10 @@ function showInfo() {
         </div>
         <div class="topbar-right">
           <span class="demo-badge"
-            ><span class="status-dot" />{{ isLive ? '接入进行中' : '模拟数据' }}</span
+            ><span class="status-dot" />{{ isLive ? '本地数据' : '模拟数据' }}</span
           ><button
             class="icon-button help-button"
-            :aria-label="isLive ? '接入进度说明' : '原型使用说明'"
+            :aria-label="isLive ? '使用说明' : '原型使用说明'"
             @click="showInfo"
           >
             <Icon name="help" :size="19" />

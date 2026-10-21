@@ -49,6 +49,7 @@ jobs:
       - run: pnpm --dir frontend test:prototype
       - run: pnpm --dir frontend test:live
       - run: pnpm --dir frontend test:history
+      - run: pnpm --dir frontend test:approved-ui
       - run: pnpm --dir frontend test:sending
       - run: pnpm --dir frontend test:runtime
       - run: pnpm --dir frontend test:operations

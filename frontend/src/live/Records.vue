@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import Icon from '../prototype/components/Icon.vue'
-import { state, formatTime } from './store'
+import NotificationTabs from './NotificationTabs.vue'
+import { state, formatTime, channelMeta } from './store'
 import {
   historyGet,
   useRemote,
@@ -101,6 +102,8 @@ const title = (row: DeliveryRecord | TestRecord | ManualRecord) =>
   'title' in row ? row.title : row.target_name + ' · 目标测试'
 const created = (row: DeliveryRecord | TestRecord | ManualRecord) =>
   'created_at' in row ? row.created_at : row.started_at
+const channelStyle = (kind: string) =>
+  channelMeta[kind as keyof typeof channelMeta] || { icon: 'send', color: 'blue' }
 function clear() {
   q.value = ''
   status.value = 'all'
@@ -122,81 +125,120 @@ function clear() {
         :error="testDetail.error.value"
         @retry="testDetail.reload"
       />
-      <section v-if="testDetail.data.value" class="panel reading-panel">
-        <h1 tabindex="-1">{{ tab === 'manual' ? '手动重发详情' : '目标测试详情' }}</h1>
-        <button class="text-link" @click="testDetail.reload">刷新记录</button>
-        <h2>{{ testDetail.data.value.target_name }}</h2>
-        <span class="result-pill" :class="resultClass(testDetail.data.value.result)">{{
-          resultLabels[testDetail.data.value.result] || '历史结果未记录'
-        }}</span>
-        <dl class="detail-grid">
+      <template v-if="testDetail.data.value">
+        <section class="page-heading">
           <div>
-            <dt>渠道</dt>
-            <dd>{{ kindLabels[testDetail.data.value.kind] || '历史渠道' }}</dd>
+            <p class="eyebrow">EVERY DELIVERY, ACCOUNTED FOR</p>
+            <h1 tabindex="-1">{{ tab === 'manual' ? '手动重发详情' : '目标测试详情' }}</h1>
+            <p class="subtitle">
+              {{ testDetail.data.value.target_name }} · {{ time(testDetail.data.value.started_at) }}
+            </p>
           </div>
-          <div>
-            <dt>开始时间</dt>
-            <dd>{{ time(testDetail.data.value.started_at) }}</dd>
-          </div>
-          <div>
-            <dt>完成时间</dt>
-            <dd>{{ time(testDetail.data.value.finished_at) }}</dd>
-          </div>
-          <div>
-            <dt>错误代码</dt>
-            <dd>{{ testDetail.data.value.error_code || '无' }}</dd>
-          </div>
-          <div class="wide">
-            <dt>操作标识</dt>
-            <dd class="mono">{{ testDetail.data.value.id }}</dd>
-          </div>
-        </dl>
-        <template v-if="'source_event_id' in testDetail.data.value">
-          <h2 class="record-title">{{ testDetail.data.value.title }}</h2>
-          <p class="small-note">
-            使用当前目标配置快照 · 版本
-            {{ testDetail.data.value.target_revision }}；独立手动重发，不改变自动去重、不自动重试。
-          </p>
-          <p class="article-summary">{{ testDetail.data.value.post.summary ?? '摘要缺失' }}</p>
-          <p v-for="(task, i) in testDetail.data.value.tasks.items" :key="i" class="small-note">
-            {{ task.name }} · 版本 {{ task.version }}
-          </p>
-          <Pagination
-            :page="taskPage"
-            :total="testDetail.data.value.tasks.total"
-            :page-size="testDetail.data.value.tasks.page_size"
-            label="重发任务"
-            @change="(v) => (taskPage = v)"
-          />
-          <button
-            v-if="testDetail.data.value.source_exists"
-            class="button"
-            @click="
-              emit('navigate', '/notifications/deliveries/' + testDetail.data.value.source_event_id)
-            "
-          >
-            查看原投递
-          </button>
-          <p v-else class="small-note">原投递已清理，独立重发快照仍保留。</p>
-        </template>
-        <p v-else class="small-note">
-          独立目标测试不计入帖子自动投递账本。此页面只读取已保存结果，不运行或重发测试。
-        </p>
-        <p
-          v-if="
-            testDetail.data.value.finished_at === null || testDetail.data.value.result === 'unknown'
-          "
-          class="warning-note"
-        >
-          尝试尚未结束或结果未知，接收端可能已经收到；不会自动重试，请刷新记录查看。
-        </p>
-        <p
-          v-if="testDetail.data.value.kind === 'smtp' && testDetail.data.value.result === 'success'"
-          class="small-note"
-        >
-          SMTP 成功只表示服务器接受，不保证进入收件箱。
-        </p>
-      </section></template
+          <button class="text-link" @click="testDetail.reload">刷新记录</button>
+        </section>
+        <div class="detail-layout">
+          <section class="panel reading-panel">
+            <span class="result-pill" :class="resultClass(testDetail.data.value.result)">{{
+              resultLabels[testDetail.data.value.result] || '历史结果未记录'
+            }}</span>
+            <dl class="detail-grid">
+              <div>
+                <dt>通知目标</dt>
+                <dd>{{ testDetail.data.value.target_name }}</dd>
+              </div>
+              <div>
+                <dt>渠道</dt>
+                <dd>{{ kindLabels[testDetail.data.value.kind] || '历史渠道' }}</dd>
+              </div>
+              <div>
+                <dt>开始时间</dt>
+                <dd>{{ time(testDetail.data.value.started_at) }}</dd>
+              </div>
+              <div>
+                <dt>完成时间</dt>
+                <dd>{{ time(testDetail.data.value.finished_at) }}</dd>
+              </div>
+              <div>
+                <dt>错误代码</dt>
+                <dd>{{ testDetail.data.value.error_code || '无' }}</dd>
+              </div>
+              <div class="wide">
+                <dt>操作标识</dt>
+                <dd class="mono">{{ testDetail.data.value.id }}</dd>
+              </div>
+            </dl>
+            <template v-if="'source_event_id' in testDetail.data.value">
+              <h2 class="record-title">{{ testDetail.data.value.title }}</h2>
+              <p class="small-note">
+                使用当前目标配置快照 · 版本
+                {{
+                  testDetail.data.value.target_revision
+                }}；独立手动重发，不改变自动去重、不自动重试。
+              </p>
+              <p class="article-summary">{{ testDetail.data.value.post.summary ?? '摘要缺失' }}</p>
+              <p v-for="(task, i) in testDetail.data.value.tasks.items" :key="i" class="small-note">
+                {{ task.name }} · 版本 {{ task.version }}
+              </p>
+              <Pagination
+                :page="taskPage"
+                :total="testDetail.data.value.tasks.total"
+                :page-size="testDetail.data.value.tasks.page_size"
+                label="重发任务"
+                @change="(v) => (taskPage = v)"
+              />
+              <button
+                v-if="testDetail.data.value.source_exists"
+                class="button"
+                @click="
+                  emit(
+                    'navigate',
+                    '/notifications/deliveries/' + testDetail.data.value.source_event_id,
+                  )
+                "
+              >
+                查看原投递
+              </button>
+              <p v-else class="small-note">原投递已清理，独立重发快照仍保留。</p>
+            </template>
+            <p v-else class="small-note">
+              独立目标测试不计入帖子自动投递账本。此页面只读取已保存结果，不运行或重发测试。
+            </p>
+            <p
+              v-if="
+                testDetail.data.value.finished_at === null ||
+                testDetail.data.value.result === 'unknown'
+              "
+              class="warning-note"
+            >
+              尝试尚未结束或结果未知，接收端可能已经收到；不会自动重试，请刷新记录查看。
+            </p>
+            <p
+              v-if="
+                testDetail.data.value.kind === 'smtp' && testDetail.data.value.result === 'success'
+              "
+              class="small-note"
+            >
+              SMTP 成功只表示服务器接受，不保证进入收件箱。
+            </p>
+          </section>
+          <aside class="panel support-panel">
+            <h2><Icon name="clock" :size="18" />投递过程</h2>
+            <ol class="delivery-timeline">
+              <li>
+                <strong>建立操作记录</strong>
+                <p>{{ time(testDetail.data.value.started_at) }}</p>
+              </li>
+              <li>
+                <strong>{{ resultLabels[testDetail.data.value.result] || '尝试尚未结束' }}</strong>
+                <p>{{ time(testDetail.data.value.finished_at) }}</p>
+              </li>
+            </ol>
+            <p class="small-note">
+              独立测试与手动重发分别留存，不进入自动去重账本；结果未知时接收端可能已经收到。
+            </p>
+          </aside>
+        </div>
+      </template></template
     >
     <template v-else>
       <Feedback
@@ -281,9 +323,8 @@ function clear() {
               </button>
               <p v-else class="small-note">原内容记录已清理，投递快照仍保留。</p>
               <p class="small-note">读取详情不会发送通知；显式确认后才运行独立重发。</p>
-            </section>
-            <section class="panel reading-panel">
-              <h2>消息内容快照</h2>
+              <div class="subtle-divider" />
+              <h3 class="section-subtitle">消息内容快照</h3>
               <p class="article-summary">
                 {{
                   detail.data.value.post.summary === null
@@ -367,31 +408,13 @@ function clear() {
       <div>
         <p class="eyebrow">GOOD NEWS, YOUR WAY</p>
         <h1 tabindex="-1">通知管理</h1>
-        <p class="subtitle">看清每一次投递，保留当时的结果。</p>
+        <p class="subtitle">把关心的消息，送到你习惯的地方。</p>
       </div>
-      <span class="small-badge neutral">服务端历史</span>
-    </section>
-    <nav class="page-tabs" aria-label="通知管理分类">
-      <button
-        v-for="item in [
-          { id: 'targets', label: '通知目标' },
-          { id: 'deliveries', label: '投递记录' },
-          { id: 'manual', label: '手动重发' },
-          { id: 'tests', label: '测试记录' },
-        ]"
-        :key="item.id"
-        :class="{ active: tab === item.id }"
-        :aria-current="tab === item.id ? 'page' : undefined"
-        @click="emit('navigate', '/notifications/' + item.id)"
-      >
-        {{ item.label }}
+      <button class="button primary" @click="emit('navigate', '/target/new')">
+        <Icon name="plus" :size="18" />添加通知目标
       </button>
-    </nav>
-    <p class="info-note">
-      只读取持久化的{{
-        tab === 'tests' ? '独立目标测试' : tab === 'manual' ? '手动重发' : '自动投递'
-      }}记录，不触发采集、发送或重发。
-    </p>
+    </section>
+    <NotificationTabs :tab="tab" @navigate="emit('navigate')" />
     <section class="panel">
       <div class="filter-toolbar">
         <label class="search-input grow"
@@ -444,7 +467,9 @@ function clear() {
       />
       <template v-if="listing.data.value">
         <article v-for="record in listing.data.value.items" :key="record.id" class="delivery-row">
-          <span class="icon-tile blue"><Icon name="send" :size="18" /></span>
+          <span class="icon-tile" :class="channelStyle(record.kind).color"
+            ><Icon :name="channelStyle(record.kind).icon" :size="18"
+          /></span>
           <div class="management-copy">
             <button
               class="text-link task-title"

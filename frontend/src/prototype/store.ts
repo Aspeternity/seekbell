@@ -750,3 +750,7 @@ export async function trialHistory(task: Task, _limit: number) {
     items: historySamples.map((sample) => ({ sample, result: evaluate(task, sample) })),
   }
 }
+
+export async function getTaskStatistics() {
+  return state.tasks.map((task) => ({ id: task.id, hits: task.hits, lastHit: task.lastHit }))
+}

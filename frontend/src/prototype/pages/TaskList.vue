@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import Icon from '../components/Icon.vue'
 import Toggle from '../components/Toggle.vue'
 import {
@@ -12,9 +12,20 @@ import {
   setTaskEnabled,
   confirmAction,
   websiteName,
+  getTaskStatistics,
 } from '@workspace'
 import type { Task } from '../model'
 const emit = defineEmits<{ navigate: [path: string] }>()
+const statistics = ref<Record<string, { hits: number; lastHit: string }>>({})
+const statisticsError = ref('')
+onMounted(async () => {
+  if (!isLive) return
+  try {
+    statistics.value = Object.fromEntries((await getTaskStatistics()).map((row) => [row.id, row]))
+  } catch (error) {
+    statisticsError.value = (error as Error).message
+  }
+})
 const query = ref(''),
   filter = ref('all')
 const list = computed(() =>
@@ -125,8 +136,7 @@ function remove(task: Task) {
       <article
         v-for="task in list"
         :key="task.id"
-        class="management-row task-management-row"
-        :class="{ 'with-example-stats': !isLive }"
+        class="management-row task-management-row with-example-stats"
         @click="(event) => openTask(event, task)"
       >
         <span class="icon-tile" :class="task.color"><Icon :name="task.icon" /></span>

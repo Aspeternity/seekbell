@@ -275,14 +275,7 @@ svg {
 .quiet-card p {
   font-size: 11px;
   color: #6f7885;
-  margin: 4px 0 14px;
-}
-.quiet-card > span {
-  font-size: 11px;
-  color: #638273;
-  display: flex;
-  align-items: center;
-  gap: 5px;
+  margin: 4px 0 0;
 }
 .sidebar-secondary {
   display: flex;

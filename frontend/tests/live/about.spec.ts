@@ -29,7 +29,7 @@ test('version and readiness remain independent, retry safely and perform no conf
     if (request.method() !== 'GET') writes.push(request.method() + ' ' + request.url())
   })
   await page.goto('/#/settings/preferences')
-  await page.getByRole('button', { name: '版本信息', exact: true }).click()
+  await page.getByRole('button', { name: '关于', exact: true }).click()
   await expect(page.getByTestId('app-version')).toHaveText(original.version)
   await expect(page.getByTestId('build-revision')).toHaveText(original.build_revision)
   await expect(page.getByTestId('database-revision')).toHaveText(original.database_revision)
@@ -37,16 +37,16 @@ test('version and readiness remain independent, retry safely and perform no conf
   await expect(page.getByText('服务已就绪', { exact: true })).toBeVisible()
   await page.reload()
   await expect(page.getByTestId('app-version')).toHaveText(original.version)
-  await expect(page.getByRole('button', { name: '版本信息', exact: true })).toBeInViewport({
+  await expect(page.getByRole('button', { name: '关于', exact: true })).toBeInViewport({
     ratio: 1,
   })
-  await expect(page.getByRole('button', { name: '版本信息', exact: true })).toHaveAttribute(
+  await expect(page.getByRole('button', { name: '关于', exact: true })).toHaveAttribute(
     'aria-current',
     'page',
   )
   // The existing compact mobile header intentionally hides the help control.
   if (info.project.name === 'desktop') {
-    await page.getByRole('button', { name: '接入进度说明', exact: true }).click()
+    await page.getByRole('button', { name: '使用说明', exact: true }).click()
     await expect(page.getByRole('dialog')).toContainText('系统告警已接入')
     await expect(page.getByRole('dialog')).toContainText('已提供停服加密备份与独立恢复维护命令')
     await page.getByRole('button', { name: '知道了', exact: true }).click()

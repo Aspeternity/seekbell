@@ -127,7 +127,7 @@ test('draft history trials, confirmed source checks and dependency-safe deletion
   await page.reload()
   await page.goto('/#/notifications/targets')
   const card = page.locator('.notification-card').filter({ hasText: name })
-  await card.getByRole('button', { name: '删除', exact: true }).click()
+  await card.getByRole('button', { name: '删除' + name, exact: true }).click()
   await expect(page.getByRole('status').filter({ hasText: '请先在关联任务' })).toBeVisible()
   expect((await page.request.delete('/api/manage/targets/' + targetId, { headers })).status()).toBe(
     409,
@@ -144,7 +144,7 @@ test('draft history trials, confirmed source checks and dependency-safe deletion
   const recordId = (await record.json()).id
   expect((await page.request.delete('/api/manage/tasks/' + taskId, { headers })).ok()).toBe(true)
   await page.reload()
-  await card.getByRole('button', { name: '删除', exact: true }).click()
+  await card.getByRole('button', { name: '删除' + name, exact: true }).click()
   await expect(page.getByRole('dialog')).toContainText('在途消息可能已经发出')
   await page.getByRole('button', { name: '取消', exact: true }).click()
   await page.route(
@@ -159,11 +159,11 @@ test('draft history trials, confirmed source checks and dependency-safe deletion
         : route.continue(),
     { times: 1 },
   )
-  await card.getByRole('button', { name: '删除', exact: true }).click()
+  await card.getByRole('button', { name: '删除' + name, exact: true }).click()
   await page.getByRole('button', { name: '删除目标', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('合成删除失败')
   await expect(card).toBeVisible()
-  await card.getByRole('button', { name: '删除', exact: true }).click()
+  await card.getByRole('button', { name: '删除' + name, exact: true }).click()
   await page.getByRole('button', { name: '删除目标', exact: true }).click()
   await expect(card).toHaveCount(0)
   await page.reload()

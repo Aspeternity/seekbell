@@ -144,7 +144,8 @@ test('browser timezone initializes once, settings persist and calendar-day filte
         })
       ).ok(),
     ).toBe(true)
-    await page.getByRole('button', { name: '时区', exact: true }).click()
+    await page.getByRole('button', { name: '偏好与保留', exact: true }).click()
+    await page.getByRole('button', { name: '查看时区详情', exact: true }).click()
     await expect(input).toHaveValue('UTC')
     release()
     await finished

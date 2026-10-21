@@ -1,0 +1,22 @@
+# Separate Portainer comparison Stack (for example seekbell-compare).
+# Keep the existing Stack and its data volume; this instance starts with an empty volume.
+services:
+  seekbell:
+    image: ghcr.io/aspeternity/seekbell:ui-restore-1
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8001:8000"
+    volumes:
+      - seekbell_compare_data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777,size=256m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+
+volumes:
+  seekbell_compare_data:

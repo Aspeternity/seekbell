@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import Icon from '../prototype/components/Icon.vue'
+import NotificationTabs from './NotificationTabs.vue'
 import Toggle from '../prototype/components/Toggle.vue'
 import { state, channelMeta, setTargetEnabled, confirmAction, removeTarget, notify } from './store'
 import type { Target } from '../prototype/shared'
@@ -61,24 +62,7 @@ function completed(path: string) {
       <Icon name="plus" :size="18" />添加通知目标
     </button>
   </section>
-  <nav class="page-tabs" aria-label="通知管理分类">
-    <button
-      v-for="item in [
-        { id: 'targets', label: '通知目标' },
-        { id: 'deliveries', label: '投递记录' },
-        { id: 'manual', label: '手动重发' },
-        { id: 'tests', label: '测试记录' },
-      ]"
-      :key="item.id"
-      :class="{ active: item.id === 'targets' }"
-      @click="emit('navigate', '/notifications/' + item.id)"
-    >
-      {{ item.label }}
-    </button>
-  </nav>
-  <p class="info-note">
-    保存配置不会发送消息；测试和手动重发须明确确认。启用的任务由服务端自动投递，关闭浏览器不影响后台执行。
-  </p>
+  <NotificationTabs tab="targets" @navigate="emit('navigate')" />
   <div class="filter-toolbar free-toolbar">
     <label class="search-input grow"
       ><Icon name="search" :size="16" /><input
@@ -119,7 +103,14 @@ function completed(path: string) {
         <button class="button" @click="testId = target.id">
           <Icon name="play" :size="14" />测试</button
         ><button class="button" @click="emit('navigate', '/target/' + target.id)">编辑</button>
-        <button class="button" :disabled="deleting" @click="remove(target)">删除</button>
+        <button
+          class="icon-button danger-text"
+          :disabled="deleting"
+          :aria-label="'删除' + target.name"
+          @click="remove(target)"
+        >
+          <Icon name="trash" :size="16" />
+        </button>
       </div>
     </article>
   </div>
@@ -131,7 +122,7 @@ function completed(path: string) {
   </section>
   <div class="bottom-note">
     <Icon name="shield" :size="18" />
-    <p>目标独立启停；恢复不会补发积压消息。暂停目标也可显式测试。</p>
+    <p>目标独立启停。同一帖子到同一目标合并发送；恢复目标不会自动补发积压消息。</p>
   </div>
   <SendDialog
     v-if="testId"

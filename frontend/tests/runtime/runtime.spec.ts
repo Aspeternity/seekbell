@@ -117,11 +117,12 @@ test('service discovers and delivers after browser closure, without rebuilding b
       await reopened.getByLabel('管理员用户名').fill(credentials.username)
       await reopened.getByLabel('密码', { exact: true }).fill(credentials.password)
       await reopened.getByRole('button', { name: '登录工作空间' }).click()
-      await expect(
-        reopened.getByText('后台采集与自动投递已运行。启用网站后按配置采集，关闭浏览器仍会继续。', {
-          exact: true,
-        }),
-      ).toBeVisible()
+      await expect(reopened.getByTestId('overview-delivered')).toBeVisible()
+      const snapshot = await (await reopened.request.get('/api/manage/overview')).json()
+      expect(snapshot.runtime_active).toBe(true)
+      await expect(reopened.getByTestId('overview-delivered')).toContainText(
+        String(snapshot.window.delivered) + '次',
+      )
       await reopened.screenshot({ path: info.outputPath('runtime-overview.png'), fullPage: true })
       await reopened.goto('/#/notifications/deliveries/' + delivery.id)
       await expect(reopened.getByRole('heading', { name: '投递详情', exact: true })).toBeVisible()
