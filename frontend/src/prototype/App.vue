@@ -332,9 +332,6 @@ function showInfo() {
           <div class="quiet-symbol"><Icon name="activity" :size="21" /></div>
           <strong>好消息，安静地抵达。</strong>
           <p>你的关注，由 SeekBell 守候。</p>
-          <span
-            ><i class="status-dot green-dot" />{{ isLive ? '服务端配置' : '本地模拟模式' }}</span
-          >
         </div>
         <button
           class="sidebar-secondary"

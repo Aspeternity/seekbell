@@ -2489,25 +2489,29 @@ h1[tabindex='-1']:focus-visible {
   margin: 0;
 }
 
-/* Use 110% desktop content size. zoom participates in layout;
-   viewport-sized overlays need unscaled bounds. */
+/* Keep desktop navigation, header and content at the same reading size.
+   Viewport-sized overlays still need unscaled bounds. */
 @media (min-width: 761px) {
-  #main-content {
-    --content-scale: 1.1;
-    zoom: var(--content-scale);
+  :root {
+    --workspace-scale: 1.1;
   }
-  #main-content .save-bar {
-    left: calc(var(--sidebar) / var(--content-scale));
+  .sidebar,
+  .topbar,
+  #main-content {
+    zoom: var(--workspace-scale);
+  }
+  .app-main {
+    margin-left: calc(var(--sidebar) * var(--workspace-scale));
   }
   #main-content .website-drawer {
-    max-width: calc(100vw / var(--content-scale));
-    height: calc(100dvh / var(--content-scale));
-    max-height: calc(100dvh / var(--content-scale));
+    max-width: calc(100vw / var(--workspace-scale));
+    height: calc(100dvh / var(--workspace-scale));
+    max-height: calc(100dvh / var(--workspace-scale));
   }
   #main-content .website-catalog-modal {
-    max-width: calc(100vw / var(--content-scale) - 48px);
-    height: min(720px, calc(85dvh / var(--content-scale)));
-    max-height: calc(85dvh / var(--content-scale));
+    max-width: calc(100vw / var(--workspace-scale) - 48px);
+    height: min(720px, calc(85dvh / var(--workspace-scale)));
+    max-height: calc(85dvh / var(--workspace-scale));
   }
 }
 
