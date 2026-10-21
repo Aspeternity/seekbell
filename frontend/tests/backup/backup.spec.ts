@@ -20,7 +20,7 @@ test('encrypted download, errors and independent restore preserve the active wor
   await expect(page.locator('.sidebar')).toBeAttached()
   const before = await (await page.request.get('/api/manage/workspace')).json()
   await page.goto('/#/settings/preferences')
-  await page.getByRole('button', { name: '备份恢复', exact: true }).click()
+  await page.getByRole('button', { name: '备份与恢复', exact: true }).click()
   await expect(page.getByRole('button', { name: '生成并下载加密备份' })).toBeEnabled()
   await page.getByLabel('当前管理员密码', { exact: true }).fill(credentials.password)
   await page.getByLabel('备份加密口令', { exact: true }).fill(password)

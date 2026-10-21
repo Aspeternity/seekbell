@@ -14,6 +14,7 @@ export interface OverviewData {
   }
   current: { queue: Record<string, number>; uncertain: number; attention: number }
   buckets: { start: number; end: number; matches: number }[]
+  tasks: { id: string; matches: number; last_match_at: number | null }[]
   sources: {
     website_id: string
     name: string

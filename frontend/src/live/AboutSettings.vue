@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import Icon from '../prototype/components/Icon.vue'
 import { loadReadiness, loadVersionInfo } from '../api'
 import { request } from './store'
 import { useRemote } from './history'
@@ -40,16 +41,13 @@ function refresh() {
 }
 </script>
 <template>
-  <div class="form-stack">
-    <section class="panel settings-card" aria-labelledby="version-title">
-      <div class="panel-heading">
-        <div>
-          <h2 id="version-title">版本信息</h2>
-          <p>当前服务提供的应用与构建版本</p>
-        </div>
-        <button class="button" :disabled="busy" @click="refresh">刷新运行信息</button>
-      </div>
-      <div class="form-content">
+  <div class="side-stack">
+    <section class="panel about-card" aria-label="版本信息">
+      <span class="brand-icon"><Icon name="bell" :size="26" /></span>
+      <h2 id="version-title">SeekBell<span class="brand-period">.</span></h2>
+      <p>留意你关心的。</p>
+      <span class="small-badge neutral">单管理员 · 自托管</span>
+      <div>
         <Feedback
           :loading="version.loading.value"
           :error="version.error.value"
@@ -78,7 +76,8 @@ function refresh() {
             本地开发构建，未固定代码提交版本。
           </p>
         </template>
-        <p class="small-note">版本信息与就绪状态分别读取；服务未就绪时仍可查看可用的版本信息。</p>
+        <p>内置网站适配 · 当前支持 NodeSeek</p>
+        <button class="button spaced" :disabled="busy" @click="refresh">刷新运行信息</button>
       </div>
     </section>
     <section class="panel settings-card" aria-labelledby="readiness-title">

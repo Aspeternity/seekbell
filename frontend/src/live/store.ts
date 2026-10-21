@@ -362,3 +362,15 @@ export const loadExampleWorkspace = unavailable,
   updateAccount = unavailable
 export const parseState = () => null,
   verifyPassword = async () => false
+
+export async function getTaskStatistics() {
+  const data = await request<import('./overview').OverviewData>('manage/overview?range=24h')
+  return data.tasks.map((row) => ({
+    id: row.id,
+    hits: row.matches,
+    lastHit:
+      row.last_match_at === null
+        ? '尚未记录'
+        : formatTime(new Date(row.last_match_at * 1000).toISOString()),
+  }))
+}

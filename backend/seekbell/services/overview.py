@@ -75,6 +75,28 @@ def overview(engine, range_name="24h", *, at=None):
                     "last_gap_at": state.last_gap_at,
                 }
             )
+        task_counts = dict(
+            session.execute(
+                select(matches.c.task_id, func.count()).group_by(matches.c.task_id)
+            ).all()
+        )
+        task_last = dict(
+            session.execute(
+                select(d.task_id, func.max(d.at))
+                .where(d.status == "match", d.at < end)
+                .group_by(d.task_id)
+            ).all()
+        )
+        task_stats = [
+            {
+                "id": task_id,
+                "matches": task_counts.get(task_id, 0),
+                "last_match_at": task_last.get(task_id),
+            }
+            for task_id in session.scalars(
+                select(Task.id).where(Task.deleted_at.is_(None)).order_by(Task.id)
+            )
+        ]
         recent = []
         for row in session.execute(
             select(
@@ -160,6 +182,7 @@ def overview(engine, range_name="24h", *, at=None):
                 }
                 for i in range(count)
             ],
+            "tasks": task_stats,
             "sources": sources,
             "recent_matches": recent,
         }

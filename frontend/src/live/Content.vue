@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import Icon from '../prototype/components/Icon.vue'
+import { channelMeta } from './store'
 import { state, websiteName, formatTime } from './store'
 import {
   historyGet,
@@ -124,8 +125,14 @@ function clear() {
                   : detail.data.value.summary || '来源提供的摘要为空。'
               }}
             </p>
-            <p class="small-note">RSS 摘要不等同全文。首次发现与来源发布时间分别记录。</p>
-            <p class="small-note">来源发布时间：{{ time(detail.data.value.published_at) }}</p>
+            <div class="info-note">
+              <Icon name="help" :size="18" />
+              <p>
+                RSS 摘要不等同全文。来源发布时间：{{
+                  time(detail.data.value.published_at)
+                }}。可通过下方入口查看原帖。
+              </p>
+            </div>
             <a
               v-if="detail.data.value.original_url"
               class="button"
@@ -154,7 +161,13 @@ function clear() {
                 :key="record.id"
                 class="compact-record"
               >
-                <span class="icon-tile blue"><Icon name="send" :size="18" /></span>
+                <span
+                  class="icon-tile"
+                  :class="channelMeta[record.kind as keyof typeof channelMeta]?.color || 'blue'"
+                  ><Icon
+                    :name="channelMeta[record.kind as keyof typeof channelMeta]?.icon || 'send'"
+                    :size="18"
+                /></span>
                 <div>
                   <strong>{{ record.target_name }}</strong>
                   <p>{{ time(record.created_at) }} · 尝试 {{ record.attempt_count }} 次</p>
@@ -180,7 +193,19 @@ function clear() {
           </section>
         </div>
         <aside class="panel support-panel">
-          <h2><Icon name="filter" :size="18" />当时的规则判定</h2>
+          <h2><Icon name="filter" :size="18" />为什么会得到这个结果？</h2>
+          <div class="match-result" :class="resultClass(detail.data.value.status)">
+            <strong>{{ postLabels[detail.data.value.status] }}</strong>
+            <template
+              v-for="evaluation in evaluations.data.value?.items || []"
+              :key="evaluation.task_id + ':' + evaluation.version"
+            >
+              <p v-for="(reason, i) in evaluation.result.reasons" :key="i">
+                {{ reasonText(reason) }}
+              </p>
+            </template>
+          </div>
+          <h3 class="section-subtitle">命中任务快照</h3>
           <p v-if="detail.data.value.baseline === true" class="info-note">
             基线帖子：首次采集时登记，未执行规则匹配或生成通知。
           </p>
@@ -202,7 +227,7 @@ function clear() {
               class="snapshot-task history-evaluation"
             >
               <div>
-                <button
+                <Icon name="layers" :size="16" /><button
                   v-if="!evaluation.deleted"
                   class="text-link"
                   @click="emit('navigate', '/task/' + evaluation.task_id)"
@@ -213,9 +238,6 @@ function clear() {
                 <span class="result-pill" :class="resultClass(evaluation.result.status)">{{
                   postLabels[evaluation.result.status]
                 }}</span>
-                <p v-for="(reason, i) in evaluation.result.reasons" :key="i" class="small-note">
-                  {{ reasonText(reason) }}
-                </p>
                 <p v-if="!evaluation.result.reasons.length" class="small-note">
                   未设置筛选条件，或旧记录未留下原因。
                 </p>
@@ -242,7 +264,9 @@ function clear() {
         <h1 tabindex="-1">内容与命中</h1>
         <p class="subtitle">留住发现的线索，也看清每一次匹配。</p>
       </div>
-      <span class="small-badge neutral">服务端历史</span>
+      <span v-if="listing.data.value" class="small-badge neutral"
+        >{{ listing.data.value.total }} 条本地内容</span
+      >
     </section>
     <div v-if="listing.data.value" class="metric-strip">
       <div>

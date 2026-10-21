@@ -58,6 +58,9 @@ def test_overview_aggregates_persisted_records_without_duplicate_attempts_or_tes
     assert len(data["buckets"]) == 24
     assert sum(b["matches"] for b in data["buckets"]) == 24
     assert data["buckets"][0]["matches"] == 24
+    assert data["tasks"][0]["id"] == ids["primary"]
+    assert data["tasks"][0]["matches"] == 23
+    assert data["tasks"][0]["last_match_at"] == data["recent_matches"][0]["at"]
     assert len(data["recent_matches"]) == 5
     assert all(r["task_name"] == "摘要关注" for r in data["recent_matches"])
     assert data["sources"][0]["last_success_at"] == last_success
@@ -92,6 +95,8 @@ def test_time_windows_are_half_open_and_buckets_sum_to_match_count(records):
         )
     data = client.get("/api/manage/overview").json()
     assert data["window"]["matches"] == 2
+    assert data["tasks"][0]["matches"] == 1
+    assert data["tasks"][0]["last_match_at"] == ids["base"] + 3600
     assert [b["matches"] for b in data["buckets"][:2]] == [1, 1]
     assert sum(b["matches"] for b in data["buckets"]) == 2
     assert data["window"]["delivered"] == 1
@@ -99,6 +104,7 @@ def test_time_windows_are_half_open_and_buckets_sum_to_match_count(records):
     week = client.get("/api/manage/overview?range=7d").json()
     assert len(week["buckets"]) == 7
     assert week["window"]["matches"] == 23
+    assert week["tasks"][0]["matches"] == 22
     assert sum(b["matches"] for b in week["buckets"]) == 23
     # Current attention covers all retained events, independently of selected window.
     assert data["current"] == week["current"]
@@ -136,7 +142,7 @@ def test_empty_database_is_zero_and_api_is_protected_and_validated(tmp_path):
         data = client.get("/api/manage/overview").json()
         assert not any(data["window"].values())
         assert not any(data["configuration"].values())
-        assert data["recent_matches"] == [] and data["sources"] == []
+        assert data["recent_matches"] == [] and data["sources"] == [] and data["tasks"] == []
         assert all(b["matches"] == 0 for b in data["buckets"])
 
 
@@ -164,3 +170,30 @@ def test_overview_has_one_read_snapshot_during_concurrent_ingestion(records):
     assert data["window"]["matches"] == sum(b["matches"] for b in data["buckets"]) == 24
     assert data["current"]["uncertain"] == 2
     assert overview(engine, at=ids["base"] + 86400)["window"]["matches"] == 0
+
+
+def test_task_table_includes_real_zeroes_and_excludes_deleted_configuration(records):
+    _, client, ids = records
+    workspace = client.get("/api/manage/workspace").json()
+    original = workspace["tasks"][0]
+    payload = {
+        "name": "Empty UI task",
+        "description": "",
+        "website_id": original["website_id"],
+        "enabled": False,
+        "rule": original["rule"],
+        "target_ids": original["target_ids"],
+    }
+    csrf = client.get("/api/auth/status").json()["csrf"]
+    response = client.post("/api/manage/tasks", json=payload, headers={"X-CSRF-Token": csrf})
+    assert response.status_code == 201, response.text
+    added = response.json()["id"]
+    data = client.get("/api/manage/overview").json()
+    by_id = {item["id"]: item for item in data["tasks"]}
+    assert by_id[added] == {"id": added, "matches": 0, "last_match_at": None}
+    assert by_id[ids["primary"]]["matches"] == data["window"]["matches"] - 1
+    response = client.delete("/api/manage/tasks/" + ids["primary"], headers={"X-CSRF-Token": csrf})
+    assert response.status_code == 200, response.text
+    data = client.get("/api/manage/overview").json()
+    assert data["tasks"] == [{"id": added, "matches": 0, "last_match_at": None}]
+    assert data["window"]["matches"] == 24

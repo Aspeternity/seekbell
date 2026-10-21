@@ -1,29 +1,31 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import AboutSettings from './AboutSettings.vue'
+import Preferences from './Preferences.vue'
 import BackupSettings from './BackupSettings.vue'
 import DisplaySettings from './DisplaySettings.vue'
 import AlertsSettings from './AlertsSettings.vue'
 import RetentionSettings from './RetentionSettings.vue'
 import Icon from '../prototype/components/Icon.vue'
-import { state, account, savePreferences, saveAdministrator, setSession } from './store'
+import { account, saveAdministrator, setSession } from './store'
 const props = defineProps<{ tab?: string }>()
 const emit = defineEmits<{ navigate: [path: string]; dirty: [value: boolean] }>()
 const tabs = ref<HTMLElement>()
+const preferenceTabs = ['preferences', 'retention', 'display', 'alerts']
+const selectedTab = computed(() =>
+  preferenceTabs.includes(props.tab || '') ? 'preferences' : props.tab,
+)
 onMounted(() =>
   tabs.value?.querySelector('.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }),
 )
 const retentionDirty = ref(false)
 const auxiliaryDirty = ref(false)
-const name = ref(state.settings.workspaceName),
-  description = ref(state.settings.workspaceDescription)
-const baseline = ref(JSON.stringify([name.value, description.value]))
 const username = ref(account.username),
   currentPassword = ref(''),
   newPassword = ref(''),
   confirmPassword = ref('')
 const dirty = computed(() =>
-  ['display', 'alerts', 'backup'].includes(props.tab || '')
+  ['preferences', 'display', 'alerts', 'backup'].includes(props.tab || '')
     ? auxiliaryDirty.value
     : props.tab === 'retention'
       ? retentionDirty.value
@@ -32,31 +34,12 @@ const dirty = computed(() =>
           !!currentPassword.value ||
           !!newPassword.value ||
           !!confirmPassword.value
-        : JSON.stringify([name.value, description.value]) !== baseline.value,
+        : false,
 )
 watch(dirty, (value) => emit('dirty', value))
 const error = ref(''),
   busy = ref(false),
   saved = ref(false)
-async function save() {
-  if (busy.value) return
-  error.value = ''
-  saved.value = false
-  busy.value = true
-  try {
-    await savePreferences({
-      ...state.settings,
-      workspaceName: name.value.trim(),
-      workspaceDescription: description.value.trim(),
-    })
-    baseline.value = JSON.stringify([name.value, description.value])
-    saved.value = true
-  } catch (e) {
-    error.value = (e as Error).message
-  } finally {
-    busy.value = false
-  }
-}
 async function saveAccount() {
   if (busy.value) return
   error.value = ''
@@ -109,17 +92,14 @@ async function logout() {
   <nav ref="tabs" class="page-tabs" aria-label="设置分类">
     <button
       v-for="item in [
-        { id: 'preferences', label: '工作空间' },
+        { id: 'preferences', label: '偏好与保留' },
         { id: 'account', label: '管理员' },
-        { id: 'retention', label: '保留策略' },
-        { id: 'display', label: '时区' },
-        { id: 'alerts', label: '系统告警' },
-        { id: 'backup', label: '备份恢复' },
-        { id: 'about', label: '版本信息' },
+        { id: 'backup', label: '备份与恢复' },
+        { id: 'about', label: '关于' },
       ]"
       :key="item.id"
-      :class="{ active: tab === item.id }"
-      :aria-current="tab === item.id ? 'page' : undefined"
+      :class="{ active: selectedTab === item.id }"
+      :aria-current="selectedTab === item.id ? 'page' : undefined"
       @click="emit('navigate', '/settings/' + item.id)"
     >
       {{ item.label }}
@@ -127,51 +107,7 @@ async function logout() {
   </nav>
   <div v-if="error" class="form-errors" role="alert">{{ error }}</div>
   <div class="settings-layout">
-    <section v-if="props.tab === 'preferences'" class="panel settings-card">
-      <div class="panel-heading">
-        <div>
-          <h2>工作空间与偏好</h2>
-          <p>让这片信息空间，有自己的名字</p>
-        </div>
-        <Icon name="clock" :size="19" />
-      </div>
-      <form class="form-content form-stack" @submit.prevent="save">
-        <h3>工作空间</h3>
-        <p class="small-note">名称与说明显示在左侧导航顶部，方便识别你的工作空间。</p>
-        <div class="workspace-settings-fields">
-          <label for="workspace-name">工作空间名称</label
-          ><input id="workspace-name" v-model="name" class="text-input" maxlength="24" required />
-          <p class="small-note">最多 24 个字符。</p>
-          <label for="workspace-description">工作空间说明 <span class="optional">选填</span></label>
-          <input
-            id="workspace-description"
-            v-model="description"
-            class="text-input"
-            maxlength="40"
-          />
-        </div>
-        <div class="workspace-preview" aria-label="工作空间外观预览">
-          <span class="workspace-icon" aria-hidden="true">{{
-            name.trim() === '个人工作空间' ? 'S' : Array.from(name.trim())[0]?.toUpperCase() || 'S'
-          }}</span>
-          <span class="workspace-copy"
-            ><strong :title="name">{{ name.trim() || '工作空间名称' }}</strong
-            ><small v-if="description.trim()" :title="description">{{
-              description.trim()
-            }}</small></span
-          ><span class="workspace-dot" aria-hidden="true" />
-        </div>
-        <p class="small-note">上方为外观预览，保存后同步到导航；此名称不会更改管理员登录账号。</p>
-        <div class="inline-form-footer">
-          <span role="status">{{
-            saved ? '设置已保存' : dirty ? '有未保存的修改' : '设置已保存'
-          }}</span>
-          <button class="button primary" type="submit" :disabled="busy">
-            {{ busy ? '保存中…' : '保存偏好设置' }}
-          </button>
-        </div>
-      </form>
-    </section>
+    <Preferences v-if="props.tab === 'preferences'" @dirty="auxiliaryDirty = $event" />
     <section v-else-if="props.tab === 'account'" class="panel settings-card">
       <div class="panel-heading">
         <h2>管理员资料</h2>
@@ -230,12 +166,11 @@ async function logout() {
         />
         <p v-if="saved" class="info-note" role="status">管理员资料已保存，旧会话已失效。</p>
         <div class="inline-form-footer">
-          <span>{{ dirty ? '有未保存的修改' : '资料已保存' }}</span>
+          <button class="text-link" type="button" :disabled="busy" @click="logout">退出登录</button>
           <button class="button primary" type="submit" :disabled="busy">
-            {{ busy ? '保存中…' : '保存管理员资料' }}
+            {{ busy ? '保存中…' : '更新管理员资料' }}
           </button>
         </div>
-        <button class="button" type="button" :disabled="busy" @click="logout">退出登录</button>
       </form>
     </section>
     <RetentionSettings v-else-if="props.tab === 'retention'" @dirty="retentionDirty = $event" />
@@ -243,5 +178,34 @@ async function logout() {
     <AlertsSettings v-else-if="props.tab === 'alerts'" @dirty="auxiliaryDirty = $event" />
     <AboutSettings v-else-if="props.tab === 'about'" />
     <BackupSettings v-else-if="props.tab === 'backup'" @dirty="auxiliaryDirty = $event" />
+    <aside class="panel support-panel settings-aside">
+      <h2><Icon name="help" :size="18" />关于这些设置</h2>
+      <template v-if="selectedTab === 'preferences'">
+        <p>时区影响网页与通知的时间显示。保留策略与系统告警由后台按照已保存的配置执行。</p>
+        <div class="subtle-divider" />
+        <p>
+          <button class="text-link" @click="emit('navigate', '/settings/retention')">
+            查看保留策略与清理状态
+          </button>
+        </p>
+        <p>
+          <button class="text-link" @click="emit('navigate', '/settings/display')">
+            查看时区详情
+          </button>
+        </p>
+        <p>
+          <button class="text-link" @click="emit('navigate', '/settings/alerts')">
+            查看系统告警记录
+          </button>
+        </p>
+      </template>
+      <p v-else-if="selectedTab === 'account'">
+        首次初始化直接创建唯一管理员，无初始化令牌。修改资料需要验证当前密码，保存后其他浏览器的旧会话失效。
+      </p>
+      <p v-else-if="selectedTab === 'backup'">
+        真实备份包含数据库和通知加密密钥。恢复先生成独立副本，正式切换通过宿主机维护工具执行。
+      </p>
+      <p v-else>SeekBell 使用内置网站适配器关注新帖。版本与运行状态从当前服务读取。</p>
+    </aside>
   </div>
 </template>

@@ -36,7 +36,7 @@ test('stored history filters, pages, snapshots, uncertainty and read errors rema
   await expect(page.locator('.content-row img')).toHaveCount(0)
   await page.screenshot({ path: info.outputPath('history-content.png'), fullPage: true })
   await page.locator('.content-title').click()
-  await expect(page.getByRole('heading', { name: '当时的规则判定' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '为什么会得到这个结果？' })).toBeVisible()
   await expect(page.locator('.history-evaluation')).toHaveCount(2)
   await expect(page.locator('.history-evaluation').filter({ hasText: '摘要关注' })).toContainText(
     '版本 1',
@@ -137,7 +137,7 @@ test('stored history filters, pages, snapshots, uncertainty and read errors rema
   )
   await page.getByRole('button', { name: '查看关联内容', exact: true }).click()
   await page.reload()
-  await expect(page.getByRole('heading', { name: '当时的规则判定' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '为什么会得到这个结果？' })).toBeVisible()
   await page.goto('/#/notifications/tests')
   await expect(page.locator('.delivery-row')).toHaveCount(2)
   await page.getByLabel('查看投递history-test-unknown', { exact: true }).click()

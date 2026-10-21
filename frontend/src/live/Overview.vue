@@ -1,64 +1,109 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import Icon from '../prototype/components/Icon.vue'
-import { state, request, formatTime } from './store'
+import Toggle from '../prototype/components/Toggle.vue'
+import { state, request, formatTime, websiteName, setTaskEnabled } from './store'
 import { useRemote } from './history'
 import type { OverviewData } from './overview'
 import Feedback from './Feedback.vue'
 const emit = defineEmits<{ navigate: [path: string] }>()
-const range = ref<'24h' | '7d'>('24h')
-const selected = ref<number | null>(null)
+const range = ref<'24h' | '7d'>('24h'),
+  query = ref(''),
+  filter = ref('all')
+const selectedPoint = ref<number | null>(null)
 const remote = useRemote(
   () => request<OverviewData>('manage/overview?range=' + range.value),
   () => [range.value],
 )
 const data = remote.data
-const chart = computed(() => data.value?.buckets || [])
-const maximum = computed(() => Math.max(1, ...chart.value.map((b) => b.matches)))
+const stamp = (value: number | null) =>
+  value === null ? '尚未记录' : formatTime(new Date(value * 1000).toISOString())
+const tasks = computed(() =>
+  state.tasks.map((task) => {
+    const stats = data.value?.tasks.find((row) => row.id === task.id)
+    return { ...task, hits: stats?.matches ?? 0, lastHit: stamp(stats?.last_match_at ?? null) }
+  }),
+)
+const active = computed(() => data.value?.configuration.enabled_tasks || 0)
+const targets = computed(() => state.targets)
+const filtered = computed(() =>
+  tasks.value.filter(
+    (task) =>
+      task.name.toLowerCase().includes(query.value.toLowerCase()) &&
+      (filter.value === 'all' || (filter.value === 'active' ? task.enabled : !task.enabled)),
+  ),
+)
+const chart = computed(() => data.value?.buckets.map((bucket) => bucket.matches) || [])
+const maximum = computed(() => Math.max(1, ...chart.value))
+const total = computed(() => data.value?.window.matches || 0)
+const attentionCount = computed(() => data.value?.current.attention || 0)
 const graph = computed(() =>
   chart.value
     .map(
-      (b, i) =>
-        ((i + 0.5) * 700) / chart.value.length + ',' + (154 - (b.matches / maximum.value) * 126),
+      (value, i) =>
+        ((i + 0.5) * 700) / chart.value.length + ',' + (154 - (value / maximum.value) * 126),
     )
     .join(' '),
 )
-const stamp = (value: number | null) =>
-  value === null ? '尚未记录' : formatTime(new Date(value * 1000).toISOString())
-const point = computed(() => (selected.value === null ? undefined : chart.value[selected.value]))
+const selected = computed(() =>
+  selectedPoint.value === null ? null : data.value?.buckets[selectedPoint.value],
+)
+const chartLabels = computed(() =>
+  data.value
+    ? Array.from({ length: 7 }, (_, i) => {
+        const label = stamp(data.value!.start + ((data.value!.end - data.value!.start) * i) / 6)
+        return range.value === '24h' ? label.split(' ').at(-1)! : label.split(' ')[0]!
+      })
+    : [],
+)
+const websites = computed(
+  () =>
+    data.value?.sources.map((source) => ({
+      ...source,
+      id: source.website_id,
+      health: source.failures ? 'error' : source.last_success_at === null ? 'waiting' : 'healthy',
+    })) || [],
+)
+const activities = computed(() => data.value?.recent_matches || [])
 function setRange(value: '24h' | '7d') {
-  selected.value = null
   range.value = value
+  selectedPoint.value = null
+}
+function clearFilters() {
+  query.value = ''
+  filter.value = 'all'
+}
+async function toggle(id: string) {
+  const task = state.tasks.find((task) => task.id === id)
+  if (task) {
+    await setTaskEnabled(task, !task.enabled)
+    remote.reload()
+  }
 }
 </script>
 <template>
   <section class="page-heading">
     <div>
       <p class="eyebrow">YOUR SIGNAL, LESS NOISE</p>
-      <h1 tabindex="-1">留意你关心的<span class="heading-dot">。</span></h1>
-      <p class="subtitle">采集、命中与通知，都有迹可循。</p>
+      <h1 tabindex="-1">每一条在意的，都不错过<span class="heading-dot">。</span></h1>
+      <p class="subtitle">让 SeekBell 留意新帖，把时间留给更重要的事。</p>
     </div>
   </section>
   <div class="overview-meta">
-    <span>服务端历史统计 · {{ state.settings.timezone }}</span>
-    <button class="text-link" :disabled="remote.loading.value" @click="remote.reload">
-      刷新概览
-    </button>
-  </div>
-  <div class="segmented compact" aria-label="统计范围">
-    <button
-      :class="{ active: range === '24h' }"
-      :aria-pressed="range === '24h'"
-      @click="setRange('24h')"
+    <span
+      ><span class="status-dot" />{{
+        state.websites.length
+          ? '已添加 ' + state.websites.length + ' 个网站'
+          : '等待添加第一个网站'
+      }}<span class="separator">/</span
+      >{{ state.websites.filter((w) => w.enabled).length }} 个已启用</span
+    ><button
+      class="text-link"
+      aria-label="刷新概览"
+      :disabled="remote.loading.value"
+      @click="remote.reload"
     >
-      24 小时
-    </button>
-    <button
-      :class="{ active: range === '7d' }"
-      :aria-pressed="range === '7d'"
-      @click="setRange('7d')"
-    >
-      7 天
+      刷新概览<span v-if="data"> · {{ stamp(data.end) }}</span>
     </button>
   </div>
   <Feedback :loading="remote.loading.value" :error="remote.error.value" @retry="remote.reload" />
@@ -68,99 +113,118 @@ function setRange(value: '24h' | '7d') {
         >后台采集与通知发送尚未启动。已启用的配置不会自动执行。</span
       >
     </div>
-    <p v-if="data.runtime_active" class="info-note" role="status">
-      后台采集与自动投递已运行。启用网站后按配置采集，关闭浏览器仍会继续。
-    </p>
     <p v-if="data.runtime.status === 'failed'" class="form-errors" role="alert">
       后台任务已停止（{{ data.runtime.code }}），请检查服务；数据库历史仍可读取。
     </p>
-    <section v-if="!data.configuration.websites" class="panel overview-welcome">
+    <section v-if="!state.websites.length" class="panel overview-welcome">
       <span class="icon-tile orange"><Icon name="globe" /></span>
       <div>
         <h2>先选择你想关注的网站</h2>
-        <p>从内置网站库添加，再创建规则和通知。</p>
+        <p>从内置网站库按需添加，再创建规则和通知。首次部署不会默认启用任何网站。</p>
       </div>
       <button class="button primary" @click="emit('navigate', '/websites')">
         添加网站<Icon name="plus" :size="16" />
       </button>
     </section>
-    <p class="small-note overview-window">
-      统计时段：{{ stamp(data.start) }} 至
-      {{
-        stamp(data.end)
-      }}（左闭右开）；以下均为已保存记录。内容、命中和采集统计受保留期限影响，自动投递按独立回执统计。
-    </p>
+    <div
+      v-else-if="state.websites.some((w) => !w.enabled || w.health === 'error')"
+      class="warning-note"
+    >
+      <Icon name="alert" :size="18" /><span>{{
+        state.websites.some((w) => w.enabled && w.health === 'error')
+          ? '来源连接异常，请检查采集设置。'
+          : '部分网站已暂停，关联任务暂不采集新帖。'
+      }}</span
+      ><button class="text-link" @click="emit('navigate', '/websites')">查看网站</button>
+    </div>
     <section class="stats-grid" aria-label="概览统计">
       <article class="stat-card">
-        <div class="stat-label">已启用任务配置<Icon name="layers" :size="18" /></div>
+        <div class="stat-label">已启用任务<Icon name="layers" :size="18" /></div>
         <div class="stat-value">
-          {{ data.configuration.enabled_tasks }}<span>/ {{ data.configuration.tasks }}</span>
+          {{ active }}<span>/ {{ tasks.length }}</span
+          ><svg class="mini-chart" viewBox="0 0 92 32" aria-hidden="true">
+            <path d="M1 27H16V20H30V23H44V13H58V17H74V5H91" />
+          </svg>
         </div>
-        <p>
-          {{ data.configuration.websites }} 个网站 · {{ data.configuration.targets }} 个通知目标
-        </p>
+        <p><span class="status-dot green-dot" /> {{ tasks.length - active }} 个任务已暂停</p>
       </article>
       <article class="stat-card">
         <div class="stat-label">
           {{ range === '24h' ? '近 24 小时' : '近 7 天' }}命中<Icon name="activity" :size="18" />
         </div>
         <div class="stat-value" data-testid="overview-matches">
-          {{ data.window.matches }}<span>条</span>
+          {{ total }}<span>条</span
+          ><span class="stat-accent">捕获新信号 <Icon name="spark" :size="15" /></span>
         </div>
         <p>按任务版本累计，含同帖多任务命中</p>
       </article>
       <article class="stat-card">
-        <div class="stat-label">自动渠道确认接受<Icon name="send" :size="18" /></div>
-        <div class="stat-value" data-testid="overview-delivered">
-          {{ data.window.delivered }}<span>次</span>
+        <div class="stat-label">成功投递<Icon name="send" :size="18" /></div>
+        <div
+          class="stat-value"
+          data-testid="overview-delivered"
+          title="渠道已接受；不代表收件箱送达"
+        >
+          {{ data.window.delivered }}<span>次</span
+          ><span class="mini-bars" aria-hidden="true"
+            ><i
+              v-for="(height, i) in chart
+                .slice(-9)
+                .map((value) => Math.max(2, (value / maximum) * 30))"
+              :key="i"
+              :style="{ height: height + 'px' }"
+          /></span>
         </div>
-        <p>自动投递按时段内回执；同帖与目标去重</p>
+        <p>渠道接受回执，按帖子与目标去重</p>
       </article>
       <article class="stat-card">
-        <div class="stat-label">当前待关注自动投递<Icon name="alert" :size="18" /></div>
+        <div class="stat-label">待关注的投递<Icon name="alert" :size="18" /></div>
         <div class="stat-value" data-testid="overview-attention">
-          {{ data.current.attention }}<span>次</span>
+          {{ attentionCount }}<span>次</span><span class="small-badge amber">需关注</span>
         </div>
-        <p>全部自动记录：失败、重试或曾未知，按事件去重</p>
-        <button class="text-link" @click="emit('navigate', '/notifications/deliveries')">
-          查看投递记录
-        </button>
+        <p>查看通知管理中的异常与重试记录</p>
       </article>
     </section>
-    <div class="metric-strip">
-      <div>
-        <span>时段内本地帖子</span><strong>{{ data.window.posts }}</strong>
-      </div>
-      <div>
-        <span>信息不足判定</span><strong>{{ data.window.insufficient_data }}</strong>
-      </div>
-      <div>
-        <span>采集失败次数</span><strong>{{ data.window.source_failures }}</strong>
-      </div>
-      <p>
-        自动队列：等待 {{ data.current.queue.pending || 0 }} · 重试
-        {{ data.current.queue.retry || 0 }} · 在途 {{ data.current.queue.leased || 0 }} · 曾未知
-        {{ data.current.uncertain }}
-      </p>
-    </div>
     <div class="overview-columns">
       <section class="panel chart-panel">
         <div class="panel-heading">
           <div>
             <h2>命中趋势</h2>
-            <p>{{ range === '24h' ? '每点 1 小时' : '每点 24 小时' }}，从统计时段起点分桶</p>
+            <p>关心的内容，正在被发现</p>
           </div>
-          <span class="small-badge neutral">真实记录</span>
+          <div class="segmented compact" aria-label="统计范围">
+            <button
+              :class="{ active: range === '24h' }"
+              :aria-pressed="range === '24h'"
+              @click="setRange('24h')"
+            >
+              24 小时</button
+            ><button
+              :class="{ active: range === '7d' }"
+              :aria-pressed="range === '7d'"
+              @click="setRange('7d')"
+            >
+              7 天
+            </button>
+          </div>
         </div>
         <div class="chart-legend">
-          <span><i />任务版本命中</span
+          <span><i />任务命中</span
           ><span class="muted">{{
-            point
-              ? stamp(point.start) + ' 至 ' + stamp(point.end) + ' · ' + point.matches + ' 条'
-              : '合计 ' + data.window.matches + ' 条'
+            selected
+              ? stamp(selected.start) +
+                ' 至 ' +
+                stamp(selected.end) +
+                ' · ' +
+                selected.matches +
+                ' 条'
+              : '合计 ' + total + ' 条'
           }}</span>
         </div>
-        <div class="chart-wrap">
+        <div
+          class="chart-wrap"
+          :title="'统计时段：' + stamp(data.start) + ' 至 ' + stamp(data.end) + '（左闭右开）'"
+        >
           <div class="chart-y">
             <span>{{ maximum }}</span
             ><span>{{ maximum / 2 }}</span
@@ -171,9 +235,16 @@ function setRange(value: '24h' | '7d') {
             viewBox="0 0 700 175"
             preserveAspectRatio="none"
             role="img"
-            :aria-label="'服务端命中趋势，合计 ' + data.window.matches + ' 条'"
+            :aria-label="'命中趋势，合计 ' + total + ' 条'"
           >
+            <defs>
+              <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#e78a52" stop-opacity=".20" />
+                <stop offset="100%" stop-color="#e78a52" stop-opacity=".015" />
+              </linearGradient>
+            </defs>
             <path d="M0 28H700M0 91H700M0 154H700" class="chart-grid" />
+            <polygon :points="'0,154 ' + graph + ' 700,154'" fill="url(#area)" />
             <polyline
               :points="graph"
               fill="none"
@@ -182,34 +253,32 @@ function setRange(value: '24h' | '7d') {
               vector-effect="non-scaling-stroke"
             />
             <circle
-              v-for="(bucket, i) in chart"
-              :key="bucket.start"
+              v-for="(value, i) in chart"
+              :key="i"
               :cx="((i + 0.5) * 700) / chart.length"
-              :cy="154 - (bucket.matches / maximum) * 126"
+              :cy="154 - (value / maximum) * 126"
               r="5"
               fill="#fff"
               stroke="#db7843"
               stroke-width="2"
               class="chart-point"
               tabindex="0"
-              :aria-label="
-                stamp(bucket.start) + ' 至 ' + stamp(bucket.end) + '：' + bucket.matches + ' 条'
-              "
-              @mouseenter="selected = i"
-              @mouseleave="selected = null"
-              @focus="selected = i"
-              @blur="selected = null"
+              @focus="selectedPoint = i"
+              @blur="selectedPoint = null"
+              @mouseenter="selectedPoint = i"
+              @mouseleave="selectedPoint = null"
             >
               <title>
-                {{ stamp(bucket.start) }} 至 {{ stamp(bucket.end) }}：{{ bucket.matches }} 条
+                {{ stamp(data.buckets[i]!.start) }} 至 {{ stamp(data.buckets[i]!.end) }}：{{
+                  value
+                }}
+                条
               </title>
             </circle>
           </svg>
         </div>
         <div class="chart-x">
-          <span>{{ stamp(data.start) }}</span
-          ><span>{{ stamp((data.start + data.end) / 2) }}</span
-          ><span>{{ stamp(data.end) }}</span>
+          <span v-for="label in chartLabels" :key="label">{{ label }}</span>
         </div>
       </section>
       <section class="panel source-panel">
@@ -219,91 +288,193 @@ function setRange(value: '24h' | '7d') {
             管理网站<Icon name="arrow" :size="14" />
           </button>
         </div>
-        <div v-if="!data.sources.length" class="empty-state">
+        <div v-if="!state.websites.length" class="empty-state">
           <Icon name="globe" :size="30" />
           <h3>还没有监控网站</h3>
-          <p>添加后查看已保存的采集状态。</p>
+          <p>添加后，在这里查看各个网站的状态。</p>
         </div>
-        <div v-for="source in data.sources" :key="source.source_id" class="overview-source">
-          <div class="overview-website-row">
-            <span class="icon-tile orange"><Icon name="globe" :size="18" /></span
-            ><span
-              ><strong>{{ source.name }}</strong
-              ><small>最后成功：{{ stamp(source.last_success_at) }}</small></span
-            ><span class="result-pill" :class="source.failures ? 'no' : 'neutral'">{{
-              !source.enabled ? '配置已暂停' : source.failures ? '最近采集失败' : '配置已启用'
-            }}</span>
+        <div v-for="w in websites" :key="w.id" class="overview-website-row overview-source">
+          <span class="icon-tile orange"><Icon name="globe" :size="18" /></span
+          ><span
+            ><strong>{{ websiteName(w.id) }}</strong
+            ><small>{{ stamp(w.last_success_at) }}</small></span
+          ><span
+            class="result-pill"
+            :class="!w.enabled ? 'neutral' : w.health === 'healthy' ? 'yes' : 'unknown'"
+            >{{
+              !w.enabled
+                ? '已暂停'
+                : w.health === 'error'
+                  ? '异常'
+                  : w.health === 'healthy'
+                    ? '正常'
+                    : '待采集'
+            }}</span
+          >
+        </div>
+        <p class="source-note"><Icon name="shield" :size="15" />各网站独立配置，同站任务共享采集</p>
+        <details class="advanced overview-diagnostics">
+          <summary>采集与运行详情</summary>
+          <div v-for="source in data.sources" :key="source.source_id" class="small-note">
+            <strong>{{ source.name }}</strong>
+            <p>
+              最后尝试：{{ stamp(source.last_attempt_at) }} · 连续失败 {{ source.failures
+              }}{{ source.error_code ? ' · ' + source.error_code : '' }}
+            </p>
+            <p>下次可尝试：{{ stamp(source.next_attempt_at) }}</p>
+            <p v-if="source.possible_gap">曾发现可能缺口：{{ stamp(source.last_gap_at) }}</p>
           </div>
           <p class="small-note">
-            最后尝试：{{ stamp(source.last_attempt_at) }} · 连续失败 {{ source.failures
-            }}{{ source.error_code ? ' · ' + source.error_code : '' }}
+            本地帖子 {{ data.window.posts }} · 信息不足 {{ data.window.insufficient_data }} ·
+            采集失败 {{ data.window.source_failures }}
           </p>
-          <p v-if="source.enabled" class="small-note">
-            下次可尝试：{{ stamp(source.next_attempt_at) }}
+          <p class="small-note">
+            自动队列：等待 {{ data.current.queue.pending || 0 }} · 重试
+            {{ data.current.queue.retry || 0 }} · 在途 {{ data.current.queue.leased || 0 }} · 曾未知
+            {{ data.current.uncertain }}
           </p>
-          <p v-if="source.possible_gap" class="small-note">
-            曾发现可能缺口：{{ stamp(source.last_gap_at) }}
-          </p>
-        </div>
-        <p class="source-note">
-          <Icon name="shield" :size="15" />显示数据库最后保存的采集状态，点击刷新概览更新。
-        </p>
+        </details>
       </section>
     </div>
+    <section class="panel tasks-panel">
+      <div class="panel-heading">
+        <div class="inline-title">
+          <h2>监控任务</h2>
+          <span class="count-badge">{{ tasks.length }}</span>
+        </div>
+        <div class="task-tools">
+          <label class="search-input"
+            ><Icon name="search" :size="16" /><input
+              v-model="query"
+              aria-label="搜索任务"
+              placeholder="搜索任务…" /></label
+          ><select v-model="filter" aria-label="筛选任务状态">
+            <option value="all">全部状态</option>
+            <option value="active">已启用</option>
+            <option value="paused">已暂停</option>
+          </select>
+        </div>
+      </div>
+      <div class="task-table-head">
+        <span>任务名称</span><span>通知目标</span
+        ><span>{{ range === '24h' ? '近24小时命中' : '近7天命中' }}</span
+        ><span>最近命中</span><span>状态</span><span />
+      </div>
+      <div v-for="task in filtered" :key="task.id" class="task-row">
+        <button class="task-name" @click="emit('navigate', '/task/' + task.id)">
+          <span class="icon-tile" :class="task.color"><Icon :name="task.icon" /></span
+          ><span
+            ><strong>{{ task.name }}</strong
+            ><small>{{
+              task.description || websiteName(task.websiteId) + ' · 新帖监控'
+            }}</small></span
+          >
+        </button>
+        <div class="target-icons">
+          <span
+            v-for="target in targets.filter((t) => task.targets.includes(t.id))"
+            :key="target.id"
+            :title="target.name"
+            class="target-icon"
+            :class="target.color"
+            ><Icon :name="target.icon" :size="16" /><span class="sr-only">{{
+              target.name
+            }}</span></span
+          >
+        </div>
+        <span class="task-hits"
+          >{{ task.hits
+          }}<small class="mobile-only">
+            {{ range === '24h' ? '近24小时命中' : '近7天命中' }}</small
+          ></span
+        ><span class="muted task-time">{{ task.lastHit }}</span>
+        <div class="task-status">
+          <Toggle
+            :model-value="task.enabled"
+            :label="task.name + '启用状态'"
+            @update:model-value="toggle(task.id)"
+          /><span>{{ task.enabled ? '已启用' : '已暂停' }}</span>
+        </div>
+        <button
+          class="icon-button task-edit"
+          :aria-label="'编辑' + task.name"
+          @click="emit('navigate', '/task/' + task.id)"
+        >
+          <Icon name="arrow" :size="17" />
+        </button>
+      </div>
+      <div v-if="!tasks.length" class="empty-state">
+        <Icon name="layers" :size="28" />
+        <h3>还没有监控任务</h3>
+        <p>添加网站后，为你关心的内容设置一条规则。</p>
+      </div>
+      <div v-else-if="!filtered.length" class="empty-state">
+        <Icon name="search" :size="28" />
+        <h3>没有找到匹配的任务</h3>
+        <p>试试其他关键词，或查看全部状态。</p>
+        <button class="button" @click="clearFilters">清除筛选</button>
+      </div>
+      <div class="table-footer">
+        <span>显示 {{ filtered.length }} 个任务</span
+        ><span><Icon name="help" :size="14" />暂停后恢复，不补发期间的帖子</span>
+      </div>
+    </section>
     <section class="panel activity-panel">
       <div class="panel-heading">
         <div>
           <h2>最近命中</h2>
-          <p>所选时段内最近 5 条，使用当时任务名称</p>
+          <p>从信息流中，找到与你有关的内容</p>
         </div>
         <button class="text-link" @click="emit('navigate', '/content')">查看内容与命中</button>
       </div>
-      <div v-for="(hit, i) in data.recent_matches" :key="i" class="activity-row">
+      <div v-for="(item, index) in activities" :key="index" class="activity-row">
         <span class="timeline-dot orange"><Icon name="spark" :size="17" /></span>
         <div class="activity-copy">
-          <button v-if="hit.post_id" @click="emit('navigate', '/content/' + hit.post_id)">
-            {{ hit.title }}</button
+          <button v-if="item.post_id" @click="emit('navigate', '/content/' + item.post_id)">
+            {{ item.title }}</button
           ><strong v-else>原内容已清理</strong>
           <p>
-            {{ hit.task_name }} · 版本 {{ hit.task_version
-            }}{{ hit.task_deleted ? ' · 任务已删除' : '' }}
+            <span>{{ item.task_name }}</span
+            ><span>版本 {{ item.task_version }}{{ item.task_deleted ? ' · 任务已删除' : '' }}</span>
           </p>
         </div>
-        <span class="result-pill yes">命中</span><time>{{ stamp(hit.at) }}</time>
+        <span class="result-pill yes"><span class="status-dot" />命中</span
+        ><time>{{ stamp(item.at) }}</time>
       </div>
-      <div v-if="!data.recent_matches.length" class="empty-state">
+      <div v-if="!activities.length" class="empty-state">
         <Icon name="inbox" :size="28" />
-        <h3>此时段还没有命中记录</h3>
-        <p>历史统计会在保存真实记录后更新。</p>
+        <p>还没有命中记录。</p>
       </div>
     </section>
+    <footer class="page-footer">
+      <span><Icon name="bell" :size="14" /> SeekBell · 留意你关心的</span
+      ><span>管理界面 <span class="separator">·</span> v0.4</span>
+    </footer>
   </template>
 </template>
+
 <style scoped>
-.overview-window {
-  margin: 18px 0;
-}
-.overview-source > p {
-  margin: 0 20px 12px;
-  overflow-wrap: anywhere;
-}
+.chart-x,
 .chart-legend {
   gap: 12px;
   flex-wrap: wrap;
-}
-.chart-x {
-  gap: 12px;
 }
 .activity-copy {
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.overview-website-row > span:nth-child(2) {
+.overview-diagnostics {
+  margin: 0 20px 16px;
+}
+.overview-source > span:nth-child(2) {
   min-width: 0;
+}
+.overview-source strong,
+.task-name strong {
   overflow-wrap: anywhere;
 }
 @media (max-width: 600px) {
-  .overview-website-row {
+  .overview-source {
     flex-wrap: wrap;
   }
   .chart-x {
