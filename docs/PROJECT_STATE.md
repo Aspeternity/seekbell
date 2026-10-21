@@ -1,6 +1,6 @@
 # 当前状态
 
-更新时间：2026-10-21（Asia/Shanghai）。M0～M3实现/本地检查完成，M4工程退出通过；当前M5用户Portainer实测修正。本轮四项体验调整已按用户审批实现，铅笔明确保留；自动检查通过，尚未发布新镜像或用户验收。
+更新时间：2026-10-21（Asia/Shanghai）。M0～M3实现/本地检查完成，M4工程退出通过；当前M5用户Portainer实测修正。本轮四项体验调整已按用户审批实现，铅笔明确保留；自动检查通过，用户现明确要求发布新镜像后自行更新测试；新标签ui-fix-1发布准备中，尚未发布或用户验收。
 
 ## 环境与代码
 
@@ -16,8 +16,8 @@
 
 ## 镜像与保留
 
-公开ghcr.io/aspeternity/seekbell:rss-fix-1代码e658b465159a24800887c30de5a645831615301b，Compose仍指此版本，不含本轮UI/通知修改。digest/完整CI/双平台原生/TLS/匿名拉取见[发布记录](history/2026-10-21-RSS修复镜像发布.md)。发布开关恢复缺失、源码private。18081项目seekbell-acceptance-b45fc2c-20261020及其容器/卷/backup-local保留；旧卷、4175/18080和已有镜像不动。
+公开ghcr.io/aspeternity/seekbell:rss-fix-1代码e658b465159a24800887c30de5a645831615301b，此前Compose指此版本；本次模板已准备ui-fix-1（尚未发布），包含本轮UI/通知修改。digest/完整CI/双平台原生/TLS/匿名拉取见[发布记录](history/2026-10-21-RSS修复镜像发布.md)。发布开关恢复缺失、源码private。18081项目seekbell-acceptance-b45fc2c-20261020及其容器/卷/backup-local保留；旧卷、4175/18080和已有镜像不动。
 
 ## 下一步与授权
 
-交付已批准结果与预览，按用户后续授权决定新镜像交付；真实Telegram/其他渠道/PVE、Safari/真机待验收。四项已审批并完成，不能再删铅笔或重复索要同项审批。本轮无新公开发布/合并/远程部署/真实发送/源码公开/正式Release授权；此前RSS发布授权已完成。独立WSL/noreply，不组织多代理。恢复读AGENTS、本状态、本轮任务交互记录，按需读TaskList/菜单/CSS及Telegram渲染。
+执行本轮公开GHCR新镜像发布，使用现有默认分支完整CI/两架构原生流程，成功后验证匿名拉取并交付Portainer模板；真实Telegram/其他渠道/PVE、Safari/真机待验收。四项已审批并完成，不能再删铅笔或重复索要同项审批。用户“发布为新镜像，我更新之后测试一下”授权本轮合并main、公开GHCR新候选及临时发布开关恢复；无远程部署/真实发送/源码公开/正式Release授权。源码API仍private/main，发布开关原先缺失。独立WSL/noreply，不组织多代理。恢复读AGENTS、本状态、本轮任务交互记录，按需读TaskList/菜单/CSS及Telegram渲染。
