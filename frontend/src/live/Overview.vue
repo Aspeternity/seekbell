@@ -6,11 +6,13 @@ import { state, request, formatTime, websiteName, setTaskEnabled } from './store
 import { useRemote } from './history'
 import type { OverviewData } from './overview'
 import Feedback from './Feedback.vue'
+import CollectionStatus from './CollectionStatus.vue'
 const emit = defineEmits<{ navigate: [path: string] }>()
 const range = ref<'24h' | '7d'>('24h'),
   query = ref(''),
   filter = ref('all')
 const selectedPoint = ref<number | null>(null)
+const selectedSource = ref('')
 const remote = useRemote(
   () => request<OverviewData>('manage/overview?range=' + range.value),
   () => [range.value],
@@ -55,14 +57,6 @@ const chartLabels = computed(() =>
         return range.value === '24h' ? label.split(' ').at(-1)! : label.split(' ')[0]!
       })
     : [],
-)
-const websites = computed(
-  () =>
-    data.value?.sources.map((source) => ({
-      ...source,
-      id: source.website_id,
-      health: source.failures ? 'error' : source.last_success_at === null ? 'waiting' : 'healthy',
-    })) || [],
 )
 const activities = computed(() => data.value?.recent_matches || [])
 function setRange(value: '24h' | '7d') {
@@ -281,38 +275,13 @@ async function toggle(id: string) {
           <span v-for="label in chartLabels" :key="label">{{ label }}</span>
         </div>
       </section>
-      <section class="panel source-panel">
-        <div class="panel-heading">
-          <h2>网站采集</h2>
-          <button class="text-link" @click="emit('navigate', '/websites')">
-            管理网站<Icon name="arrow" :size="14" />
-          </button>
-        </div>
-        <div v-if="!state.websites.length" class="empty-state">
-          <Icon name="globe" :size="30" />
-          <h3>还没有监控网站</h3>
-          <p>添加后，在这里查看各个网站的状态。</p>
-        </div>
-        <div v-for="w in websites" :key="w.id" class="overview-website-row overview-source">
-          <span class="icon-tile orange"><Icon name="globe" :size="18" /></span
-          ><span
-            ><strong>{{ websiteName(w.id) }}</strong
-            ><small>{{ stamp(w.last_success_at) }}</small></span
-          ><span
-            class="result-pill"
-            :class="!w.enabled ? 'neutral' : w.health === 'healthy' ? 'yes' : 'unknown'"
-            >{{
-              !w.enabled
-                ? '已暂停'
-                : w.health === 'error'
-                  ? '异常'
-                  : w.health === 'healthy'
-                    ? '正常'
-                    : '待采集'
-            }}</span
-          >
-        </div>
-        <p class="source-note"><Icon name="shield" :size="15" />各网站独立配置，同站任务共享采集</p>
+      <div class="overview-source-column">
+        <CollectionStatus
+          v-model="selectedSource"
+          :sources="data.sources"
+          :stamp="stamp"
+          :timezone="data.today.timezone"
+        />
         <details class="advanced overview-diagnostics">
           <summary>采集与运行详情</summary>
           <div v-for="source in data.sources" :key="source.source_id" class="small-note">
@@ -334,7 +303,7 @@ async function toggle(id: string) {
             {{ data.current.uncertain }}
           </p>
         </details>
-      </section>
+      </div>
     </div>
     <section class="panel tasks-panel">
       <div class="panel-heading">
@@ -463,20 +432,16 @@ async function toggle(id: string) {
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.overview-diagnostics {
-  margin: 0 20px 16px;
-}
-.overview-source > span:nth-child(2) {
+.overview-source-column {
   min-width: 0;
 }
-.overview-source strong,
+.overview-diagnostics {
+  margin: 10px 0 0;
+}
 .task-name strong {
   overflow-wrap: anywhere;
 }
 @media (max-width: 600px) {
-  .overview-source {
-    flex-wrap: wrap;
-  }
   .chart-x {
     font-size: 10px;
   }

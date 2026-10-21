@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -9,9 +10,14 @@ from seekbell.db.models import (
     Outbox,
     Post,
     RuleHit,
+    SeenPost,
+    Source,
+    SourceProbe,
     SourceRun,
     SourceState,
     TaskEvaluation,
+    Website,
+    WorkspacePreferences,
 )
 from seekbell.db.transactions import write_session
 from seekbell.main import create_app
@@ -197,3 +203,85 @@ def test_task_table_includes_real_zeroes_and_excludes_deleted_configuration(reco
     data = client.get("/api/manage/overview").json()
     assert data["tasks"] == [{"id": added, "matches": 0, "last_match_at": None}]
     assert data["window"]["matches"] == 24
+
+
+@pytest.mark.parametrize(
+    ("timezone", "end_iso", "start_iso"),
+    [
+        ("UTC", "2026-10-20T12:30:00+00:00", "2026-10-20T00:00:00+00:00"),
+        ("Asia/Shanghai", "2026-10-20T12:30:00+00:00", "2026-10-19T16:00:00+00:00"),
+        # The fall-back day begins at 04:00 UTC; a fixed UTC offset would be wrong.
+        ("America/New_York", "2026-11-01T18:30:00+00:00", "2026-11-01T04:00:00+00:00"),
+    ],
+)
+def test_collection_day_uses_saved_timezone_and_survives_content_retention(
+    records, timezone, end_iso, start_iso
+):
+    app, client, _ = records
+    end = datetime.fromisoformat(end_iso).timestamp()
+    start = datetime.fromisoformat(start_iso).timestamp()
+    app.dependency_overrides[snapshot_time] = lambda: end
+    with write_session(app.state.engine) as session:
+        session.get(WorkspacePreferences, 1).timezone = timezone
+        session.execute(update(SeenPost).values(first_seen_at=start - 1))
+        session.get(SeenPost, ("nodeseek", "8026")).first_seen_at = start
+        session.execute(delete(Post).where(Post.external_post_id == "8026"))
+        session.add(Website(id="fixture", name="Synthetic site", enabled=False))
+        session.flush()
+        session.add_all(
+            [
+                SeenPost(
+                    website_id="nodeseek", external_post_id="before", first_seen_at=start - 0.001
+                ),
+                SeenPost(website_id="nodeseek", external_post_id="last", first_seen_at=end - 0.001),
+                SeenPost(website_id="nodeseek", external_post_id="end", first_seen_at=end),
+                SeenPost(website_id="fixture", external_post_id="other", first_seen_at=start),
+            ]
+        )
+    day = client.get("/api/manage/overview").json()
+    week = client.get("/api/manage/overview?range=7d").json()
+    assert day["today"] == week["today"] == {"start": start, "end": end, "timezone": timezone}
+    assert day["sources"][0]["today_posts"] == week["sources"][0]["today_posts"] == 2
+
+
+def test_collection_history_is_capped_isolated_and_not_explicit_connection_tests(records):
+    app, client, ids = records
+    end = ids["base"] + 86400
+    expected = []
+    with write_session(app.state.engine) as session:
+        session.execute(delete(SourceRun))
+        session.get(Source, "nodeseek-rss").interval_seconds = 137
+        for index in range(35):
+            # A clock adjustment must not reorder persisted attempts.
+            at = ids["base"] + (index if index != 31 else -10)
+            status = "failure" if index % 7 == 0 else "success"
+            if index == 34:
+                status = PRIVATE
+            run = SourceRun(source_id="nodeseek-rss", at=at, status=status)
+            session.add(run)
+            session.flush()
+            expected.append(
+                {"id": run.id, "at": at, "status": "unknown" if status == PRIVATE else status}
+            )
+        session.add(SourceRun(source_id="nodeseek-rss", at=end, status="failure"))
+        session.add(
+            SourceProbe(
+                source_id="nodeseek-rss",
+                started_at=end - 2,
+                finished_at=end - 1,
+                next_attempt_at=end + 1,
+                status="success",
+                item_count=999,
+            )
+        )
+        session.add(Website(id="fixture", name="Synthetic site", enabled=False))
+        session.flush()
+        session.add(Source(id="fixture-rss", website_id="fixture", url="https://fixture.test/rss"))
+        session.flush()
+        session.add(SourceRun(source_id="fixture-rss", at=end - 1, status="failure"))
+    response = client.get("/api/manage/overview")
+    source = response.json()["sources"][0]
+    assert source["interval_seconds"] == 137
+    assert source["recent_runs"] == expected[-30:]
+    assert len(response.json()["sources"]) == 1
+    assert PRIVATE not in response.text

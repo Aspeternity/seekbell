@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, reactive, ref, watch } from 'vue'
 import Icon from './components/Icon.vue'
 import Toggle from './components/Toggle.vue'
 import TagInput from './components/TagInput.vue'
 import { evaluate, historySamples, statusLabel } from './model'
 import type { Sample, Task } from './model'
 import { state, websiteName, isLive, evaluateTask, trialHistory, formatTime } from '@workspace'
+const WebsiteSelect = defineAsyncComponent(() => import('./components/WebsiteSelect.vue'))
 const targets = computed(() => state.targets)
 const props = withDefaults(
   defineProps<{ task: Task; returnLabel?: string; saving?: boolean; saveError?: string }>(),
@@ -242,17 +243,19 @@ function jump(id: string) {
             placeholder="这项任务想关注什么？"
             maxlength="160"
           />
-          <label class="field-label" for="task-website">监控网站</label>
-          <select
-            id="task-website"
-            v-model="draft.websiteId"
-            class="text-input"
-            :disabled="!!draft.id"
-          >
-            <option v-for="w in state.websites" :key="w.id" :value="w.id">
-              {{ websiteName(w.id) }}{{ w.enabled ? '' : ' · 已暂停' }}
-            </option>
-          </select>
+          <div class="task-website-field">
+            <label class="field-label" for="task-website">监控网站</label>
+            <WebsiteSelect
+              v-model="draft.websiteId"
+              :disabled="!!draft.id"
+              :options="
+                state.websites.map((w) => ({
+                  value: w.id,
+                  label: websiteName(w.id) + (w.enabled ? '' : ' · 已暂停'),
+                }))
+              "
+            />
+          </div>
           <p class="field-help">
             {{
               draft.id
@@ -652,3 +655,9 @@ function jump(id: string) {
     </div>
   </form>
 </template>
+
+<style scoped>
+.task-website-field {
+  margin-top: 22px;
+}
+</style>

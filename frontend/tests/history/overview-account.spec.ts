@@ -28,8 +28,8 @@ test('real overview and administrator forms preserve records and rotate sessions
   await expect(
     page.getByText('后台采集与通知发送尚未启动。已启用的配置不会自动执行。'),
   ).toBeVisible()
-  await expect(page.locator('.overview-source')).toContainText('已暂停')
-  await expect(page.locator('.overview-source')).toContainText('10/19')
+  await expect(page.locator('.collection-card .collection-health')).toHaveText('已暂停')
+  await expect(page.locator('.collection-card .source-data dd').first()).toContainText('10/19')
   await expect(page.locator('.activity-row')).toHaveCount(5)
   await expect(page.locator('.activity-row').first()).toContainText('摘要关注')
   await page.getByRole('button', { name: '7 天', exact: true }).click()

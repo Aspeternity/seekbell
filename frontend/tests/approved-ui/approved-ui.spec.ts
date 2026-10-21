@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { checkCollection, checkWebsitePicker } from './collection'
 const credentials = { username: 'history_admin', password: 'Synthetic-History-2026' }
 
 test('production pages preserve the approved UI while using real persisted data', async ({
@@ -39,6 +40,8 @@ test('production pages preserve the approved UI while using real persisted data'
     await expect(element.getByRole('switch')).toHaveAttribute('aria-checked', String(task.enabled))
   }
   await page.screenshot({ path: info.outputPath('approved-overview.png'), fullPage: true })
+  await checkCollection(page, info, overview)
+  await checkWebsitePicker(page, info)
   await page.goto('/#/notifications/targets')
   const total = await (await page.request.get('/api/manage/history/deliveries?page_size=1')).json()
   await expect(
@@ -97,6 +100,9 @@ test('production pages preserve the approved UI while using real persisted data'
   await page.getByRole('button', { name: '保存偏好设置', exact: true }).click()
   await expect(page.locator('.workspace-label')).toContainText(original.settings.workspaceName)
 
+  await expect
+    .poll(async () => (await (await page.request.get('/api/manage/display')).json()).timezone)
+    .toBe(display.timezone)
   const previous = await (await page.request.get('/api/manage/display')).json()
   await page.getByLabel('显示时区', { exact: true }).selectOption(nextZone)
   const csrf = (await (await page.request.get('/api/auth/status')).json()).csrf
