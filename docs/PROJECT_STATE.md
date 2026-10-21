@@ -1,10 +1,10 @@
 # 当前状态
 
-更新时间：2026-10-22（Asia/Shanghai）。M0～M3实现/本地检查完成，M4工程退出通过；现M5用户实测修正。原UI恢复待用户验收，本轮已获采集卡/异常定位和任务网站下拉修复授权，本地实施/检查完成，未发布。
+更新时间：2026-10-22（Asia/Shanghai）。M0～M3实现/本地检查完成，M4工程退出通过；现M5用户实测修正。原UI恢复待用户验收，本轮已获采集卡/异常定位和任务网站下拉修复授权，本地实施/检查完成；用户现明确授权发布，本轮准备ui-restore-2。
 
 ## 环境与基准
 
-仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发；[环境入口](DEVELOPMENT_ENVIRONMENT.md)。分支codex/collection-card-task-picker；本轮实现基准d23413dfd9b45941d8d6d034a253fdc9b5743117（起点main 4534e06）。旧D盘/Ubuntu/全局WSL保留，不组织多代理。本轮代码/测试/权威文档与原有核对记录一并本地提交，未推送/合并/发布；后续纯文档收尾不改变此代码基准。
+仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发；[环境入口](DEVELOPMENT_ENVIRONMENT.md)。分支codex/collection-card-task-picker；本轮实现基准d23413dfd9b45941d8d6d034a253fdc9b5743117（起点main 4534e06）。旧D盘/Ubuntu/全局WSL保留，不组织多代理。本轮代码/测试/权威文档与原有核对记录一并本地提交，现因用户发布指示进入合并/发布流程；此实现SHA仍为功能基准，发布镜像另记实际main SHA。
 
 ## 已确认与进度
 
@@ -15,10 +15,10 @@
 ## 证据与发布
 
 本轮547后端通过126.27秒，Ruff/类型/生产构建通过。56浏览器通过（原型42/接入6/历史4/runtime2/approved-ui2），含320～1440宽度、键盘/焦点、异常数0/1/3、多站切换和刷新保留；截图已核对。详细命令/证据与限制见[实施记录](history/2026-10-22-采集卡与网站选择实施.md)。均临时合成库/模拟来源，未真实采集或发送。尚未用户验收。
-已发布对比镜像仍ghcr.io/aspeternity/seekbell:ui-restore-1，代码40353049c5190f7ecc2888377c54c2370e7b299f，digest sha256:4421b9e64652b3d19c464c462c1446e14f9ca81afac2fccca0eaa666ce201667；上轮543后端/70浏览器/amd64+arm64原生与匿名拉取通过，[回执](history/2026-10-22-原UI对比镜像发布.md)。源码private/包public；上轮发布授权已完成，本轮不自动发布。
-对比compose仍8001:8000及独立seekbell_compare_data，旧ui-fix-1/8000不变；禁止共用运行中SQLite卷。同IP跨端口Cookie共用，建议对比用无痕窗口。
+已发布对比镜像仍ghcr.io/aspeternity/seekbell:ui-restore-1，代码40353049c5190f7ecc2888377c54c2370e7b299f，digest sha256:4421b9e64652b3d19c464c462c1446e14f9ca81afac2fccca0eaa666ce201667；上轮543后端/70浏览器/amd64+arm64原生与匿名拉取通过，[回执](history/2026-10-22-原UI对比镜像发布.md)。源码private/包public；上轮发布授权已完成；用户本轮新授权发布修复镜像。
+对比compose已准备ui-restore-2、仍8001:8000及独立seekbell_compare_data，旧ui-fix-1/8000不变；禁止共用运行中SQLite卷。同IP跨端口Cookie共用，建议对比用无痕窗口。
 
 ## 保留与下一步
 
 保护18081的seekbell-acceptance-b45fc2c-20261020项目/容器/卷及backup-local，旧Stack/卷/4175/18080均不动。无远程部署/真实发送/公开源码。旧内联预览两种路径仍失败；5192旧方案仅Windows HTTP和浏览器检查通过，应用打开返回queued，不能称已修复或打开。
-工作区将以本记录收尾提交保持干净。无外部阻塞；下一步按用户指示发布测试镜像或处理反馈。发布后还需用户真实环境验收；自动检查使用模拟站点，不代表新增网站适配器、Safari或真机验收。恢复读本状态、UI_DESIGN卡片段及实施记录，再按影响范围读取代码；历史旧阶段资料按需读。
+发布准备：ui-restore-2尚不可拉取；既有GHCR发布开关缺失，本轮临时开启并在结束恢复。先合并/推送明确main SHA，再手动运行完整CI及原生双架构发布，最后匿名拉取验证。无外部阻塞；下一步记录Actions/实际digest并交付Compose。发布后还需用户真实环境验收；自动检查使用模拟站点，不代表新增网站适配器、Safari或真机验收。恢复读本状态、UI_DESIGN卡片段及实施记录，再按影响范围读取代码；历史旧阶段资料按需读。
