@@ -14,6 +14,7 @@ from seekbell.notifiers.rendering import (
     message_title,
     message_url,
     render,
+    telegram_message,
     webhook_payload,
 )
 
@@ -52,7 +53,7 @@ class HTTPNotifier:
             url = config["base_url"] + "/bot" + config["bot_token"] + "/sendMessage"
             body = {
                 "chat_id": config["chat_id"],
-                "text": render(payload, config),
+                **telegram_message(payload, config),
                 "link_preview_options": {"is_disabled": True},
             }
             if config["message_thread_id"] is not None:

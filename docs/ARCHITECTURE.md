@@ -267,3 +267,10 @@ Settings新增精确可信代理IP（默认空、最多32个，拒绝*/CIDR/host
 ## M4镜像候选与发布边界
 
 双架构采用原生amd64/arm64 runner，分别构建与禁业务外网演练后保存镜像归档；只读可复用工作流由codex/开发分支push的完整CI及手动候选流程共同调用，支持合并前验证；手动流程默认只生成候选，显式仓库开关和手动发布选择、默认分支及完整CI通过后才授予独立job的GHCR写权限。发布复用测试产物，核对运行配置digest与层指纹，再以两个单平台digest合成索引并固定索引digest部署。区分classic/containerd的本机image ID、运行配置digest和registry manifest/index digest；不以代码SHA标签推定逐字节可重现或标签不可改写。只有发布job使用短期GITHUB_TOKEN写GHCR；写前后确认私有源仓库及显式public镜像包；公开仅涉及GHCR包，源码仓库保持私有。包缺失/不可读或可见性不符则在写前停止，不自动变更权限或创建默认私有包。GitHub包repository元数据可选/可空，缺失记not-reported，明确报告的错配则拒绝；镜像source/config与测试归档独立核对，不将缺失字段当成关联失败或关联成功的证明。发布后按索引digest拉取amd64并在隔离新实例复验；arm64以发布前原生检查为证。真实写入回执即使后置失败也保留，整轮成功仍要求全部检查通过。没有自动部署/自动真实发送。[具体流程与限制](IMAGE_RELEASE.md)。
+
+
+## 通知呈现时区与Telegram排版（2026-10-21，M5实测修正）
+
+自动认领、目标测试、手动重发、告警认领在各自事务内读取WorkspacePreferences.timezone，向发往Notifier的独立payload副本加入display_timezone；不改Outbox/ManualDelivery保存的原始消息和UTC时间戳。旧队列不要求迁移，重试/重发按本次发送准备时的时区呈现；保存时区后的在途请求可能继续使用认领时的值。无时区上下文时回退UTC。render统一将发布ISO时间/首次发现epoch/系统事件epoch转换为带IANA名称的可读时间，发布缺失/无效时明确用发现时间；Webhook仍由显式白名单字段生成原版本JSON，不泄漏呈现上下文。
+
+Telegram单独生成普通文本、UTF-16偏移/长度的bold实体和原帖URL按钮，不使用parse_mode、不执行外部标记；标题/作者/版块/任务/摘要逐段限长，整段最多4000 UTF-16单位，按钮URL独立于截断正文。系统告警只加粗标题、不附原帖按钮。禁用链接预览、话题ID、HTTP错误分类、去重及重试策略沿用原实现。Bark/SMTP仅更新共享的可读时间格式，无新增依赖/迁移。

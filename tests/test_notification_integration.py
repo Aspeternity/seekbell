@@ -17,6 +17,7 @@ from seekbell.notifiers.credentials import CredentialVault
 from seekbell.notifiers.registry import NotifierRegistry
 from seekbell.services.configuration import Configuration
 from seekbell.services.delivery import DeliveryWorker
+from seekbell.services.display import get_display, update_display
 from seekbell.services.target_testing import TargetTesting
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -35,6 +36,7 @@ def configured(core, kinds):
 
 def test_four_channels_merge_by_target_and_retry_only_failed_target(core, monkeypatch):
     keyring, service, targets = configured(core, CONFIGS)
+    update_display(core.engine, "Asia/Shanghai", get_display(core.engine)["revision"])
     service.create_task("rule two", Rule(), targets.values(), at=2)
     server = SMTPServer()
     install(monkeypatch, server)
@@ -48,11 +50,17 @@ def test_four_channels_merge_by_target_and_retry_only_failed_target(core, monkey
         body = json.loads(request.content)
         if request.url.path.endswith("sendMessage"):
             assert "rule one" in body["text"] and "rule two" in body["text"]
+            assert "2026-10-18 20:00:00 (Asia/Shanghai)" in body["text"]
+            assert body["entities"][0]["type"] == "bold"
+            assert body["reply_markup"]["inline_keyboard"][0][0]["url"].endswith("/post-9002-1")
             return httpx.Response(200, json={"ok": True, "result": {"message_id": 1}})
         if request.url.path.endswith("/push"):
+            assert "2026-10-18 20:00:00 (Asia/Shanghai)" in body["body"]
             return httpx.Response(200, json={"code": 200})
         webhook_calls.append(request)
         assert len(body["matched_tasks"]) == 2
+        assert body["post"]["published_at"] == "2026-10-18T12:00:00+00:00"
+        assert "display_timezone" not in body
         if len(webhook_calls) == 1:
             return httpx.Response(429, headers={"Retry-After": "80"})
         return httpx.Response(204)
@@ -77,6 +85,8 @@ def test_four_channels_merge_by_target_and_retry_only_failed_target(core, monkey
     asyncio.run(run())
     assert len(calls) == 4
     assert sum(call[0] == "data" for call in server.calls) == 1
+    mail = next(call[1] for call in server.calls if call[0] == "data")
+    assert "2026-10-18 20:00:00 (Asia/Shanghai)" in mail.get_content()
     assert core.count(DeliveredPost) == 4 and core.count(DeliveryAttempt) == 5
     assert webhook_calls[0].content == webhook_calls[1].content
     assert (

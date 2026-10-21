@@ -1,5 +1,6 @@
 """Persistent display preference; timestamps remain UTC."""
 
+from copy import deepcopy
 from zoneinfo import available_timezones
 
 from sqlalchemy.orm import Session
@@ -59,3 +60,12 @@ def update_display(engine, timezone, revision):
             "revision": preferences.display_revision,
             "available": TIMEZONES,
         }
+
+
+def notification_context(session, payload):
+    """Resolve the saved timezone for this send, including legacy queued payloads."""
+    preferences = session.get(WorkspacePreferences, 1)
+    return {
+        **deepcopy(payload),
+        "display_timezone": preferences.timezone if preferences else "UTC",
+    }

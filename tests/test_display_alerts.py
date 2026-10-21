@@ -475,3 +475,25 @@ def test_pending_and_unfinished_alerts_protect_expired_event_history(configured)
     with Session(app.state.engine) as session:
         delivery = session.get(AlertDelivery, claim[0])
         assert delivery.result == "unknown" and delivery.finished_at is None
+
+
+def test_system_alert_notification_uses_saved_timezone_without_rewriting_event(configured):
+    from seekbell.notifiers.rendering import render, telegram_message, webhook_payload
+    from seekbell.services.display import get_display, update_display
+
+    app, _, _ = configured
+    engine = app.state.engine
+    update_display(engine, "Asia/Shanghai", get_display(engine)["revision"])
+    fault(engine, at=100)
+    _, _, message = AlertWorker(engine, {})._claim()
+    assert message["display_timezone"] == "Asia/Shanghai"
+    config = {"include_summary": False}
+    assert "1970-01-01 08:01:40 (Asia/Shanghai)" in render(message, config)
+    telegram = telegram_message(message, config)
+    assert "系统故障" in telegram["text"]
+    assert "reply_markup" not in telegram
+    assert "parse_mode" not in telegram
+    assert telegram["entities"][0]["type"] == "bold"
+    assert webhook_payload(message, config)["alert"]["at"] == 100
+    with Session(engine) as session:
+        assert session.get(SystemEvent, message["alert"]["id"]).at == 100

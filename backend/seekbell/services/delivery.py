@@ -23,6 +23,7 @@ from seekbell.domain.delivery import DeliveryPolicy, SendResult
 from seekbell.notifiers.base import Notifier
 from seekbell.services.alerts import observe
 from seekbell.services.configuration import identifier
+from seekbell.services.display import notification_context
 
 
 @dataclass(frozen=True)
@@ -156,7 +157,7 @@ class DeliveryWorker:
                     event.id,
                     token,
                     event.attempt_count,
-                    copy.deepcopy(event.payload),
+                    notification_context(session, event.payload),
                     copy.deepcopy(event.target_snapshot),
                 )
         return None
