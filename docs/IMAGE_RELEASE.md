@@ -1,6 +1,6 @@
 # 双架构镜像候选与GHCR流程（M4第五子阶段）
 
-本轮原UI恢复对比镜像为`ghcr.io/aspeternity/seekbell:ui-restore-1`，代码`40353049c5190f7ecc2888377c54c2370e7b299f`，双架构/公开匿名验证见[发布证据](history/2026-10-22-原UI对比镜像发布.md)。[对比Portainer模板](../deploy/compose.portainer.compare.yaml)使用8001:8000及独立数据卷；旧`ui-fix-1`/8000及[原模板](../deploy/compose.portainer.yaml)保留。本流程不部署服务。`.github/workflows/images.yml`只有`workflow_dispatch`入口；普通push/PR不登录或写GHCR；codex/开发分支的push在完整CI成功后调用同一原生双架构检查，便于合并主分支前验证。新流程默认`publish=false`，分别使用`ubuntu-24.04`和`ubuntu-24.04-arm`原生构建Linux amd64/arm64，不安装QEMU或修改本机Docker。私有仓库使用账户Actions额度，runner/额度是否可用须实际运行确认。
+本轮采集卡/网站下拉修复对比镜像为`ghcr.io/aspeternity/seekbell:ui-restore-2`，代码`820dc29ce517d89423cc2323eb1b95b0fe621737`，547后端/70浏览器、双架构/公开匿名验证见[发布证据](history/2026-10-22-采集卡修复镜像发布.md)。[对比Portainer模板](../deploy/compose.portainer.compare.yaml)使用8001:8000及独立数据卷；旧`ui-fix-1`/8000及[原模板](../deploy/compose.portainer.yaml)保留。本流程不部署服务。`.github/workflows/images.yml`只有`workflow_dispatch`入口；普通push/PR不登录或写GHCR；codex/开发分支的push在完整CI成功后调用同一原生双架构检查，便于合并主分支前验证。新流程默认`publish=false`，分别使用`ubuntu-24.04`和`ubuntu-24.04-arm`原生构建Linux amd64/arm64，不安装QEMU或修改本机Docker。私有仓库使用账户Actions额度，runner/额度是否可用须实际运行确认。
 
 ## 候选检查与产物
 
@@ -66,7 +66,7 @@ python3 scripts/release_images.py --revision "$SEEKBELL_REVISION" --repository a
 PVE部署可跳过原说明中的Token、docker login/logout，直接执行：
 
 ~~~bash
-docker pull ghcr.io/aspeternity/seekbell:ui-restore-1
+docker pull ghcr.io/aspeternity/seekbell:ui-restore-2
 ~~~
 
-仓库维护compose.yaml的pull_policy=never仍要求预先拉取；Portainer模板直接使用已发布短标签，首次部署会拉取。本轮对比请新建Stack（建议seekbell-compare），粘贴deploy/compose.portainer.compare.yaml，访问服务器8001端口；旧Stack/8000/原卷保留。新卷需首次初始化及配置，不共享运行中的SQLite卷。同IP不同端口共享Cookie，新版建议在无痕窗口/独立浏览器配置中打开，避免会话覆盖。以后升级单个实例才保留该实例的Stack/端口/数据卷。操作者是否加sudo取决于目标Docker权限。
+仓库维护compose.yaml的pull_policy=never仍要求预先拉取；Portainer模板直接使用已发布短标签，首次部署会拉取。已有8001对比实例请在原Stack更新deploy/compose.portainer.compare.yaml并重新拉取镜像，保留Stack名称和原数据卷；尚未部署对比实例时才新建Stack（建议seekbell-compare），访问服务器8001端口。旧Stack/8000/原卷保留；新卷需首次初始化及配置，不共享运行中的SQLite卷。同IP不同端口共享Cookie，新版建议在无痕窗口/独立浏览器配置中打开，避免会话覆盖。以后升级单个实例才保留该实例的Stack/端口/数据卷。操作者是否加sudo取决于目标Docker权限。

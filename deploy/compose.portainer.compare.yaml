@@ -1,5 +1,5 @@
-# Separate Portainer comparison Stack (for example seekbell-compare).
-# Keep the existing Stack and its data volume; this instance starts with an empty volume.
+# Portainer comparison on 8001 (for example seekbell-compare).
+# Reuse the same Stack and volume to upgrade; a new Stack starts with an empty volume.
 services:
   seekbell:
     image: ghcr.io/aspeternity/seekbell:ui-restore-2

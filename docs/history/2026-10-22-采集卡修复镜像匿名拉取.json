@@ -1,0 +1,37 @@
+{
+  "date": "2026-10-22",
+  "environment": "SeekBell-Dev rootless Docker 29.9.1 linux/amd64",
+  "reference": "ghcr.io/aspeternity/seekbell:ui-restore-2",
+  "code_sha": "820dc29ce517d89423cc2323eb1b95b0fe621737",
+  "anonymous_pull_succeeded": true,
+  "credentials": "empty isolated Docker config; no registry login",
+  "image_id": "sha256:b6fc9f5ebbe16d88d93ef2b16c3a72423e06761cad30fdd0d3638fa6f9d5cab6",
+  "user": "10001:10001",
+  "repository_digests": [
+    "ghcr.io/aspeternity/seekbell@sha256:b6fc9f5ebbe16d88d93ef2b16c3a72423e06761cad30fdd0d3638fa6f9d5cab6"
+  ],
+  "indices": {
+    "ui-restore-2": {
+      "digest": "sha256:b6fc9f5ebbe16d88d93ef2b16c3a72423e06761cad30fdd0d3638fa6f9d5cab6",
+      "manifests": {
+        "amd64": "sha256:81cd088ca09fb4f23d23976d48308b30cbee016304150cb3f379cee500660ec2",
+        "arm64": "sha256:b05d189c24bbb142bb4aa8152d9a5d7fc5ccf460fca18df0d36cf8c038ae3ac0"
+      }
+    },
+    "ui-restore-1": {
+      "digest": "sha256:4421b9e64652b3d19c464c462c1446e14f9ca81afac2fccca0eaa666ce201667",
+      "manifests": {
+        "amd64": "sha256:091e2d007313710a55f2424a9f72e94b8c5865c9d911ac689eb467bb581b7565",
+        "arm64": "sha256:272d47ad1e9e044fe9693050c50e8f7034ab30fb3d8f1ee1c5a351b3775699d8"
+      }
+    },
+    "ui-fix-1": {
+      "digest": "sha256:909818de6963aecf5ad46f14429856826a30559e45bf6b6a5f5b823566bc481b",
+      "manifests": {
+        "amd64": "sha256:3dcf48df99cd1c05a83cf573f9dee20a8f8215c555754efdfe28cb5abd900727",
+        "arm64": "sha256:8c89cbb2611c3dfdf5e8e6445b90a1fae050c6bb4e92897bbf4e69b80d2597dc"
+      }
+    }
+  },
+  "arm64_runtime_evidence": "https://github.com/Aspeternity/seekbell/actions/runs/39691369507"
+}
