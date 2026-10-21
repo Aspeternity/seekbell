@@ -25,6 +25,12 @@ from tests.notifier_helpers import CONFIGS, payload
 )
 def test_notification_time_converts_the_same_instant_including_dst(instant, zone, expected):
     assert format_timestamp(instant, zone) == expected + " (" + zone + ")"
+    event = payload()
+    event["display_timezone"] = zone
+    event["post"]["published_at"] = instant
+    text = telegram_message(event, validate_config("telegram", CONFIGS["telegram"]))["text"]
+    assert "发布时间：" + expected in text
+    assert zone not in text
 
 
 def test_invalid_or_missing_time_does_not_show_raw_iso_or_crash():
@@ -55,7 +61,8 @@ def test_telegram_styles_literal_title_and_keeps_a_complete_post_button():
     ]
     assert "parse_mode" not in message
     assert "synthetic summary" not in message["text"]
-    assert "2026-10-21 20:09:01 (Asia/Shanghai)" in message["text"]
+    assert "2026-10-21 20:09:01" in message["text"]
+    assert "Asia/Shanghai" not in message["text"]
     assert "作者：" in message["text"] and "命中任务：" in message["text"]
     assert event["post"]["url"] not in message["text"]
     assert message["reply_markup"] == {
@@ -120,3 +127,6 @@ def test_target_test_uses_saved_timezone_and_discovery_time(core):
     _, _, event = TargetTesting(core.engine, {}, clock=lambda: 0)._start(core.target)
     text = render(event, validate_config("telegram", CONFIGS["telegram"]))
     assert "发现时间：1970-01-01 08:00:00 (Asia/Shanghai)" in text
+    telegram = telegram_message(event, validate_config("telegram", CONFIGS["telegram"]))["text"]
+    assert "发现时间：1970-01-01 08:00:00" in telegram
+    assert "Asia/Shanghai" not in telegram

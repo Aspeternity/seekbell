@@ -70,10 +70,10 @@ const targetEditing = computed(() =>
 )
 const navItems = [
   { name: '概览', icon: 'grid', path: '/', key: 'overview' },
-  { name: '监控任务', icon: 'layers', path: '/tasks', key: 'tasks' },
   { name: '监控网站', icon: 'globe', path: '/websites', key: 'websites' },
-  { name: '内容与命中', icon: 'inbox', path: '/content', key: 'content' },
   { name: '通知管理', icon: 'bell', path: '/notifications/targets', key: 'notifications' },
+  { name: '监控任务', icon: 'layers', path: '/tasks', key: 'tasks' },
+  { name: '内容与命中', icon: 'inbox', path: '/content', key: 'content' },
 ]
 const activeKey = computed(() =>
   page.value === 'task' ? 'tasks' : page.value === 'target' ? 'notifications' : page.value,

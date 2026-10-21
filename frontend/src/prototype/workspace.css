@@ -2510,3 +2510,59 @@ h1[tabindex='-1']:focus-visible {
     max-height: calc(85dvh / var(--content-scale));
   }
 }
+
+/* Task status and actions keep their own columns when labels change. */
+.task-management-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 104px max-content;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.task-management-row.with-example-stats {
+  grid-template-columns: 44px minmax(0, 1fr) 90px 104px max-content;
+}
+.task-management-row:hover,
+.task-management-row:focus-within {
+  background: #fcfaf7;
+}
+.task-management-row .management-copy {
+  min-width: 0;
+}
+.task-management-row .task-status {
+  display: grid;
+  grid-template-columns: 29px minmax(0, 1fr);
+  width: 104px;
+  margin: 0;
+  column-gap: 8px;
+  align-items: center;
+  white-space: nowrap;
+  cursor: default;
+}
+.task-management-row .row-actions {
+  margin: 0;
+  cursor: default;
+}
+@media (max-width: 1200px) {
+  .task-management-row.with-example-stats {
+    grid-template-columns: 44px minmax(0, 1fr) 104px max-content;
+  }
+}
+@media (max-width: 760px) {
+  .task-management-row,
+  .task-management-row.with-example-stats {
+    grid-template-columns: 35px minmax(0, 1fr);
+  }
+  .task-management-row .management-copy {
+    grid-column: 2;
+  }
+  .task-management-row .task-status {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+  .task-management-row .row-actions {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    justify-self: end;
+  }
+}

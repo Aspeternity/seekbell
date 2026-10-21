@@ -50,7 +50,8 @@ def test_four_channels_merge_by_target_and_retry_only_failed_target(core, monkey
         body = json.loads(request.content)
         if request.url.path.endswith("sendMessage"):
             assert "rule one" in body["text"] and "rule two" in body["text"]
-            assert "2026-10-18 20:00:00 (Asia/Shanghai)" in body["text"]
+            assert "2026-10-18 20:00:00" in body["text"]
+            assert "Asia/Shanghai" not in body["text"]
             assert body["entities"][0]["type"] == "bold"
             assert body["reply_markup"]["inline_keyboard"][0][0]["url"].endswith("/post-9002-1")
             return httpx.Response(200, json={"ok": True, "result": {"message_id": 1}})

@@ -491,6 +491,8 @@ def test_system_alert_notification_uses_saved_timezone_without_rewriting_event(c
     assert "1970-01-01 08:01:40 (Asia/Shanghai)" in render(message, config)
     telegram = telegram_message(message, config)
     assert "系统故障" in telegram["text"]
+    assert "1970-01-01 08:01:40" in telegram["text"]
+    assert "Asia/Shanghai" not in telegram["text"]
     assert "reply_markup" not in telegram
     assert "parse_mode" not in telegram
     assert telegram["entities"][0]["type"] == "bold"

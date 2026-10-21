@@ -1,25 +1,23 @@
 # 当前状态
 
-更新时间：2026-10-21（Asia/Shanghai）。M0～M3实现/本地检查完成，M4工程退出通过；当前M5用户Portainer实测修正。本轮通知时区与Telegram排版已实现/自动验证，尚未发布新镜像，真实接收待用户验收。
+更新时间：2026-10-21（Asia/Shanghai）。M0～M3实现/本地检查完成，M4工程退出通过；当前M5用户Portainer实测修正。本轮四项体验调整已按用户审批实现，铅笔明确保留；自动检查通过，尚未发布新镜像或用户验收。
 
 ## 环境与代码
 
-仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。codex/ui-content-readability基于main/origin e7b5d81；a42b02d包含主内容1.1倍/概览移除创建，f7f84ca为入口收敛/侧栏退出。本轮通知代码、检查、DisplaySettings/SPEC/ARCHITECTURE与状态同提交，未推送/合并。原D盘、全局WSL和18081验收实例未动。
+仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。codex/ui-content-readability基于main/origin e7b5d81；a42b02d为主内容1.1倍/概览移除创建，f7f84ca为入口收敛/账号退出，9810ba0为通知时区/Telegram排版。本轮代码/测试/SPEC/UI_DESIGN/ARCHITECTURE与本状态同提交，未推送/合并。原D盘、全局WSL和18081验收实例未动。
 
-## 当前通知修复与证据
+## 最新交付与证据
 
-用户反馈UTC正文与网站时区不符并要求优化Telegram样式。根因为render直接输出RSS UTC ISO；现于自动认领/目标测试/手动重发/告警认领读取保存时区，向发送副本加入display_timezone。旧队列兼容，重试/重发按本次准备时区；不改原消息/UTC数据/去重，Webhook仍原版本机器时间。发布缺失时用发现时间并标明；正常时间展示日期/时分秒/IANA名，已发送不改写。
+用户批准四项但要求铅笔先保留：TG正文日期时间按保存时区转换、不附IANA名称，包含普通/测试/重发/告警；Bark/SMTP仍标时区，Webhook/UTC数据不变。任务统计/筛选/行状态统一已启用/已暂停，独立固定状态列/开关/操作列，手机卡片底部独立状态位。菜单概览→监控网站→通知管理→监控任务→内容与命中，设置/账号留底。点击任务信息/空白编辑，开关/编辑/复制/删除独立，标题支持键盘，铅笔保留。未改采集/启停/去重语义，无依赖/迁移。
 
-TG使用普通文本+结构化bold实体、分组信息、原帖按钮和可选摘要；不解析外部HTML/Markdown。UTF-16逐段及4000总限长，按钮不截断，保留话题/关闭预览和故障分类。Bark/SMTP共用时间格式，无依赖/迁移。[完整实现与证据](history/2026-10-21-通知时区与Telegram排版.md)。
+后端相关111项10.58秒通过；原演示40项通过、新任务交互桌面/手机2项修正统计文案遗漏后定向通过（最终9.7秒），生产集成6项36.8秒通过，共48种浏览器场景；非一次42项全绿。新检查量测320～1440宽度开关切换前后x/y差<0.5px、无状态/操作重叠或横溢，四种按钮与行点击/键盘不串联，真实配置进入正确任务。类型检查/Vite构建、Ruff/Prettier/diff通过。合成截图已核对，不等同Telegram客户端实测。[完整实现/命令/限制](history/2026-10-21-任务交互与通知时间精简.md)。
 
-本轮相关后端214项31.12秒通过；四渠道真实队列/Registry/模拟HTTP及SMTP补强后10项1.04秒通过（含于上述范围）。时区/DST/跨日/缺失值、旧队列重试、测试/重发/告警、字面标记/emoji/长度/按钮及机器时间均覆盖。前端类型检查/Vite构建、Ruff/Prettier/diff通过；桌面/手机system浏览器4项14.4秒通过。合成排版示意来自实际生成JSON，截图已检查，不等同Telegram实测；未访问真实RSS/发通知。
+9810ba0的通知呈现上下文覆盖旧队列/测试/重发/告警，不改原消息快照，TG用安全bold实体/原帖按钮/可选摘要；原214项及system4项未受影响部分复用，[通知记录](history/2026-10-21-通知时区与Telegram排版.md)。UI尺寸、去重入口/真实注销既有证据见[尺寸记录](history/2026-10-21-内容区尺寸与概览入口.md)、[入口记录](history/2026-10-21-入口收敛与侧栏退出.md)。无真实RSS/通知操作。
 
-## 既有UI与镜像
+## 镜像与保留
 
-f7f84ca的入口/退出等48项浏览器证据仍适用：[尺寸记录](history/2026-10-21-内容区尺寸与概览入口.md)、[入口记录](history/2026-10-21-入口收敛与侧栏退出.md)。偏好/管理员统一从设置管理，左下账号仅展示且独立退出，顶栏头像及概览网站行重复跳转移除，内容/投递详情入口保留。
-
-已交付公开ghcr.io/aspeternity/seekbell:rss-fix-1代码e658b465159a24800887c30de5a645831615301b，Compose仍指此版本，不含本轮UI/通知修改。digest/528后端/64浏览器/双平台原生/TLS/匿名拉取见[发布记录](history/2026-10-21-RSS修复镜像发布.md)。发布开关恢复缺失、源码private。18081项目seekbell-acceptance-b45fc2c-20261020及其容器/卷/backup-local保留，旧卷/4175/18080/已有镜像不动。
+公开ghcr.io/aspeternity/seekbell:rss-fix-1代码e658b465159a24800887c30de5a645831615301b，Compose仍指此版本，不含本轮UI/通知修改。digest/完整CI/双平台原生/TLS/匿名拉取见[发布记录](history/2026-10-21-RSS修复镜像发布.md)。发布开关恢复缺失、源码private。18081项目seekbell-acceptance-b45fc2c-20261020及其容器/卷/backup-local保留；旧卷、4175/18080和已有镜像不动。
 
 ## 下一步与授权
 
-交付修复与样式示意，按用户后续授权决定新镜像交付；真实Telegram/其他渠道、目标环境、Safari/真机待验收。用户已批准UI入口及账号退出、明确要求本轮通知修复；无需重复审批。此前RSS发布授权已完成，本轮无新公开发布/合并/远程部署/真实发送/源码公开/正式Release授权。独立WSL/noreply，不组织多代理。恢复读AGENTS、本状态、本轮通知记录，按需读渲染/四个发送入口与SPEC/ARCHITECTURE。
+交付已批准结果与预览，按用户后续授权决定新镜像交付；真实Telegram/其他渠道/PVE、Safari/真机待验收。四项已审批并完成，不能再删铅笔或重复索要同项审批。本轮无新公开发布/合并/远程部署/真实发送/源码公开/正式Release授权；此前RSS发布授权已完成。独立WSL/noreply，不组织多代理。恢复读AGENTS、本状态、本轮任务交互记录，按需读TaskList/菜单/CSS及Telegram渲染。

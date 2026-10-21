@@ -20,7 +20,7 @@ def line(value) -> str:
     return " ".join(str(value or "未知").split())
 
 
-def format_timestamp(value, timezone="UTC"):
+def format_timestamp(value, timezone="UTC", *, show_timezone=True):
     try:
         zone = ZoneInfo(timezone)
     except (ZoneInfoNotFoundError, ValueError, TypeError):
@@ -33,21 +33,24 @@ def format_timestamp(value, timezone="UTC"):
         )
         if instant.tzinfo is None:
             instant = instant.replace(tzinfo=UTC)
-        return instant.astimezone(zone).strftime("%Y-%m-%d %H:%M:%S") + " (" + zone.key + ")"
+        text = instant.astimezone(zone).strftime("%Y-%m-%d %H:%M:%S")
+        return text + " (" + zone.key + ")" if show_timezone else text
     except (TypeError, ValueError, OverflowError, OSError):
         return None
 
 
-def post_time(payload):
+def post_time(payload, *, show_timezone=True):
     post = payload["post"]
     zone = payload.get("display_timezone", "UTC")
-    published = format_timestamp(post.get("published_at"), zone)
+    published = format_timestamp(post.get("published_at"), zone, show_timezone=show_timezone)
     if published:
         return "发布时间：" + published
-    return "发现时间：" + (format_timestamp(post.get("first_seen_at"), zone) or "未知")
+    return "发现时间：" + (
+        format_timestamp(post.get("first_seen_at"), zone, show_timezone=show_timezone) or "未知"
+    )
 
 
-def render(payload: dict, config: dict, *, limit: int = 4000) -> str:
+def render(payload: dict, config: dict, *, limit: int = 4000, show_timezone=True) -> str:
     if payload.get("type") == "system_alert":
         alert = payload["alert"]
         return clip(
@@ -57,7 +60,11 @@ def render(payload: dict, config: dict, *, limit: int = 4000) -> str:
                     "状态：" + ("故障" if alert["phase"] == "fault" else "恢复"),
                     "时间："
                     + (
-                        format_timestamp(alert["at"], payload.get("display_timezone", "UTC"))
+                        format_timestamp(
+                            alert["at"],
+                            payload.get("display_timezone", "UTC"),
+                            show_timezone=show_timezone,
+                        )
                         or "未知"
                     ),
                     "诊断代码：" + line(alert.get("code") or "recovered"),
@@ -71,7 +78,7 @@ def render(payload: dict, config: dict, *, limit: int = 4000) -> str:
         post["url"],
         "作者：" + clip(line(post.get("author")), 100),
         "版块：" + clip(line(post.get("category")), 100),
-        post_time(payload),
+        post_time(payload, show_timezone=show_timezone),
         "命中任务："
         + clip("、".join(line(task["name"]) for task in payload["matched_tasks"]), 1000),
     ]
@@ -84,7 +91,7 @@ def telegram_message(payload: dict, config: dict) -> dict:
     """Structured entities style trusted spans; external text stays literal."""
     title = clip(line(message_title(payload)), 600)
     if payload.get("type") == "system_alert":
-        details = render(payload, config).split("\n")[1:]
+        details = render(payload, config, show_timezone=False).split("\n")[1:]
     else:
         post = payload["post"]
         details = [
@@ -92,7 +99,7 @@ def telegram_message(payload: dict, config: dict) -> dict:
             + clip(line(post.get("author")), 100)
             + " · 版块："
             + clip(line(post.get("category")), 100),
-            post_time(payload),
+            post_time(payload, show_timezone=False),
             "命中任务："
             + clip("、".join(line(task["name"]) for task in payload["matched_tasks"]), 1000),
         ]
