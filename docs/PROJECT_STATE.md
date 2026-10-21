@@ -4,7 +4,7 @@
 
 ## 环境与基准
 
-仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发；[环境入口](DEVELOPMENT_ENVIRONMENT.md)。分支codex/collection-card-task-picker，基于main 4534e06，未提交。旧D盘/Ubuntu/全局WSL保留，不组织多代理。未提交路径：overview服务/类型/视图、新CollectionStatus、共享TaskEditor/WebsiteSelect/Icon、overview与浏览器测试、SPEC/ARCHITECTURE/UI_DESIGN/本状态及本轮两份历史记录。
+仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发；[环境入口](DEVELOPMENT_ENVIRONMENT.md)。分支codex/collection-card-task-picker；本轮实现基准d23413dfd9b45941d8d6d034a253fdc9b5743117（起点main 4534e06）。旧D盘/Ubuntu/全局WSL保留，不组织多代理。本轮代码/测试/权威文档与原有核对记录一并本地提交，未推送/合并/发布；后续纯文档收尾不改变此代码基准。
 
 ## 已确认与进度
 
@@ -21,4 +21,4 @@
 ## 保留与下一步
 
 保护18081的seekbell-acceptance-b45fc2c-20261020项目/容器/卷及backup-local，旧Stack/卷/4175/18080均不动。无远程部署/真实发送/公开源码。旧内联预览两种路径仍失败；5192旧方案仅Windows HTTP和浏览器检查通过，应用打开返回queued，不能称已修复或打开。
-无外部阻塞；下一步本地提交并等待用户反馈或新镜像指示。发布后还需用户真实环境验收；自动检查使用模拟站点，不代表新增网站适配器、Safari或真机验收。恢复读本状态、UI_DESIGN卡片段及实施记录，再按影响范围读取代码；历史旧阶段资料按需读。
+工作区将以本记录收尾提交保持干净。无外部阻塞；下一步按用户指示发布测试镜像或处理反馈。发布后还需用户真实环境验收；自动检查使用模拟站点，不代表新增网站适配器、Safari或真机验收。恢复读本状态、UI_DESIGN卡片段及实施记录，再按影响范围读取代码；历史旧阶段资料按需读。
