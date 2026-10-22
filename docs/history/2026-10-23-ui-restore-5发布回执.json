@@ -1,0 +1,901 @@
+{
+  "date": "2026-10-22T20:36:38.129179+00:00",
+  "run_url": "https://github.com/Aspeternity/seekbell/actions/runs/39847575735",
+  "code_sha": "c8be41c9a1f85650be6447e773b73a204dba9b88",
+  "conclusion": "success",
+  "artifact_id": 12457411254,
+  "artifact_zip_sha256": "3e71e4d525fa6c0a0ea9880b2b6c8d257c023fbc8a09afef00beef75af9c375a",
+  "artifact_api_digest": "sha256:3e71e4d525fa6c0a0ea9880b2b6c8d257c023fbc8a09afef00beef75af9c375a",
+  "publication_gate_restored": true,
+  "source_repository_private": true,
+  "baseline": {
+    "code_sha": "c8be41c9a1f85650be6447e773b73a204dba9b88",
+    "job_id": 120064906098,
+    "passed": [
+      {
+        "step": "uv run --frozen pytest -q",
+        "count": 616,
+        "line": "2026-10-22T20:21:35.3603758Z 616 passed, 1 warning in 195.29s (0:03:15)"
+      },
+      {
+        "step": "pnpm --dir frontend test:prototype",
+        "count": 44,
+        "line": "2026-10-22T20:24:25.7588615Z   44 passed (1.8m)"
+      },
+      {
+        "step": "pnpm --dir frontend test:live",
+        "count": 6,
+        "line": "2026-10-22T20:25:06.9766971Z   6 passed (40.4s)"
+      },
+      {
+        "step": "pnpm --dir frontend test:history",
+        "count": 4,
+        "line": "2026-10-22T20:25:33.4918107Z   4 passed (25.6s)"
+      },
+      {
+        "step": "pnpm --dir frontend test:loading",
+        "count": 4,
+        "line": "2026-10-22T20:25:50.0089538Z   4 passed (15.7s)"
+      },
+      {
+        "step": "pnpm --dir frontend test:approved-ui",
+        "count": 8,
+        "line": "2026-10-22T20:26:36.0010102Z   8 passed (45.2s)"
+      },
+      {
+        "step": "pnpm --dir frontend test:sending",
+        "count": 4,
+        "line": "2026-10-22T20:27:02.0504864Z   4 passed (25.3s)"
+      },
+      {
+        "step": "pnpm --dir frontend test:runtime",
+        "count": 2,
+        "line": "2026-10-22T20:27:33.5631139Z   2 passed (30.7s)"
+      },
+      {
+        "step": "pnpm --dir frontend test:operations",
+        "count": 6,
+        "line": "2026-10-22T20:28:00.2032453Z   6 passed (25.9s)"
+      },
+      {
+        "step": "pnpm --dir frontend test:retention",
+        "count": 2,
+        "line": "2026-10-22T20:28:13.5217808Z   2 passed (12.6s)"
+      },
+      {
+        "step": "pnpm --dir frontend test:system",
+        "count": 4,
+        "line": "2026-10-22T20:28:34.5728558Z   4 passed (20.3s)"
+      },
+      {
+        "step": "pnpm --dir frontend test:backup",
+        "count": 2,
+        "line": "2026-10-22T20:28:49.2027946Z   2 passed (13.8s)"
+      },
+      {
+        "step": "pnpm --dir frontend test:proxy",
+        "count": 2,
+        "line": "2026-10-22T20:31:08.0124693Z   2 passed (11.4s)"
+      }
+    ]
+  },
+  "release.json": {
+    "revision": "c8be41c9a1f85650be6447e773b73a204dba9b88",
+    "tag": "ghcr.io/aspeternity/seekbell:sha-c8be41c9a1f85650be6447e773b73a204dba9b88-39847575735-1",
+    "published": true,
+    "images": {
+      "amd64": {
+        "schema": 1,
+        "architecture": "amd64",
+        "revision": "c8be41c9a1f85650be6447e773b73a204dba9b88",
+        "source": "https://github.com/aspeternity/seekbell",
+        "image_id": "sha256:85d3394554af2ff3299a6d24d770864bb18e1589c37a0e5c31282372ceeb5e6f",
+        "archive_tag": "seekbell-artifact:sha-c8be41c9a1f85650be6447e773b73a204dba9b88-amd64",
+        "config_digest": "sha256:85d3394554af2ff3299a6d24d770864bb18e1589c37a0e5c31282372ceeb5e6f",
+        "archive_sha256": "0a07ce2acaaffe1abf7112e4567e7c8dd5e72164df339dc80fb949af7d0c1170",
+        "loaded_id": "sha256:85d3394554af2ff3299a6d24d770864bb18e1589c37a0e5c31282372ceeb5e6f"
+      },
+      "arm64": {
+        "schema": 1,
+        "architecture": "arm64",
+        "revision": "c8be41c9a1f85650be6447e773b73a204dba9b88",
+        "source": "https://github.com/aspeternity/seekbell",
+        "image_id": "sha256:5aaa7cdd7b8675330900ae297a9701ab047f46fdf0bf16a5327359cb8b35a447",
+        "archive_tag": "seekbell-artifact:sha-c8be41c9a1f85650be6447e773b73a204dba9b88-arm64",
+        "config_digest": "sha256:5aaa7cdd7b8675330900ae297a9701ab047f46fdf0bf16a5327359cb8b35a447",
+        "archive_sha256": "9ba2f3685fcdf08975d8926d5591aef22ea819f3d7badacdec7b10cf199dcdc0",
+        "loaded_id": "sha256:5aaa7cdd7b8675330900ae297a9701ab047f46fdf0bf16a5327359cb8b35a447"
+      }
+    },
+    "digest": "sha256:089289552719774057aa527bbd055e7c33370e6cc5c1811c0da4583b0675f7ff",
+    "reference": "ghcr.io/aspeternity/seekbell@sha256:089289552719774057aa527bbd055e7c33370e6cc5c1811c0da4583b0675f7ff",
+    "manifests": {
+      "amd64": "sha256:af0fa306a767f469f4383a4137e4007bdff1a8f3dcf86dd6b1b0aa43b7100a60",
+      "arm64": "sha256:4fb55f597d72a590c70e0203ea495dd4f23473a668b516764c4b0b9fb565fd16"
+    }
+  },
+  "package.json": {
+    "package": "ghcr.io/aspeternity/seekbell",
+    "repository": "aspeternity/seekbell",
+    "visibility": "public",
+    "visibility_verified": true,
+    "private_verified": false,
+    "repository_binding": "not-reported"
+  },
+  "alias.json": {
+    "revision": "c8be41c9a1f85650be6447e773b73a204dba9b88",
+    "tag": "ghcr.io/aspeternity/seekbell:ui-restore-5",
+    "reference": "ghcr.io/aspeternity/seekbell@sha256:089289552719774057aa527bbd055e7c33370e6cc5c1811c0da4583b0675f7ff",
+    "digest": "sha256:089289552719774057aa527bbd055e7c33370e6cc5c1811c0da4583b0675f7ff",
+    "published": true
+  },
+  "jobs": [
+    {
+      "name": "preflight",
+      "id": 120064824351,
+      "conclusion": "success",
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success"
+        },
+        {
+          "name": "Check explicit revision and publication opt-in",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "conclusion": "success"
+        },
+        {
+          "name": "Check package access and public destination before building a publication candidate",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "baseline / baseline",
+      "id": 120064906098,
+      "conclusion": "success",
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run astral-sh/setup-uv@v6",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run pnpm/action-setup@v4",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run python scripts/check_privacy.py",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run uv lock --check",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run uv sync --frozen",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run uv run --frozen ruff check .",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run uv run --frozen ruff format --check .",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run uv run --frozen pytest -q",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run uv run --frozen python -m seekbell.services.demo",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run uv run --frozen python -m seekbell.services.runtime_demo",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run uv run --frozen python -m seekbell.services.backup_demo",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run uv build --wheel",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run pnpm --dir frontend install --frozen-lockfile",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run pnpm --dir frontend format:check",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run pnpm --dir frontend build",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run pnpm --dir frontend build:prototype",
+          "conclusion": "success"
+        },
+        {
+          "name": "Prefer Ubuntu archives and bound browser dependency downloads",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run pnpm --dir frontend test:prototype",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run pnpm --dir frontend test:live",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run pnpm --dir frontend test:history",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run pnpm --dir frontend test:loading",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run pnpm --dir frontend test:approved-ui",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run pnpm --dir frontend test:sending",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run pnpm --dir frontend test:runtime",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run pnpm --dir frontend test:operations",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run pnpm --dir frontend test:retention",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run pnpm --dir frontend test:system",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run pnpm --dir frontend test:backup",
+          "conclusion": "success"
+        },
+        {
+          "name": "Verify migration commands",
+          "conclusion": "success"
+        },
+        {
+          "name": "Build container without publishing",
+          "conclusion": "success"
+        },
+        {
+          "name": "Check packaged service without external networking",
+          "conclusion": "success"
+        },
+        {
+          "name": "Rehearse Compose and independent encrypted restore offline",
+          "conclusion": "success"
+        },
+        {
+          "name": "Rehearse isolated volume switch and explicit rollback offline",
+          "conclusion": "success"
+        },
+        {
+          "name": "Load pinned external proxy for isolated TLS rehearsal",
+          "conclusion": "success"
+        },
+        {
+          "name": "Rehearse actual HTTPS proxy and streaming without external egress",
+          "conclusion": "success"
+        },
+        {
+          "name": "Check browser login through actual HTTPS proxy",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run pnpm/action-setup@v4",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run astral-sh/setup-uv@v6",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "native / native (arm64, ubuntu-24.04-arm)",
+      "id": 120071757838,
+      "conclusion": "success",
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success"
+        },
+        {
+          "name": "Resolve repository image identity",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "conclusion": "success"
+        },
+        {
+          "name": "Build native image without registry login or publication",
+          "conclusion": "success"
+        },
+        {
+          "name": "Check packaged service and persistence offline",
+          "conclusion": "success"
+        },
+        {
+          "name": "Rehearse encrypted backup and independent restore offline",
+          "conclusion": "success"
+        },
+        {
+          "name": "Rehearse migrations, volume switch and explicit rollback offline",
+          "conclusion": "success"
+        },
+        {
+          "name": "Load pinned proxy image",
+          "conclusion": "success"
+        },
+        {
+          "name": "Rehearse TLS and streaming without external egress",
+          "conclusion": "success"
+        },
+        {
+          "name": "Package and verify exact tested image content",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "native / native (amd64, ubuntu-24.04)",
+      "id": 120071757991,
+      "conclusion": "success",
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success"
+        },
+        {
+          "name": "Resolve repository image identity",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "conclusion": "success"
+        },
+        {
+          "name": "Build native image without registry login or publication",
+          "conclusion": "success"
+        },
+        {
+          "name": "Check packaged service and persistence offline",
+          "conclusion": "success"
+        },
+        {
+          "name": "Rehearse encrypted backup and independent restore offline",
+          "conclusion": "success"
+        },
+        {
+          "name": "Rehearse migrations, volume switch and explicit rollback offline",
+          "conclusion": "success"
+        },
+        {
+          "name": "Load pinned proxy image",
+          "conclusion": "success"
+        },
+        {
+          "name": "Rehearse TLS and streaming without external egress",
+          "conclusion": "success"
+        },
+        {
+          "name": "Package and verify exact tested image content",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "baseline / native-candidates",
+      "id": 120071759023,
+      "conclusion": "skipped",
+      "steps": []
+    },
+    {
+      "name": "publish",
+      "id": 120073117479,
+      "conclusion": "success",
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
+          "conclusion": "success"
+        },
+        {
+          "name": "Verify both artifacts before registry authentication",
+          "conclusion": "success"
+        },
+        {
+          "name": "Verify private source repository and public package before any registry write",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run docker/login-action@dbcb813823bdd20940b903addbd779551569679f",
+          "conclusion": "success"
+        },
+        {
+          "name": "Publish tested bytes and verify immutable two-platform index",
+          "conclusion": "success"
+        },
+        {
+          "name": "Confirm published package remains public and record reported linkage",
+          "conclusion": "success"
+        },
+        {
+          "name": "Pull immutable registry image and check it without external networking",
+          "conclusion": "success"
+        },
+        {
+          "name": "Add explicit short tag after all image checks",
+          "conclusion": "success"
+        },
+        {
+          "name": "Record pinned deployment reference",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run docker/login-action@dbcb813823bdd20940b903addbd779551569679f",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success"
+        }
+      ]
+    }
+  ],
+  "main_push_ci": {
+    "id": 39847568017,
+    "status": "completed",
+    "conclusion": "success",
+    "html_url": "https://github.com/Aspeternity/seekbell/actions/runs/39847568017",
+    "head_sha": "c8be41c9a1f85650be6447e773b73a204dba9b88",
+    "run_attempt": 1
+  },
+  "previous_runs": [
+    {
+      "run_id": 39844986835,
+      "url": "https://github.com/Aspeternity/seekbell/actions/runs/39844986835",
+      "revision": "803158264ccbe319152187c61a0481cfc594091b",
+      "conclusion": "cancelled",
+      "published": false,
+      "gate_restored": true,
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:00:20Z",
+          "completed_at": "2026-10-22T20:00:23Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:00:23Z",
+          "completed_at": "2026-10-22T20:00:24Z"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:00:24Z",
+          "completed_at": "2026-10-22T20:00:25Z"
+        },
+        {
+          "name": "Run astral-sh/setup-uv@v6",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:00:25Z",
+          "completed_at": "2026-10-22T20:00:27Z"
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:00:27Z",
+          "completed_at": "2026-10-22T20:00:32Z"
+        },
+        {
+          "name": "Run pnpm/action-setup@v4",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:00:32Z",
+          "completed_at": "2026-10-22T20:00:34Z"
+        },
+        {
+          "name": "Run python scripts/check_privacy.py",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:00:34Z",
+          "completed_at": "2026-10-22T20:00:42Z"
+        },
+        {
+          "name": "Run uv lock --check",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:00:42Z",
+          "completed_at": "2026-10-22T20:00:42Z"
+        },
+        {
+          "name": "Run uv sync --frozen",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:00:42Z",
+          "completed_at": "2026-10-22T20:00:43Z"
+        },
+        {
+          "name": "Run uv run --frozen ruff check .",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:00:43Z",
+          "completed_at": "2026-10-22T20:00:43Z"
+        },
+        {
+          "name": "Run uv run --frozen ruff format --check .",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:00:43Z",
+          "completed_at": "2026-10-22T20:00:43Z"
+        },
+        {
+          "name": "Run uv run --frozen pytest -q",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:00:43Z",
+          "completed_at": "2026-10-22T20:04:18Z"
+        },
+        {
+          "name": "Run uv run --frozen python -m seekbell.services.demo",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:04:18Z",
+          "completed_at": "2026-10-22T20:04:19Z"
+        },
+        {
+          "name": "Run uv run --frozen python -m seekbell.services.runtime_demo",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:04:19Z",
+          "completed_at": "2026-10-22T20:04:21Z"
+        },
+        {
+          "name": "Run uv run --frozen python -m seekbell.services.backup_demo",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:04:21Z",
+          "completed_at": "2026-10-22T20:04:24Z"
+        },
+        {
+          "name": "Run uv build --wheel",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:04:24Z",
+          "completed_at": "2026-10-22T20:04:24Z"
+        },
+        {
+          "name": "Run pnpm --dir frontend install --frozen-lockfile",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:04:24Z",
+          "completed_at": "2026-10-22T20:04:28Z"
+        },
+        {
+          "name": "Run pnpm --dir frontend format:check",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:04:28Z",
+          "completed_at": "2026-10-22T20:04:33Z"
+        },
+        {
+          "name": "Run pnpm --dir frontend build",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:04:33Z",
+          "completed_at": "2026-10-22T20:04:43Z"
+        },
+        {
+          "name": "Run pnpm --dir frontend build:prototype",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:04:43Z",
+          "completed_at": "2026-10-22T20:04:53Z"
+        },
+        {
+          "name": "Prefer Ubuntu archives and bound browser dependency downloads",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:04:53Z",
+          "completed_at": "2026-10-22T20:05:27Z"
+        },
+        {
+          "name": "Run pnpm --dir frontend test:prototype",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:05:27Z",
+          "completed_at": "2026-10-22T20:07:39Z"
+        },
+        {
+          "name": "Run pnpm --dir frontend test:live",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:07:39Z",
+          "completed_at": "2026-10-22T20:08:23Z"
+        },
+        {
+          "name": "Run pnpm --dir frontend test:history",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:08:23Z",
+          "completed_at": "2026-10-22T20:08:53Z"
+        },
+        {
+          "name": "Run pnpm --dir frontend test:loading",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:08:53Z",
+          "completed_at": "2026-10-22T20:09:12Z"
+        },
+        {
+          "name": "Run pnpm --dir frontend test:approved-ui",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:09:12Z",
+          "completed_at": "2026-10-22T20:10:06Z"
+        },
+        {
+          "name": "Run pnpm --dir frontend test:sending",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:10:06Z",
+          "completed_at": "2026-10-22T20:10:35Z"
+        },
+        {
+          "name": "Run pnpm --dir frontend test:runtime",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:10:35Z",
+          "completed_at": "2026-10-22T20:11:09Z"
+        },
+        {
+          "name": "Run pnpm --dir frontend test:operations",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:11:09Z",
+          "completed_at": "2026-10-22T20:11:42Z"
+        },
+        {
+          "name": "Run pnpm --dir frontend test:retention",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:11:42Z",
+          "completed_at": "2026-10-22T20:11:58Z"
+        },
+        {
+          "name": "Run pnpm --dir frontend test:system",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:11:58Z",
+          "completed_at": "2026-10-22T20:12:24Z"
+        },
+        {
+          "name": "Run pnpm --dir frontend test:backup",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:12:24Z",
+          "completed_at": "2026-10-22T20:12:43Z"
+        },
+        {
+          "name": "Verify migration commands",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:12:43Z",
+          "completed_at": "2026-10-22T20:12:45Z"
+        },
+        {
+          "name": "Build container without publishing",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:12:45Z",
+          "completed_at": "2026-10-22T20:13:18Z"
+        },
+        {
+          "name": "Check packaged service without external networking",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:13:18Z",
+          "completed_at": "2026-10-22T20:13:43Z"
+        },
+        {
+          "name": "Rehearse Compose and independent encrypted restore offline",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:13:43Z",
+          "completed_at": "2026-10-22T20:14:04Z"
+        },
+        {
+          "name": "Rehearse isolated volume switch and explicit rollback offline",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:14:04Z",
+          "completed_at": "2026-10-22T20:14:53Z"
+        },
+        {
+          "name": "Load pinned external proxy for isolated TLS rehearsal",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:14:53Z",
+          "completed_at": "2026-10-22T20:14:54Z"
+        },
+        {
+          "name": "Rehearse actual HTTPS proxy and streaming without external egress",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:14:54Z",
+          "completed_at": "2026-10-22T20:15:02Z"
+        },
+        {
+          "name": "Check browser login through actual HTTPS proxy",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:15:02Z",
+          "completed_at": "2026-10-22T20:15:17Z"
+        },
+        {
+          "name": "Post Run pnpm/action-setup@v4",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:15:17Z",
+          "completed_at": "2026-10-22T20:15:17Z"
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:15:17Z",
+          "completed_at": "2026-10-22T20:15:17Z"
+        },
+        {
+          "name": "Post Run astral-sh/setup-uv@v6",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:15:17Z",
+          "completed_at": "2026-10-22T20:15:17Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:15:17Z",
+          "completed_at": "2026-10-22T20:15:18Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:15:18Z",
+          "completed_at": "2026-10-22T20:15:18Z"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success",
+          "started_at": "2026-10-22T20:15:18Z",
+          "completed_at": "2026-10-22T20:15:18Z"
+        }
+      ],
+      "passed": [
+        {
+          "step": "uv run --frozen pytest -q",
+          "count": 616
+        },
+        {
+          "step": "pnpm --dir frontend test:prototype",
+          "count": 44
+        },
+        {
+          "step": "pnpm --dir frontend test:live",
+          "count": 6
+        },
+        {
+          "step": "pnpm --dir frontend test:history",
+          "count": 4
+        },
+        {
+          "step": "pnpm --dir frontend test:loading",
+          "count": 4
+        },
+        {
+          "step": "pnpm --dir frontend test:approved-ui",
+          "count": 8
+        },
+        {
+          "step": "pnpm --dir frontend test:sending",
+          "count": 4
+        },
+        {
+          "step": "pnpm --dir frontend test:runtime",
+          "count": 2
+        },
+        {
+          "step": "pnpm --dir frontend test:operations",
+          "count": 6
+        },
+        {
+          "step": "pnpm --dir frontend test:retention",
+          "count": 2
+        },
+        {
+          "step": "pnpm --dir frontend test:system",
+          "count": 4
+        },
+        {
+          "step": "pnpm --dir frontend test:backup",
+          "count": 2
+        },
+        {
+          "step": "pnpm --dir frontend test:proxy",
+          "count": 2
+        }
+      ]
+    }
+  ]
+}
