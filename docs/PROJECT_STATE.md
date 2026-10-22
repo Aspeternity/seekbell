@@ -1,27 +1,21 @@
 # 当前状态
 
-更新时间：2026-10-22（Asia/Shanghai）。M0～M3完成、M4工程退出通过，现M5用户实测修正。Telegram预览/卡片及本轮RSS缺摘要修正均已本地实现、针对性检查通过，尚未发布或用户实机验收。
+更新时间：2026-10-22（Asia/Shanghai）。M0～M3完成、M4工程退出通过，M5用户实测修正。删除流程及前轮Telegram/RSS修正本地完成，ui-restore-4首次CI失败，已定位旧空请求体兼容问题并修复中，尚未发布或用户验收。
 
-## 环境与基准
+## 环境与授权
 
-仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。当前codex/telegram-preview-card-fixes，基于main f5cac4d（已发布实现679bcf0）；前轮实现ee750a2008fee07c51d0906b260f9762de680172，本轮实现172f6b7c3bea3575e1f6f6fe7b65ce6e1b14ed12（基于ca2068d，代码/规格/测试/状态同提交；后续仅文档收尾）。原D盘/Ubuntu/全局WSL及旧分支保留，不组织多代理。
+仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。当前main 9783c0f1859ff41eaacda4c7043f14f8797e783e，已合并本轮40bc7ba及前轮ee750a2/172f6b7；codex/telegram-preview-card-fixes保留。用户明确批准最终删除交互并要求构建镜像、给Compose自测；本次公开GHCR发布及必要合并/开关已授权，不代部署、不真实发送。源码仍private、包public，不组织多代理，原D盘/Ubuntu/全局WSL不动。
 
-## 本轮批准与实现
+## 已实现与本地证据
 
-用户明确要求按RSS实际提供内容判断，并授权修改：标题＋摘要缺摘要时仅按标题匹配和排除，不因未知摘要挡住已满足的标题；标题不满足为不命中。仅摘要缺失与空文本、显式作者/版块缺失仍保留三值判断，已知否决优先。共用后端只过滤联合范围的缺失字段，原None保留；演示逻辑及原位置说明同步，不新增选项或改UI布局。SPEC/ARCHITECTURE/ACCEPTANCE已回写。
-[本轮根因、范围、命令和证据](history/2026-10-22-RSS缺摘要匹配语义修正.md)。此前“严格默认/可选降级”仅是讨论建议，已被本轮确认方案替代。历史判定不回写，已见帖子不重推；无迁移/采集/队列结构扩展。
+删除弹窗只显示删除后无通知目标的任务：启用者“删除后暂停”、暂停者“保持暂停”；无此类任务时普通确认，无其他任务/数量或替换流程。任务规则/历史保留，原风格/长名单滚动，正式演示共用。认证只读预览与确认摘要绑定目标/全部当前关联任务/告警版本，过期409需重新确认；短事务内解除引用并建新任务版本，仅无目标者暂停。原目标待发取消、在途保留租约/回执；告警无目标时明确关闭；无目标任务不可启用。
+本地52后端20.61秒、原型44项45.8秒、operations6项16.5秒、sending4项20.2秒，共54浏览器通过；两版类型构建/Ruff/Prettier/隐私身份/diff通过，截图已核对。均模拟RSS/临时库，无真实采集发送，5174/8013/8015已退出。[本轮代码/命令/证据](history/2026-10-22-通知目标删除与ui-restore-4发布.md)。远端pytest步骤已通过（最终数量待回执），完整浏览器/镜像检查尚待，不冒充验收。
 
-前轮TG去两Emoji、发布时间、同正式formatter的认证只读预览及整卡进配置已完成，内部SEEKBELL保留；154后端/54独立浏览器及类型构建检查证据见[前轮记录](history/2026-10-22-Telegram预览与通知卡片交互修正.md)。原UI/1475f5a采集卡、批准110%/多站交互、概览/下拉/间距/退出、679bcf0的详情16px和页面内存缓存保持。稳定约束以SPEC/UI_DESIGN为准。
+前轮[TG预览/卡片](history/2026-10-22-Telegram预览与通知卡片交互修正.md)保留SEEKBELL、去两Emoji、真实发布时间、同formatter只读预览及整卡配置；[RSS缺摘要](history/2026-10-22-RSS缺摘要匹配语义修正.md)联合范围只匹配已得字段，缺摘要按标题，仅摘要/作者/版块仍三值，历史不重算不补发。原确认UI及110%/采集卡/多站、详情间距和内存缓存保持，稳定语义见SPEC/UI_DESIGN。
 
-## 本轮本地验证
+## 发布中与保护
 
-88后端通过（19.87秒，一条既有warning）：规则边界、真实RSS解析摄取后入队一次、摘要排除、仅摘要及元字段限制、手动与历史同结果且业务表不写。原型桌面/手机4项3.7秒、正式API接入2项11.7秒通过，共6项浏览器回归；两版类型/构建、Ruff/Prettier/隐私/diff通过。均合成RSS/临时库，无真实采集或发送。临时5174/8015均已退出（ss核对）；自动证据不冒充用户验收。
-
-## 已发布与保护
-
-当前公开ghcr.io/aspeternity/seekbell:ui-restore-3，代码679bcf0ee09c9da63f01f2fbbe99347bc7f5a01c，digest sha256:328f888d8b616e45947edb512e5c7f9d1e6b27ded11ff0c33ee43021277f97e4；[564后端/74浏览器/双架构及匿名证据](history/2026-10-22-详情通知与页面加载修正.md)。源码private/包public、关联not-reported，临时开关恢复缺失。本轮仅授权修复，未合并/推送/发布，Compose仍原镜像。
-8001:8000及seekbell_compare_data保留，更新沿用同一Stack/卷，禁双实例共用SQLite卷；保护18081项目seekbell-acceptance-b45fc2c-20261020及容器/卷/backup-local、旧Stack/卷/8000/4175/18080。仅NodeSeek；Safari/真机未验收。
-
-用户已批准删除方案及构建/公开发布新镜像、8001 Compose自测（不代部署）。删除预览仅列无其他通知目标的任务；确认摘要绑定目标/任务/告警版本，过期409需重新确认。事务内解除全部引用并建新任务版本，仅无目标者暂停，原状态/历史留存；告警无目标时说明并关闭。正式/演示共用原风格弹窗；长名单滚动，无目标不可启用。
-本地52后端20.61秒、原型44项45.8秒、operations6项16.5秒、sending4项20.2秒，共54浏览器通过；两版类型构建/Ruff/Prettier/隐私身份检查通过，截图已核对。代码/规格/测试/此状态同提交，详见[删除实现与发布记录](history/2026-10-22-通知目标删除与ui-restore-4发布.md)。准备发布ui-restore-4，包含前轮TG/RSS修正；614后端仅收集核对，远端全量/原生双架构/匿名拉取尚待。发布状态在/home/dev/.local/state/seekbell/releases/ui-restore-4，开关原缺失；旧标签已留底、ui4未存在。
-无外部阻塞。本轮删除修复本地完成，下一步完成针对性验证、提交、远端CI与双架构发布及匿名核对；未擅自合并/发布。交接读本状态、本轮记录、相关规则/试算代码，发布时按需IMAGE_RELEASE。
+目标ghcr.io/aspeternity/seekbell:ui-restore-4原不存在；工作流39779628607在容器检查失败，native/publish均跳过，未写镜像。根因：旧脚本DELETE传{}，新可选请求体模型却要求confirmation，返回422；修复为缺省None继续旧依赖保护，新增None/{}两种回归，不放宽有依赖的无确认删除。原614后端及80个非代理浏览器均已通过，最终数量待日志整理。
+SEEKBELL_GHCR_ENABLED已DELETE并GET404，恢复原缺失。操作目录/home/dev/.local/state/seekbell/releases/ui-restore-4保留失败日志，待本地容器复验后新SHA重启全流程。兼容修正及相关管理回归45项通过（19.06秒）；准备提交API/测试/两份进度文档并本地构建容器复验后再发布。
+当前可用镜像仍ui-restore-3，代码679bcf0ee09c9da63f01f2fbbe99347bc7f5a01c，digest sha256:328f888d8b616e45947edb512e5c7f9d1e6b27ded11ff0c33ee43021277f97e4。旧ui3/ui2/ui1/ui-fix-1 digest已留底；成功及匿名核对后才更新Compose。
+8001:8000与seekbell_compare_data沿用原Stack，禁双实例共用SQLite卷。保护18081项目seekbell-acceptance-b45fc2c-20261020及容器/卷/backup-local、旧Stack/卷/8000/4175/18080。仅NodeSeek；Safari/真机未验收。无外部阻塞；下一步等待CI并完成发布回执、匿名核对、Compose交付。交接读本状态/本轮记录与IMAGE_RELEASE。

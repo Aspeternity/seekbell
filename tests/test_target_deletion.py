@@ -280,3 +280,19 @@ def test_confirmed_deletion_and_concurrent_task_creation_cannot_leave_dangling_r
         for task in session.scalars(select(Task).where(Task.deleted_at.is_(None))):
             version = session.get(TaskVersion, (task.id, task.current_version))
             assert not deleted or old not in version.target_ids
+
+
+@pytest.mark.parametrize("body", [None, {}])
+def test_legacy_empty_body_keeps_dependency_guard_and_allows_unlinked_delete(configured, body):
+    app, client, config, old, other = configured
+    key = add_task(config, "Legacy dependency", [old])
+    response = client.request("DELETE", "/api/manage/targets/" + old, json=body)
+    assert response.status_code == 409
+    with Session(app.state.engine) as session:
+        assert session.get(Task, key).enabled
+        assert session.get(Task, key).current_version == 1
+        assert session.get(NotificationTarget, old).deleted_at is None
+    response = client.request("DELETE", "/api/manage/targets/" + other, json=body)
+    assert response.status_code == 200, response.text
+    with Session(app.state.engine) as session:
+        assert session.get(NotificationTarget, other).deleted_at is not None

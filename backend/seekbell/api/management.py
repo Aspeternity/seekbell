@@ -312,7 +312,7 @@ def runtime(request: Request):
 
 
 class TargetDeleteInput(Input):
-    confirmation: str = Field(pattern=r"^[0-9a-f]{64}$")
+    confirmation: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
 
 @router.get("/targets/{key}/delete-preview")
