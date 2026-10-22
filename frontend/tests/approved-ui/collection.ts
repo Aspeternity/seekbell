@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test'
 import type { Page, TestInfo } from '@playwright/test'
-import type { OverviewData } from '../../src/live/overview'
+import type { OverviewData } from '../../src/overview'
 
 export async function checkCollection(page: Page, info: TestInfo, data: OverviewData) {
   const card = page.locator('.collection-card')

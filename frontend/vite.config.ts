@@ -3,7 +3,6 @@ import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
   plugins: [vue()],
-  resolve: { alias: { '@workspace': '/src/live/store.ts' } },
   server: {
     proxy: {
       '/api': 'http://127.0.0.1:8000',

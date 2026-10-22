@@ -1,5 +1,5 @@
 import { createApp } from 'vue'
-import App from './live/Bootstrap.vue'
-import './prototype/style.css'
-import './prototype/workspace.css'
+import App from './Bootstrap.vue'
+import './styles/base.css'
+import './styles/workspace.css'
 createApp(App).mount('#app')

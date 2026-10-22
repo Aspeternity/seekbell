@@ -95,7 +95,7 @@ test('browser timezone initializes once, settings persist and calendar-day filte
     await context.close()
   }
   await page.goto('/#/content')
-  await page.getByLabel('发现日期', { exact: true }).fill('2026-10-18')
+  await page.getByLabel('发现日期', { exact: true }).selectOption('2026-10-18')
   await expect(page.locator('.content-row')).toHaveCount(1)
   await expect(page.locator('.content-row')).toContainText('时区边界夜帖')
   const utc = await (
@@ -150,18 +150,25 @@ test('browser timezone initializes once, settings persist and calendar-day filte
     release()
     await finished
     await page.goto('/#/content')
+    const utcDay = await (
+      await page.request.get('/api/manage/history/posts?discovered_on=2026-10-19&timezone=UTC')
+    ).json()
+    expect(utcDay.total).toBeGreaterThan(0)
     const filtered = page.waitForResponse((response) => {
       const url = new URL(response.url())
       return (
         url.pathname === '/api/manage/history/posts' &&
-        url.searchParams.get('discovered_on') === '2026-10-18'
+        url.searchParams.get('discovered_on') === '2026-10-19'
       )
     })
-    await page.getByLabel('发现日期', { exact: true }).fill('2026-10-18')
+    // The restored select offers only saved local dates; UTC has no October 18 posts.
+    const date = page.getByLabel('发现日期', { exact: true })
+    await date.selectOption('2026-10-19')
+    await expect(date.locator('option[value="2026-10-18"]')).toHaveCount(0)
     const applied = await filtered
     expect(new URL(applied.url()).searchParams.get('timezone')).toBe('UTC')
-    expect((await applied.json()).total).toBe(0)
-    await expect(page.locator('.content-row')).toHaveCount(0)
+    expect((await applied.json()).total).toBe(utcDay.total)
+    await expect(page.locator('.content-row')).toHaveCount(Math.min(20, utcDay.total))
   } finally {
     release()
   }

@@ -44,7 +44,6 @@ jobs:
       - run: pnpm --dir frontend install --frozen-lockfile
       - run: pnpm --dir frontend format:check
       - run: pnpm --dir frontend build
-      - run: pnpm --dir frontend build:prototype
       - name: Prefer Ubuntu archives and bound browser dependency downloads
         run: |
           sudo python3 - <<'PY'
@@ -63,7 +62,7 @@ jobs:
           )
           PY
           timeout --signal=TERM --kill-after=10s 4m pnpm --dir frontend exec playwright install --with-deps chromium
-      - run: pnpm --dir frontend test:prototype
+      - run: pnpm --dir frontend test:ui
       - run: pnpm --dir frontend test:live
       - run: pnpm --dir frontend test:history
       - run: pnpm --dir frontend test:loading

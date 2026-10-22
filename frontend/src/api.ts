@@ -40,10 +40,3 @@ export async function loadReadiness(): Promise<'ok' | 'unavailable'> {
     throw new Error('无法读取就绪状态，请检查连接后重试。')
   }
 }
-
-// Retain the original standalone status entry's contract.
-export async function loadSystemInfo(): Promise<VersionInfo> {
-  const [version, ready] = await Promise.all([loadVersionInfo(), loadReadiness()])
-  if (ready !== 'ok') throw new Error('服务暂未就绪，请检查后端运行状态后重试。')
-  return version
-}

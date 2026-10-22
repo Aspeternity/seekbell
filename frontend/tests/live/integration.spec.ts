@@ -26,7 +26,7 @@ test('real setup, login, website, task, workspace and a fresh browser retain ser
     await page.getByRole('button', { name: '登录工作空间' }).click()
   }
   await expect(page.locator('.sidebar')).toBeAttached()
-  await expect(page.locator('.demo-badge')).toContainText('本地数据')
+  await expect(page.locator('.data-badge')).toContainText('本地数据')
   const csrf = (await (await page.request.get('/api/auth/status')).json()).csrf
   const headers = { 'X-CSRF-Token': csrf }
   // Each project starts without installed websites; only this disposable server is changed.
