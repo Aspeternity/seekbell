@@ -2,6 +2,7 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import Icon from '../components/Icon.vue'
 import Toggle from '../components/Toggle.vue'
+import TelegramPreview from '../components/TelegramPreview.vue'
 import { state, isLive, channelMeta, clone, newTarget, saveTarget } from '@workspace'
 import type { Channel, Target } from '@workspace'
 const props = defineProps<{ target: Target }>()
@@ -478,12 +479,19 @@ async function save() {
         <p>{{ meta.description }}</p>
         <div class="message-preview">
           <span class="small-badge neutral">SEEKBELL</span>
-          <h3>DMIT 洛杉矶套餐补货</h3>
-          <p>作者：cloud_note<br />版块：优惠<br />命中：好价服务器雷达</p>
-          <p v-if="draft.summary">
-            {{ '新一批套餐开放，记录本次优惠信息。'.slice(0, draft.summaryLimit) }}
-          </p>
-          <span class="mock-link">查看原帖 ↗</span>
+          <TelegramPreview
+            v-if="draft.channel === 'telegram'"
+            :summary="draft.summary"
+            :summary-limit="draft.summaryLimit"
+          />
+          <template v-else>
+            <h3>DMIT 洛杉矶套餐补货</h3>
+            <p>作者：cloud_note<br />版块：优惠<br />命中：好价服务器雷达</p>
+            <p v-if="draft.summary">
+              {{ '新一批套餐开放，记录本次优惠信息。'.slice(0, draft.summaryLimit) }}
+            </p>
+            <span class="mock-link">查看原帖 ↗</span>
+          </template>
         </div>
         <p class="small-note">
           {{

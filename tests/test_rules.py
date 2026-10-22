@@ -121,12 +121,63 @@ def test_missing_summary_is_different_from_known_empty_summary():
     assert result(rule, summary="").status == "no_match"
 
 
-def test_known_positive_and_unknown_exclusion():
-    rule = {"scope": "title_summary", "groups": [{"all_of": ["DMIT"]}]}
-    assert result(rule, title="DMIT").status == "match"
-    assert result({**rule, "exclude": ["求购"]}, title="DMIT").status == "insufficient_data"
-    assert result({**rule, "exclude": ["求购"]}, title="DMIT 求购").status == "no_match"
-    assert result({**rule, "scope": "title"}, title="unrelated").status == "no_match"
+@pytest.mark.parametrize(
+    "title,summary,expected",
+    [
+        ("[出]180出Vmiss Tri 来", None, "match"),
+        ("[出]180出Vmiss Tri 来", "", "match"),
+        ("[出]180出Vmiss Tri 来", "普通合成摘要", "match"),
+        ("[出]180出Vmiss Tri 来", "包含 core 的合成摘要", "no_match"),
+        ("[出]180出Vmiss Tri 来", "收一台同款", "no_match"),
+        ("收 Vmiss Tri", None, "no_match"),
+        ("Vmiss Tri core", None, "no_match"),
+        ("出 Vmiss", None, "no_match"),
+        ("出 Vmiss", "Tri 套餐", "match"),
+        ("无关标题", "Vmiss Tri 套餐", "match"),
+        ("无关标题", None, "no_match"),
+    ],
+)
+def test_combined_scope_matches_only_received_fields(title, summary, expected):
+    rule = {
+        "scope": "title_summary",
+        "groups": [{"all_of": ["vmiss", "tri"]}],
+        "exclude": ["core", "收"],
+    }
+    answer = result(rule, title=title, summary=summary)
+    assert answer.status == expected
+    assert all(reason.truth != "unknown" for reason in answer.reasons)
+    assert "missing_summary" not in {reason.code for reason in answer.reasons}
+    assert "摘要缺失时仅按标题判断" in explain(Rule.model_validate(rule))
+
+
+@pytest.mark.parametrize(
+    "restriction,missing_reason",
+    [
+        ({"authors_include": ["fixture"]}, "missing_author"),
+        ({"authors_exclude": ["fixture"]}, "missing_author"),
+        ({"categories": ["tech"]}, "missing_category"),
+    ],
+)
+def test_title_fallback_does_not_bypass_required_metadata(restriction, missing_reason):
+    answer = result(
+        {
+            "scope": "title_summary",
+            "groups": [{"all_of": ["vmiss", "tri"]}],
+            "exclude": ["core", "收"],
+            **restriction,
+        },
+        title="[出]180出Vmiss Tri 来",
+    )
+    assert answer.status == "insufficient_data"
+    assert missing_reason in {reason.code for reason in answer.reasons}
+    assert "missing_summary" not in {reason.code for reason in answer.reasons}
+
+
+def test_summary_only_exclusions_still_distinguish_missing_from_empty():
+    rule = {"scope": "summary", "exclude": ["core", "收"]}
+    assert result(rule, title="Vmiss Tri", summary=None).status == "insufficient_data"
+    assert result(rule, title="Vmiss Tri", summary="").status == "match"
+    assert result(rule, title="Vmiss Tri", summary="收").status == "no_match"
 
 
 def test_unknown_field_does_not_override_a_definite_no_match():

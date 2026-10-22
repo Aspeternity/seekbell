@@ -1,3 +1,5 @@
+import hashlib
+import json
 import time
 from uuid import uuid4
 
@@ -40,6 +42,10 @@ def target_snapshot(target: NotificationTarget) -> dict:
 
 
 class TargetInUse(ValueError):
+    pass
+
+
+class TargetDeleteChanged(ValueError):
     pass
 
 
@@ -281,6 +287,11 @@ class Configuration:
             task = session.get(Task, key)
             if task is None or task.deleted_at is not None:
                 raise ValueError("Unknown active task")
+            if enabled:
+                version = session.get(TaskVersion, (key, task.current_version))
+                if not version.target_ids:
+                    raise ValueError("请先为任务选择通知目标。")
+                self._targets(session, version.target_ids)
             task.enabled = enabled
             if not enabled:
                 self._cancel_contributions(session, key, at=at)
@@ -294,27 +305,91 @@ class Configuration:
             task.enabled = False
             self._cancel_contributions(session, key, at=at)
 
-    def delete_target(self, key: str, *, at: float) -> None:
+    @staticmethod
+    def _target_dependencies(session, key):
+        rows = session.execute(
+            select(Task, TaskVersion)
+            .join(
+                TaskVersion,
+                (Task.id == TaskVersion.task_id) & (Task.current_version == TaskVersion.version),
+            )
+            .where(Task.deleted_at.is_(None))
+            .order_by(Task.id)
+        ).all()
+        tasks = [(task, version) for task, version in rows if key in version.target_ids]
+        alerts = session.get(AlertSettings, 1)
+        if alerts is not None and key not in alerts.target_ids:
+            alerts = None
+        return tasks, alerts
+
+    @staticmethod
+    def _delete_confirmation(target, tasks, alerts):
+        context = {
+            "target": [target.id, target.revision],
+            "tasks": [
+                [task.id, task.current_version, task.enabled, version.target_ids]
+                for task, version in tasks
+            ],
+            "alerts": [alerts.revision, alerts.enabled, alerts.target_ids] if alerts else None,
+        }
+        return hashlib.sha256(json.dumps(context, sort_keys=True).encode()).hexdigest()
+
+    def target_delete_preview(self, key: str) -> dict:
+        with Session(self.engine) as session:
+            session.connection().exec_driver_sql("BEGIN")
+            target = session.get(NotificationTarget, key)
+            if target is None or target.deleted_at is not None or target.kind == "mock":
+                raise ValueError("Unknown configured target")
+            tasks, alerts = self._target_dependencies(session, key)
+            return {
+                "target_name": target.name,
+                "confirmation": self._delete_confirmation(target, tasks, alerts),
+                "tasks": [
+                    {"id": task.id, "name": version.name, "enabled": task.enabled}
+                    for task, version in tasks
+                    if not any(item != key for item in version.target_ids)
+                ],
+                "alerts_disabled": bool(
+                    alerts and alerts.enabled and not any(item != key for item in alerts.target_ids)
+                ),
+            }
+
+    def delete_target(self, key: str, *, at: float, confirmation: str | None = None) -> None:
         with write_session(self.engine) as session:
             target = session.get(NotificationTarget, key)
             if target is None or target.kind == "mock":
                 raise ValueError("Unknown configured target")
             if target.deleted_at is not None:
                 return
-            versions = session.scalars(
-                select(TaskVersion)
-                .join(
-                    Task,
-                    (Task.id == TaskVersion.task_id)
-                    & (Task.current_version == TaskVersion.version),
+            tasks, alerts = self._target_dependencies(session, key)
+            if confirmation is None:
+                if tasks:
+                    raise TargetInUse("请先在所有关联任务中取消选择此目标，包括暂停的任务。")
+                if alerts:
+                    raise TargetInUse("请先在系统告警设置中取消选择此目标。")
+            elif confirmation != self._delete_confirmation(target, tasks, alerts):
+                raise TargetDeleteChanged("关联配置已更新，请重新查看后再删除。")
+            for task, version in tasks:
+                remaining = [item for item in version.target_ids if item != key]
+                task.current_version += 1
+                session.add(
+                    TaskVersion(
+                        task_id=task.id,
+                        version=task.current_version,
+                        name=version.name,
+                        description=version.description,
+                        rule=version.rule,
+                        target_ids=remaining,
+                        created_at=at,
+                    )
                 )
-                .where(Task.deleted_at.is_(None))
-            )
-            if any(key in version.target_ids for version in versions):
-                raise TargetInUse("请先在所有关联任务中取消选择此目标，包括暂停的任务。")
-            alerts = session.get(AlertSettings, 1)
-            if alerts and key in alerts.target_ids:
-                raise TargetInUse("请先在系统告警设置中取消选择此目标。")
+                if not remaining:
+                    task.enabled = False
+                    self._cancel_contributions(session, task.id, at=at)
+            if alerts:
+                alerts.target_ids = [item for item in alerts.target_ids if item != key]
+                alerts.enabled = alerts.enabled and bool(alerts.target_ids)
+                alerts.revision += 1
             self._target_enabled(session, target, False, at=at)
             target.revision += 1
             target.deleted_at = at

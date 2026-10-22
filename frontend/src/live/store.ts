@@ -1,5 +1,9 @@
 import { reactive, ref } from 'vue'
 import { clearReadCache } from './readCache'
+import type {
+  TelegramPreviewMessage,
+  NotificationPreviewOptions,
+} from '../prototype/notificationPreview'
 import type { Task, Sample } from '../prototype/model'
 import { emptyTask } from '../prototype/model'
 import { createWebsite, websiteDefinition } from '../prototype/websites'
@@ -231,6 +235,10 @@ export async function saveTask(task: Task) {
   return result
 }
 export async function setTaskEnabled(task: Task, value: boolean) {
+  if (value && !task.targets.length) {
+    notify('请先为任务选择通知目标。')
+    return
+  }
   try {
     await saveTask({ ...clone(task), enabled: value })
   } catch (error) {
@@ -259,8 +267,13 @@ export async function setTargetEnabled(target: Target, value: boolean) {
     notify((error as Error).message)
   }
 }
-export async function removeTarget(target: Target) {
-  await request('manage/targets/' + target.id, 'DELETE')
+export async function getTargetDeletePreview(id: string) {
+  return request<import('../prototype/targetDeletion').TargetDeletePreview>(
+    'manage/targets/' + id + '/delete-preview',
+  )
+}
+export async function removeTarget(target: Target, confirmation: string) {
+  await request('manage/targets/' + target.id, 'DELETE', { confirmation })
   await refresh()
   notify('目标已删除，历史记录保留。')
 }
@@ -377,4 +390,12 @@ export async function getTaskStatistics() {
         ? '尚未记录'
         : formatTime(new Date(row.last_match_at * 1000).toISOString()),
   }))
+}
+
+export function loadTelegramPreview(options: NotificationPreviewOptions) {
+  const params = new URLSearchParams({
+    include_summary: String(options.include_summary),
+    summary_limit: String(options.summary_limit),
+  })
+  return request<TelegramPreviewMessage>('manage/notification-preview/telegram?' + params)
 }

@@ -223,6 +223,17 @@ test('four channel forms validate and save while keeping credentials out of stor
     await expect(page.getByRole('alert')).toContainText('请填写目标名称')
     await page.getByLabel('目标名称').fill('新建 ' + channel)
     if (channel === 'Telegram Bot') {
+      const preview = page.locator('.message-preview')
+      await expect(preview.locator('.small-badge')).toHaveText('SEEKBELL')
+      await expect(preview.locator('h3')).toHaveCSS('font-weight', '600')
+      await expect(preview).toContainText('NodeSeek · 情报 · 作者：cloud_note')
+      await expect(preview).toContainText('发布时间：2026-10-22 18:40:33')
+      const summary = page.getByRole('switch', { name: '包含 RSS 摘要', exact: true })
+      await summary.click()
+      await page.getByLabel('摘要最大长度', { exact: true }).fill('7')
+      await expect(preview).toContainText('摘要：新一批套餐开…')
+      await expect(preview).not.toContainText('🎯')
+      await expect(preview).not.toContainText('🕒')
       await page.getByLabel('Bot Token').fill('123456:' + marker)
       await page.getByLabel('Chat ID').fill('-100123456')
     } else if (channel === 'Bark') {
@@ -257,6 +268,14 @@ test('four channel forms validate and save while keeping credentials out of stor
 test('target test, uncertain resend and disabled target cancellation keep distinct records', async ({
   page,
 }) => {
+  await go(page, '/notifications/targets')
+  await page
+    .locator('.notification-card')
+    .filter({ hasText: 'Telegram Bot' })
+    .locator('.target-card-meta')
+    .click()
+  await expect(page.getByRole('heading', { name: '编辑通知目标', exact: true })).toBeVisible()
+  await expect(page.locator('.message-preview .small-badge')).toHaveText('SEEKBELL')
   await go(page, '/notifications/targets')
   await page
     .locator('.notification-card')
@@ -387,4 +406,32 @@ test('unsaved settings are guarded on browser back and corrupt storage falls bac
   await page.reload()
   await expect(page.getByRole('heading', { name: '从第一个关心的网站开始' })).toBeVisible()
   await expect(page.getByRole('status')).toContainText('恢复默认')
+})
+
+test('demo target deletion shares the sole-target list and pauses tasks after confirmation', async ({
+  page,
+}) => {
+  await go(page, '/notifications/targets')
+  const card = page.locator('.notification-card').filter({ hasText: 'Telegram 私人通知' })
+  await card.getByRole('button', { name: '删除Telegram 私人通知', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: '删除「Telegram 私人通知」？', exact: true })
+  const list = dialog.getByRole('list', { name: '删除后没有通知目标的任务' })
+  await expect(list).toContainText('自托管灵感收集')
+  await expect(dialog).not.toContainText('好价服务器雷达')
+  await dialog.getByRole('button', { name: '取消', exact: true }).click()
+  await expect(card).toBeVisible()
+  await card.getByRole('button', { name: '删除Telegram 私人通知', exact: true }).click()
+  await dialog.getByRole('button', { name: '删除', exact: true }).click()
+  await expect(card).toHaveCount(0)
+  await go(page, '/tasks')
+  const toggle = page.getByRole('switch', { name: '自托管灵感收集启用状态', exact: true })
+  await expect(toggle).toHaveAttribute('aria-checked', 'false')
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-checked', 'false')
+  await expect(page.getByRole('status').filter({ hasText: '请先为任务选择通知目标' })).toBeVisible()
+  await expect(
+    page.getByRole('switch', { name: '好价服务器雷达启用状态', exact: true }),
+  ).toHaveAttribute('aria-checked', 'true')
+  await page.reload()
+  await expect(toggle).toHaveAttribute('aria-checked', 'false')
 })

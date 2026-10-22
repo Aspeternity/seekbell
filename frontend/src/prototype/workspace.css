@@ -504,6 +504,16 @@
 .notification-card {
   padding: 23px;
 }
+.notification-card.is-clickable {
+  cursor: pointer;
+  transition:
+    border-color 0.16s,
+    box-shadow 0.16s;
+}
+.notification-card.is-clickable:hover {
+  border-color: #e5cbb8;
+  box-shadow: 0 4px 12px rgb(18 31 46 / 4%);
+}
 .notification-card-top {
   display: flex;
   justify-content: space-between;

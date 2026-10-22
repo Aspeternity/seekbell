@@ -14,6 +14,7 @@ from seekbell.db.models import (
     SeenPost,
     SourceItem,
     SourceState,
+    TaskEvaluation,
     TaskVersion,
     Website,
 )
@@ -215,6 +216,42 @@ def test_preview_is_read_only_and_insufficient_summary_is_not_match(core):
     assert result["first_seen_from"] == result["first_seen_until"]
     assert result["results"][0]["result"]["status"] == "match"
     assert before == (core.count(SeenPost), core.count(RuleHit), core.count(Outbox))
+
+
+@pytest.mark.parametrize(
+    "summary,expected",
+    [
+        (None, "match"),
+        ("", "match"),
+        ("普通合成摘要", "match"),
+        ("core 合成摘要", "no_match"),
+        ("收一台同款", "no_match"),
+    ],
+)
+def test_missing_summary_title_match_is_queued_once_unless_received_content_excludes(
+    core, summary, expected
+):
+    core.config.update_task(
+        core.task,
+        "Title fallback",
+        Rule(
+            scope="title_summary",
+            groups=[ConditionGroup(all_of=["vmiss", "tri"])],
+            exclude=["core", "收"],
+        ),
+        [core.target],
+        at=1,
+    )
+    core.ingest(9001, at=10)
+    report = core.ingest(9002, at=20, title="[出]180出Vmiss Tri 来", summary=summary)
+    count = int(expected == "match")
+    assert report.new_posts == 1
+    assert (report.hits, report.queued, report.insufficient) == (count, count, 0)
+    assert core.one(TaskEvaluation).status == expected
+    assert core.count(RuleHit) == core.count(Outbox) == count
+    repeat = core.ingest(9002, at=30, title="[出]180出Vmiss Tri 来", summary=summary)
+    assert repeat.new_posts == repeat.hits == repeat.queued == 0
+    assert core.count(RuleHit) == core.count(Outbox) == count
 
 
 def test_pruning_readable_history_does_not_remove_dedupe_receipts(core):
