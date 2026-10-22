@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import Icon from '../prototype/components/Icon.vue'
 import Toggle from '../prototype/components/Toggle.vue'
+import { shouldOpenTaskRow } from '../prototype/taskRow'
 import { state, request, formatTime, websiteName, setTaskEnabled } from './store'
 import { useRemote } from './history'
 import type { OverviewData } from './overview'
@@ -67,6 +68,9 @@ function setRange(value: '24h' | '7d') {
 function clearFilters() {
   query.value = ''
   filter.value = 'all'
+}
+function openTask(event: MouseEvent, id: string) {
+  if (shouldOpenTaskRow(event)) emit('navigate', '/task/' + id)
 }
 async function toggle(id: string) {
   const task = state.tasks.find((task) => task.id === id)
@@ -310,7 +314,12 @@ async function toggle(id: string) {
         ><span>{{ range === '24h' ? '近24小时命中' : '近7天命中' }}</span
         ><span>最近命中</span><span>状态</span><span />
       </div>
-      <div v-for="task in filtered" :key="task.id" class="task-row">
+      <div
+        v-for="task in filtered"
+        :key="task.id"
+        class="task-row is-clickable"
+        @click="(event) => openTask(event, task.id)"
+      >
         <button class="task-name" @click="emit('navigate', '/task/' + task.id)">
           <span class="icon-tile" :class="task.color"><Icon :name="task.icon" /></span
           ><span

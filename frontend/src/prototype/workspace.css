@@ -333,6 +333,13 @@
   color: #6c7886;
   font-size: 11px;
 }
+/* Composite search fields show focus on their shell, never on the inner text. */
+.search-input:focus-within,
+.task-tools select:focus,
+.filter-toolbar select:focus {
+  border-color: #cba280;
+  box-shadow: 0 0 0 3px #bf86521a;
+}
 .free-toolbar {
   border: 0;
   padding: 0;

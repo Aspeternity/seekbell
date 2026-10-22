@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import Icon from './components/Icon.vue'
 import Toggle from './components/Toggle.vue'
+import { shouldOpenTaskRow } from './taskRow'
 import { state, formatTime, websiteName, loadExampleWorkspace } from '@workspace'
 const targets = computed(() => state.targets)
 const attentionCount = computed(
@@ -49,6 +50,9 @@ const selectedPoint = ref<number | null>(null)
 function setRange(value: string) {
   range.value = value
   selectedPoint.value = null
+}
+function openTask(event: MouseEvent, id: string) {
+  if (shouldOpenTaskRow(event)) emit('edit', id)
 }
 function clearFilters() {
   query.value = ''
@@ -318,7 +322,12 @@ const activities = [
       <span>任务名称</span><span>通知目标</span><span>今日命中</span><span>最近命中</span
       ><span>状态</span><span />
     </div>
-    <div v-for="task in filtered" :key="task.id" class="task-row">
+    <div
+      v-for="task in filtered"
+      :key="task.id"
+      class="task-row is-clickable"
+      @click="(event) => openTask(event, task.id)"
+    >
       <button class="task-name" @click="emit('edit', task.id)">
         <span class="icon-tile" :class="task.color"><Icon :name="task.icon" /></span
         ><span

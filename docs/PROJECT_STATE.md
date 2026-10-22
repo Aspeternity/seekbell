@@ -1,10 +1,10 @@
 # 当前状态
 
-更新时间：2026-10-23（Asia/Shanghai）。M0～M3完成、M4工程退出通过，M5用户实测修正。ui-restore-4已公开发布并匿名拉取通过，待用户实机验收。
+更新时间：2026-10-23（Asia/Shanghai）。M0～M3完成、M4工程退出通过，M5用户实测修正。ui-restore-4已公开发布；用户实测反馈通知标签404、粗焦点框及概览行点击不完整，本轮代码已修复并通过定向验证，尚未发布新镜像。
 
 ## 环境与授权
 
-仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。当前main，实现基准0499f8b1972f9131e0d977ea96305ccb93d5d327，本轮40bc7ba及兼容99bb654已合并，其后仅发布回执/Compose文档提交；codex/telegram-preview-card-fixes保留。用户批准最终删除方案、构建/公开发布镜像及8001 Compose自测；必要合并/开关已执行，不代部署、不真实发送。源码private、包public，不组织多代理；原D盘/Ubuntu/全局WSL不动。
+仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。当前codex/notification-navigation-focus-fixes，分支基于main 7122f0b；已发布实现基准0499f8b1972f9131e0d977ea96305ccb93d5d327，本轮40bc7ba及兼容99bb654已合并，本轮前端修复/回归测试与状态同一提交；codex/telegram-preview-card-fixes保留。用户批准最终删除方案、构建/公开发布镜像及8001 Compose自测；必要合并/开关已执行，不代部署、不真实发送。源码private、包public，不组织多代理；原D盘/Ubuntu/全局WSL不动。
 
 ## 实现与边界
 
@@ -18,6 +18,8 @@
 
 当前ghcr.io/aspeternity/seekbell:ui-restore-4，索引sha256:09d7af1aa081594c2bb77f949f4bdcd534728618eef3bd3b667d708619a87e3a。空Docker配置实际匿名拉取amd64并核对UID/代码、两平台manifest及config；arm64为原生CI运行证据。旧ui3/ui2/ui1/ui-fix-1 digest均未变，临时SEEKBELL_GHCR_ENABLED已恢复缺失。原始状态/日志/ZIP在/home/dev/.local/state/seekbell/releases/ui-restore-4。
 
-## 保护与下一步
+## 当前修复与下一步
 
-Compose已更新，8001:8000与seekbell_compare_data沿用原Stack/卷，禁双实例共用SQLite卷。保护18081项目seekbell-acceptance-b45fc2c-20261020及容器/卷/backup-local、旧Stack/卷/8000/4175/18080；临时5174/8013/8015已退出，未代部署。仅NodeSeek，未扩大采集范围。无外部阻塞，下一步用户更新实机验收，收到反馈再修正。交接读本状态/本轮记录，发布维护按IMAGE_RELEASE。
+三项均在已发布代码对应的生产前端复现：标签点击丢失path进/404、搜索内部outline 2.72727px、概览目标图标旁点击不跳转。修复事件路径透传；原控件使用自身细边框/浅阴影，搜索由外壳反馈、内部可伸展；概览/任务列表共用点击保护，信息/空白可编辑，开关/按钮/选中文本独立。正式UI8项32.8秒、history4项19.1秒、原型44项45.2秒共56浏览器通过，两版类型/构建与全前端格式通过；证据和路径见[本轮记录](history/2026-10-23-通知导航焦点与概览任务行修复.md)。本轮尚未构建或发布新镜像，用户部署仍ui-restore-4。
+
+保护8001原Stack/seekbell_compare_data，以及18081项目seekbell-acceptance-b45fc2c-20261020及容器/卷/backup-local、旧Stack/卷/8000/4175/18080；临时检查仅独立库、模拟服务。仅NodeSeek，无真实采集发送，不组织多代理。无代码阻塞；下一步按用户发布指令构建新镜像，再实机验收；交接读本状态/本轮记录，发布维护按IMAGE_RELEASE。

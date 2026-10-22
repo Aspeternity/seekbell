@@ -414,7 +414,7 @@ function clear() {
         <Icon name="plus" :size="18" />添加通知目标
       </button>
     </section>
-    <NotificationTabs :tab="tab" @navigate="emit('navigate')" />
+    <NotificationTabs :tab="tab" @navigate="(path) => emit('navigate', path)" />
     <section class="panel">
       <div class="filter-toolbar">
         <label class="search-input grow"

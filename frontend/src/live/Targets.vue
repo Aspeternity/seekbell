@@ -39,7 +39,7 @@ function completed(path: string) {
       <Icon name="plus" :size="18" />添加通知目标
     </button>
   </section>
-  <NotificationTabs tab="targets" @navigate="emit('navigate')" />
+  <NotificationTabs tab="targets" @navigate="(path) => emit('navigate', path)" />
   <div class="filter-toolbar free-toolbar">
     <label class="search-input grow"
       ><Icon name="search" :size="16" /><input

@@ -56,10 +56,9 @@ select {
 button:focus-visible,
 a:focus-visible,
 summary:focus-visible,
-input:focus-visible,
-textarea:focus-visible,
-select:focus-visible,
-[tabindex]:focus-visible {
+input[type='checkbox']:focus-visible,
+input[type='radio']:focus-visible,
+[tabindex]:not(:where(input, textarea, select)):focus-visible {
   outline: 3px solid #dc9b72;
   outline-offset: 3px;
 }
@@ -852,6 +851,8 @@ main {
   color: #6f7885;
 }
 .search-input input {
+  flex: 1;
+  min-width: 0;
   width: 135px;
   background: transparent;
   border: 0;
@@ -889,6 +890,12 @@ main {
 }
 .task-row:hover {
   background: #fdfdfd;
+}
+.task-row.is-clickable {
+  cursor: pointer;
+}
+.task-row.is-clickable .task-status {
+  cursor: default;
 }
 .task-name {
   display: flex;

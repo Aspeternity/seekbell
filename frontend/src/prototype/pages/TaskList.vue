@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import Icon from '../components/Icon.vue'
 import Toggle from '../components/Toggle.vue'
+import { shouldOpenTaskRow } from '../taskRow'
 import {
   state,
   isLive,
@@ -56,16 +57,7 @@ async function copy(task: Task) {
   emit('navigate', '/task/' + next.id)
 }
 function openTask(event: MouseEvent, task: Task) {
-  const target = event.target
-  if (
-    event.defaultPrevented ||
-    event.button !== 0 ||
-    (target instanceof Element &&
-      target.closest('button, a, input, select, textarea, .task-status, .row-actions')) ||
-    window.getSelection()?.toString()
-  )
-    return
-  emit('navigate', '/task/' + task.id)
+  if (shouldOpenTaskRow(event)) emit('navigate', '/task/' + task.id)
 }
 function remove(task: Task) {
   confirmAction(
