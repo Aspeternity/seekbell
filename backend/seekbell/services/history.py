@@ -288,7 +288,10 @@ class History:
             )
             rows = session.execute(
                 statement.order_by(
-                    Post.first_seen_at.desc(), Post.website_id, Post.external_post_id
+                    Post.first_seen_at.desc(),
+                    Post.published_at.desc().nulls_last(),
+                    Post.website_id,
+                    Post.external_post_id,
                 )
                 .offset((page - 1) * page_size)
                 .limit(page_size)

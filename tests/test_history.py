@@ -1,5 +1,5 @@
 import json
-from datetime import date
+from datetime import UTC, date, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -390,3 +390,40 @@ def test_history_dates_handle_both_sides_of_dst_transition(history_client):
         params={"timezone": "America/Los_Angeles", "discovered_on": "2026-11-01"},
     ).json()
     assert page["total"] == 3
+
+
+def test_posts_in_one_collection_batch_follow_source_publication_order_without_rewriting_times(
+    history_client,
+):
+    client, app, ids = history_client
+    seen = ids["base"] + 10000
+    published = seen - 5400
+    with Session(app.state.engine) as session, session.begin():
+        for index, value in ((0, published), (1, published + 60), (2, None)):
+            post = session.get(Post, ("nodeseek", str(8000 + index)))
+            post.first_seen_at = seen
+            post.published_at = value
+    response = client.get("/api/manage/history/posts", params={"page_size": 3}).json()
+    assert [post["id"] for post in response["items"]] == [
+        ids["posts"][1],
+        ids["posts"][0],
+        ids["posts"][2],
+    ]
+    assert all(post["first_seen_at"] == seen for post in response["items"])
+    assert [post["published_at"] for post in response["items"]] == [
+        published + 60,
+        published,
+        None,
+    ]
+    for index in (0, 1, 2):
+        detail = client.get("/api/manage/history/posts/" + ids["posts"][index]).json()
+        assert detail["external_post_id"] == str(8000 + index)
+        assert detail["original_url"] == f"https://www.nodeseek.com/post-{8000 + index}-1"
+    # Discovery dates still filter discovery, even when the source post is much older.
+    absent = datetime.fromtimestamp(published - 86400, UTC).date().isoformat()
+    assert (
+        client.get(
+            "/api/manage/history/posts", params={"discovered_on": absent, "timezone": "UTC"}
+        ).json()["total"]
+        == 0
+    )

@@ -202,6 +202,7 @@ export function historyGet<T>(
 interface RemoteOptions {
   cacheKey?: () => string | undefined
   debounce?: () => unknown
+  keepPrevious?: boolean
 }
 export function useRemote<T>(
   loader: () => Promise<T>,
@@ -210,7 +211,10 @@ export function useRemote<T>(
 ) {
   const data = shallowRef<T>(),
     loading = ref(false),
-    error = ref('')
+    error = ref(''),
+    stale = ref(false)
+  let dataKey: string | undefined
+  let dataRevision = readCacheRevision.value
   let generation = 0,
     timer: ReturnType<typeof setTimeout> | undefined
   function reload(delay = 0) {
@@ -220,12 +224,24 @@ export function useRemote<T>(
     const key = options.cacheKey?.()
     loading.value = true
     error.value = ''
-    data.value = key ? cachedRead<T>(key) : undefined
+    const cached = key ? cachedRead<T>(key) : undefined
+    if (cached !== undefined) {
+      data.value = cached
+      dataKey = key
+      dataRevision = revision
+    } else if (!options.keepPrevious || dataRevision !== revision) {
+      data.value = undefined
+      dataKey = undefined
+    }
+    stale.value = data.value !== undefined && dataKey !== key
     const run = async () => {
       try {
         const value = await loader()
         if (current === generation && (!key || revision === readCacheRevision.value)) {
           data.value = value
+          dataKey = key
+          dataRevision = revision
+          stale.value = false
           if (key) rememberRead(key, value, revision)
         }
       } catch (e) {
@@ -253,5 +269,5 @@ export function useRemote<T>(
     ++generation
     clearTimeout(timer)
   })
-  return { data, loading, error, reload: () => reload() }
+  return { data, loading, error, stale, reload: () => reload() }
 }

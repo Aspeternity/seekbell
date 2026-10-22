@@ -4,7 +4,7 @@
 
 ## 环境、代码与授权
 
-仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。分支codex/single-production-frontend，最后产品实现d224853a2f24cd003ff02eafb27a1532e78e54bf；本地镜像源34aedc41ddf2d2c2cd7f5f6d1a138f83254f6b76，其后仅启动记录。保持批准UI/统计口径，不实施拒绝的改版或结果按钮组。用户已授权结构清理、旧Docker退役和最新代码本地Docker实测；没有推送、公开发布、远程部署或代用户采集/消息授权。不组织多代理，不动旧D盘/Ubuntu/全局WSL。
+仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。当前修复分支codex/content-loading-and-source-time，基于8bd7083；此前分支codex/single-production-frontend，最后产品实现d224853a2f24cd003ff02eafb27a1532e78e54bf；本地镜像源34aedc41ddf2d2c2cd7f5f6d1a138f83254f6b76，其后仅启动记录。保持批准UI/统计口径，不实施拒绝的改版或结果按钮组。用户已授权结构清理、旧Docker退役和最新代码本地Docker实测；没有推送、公开发布、远程部署或代用户采集/消息授权。不组织多代理，不动旧D盘/Ubuntu/全局WSL。
 
 ## 当前本地实例
 
@@ -23,3 +23,7 @@ SeekBell-Dev、d224853：后端659、浏览器58、类型/正式构建、Ruff/Pr
 [旧Docker清理](history/2026-10-23-旧Docker实例退役清理.md)已删除3容器/3卷/2网络/2镜像，18080/18081释放。旧数据归档/home/dev/.local/state/seekbell/maintenance/2026-10-23-retired-docker/archives（0600，SQLite/SHA校验），未入Git；该记录的容器清单为空是新实例启动前事实。
 
 公开镜像仍ui-restore-5，代码c8be41c9a1f85650be6447e773b73a204dba9b88，digest sha256:089289552719774057aa527bbd055e7c33370e6cc5c1811c0da4583b0675f7ff。未更新远程Stack或8000/4175。下一步用户在8001实测并反馈；本地实例继续保留，发布/远程部署需明确指示。恢复读本状态、启动记录及受影响代码。
+
+## 当前内容修复待本地更新
+
+[根因/修复/验证记录](history/2026-10-23-内容加载闪烁与RSS时间核对修复.md)：查询清空数据、防抖、提示和异步控件宽度导致闪白；现内容列表保留带说明且禁交互的旧快照，原子更新统计/行/页码，固定控件和徽标几何。主时间标发布、源缺失标发现，发现日期不变，同批按发布时间排序。1002626发布05:36:15、发现07:05:41，ID/链接对应；官方RSS和当前采集成功，标题后续编辑保持首次快照。规则/队列/历史库未改。修复前失败复现、新增6浏览器、全部62正式浏览器及660后端、类型/构建/Ruff/Prettier/diff通过，证据/home/dev/.local/state/seekbell/acceptance/2026-10-23-content-loading-rss。实现与状态同本地提交；下一步固定SHA构建检查，备份并保留原卷更新8001供用户复测。

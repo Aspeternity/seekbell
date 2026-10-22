@@ -7,8 +7,9 @@ const props = withDefaults(
     delay?: number
     retained?: boolean
     subtle?: boolean
+    message?: string
   }>(),
-  { delay: 0, retained: false, subtle: false },
+  { delay: 0, retained: false, subtle: false, message: '' },
 )
 const emit = defineEmits<{ retry: [] }>()
 const visible = ref(false)
@@ -26,7 +27,7 @@ onBeforeUnmount(() => clearTimeout(timer))
 </script>
 <template>
   <p v-if="visible" :class="subtle ? 'small-note remote-feedback' : 'info-note'" role="status">
-    {{ retained ? '正在更新…' : subtle ? '加载中…' : '正在读取服务端记录…' }}
+    {{ message || (retained ? '正在更新…' : subtle ? '加载中…' : '正在读取服务端记录…') }}
   </p>
   <div v-else-if="error" class="form-errors" role="alert">
     <p v-if="retained">刷新失败，当前显示上次结果。</p>

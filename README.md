@@ -91,7 +91,7 @@ uv run --frozen python -m seekbell
 
 反代头默认不信任。外部HTTPS代理须保留Host（含非默认端口）并覆盖转发头，通过SEEKBELL_TRUSTED_PROXY_IPS明确指定应用实际看到的代理IP；ASGI层统一处理，Uvicorn入口保持--no-proxy-headers。受信HTTPS设置Secure Cookie，普通本机HTTP仍可登录。配置示例、只读检查与本地真实Nginx/TLS演练见[HTTPS部署](docs/PROXY_DEPLOYMENT.md)，实际目标环境部署仍待授权验证。存活不依赖外部服务；就绪检查验证数据库/迁移及后台actor存活。初始化后按已安装网站及启停配置自动采集和投递；空库不请求外网。
 
-浏览器复验使用一次性临时服务/数据库：首闭环8011为空库；历史8012、显式发送8013、后台8014、管理操作8015、保留清理8016、时区/系统告警8017使用各自合成夹具；备份8018/8019为独立空库，加载8020、筛选修复8021和通用UI8022为临时服务；不读上述开发数据，不访问论坛或发送消息：
+浏览器复验使用一次性临时服务/数据库：首闭环8011为空库；历史8012、显式发送8013、后台8014、管理操作8015、保留清理8016、时区/系统告警8017使用各自合成夹具；备份8018/8019为独立空库，加载8020、筛选修复8021、通用UI8022和内容稳定性8023为临时服务；不读上述开发数据，不访问论坛或发送消息：
 
 ~~~bash
 pnpm --dir frontend build
@@ -107,6 +107,7 @@ pnpm --dir frontend test:backup
 pnpm --dir frontend test:approved-ui
 pnpm --dir frontend test:loading
 pnpm --dir frontend test:history-ui-fixes
+pnpm --dir frontend test:content-stability
 ~~~
 
 

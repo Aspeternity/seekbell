@@ -74,6 +74,7 @@ const listing = useRemote(
             state.settings.timezone,
           ]),
     debounce: () => q.value,
+    keepPrevious: true,
   },
 )
 const results = useReadHeight(listing.loading)
@@ -182,7 +183,7 @@ function clear() {
               <p>
                 RSS 摘要不等同全文。来源发布时间：{{
                   time(detail.data.value.published_at)
-                }}。可通过下方入口查看原帖。
+                }}。保存首次读取时的内容，原帖后续编辑不会改写此快照。可通过下方入口查看原帖。
               </p>
             </div>
             <a
@@ -322,11 +323,17 @@ function clear() {
         <h1 tabindex="-1">内容与命中</h1>
         <p class="subtitle">留住发现的线索，也看清每一次匹配。</p>
       </div>
-      <span v-if="listing.data.value" class="small-badge neutral"
-        >{{ listing.data.value.total }} 条本地内容</span
+      <span
+        :style="{ visibility: listing.data.value ? undefined : 'hidden' }"
+        class="small-badge neutral"
+        >{{ listing.data.value?.total ?? '…' }} 条本地内容</span
       >
     </section>
-    <div class="metric-strip" :aria-busy="listing.loading.value">
+    <div
+      class="metric-strip"
+      :aria-busy="listing.loading.value"
+      :aria-label="listing.stale.value ? '筛选更新中，当前显示上次结果' : undefined"
+    >
       <div>
         <span>当前筛选内容</span><strong>{{ listing.data.value?.total ?? '—' }}</strong>
       </div>
@@ -391,64 +398,110 @@ function clear() {
       <p v-if="options.data.value?.truncated" class="small-note content-filter-note">
         筛选选项较多，仅列出前 200 项；可结合内容搜索定位。
       </p>
-      <Feedback
-        :loading="listing.loading.value || options.loading.value"
-        :error="[listing.error.value, options.error.value].filter(Boolean).join('；')"
-        :retained="!!listing.data.value"
-        :delay="200"
-        subtle
-        @retry="reloadListing"
-      />
       <div
         :ref="(el) => (results.element.value = el as HTMLElement | undefined)"
-        :style="results.style()"
+        class="content-results"
+        :style="
+          listing.loading.value && !listing.data.value ? { minHeight: '220px' } : results.style()
+        "
       >
-        <template v-if="listing.data.value">
-          <article v-for="post in listing.data.value.items" :key="post.id" class="content-row">
-            <div class="content-row-top">
-              <span class="result-pill" :class="resultClass(post.status)">{{
-                postLabels[post.status]
-              }}</span
-              ><span class="muted">{{ time(post.first_seen_at) }}</span>
-            </div>
-            <button class="content-title" @click="emit('navigate', '/content/' + post.id)">
-              {{ post.title }}<Icon name="arrow" :size="17" />
-            </button>
-            <p class="content-excerpt">
-              {{ post.summary === null ? '来源未提供摘要' : post.summary || '摘要为空' }}
-            </p>
-            <div class="content-row-meta">
-              <span><Icon name="user" :size="13" />{{ post.author || '作者缺失' }}</span
-              ><span>{{ post.category_label || post.category || '版块缺失' }}</span>
-              <span
-                v-for="hit in post.hits"
-                :key="hit.task_id + ':' + hit.version"
-                class="plain-chip"
-                >{{ hit.name }} · v{{ hit.version }}{{ hit.deleted ? ' · 已删除' : '' }}</span
-              >
-            </div>
-          </article>
-          <div v-if="!listing.data.value.total" class="empty-state">
-            <Icon name="search" :size="30" />
-            <h3>没有符合条件的内容</h3>
-            <p>
-              当前没有已保存的记录，或筛选条件未匹配。请检查网站启停状态与概览中的最近采集结果。
-            </p>
-            <button class="button" @click="clear">清除筛选</button>
-          </div>
-          <Pagination
-            :page="page"
-            :total="listing.data.value.total"
-            :page-size="listing.data.value.page_size"
-            label="内容"
-            @change="(value) => (page = value)"
+        <div
+          class="content-query-feedback"
+          :class="{ pending: listing.loading.value || options.loading.value }"
+        >
+          <Feedback
+            :loading="listing.loading.value || options.loading.value"
+            :error="[listing.error.value, options.error.value].filter(Boolean).join('；')"
+            :retained="!!listing.data.value"
+            :message="listing.stale.value ? '正在更新筛选，当前显示上次结果…' : ''"
+            :delay="200"
+            subtle
+            @retry="reloadListing"
           />
-        </template>
+        </div>
+        <div
+          class="content-result-snapshot"
+          :inert="listing.stale.value"
+          :aria-busy="listing.loading.value"
+        >
+          <template v-if="listing.data.value">
+            <article v-for="post in listing.data.value.items" :key="post.id" class="content-row">
+              <div class="content-row-top">
+                <span class="result-pill" :class="resultClass(post.status)">{{
+                  postLabels[post.status]
+                }}</span
+                ><time
+                  class="muted"
+                  :datetime="
+                    new Date((post.published_at ?? post.first_seen_at) * 1000).toISOString()
+                  "
+                  :title="
+                    '首次发现：' +
+                    time(post.first_seen_at) +
+                    (post.published_at === null ? '；来源未提供发布时间' : '')
+                  "
+                  >{{ post.published_at === null ? '发现' : '发布' }}
+                  {{ time(post.published_at ?? post.first_seen_at) }}</time
+                >
+              </div>
+              <button class="content-title" @click="emit('navigate', '/content/' + post.id)">
+                {{ post.title }}<Icon name="arrow" :size="17" />
+              </button>
+              <p class="content-excerpt">
+                {{ post.summary === null ? '来源未提供摘要' : post.summary || '摘要为空' }}
+              </p>
+              <div class="content-row-meta">
+                <span><Icon name="user" :size="13" />{{ post.author || '作者缺失' }}</span
+                ><span>{{ post.category_label || post.category || '版块缺失' }}</span>
+                <span
+                  v-for="hit in post.hits"
+                  :key="hit.task_id + ':' + hit.version"
+                  class="plain-chip"
+                  >{{ hit.name }} · v{{ hit.version }}{{ hit.deleted ? ' · 已删除' : '' }}</span
+                >
+              </div>
+            </article>
+            <div v-if="!listing.data.value.total" class="empty-state">
+              <Icon name="search" :size="30" />
+              <h3>没有符合条件的内容</h3>
+              <p>
+                当前没有已保存的记录，或筛选条件未匹配。请检查网站启停状态与概览中的最近采集结果。
+              </p>
+              <button class="button" @click="clear">清除筛选</button>
+            </div>
+            <Pagination
+              :page="listing.data.value.page"
+              :total="listing.data.value.total"
+              :page-size="listing.data.value.page_size"
+              label="内容"
+              @change="(value) => (page = value)"
+            />
+          </template>
+        </div>
       </div></section
   ></template>
 </template>
 
 <style scoped>
+.content-results {
+  position: relative;
+}
+.content-query-feedback.pending {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  z-index: 1;
+  pointer-events: none;
+}
+.content-query-feedback.pending :deep(.remote-feedback) {
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: #fff;
+}
+.filter-toolbar > select {
+  width: 110px;
+}
 .original-post-link {
   margin-top: 16px;
 }

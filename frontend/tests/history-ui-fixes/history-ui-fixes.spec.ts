@@ -52,7 +52,7 @@ test('content filters preserve geometry, task notes are inset and post details a
   await expect.poll(() => started).toBe(true)
   await expect(page.locator('.metric-strip')).toHaveCount(1)
   expect(Math.abs((await search.boundingBox())!.y - start.y)).toBeLessThan(1)
-  await expect(page.locator('.content-row')).toHaveCount(0)
+  await expect(page.locator('.content-row')).toHaveCount(20)
   hold.release()
   await expect(page.getByText('没有符合条件的内容', { exact: true })).toBeVisible()
   await search.fill('')

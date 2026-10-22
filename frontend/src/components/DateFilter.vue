@@ -53,7 +53,12 @@ function choose(event: Event) {
 </script>
 <template>
   <div class="history-date-filter">
-    <select :value="modelValue" :aria-label="label" @change="choose">
+    <select
+      :value="modelValue"
+      :aria-label="label"
+      :aria-busy="remote.loading.value"
+      @change="choose"
+    >
       <option value="">全部日期</option>
       <option v-for="date in choices" :key="date" :value="date">
         {{ date.replaceAll('-', '/') }}
@@ -65,7 +70,6 @@ function choose(event: Event) {
       >
         加载更早日期…
       </option>
-      <option v-if="remote.loading.value" disabled>正在读取日期…</option>
     </select>
     <button
       v-if="remote.error.value"
@@ -80,10 +84,14 @@ function choose(event: Event) {
 </template>
 <style scoped>
 .history-date-filter {
+  width: 110px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+}
+select {
+  width: 100%;
 }
 @media (max-width: 760px) {
   .history-date-filter {
