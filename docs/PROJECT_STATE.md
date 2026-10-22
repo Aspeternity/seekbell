@@ -4,7 +4,7 @@
 
 ## 环境与授权
 
-仅SeekBell-Dev:/home/dev/projects/seekbell开发；聊天在原Ubuntu时经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。当前codex/single-production-frontend，最后实现d224853a2f24cd003ff02eafb27a1532e78e54bf，其后仅证据文档。用户授权“进行结构清理”“继续任务”，保持批准UI及统计口径，拒绝的改版/结果按钮组不得实施。内嵌可视化不可用，使用文字/实际截图。无本轮推送、公开发布、部署、真实采集/消息授权；不组织多代理，不动旧D盘/Ubuntu/全局WSL。
+仅SeekBell-Dev:/home/dev/projects/seekbell开发；聊天在原Ubuntu时经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。当前codex/single-production-frontend，最后实现d224853a2f24cd003ff02eafb27a1532e78e54bf，其后仅证据文档。用户授权“进行结构清理”“继续任务”，保持批准UI及统计口径，拒绝的改版/结果按钮组不得实施。内嵌可视化不可用，使用文字/实际截图。用户追加授权清理无用旧Docker实例，已退役18080/18081及同批失败容器，旧数据先在仓库外归档。无本轮推送、公开发布、新部署、真实采集/消息授权；不组织多代理，不动旧D盘/Ubuntu/全局WSL。
 
 ## 实现与证据
 
@@ -18,4 +18,4 @@ SeekBell-Dev、实现d224853：后端659项、浏览器58项（含新增通用UI
 
 公开镜像仍ui-restore-5，代码c8be41c9a1f85650be6447e773b73a204dba9b88，digest sha256:089289552719774057aa527bbd055e7c33370e6cc5c1811c0da4583b0675f7ff，[旧回执](history/2026-10-23-通知导航焦点与概览任务行修复.md)。本轮未更新镜像/部署。
 
-保护18080/18081、seekbell-acceptance-b45fc2c-20261020容器/卷、backup-local、旧Stack/卷及8000/4175。Compose沿用8001与seekbell_compare_data，禁同SQLite卷双实例。结构清理无阻塞，下一步用户审阅；发布/部署需明确指示。恢复读本状态、结构记录与受影响代码。
+[旧Docker已定向清理](history/2026-10-23-旧Docker实例退役清理.md)：3容器、3专属卷、2网络、2旧镜像移除，18080/18081释放；rootless现无容器/卷，其他镜像标签保持。旧数据归档在/home/dev/.local/state/seekbell/maintenance/2026-10-23-retired-docker/archives，权限0600、SQLite和SHA校验通过，未入Git。原Ubuntu、远程Stack及8000/4175仍未动。Compose沿用8001与seekbell_compare_data，禁同SQLite卷双实例。结构清理及旧Docker清理完成，无阻塞，下一步用户审阅；发布/部署需明确指示。恢复读本状态、结构记录与受影响代码。
