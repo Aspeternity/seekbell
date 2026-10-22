@@ -1,0 +1,33 @@
+{
+  "date": "2026-10-22T08:37:58.094537+00:00",
+  "reference": "ghcr.io/aspeternity/seekbell:ui-restore-3",
+  "digest": "sha256:328f888d8b616e45947edb512e5c7f9d1e6b27ded11ff0c33ee43021277f97e4",
+  "code_sha": "679bcf0ee09c9da63f01f2fbbe99347bc7f5a01c",
+  "anonymous_pull": {
+    "success": true,
+    "platform": "linux/amd64",
+    "docker_config_has_auth": false,
+    "image_id": "sha256:328f888d8b616e45947edb512e5c7f9d1e6b27ded11ff0c33ee43021277f97e4",
+    "user": "10001:10001",
+    "revision": "679bcf0ee09c9da63f01f2fbbe99347bc7f5a01c",
+    "repo_digests": [
+      "ghcr.io/aspeternity/seekbell@sha256:328f888d8b616e45947edb512e5c7f9d1e6b27ded11ff0c33ee43021277f97e4"
+    ]
+  },
+  "platforms": {
+    "amd64": {
+      "manifest": "sha256:6c3a6660894496e2de7e97352d67e9921204c990fae117aff19007e0963f6dfa",
+      "config": "sha256:d2545e7c0360ae1c3581cfa3c0ea6163fd6f7708a491d84fff7a189cee60b676"
+    },
+    "arm64": {
+      "manifest": "sha256:5d986696f44b79eeaebe8c31a1e79239e99dcecd3bd7cad1494fbb0af3a984a6",
+      "config": "sha256:d14ff7aa0b365c820cf11dcf43bd0ef4decd82abad6a36d2ade917d48259dfe5"
+    }
+  },
+  "unchanged_previous_tags": {
+    "ui-restore-2": "sha256:b6fc9f5ebbe16d88d93ef2b16c3a72423e06761cad30fdd0d3638fa6f9d5cab6",
+    "ui-restore-1": "sha256:4421b9e64652b3d19c464c462c1446e14f9ca81afac2fccca0eaa666ce201667",
+    "ui-fix-1": "sha256:909818de6963aecf5ad46f14429856826a30559e45bf6b6a5f5b823566bc481b"
+  },
+  "arm64_runtime_evidence": "native CI; not locally emulated"
+}
