@@ -52,6 +52,16 @@ def post_time(payload, *, show_timezone=True):
     )
 
 
+def telegram_post_time(payload):
+    post = payload["post"]
+    zone = payload.get("display_timezone", "UTC")
+    published = format_timestamp(post.get("published_at"), zone, show_timezone=False)
+    # A synthetic target test has no source post. Its sample time is its creation time.
+    if published is None and payload.get("type") == "target_test":
+        published = format_timestamp(post.get("first_seen_at"), zone, show_timezone=False)
+    return "发布时间：" + (published or "来源未提供")
+
+
 def render(payload: dict, config: dict, *, limit: int = 4000, show_timezone=True) -> str:
     if payload.get("type") == "system_alert":
         alert = payload["alert"]
@@ -102,9 +112,9 @@ def telegram_message(payload: dict, config: dict) -> dict:
             + clip(line(category_label(post.get("website_id"), post.get("category"))), 100)
             + " · 作者："
             + clip(line(post.get("author")), 100),
-            "🎯 命中任务："
+            "命中任务："
             + clip("、".join(line(task["name"]) for task in payload["matched_tasks"]), 1000),
-            "🕒 " + post_time(payload, show_timezone=False),
+            telegram_post_time(payload),
         ]
     text = title + "\n\n" + "\n".join(details)
     if payload.get("type") != "system_alert" and config["include_summary"]:

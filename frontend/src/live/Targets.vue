@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { shouldOpenNotificationCard } from '../prototype/notificationCard'
 import { computed, ref } from 'vue'
 import Icon from '../prototype/components/Icon.vue'
 import NotificationTabs from './NotificationTabs.vue'
@@ -12,6 +13,9 @@ const q = ref(''),
   testId = ref('')
 const deleting = ref(false)
 const deleteError = ref('')
+function openTarget(event: MouseEvent, target: Target) {
+  if (shouldOpenNotificationCard(event)) emit('navigate', '/target/' + target.id)
+}
 function remove(target: Target) {
   if (deleting.value) return
   if (state.tasks.some((task) => task.targets.includes(target.id))) {
@@ -76,7 +80,12 @@ function completed(path: string) {
   </div>
   <p v-if="deleteError" class="form-errors" role="alert">{{ deleteError }}</p>
   <div class="target-card-grid">
-    <article v-for="target in targets" :key="target.id" class="panel notification-card">
+    <article
+      v-for="target in targets"
+      :key="target.id"
+      class="panel notification-card is-clickable"
+      @click="(event) => openTarget(event, target)"
+    >
       <div class="notification-card-top">
         <span class="icon-tile" :class="target.color"><Icon :name="target.icon" :size="22" /></span
         ><Toggle

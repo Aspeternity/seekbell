@@ -122,13 +122,13 @@ def test_legacy_queue_reads_current_timezone_for_each_attempt_without_rewriting_
     assert retry.payload["post"] == before["post"]
 
 
-def test_target_test_uses_saved_timezone_and_discovery_time(core):
+def test_target_test_uses_saved_timezone_and_sample_publication_time(core):
     update_display(core.engine, "Asia/Shanghai", get_display(core.engine)["revision"])
     _, _, event = TargetTesting(core.engine, {}, clock=lambda: 0)._start(core.target)
     text = render(event, validate_config("telegram", CONFIGS["telegram"]))
     assert "发现时间：1970-01-01 08:00:00 (Asia/Shanghai)" in text
     telegram = telegram_message(event, validate_config("telegram", CONFIGS["telegram"]))["text"]
-    assert "发现时间：1970-01-01 08:00:00" in telegram
+    assert "发布时间：1970-01-01 08:00:00" in telegram
     assert "Asia/Shanghai" not in telegram
 
 
@@ -184,8 +184,8 @@ def test_telegram_groups_compact_metadata_and_optional_summary_with_literal_exte
         event["post"]["title"],
         "",
         "NodeSeek · 交易 · 作者：synthetic author",
-        "🎯 命中任务：synthetic rule、第二个任务",
-        "🕒 发布时间：2026-10-18 00:00:00",
+        "命中任务：synthetic rule、第二个任务",
+        "发布时间：2026-10-18 00:00:00",
         "",
         "摘要：<b>literal summary</b> & 😀",
     ]
@@ -197,3 +197,18 @@ def test_telegram_groups_compact_metadata_and_optional_summary_with_literal_exte
         }
     ]
     assert "parse_mode" not in message
+
+
+@pytest.mark.parametrize("published", [None, "", "invalid"])
+def test_telegram_missing_source_publication_time_is_not_relabelled_discovery_time(published):
+    event = payload()
+    event["post"]["published_at"] = published
+    event["display_timezone"] = "Asia/Shanghai"
+    before = copy.deepcopy(event)
+    text = telegram_message(event, validate_config("telegram", CONFIGS["telegram"]))["text"]
+    assert "发布时间：来源未提供" in text
+    assert "发现时间" not in text
+    assert "1970-01-01" not in text
+    assert "🎯" not in text and "🕒" not in text
+    assert event == before
+    assert "发现时间：" in render(event, validate_config("bark", CONFIGS["bark"]))

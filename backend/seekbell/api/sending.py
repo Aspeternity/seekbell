@@ -2,10 +2,12 @@ import asyncio
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from seekbell.api.auth import require_admin
+from seekbell.notifiers.preview import telegram_preview
+from seekbell.services.display import get_display
 from seekbell.services.history import History
 from seekbell.services.manual_sending import MissingSend, preview
 from seekbell.services.target_testing import OperationConflict
@@ -24,6 +26,21 @@ def services(request: Request):
 
 
 Services = Annotated[tuple, Depends(services)]
+
+
+class MessagePreviewInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+    include_summary: bool = True
+    summary_limit: int = Field(default=160, ge=0, le=1000)
+
+
+@router.get("/notification-preview/telegram")
+def telegram_message_preview(values: Annotated[MessagePreviewInput, Query()], request: Request):
+    return telegram_preview(
+        get_display(request.app.state.engine)["timezone"],
+        include_summary=values.include_summary,
+        summary_limit=values.summary_limit,
+    )
 
 
 @router.get("/targets/{key}/test-preview")

@@ -64,6 +64,7 @@ class TargetTesting:
         payload = {
             **context,
             "schema_version": 1,
+            "type": "target_test",
             "event_id": key,
             "post": {
                 "website_id": "nodeseek",

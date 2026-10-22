@@ -1,5 +1,9 @@
 import { reactive, ref } from 'vue'
 import { clearReadCache } from './readCache'
+import type {
+  TelegramPreviewMessage,
+  NotificationPreviewOptions,
+} from '../prototype/notificationPreview'
 import type { Task, Sample } from '../prototype/model'
 import { emptyTask } from '../prototype/model'
 import { createWebsite, websiteDefinition } from '../prototype/websites'
@@ -377,4 +381,12 @@ export async function getTaskStatistics() {
         ? '尚未记录'
         : formatTime(new Date(row.last_match_at * 1000).toISOString()),
   }))
+}
+
+export function loadTelegramPreview(options: NotificationPreviewOptions) {
+  const params = new URLSearchParams({
+    include_summary: String(options.include_summary),
+    summary_limit: String(options.summary_limit),
+  })
+  return request<TelegramPreviewMessage>('manage/notification-preview/telegram?' + params)
 }

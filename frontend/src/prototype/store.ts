@@ -1,4 +1,6 @@
 import { reactive, ref, watch } from 'vue'
+import previewSample from './telegramPreview.sample.json'
+import type { TelegramPreviewMessage, NotificationPreviewOptions } from './notificationPreview'
 import { initialTasks, targets as seedTargets, historySamples, evaluate } from './model'
 import type { Task, Sample } from './model'
 import { createWebsite, websiteDefinition } from './websites'
@@ -753,4 +755,17 @@ export async function trialHistory(task: Task, _limit: number) {
 
 export async function getTaskStatistics() {
   return state.tasks.map((task) => ({ id: task.id, hits: task.hits, lastHit: task.lastHit }))
+}
+
+export async function loadTelegramPreview(
+  options: NotificationPreviewOptions,
+): Promise<TelegramPreviewMessage> {
+  const messages: Record<string, TelegramPreviewMessage> = previewSample.messages
+  const message = clone(messages[options.timezone] || previewSample.messages.UTC)
+  if (options.include_summary)
+    message.text +=
+      previewSample.summary_suffixes[
+        Math.min(options.summary_limit, previewSample.summary_suffixes.length - 1)
+      ]
+  return message
 }

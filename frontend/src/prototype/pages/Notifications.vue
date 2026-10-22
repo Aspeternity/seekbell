@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { shouldOpenNotificationCard } from '../notificationCard'
 import { computed, nextTick, ref } from 'vue'
 import Icon from '../components/Icon.vue'
 import Toggle from '../components/Toggle.vue'
@@ -46,6 +47,9 @@ const records = computed(() =>
 )
 function toggle(target: Target, value: boolean) {
   setTargetEnabled(target, value)
+}
+function openTarget(event: MouseEvent, target: Target) {
+  if (shouldOpenNotificationCard(event)) emit('navigate', '/target/' + target.id)
 }
 function remove(target: Target) {
   const linked = state.tasks.filter((t) => t.targets.includes(target.id))
@@ -246,7 +250,12 @@ function canRetry(record: Delivery) {
         </select>
       </div>
       <div class="target-card-grid">
-        <article v-for="target in targetList" :key="target.id" class="panel notification-card">
+        <article
+          v-for="target in targetList"
+          :key="target.id"
+          class="panel notification-card is-clickable"
+          @click="(event) => openTarget(event, target)"
+        >
           <div class="notification-card-top">
             <span class="icon-tile" :class="target.color"
               ><Icon :name="target.icon" :size="22" /></span
