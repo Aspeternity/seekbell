@@ -214,7 +214,7 @@ test('Telegram preview shares real formatting and target cards open without hija
     await expect(page).toHaveURL(/notifications\/targets/)
     await page.getByRole('dialog').getByRole('button', { name: '取消', exact: true }).click()
     await card.getByRole('button', { name: '删除' + name, exact: true }).click()
-    await expect(page.getByRole('dialog')).toContainText('删除当前配置')
+    await expect(page.getByRole('dialog')).toContainText('任务规则和历史记录会保留')
     await expect(page).toHaveURL(/notifications\/targets/)
     await page.getByRole('dialog').getByRole('button', { name: '取消', exact: true }).click()
     const text = card.locator('.credential-status')

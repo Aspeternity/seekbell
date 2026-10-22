@@ -498,6 +498,10 @@ export function formatTime(value: string) {
     : '尚未测试'
 }
 export function setTaskEnabled(task: Task, value: boolean) {
+  if (value && !task.targets.length) {
+    notify('请先为任务选择通知目标。')
+    return
+  }
   task.enabled = value
   notify(value ? '任务已恢复；不补发暂停期间的帖子。' : '任务已暂停；历史命中仍保留。')
 }
@@ -768,4 +772,37 @@ export async function loadTelegramPreview(
         Math.min(options.summary_limit, previewSample.summary_suffixes.length - 1)
       ]
   return message
+}
+
+export async function getTargetDeletePreview(
+  id: string,
+): Promise<import('./targetDeletion').TargetDeletePreview> {
+  const target = state.targets.find((item) => item.id === id)
+  if (!target) throw new Error('通知目标已不存在。')
+  const linked = state.tasks.filter((task) => task.targets.includes(id))
+  return {
+    target_name: target.name,
+    confirmation: JSON.stringify([target, linked, state.settings.alertTargets]),
+    tasks: linked
+      .filter((task) => task.targets.every((key) => key === id))
+      .map((task) => ({
+        id: task.id,
+        name: task.name,
+        enabled: task.enabled,
+      })),
+    alerts_disabled:
+      state.settings.alertTargets.length === 1 && state.settings.alertTargets[0] === id,
+  }
+}
+export async function removeTarget(target: Target, confirmation: string) {
+  const current = await getTargetDeletePreview(target.id)
+  if (current.confirmation !== confirmation) throw new Error('关联配置已更新，请重新查看后再删除。')
+  for (const task of state.tasks.filter((item) => item.targets.includes(target.id))) {
+    task.targets = task.targets.filter((id) => id !== target.id)
+    if (!task.targets.length) task.enabled = false
+  }
+  cancelTargetRetries(target.id)
+  state.targets = state.targets.filter((item) => item.id !== target.id)
+  state.settings.alertTargets = state.settings.alertTargets.filter((id) => id !== target.id)
+  notify('目标已删除，历史记录保留。')
 }

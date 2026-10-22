@@ -3,22 +3,22 @@ import { shouldOpenNotificationCard } from '../notificationCard'
 import { computed, nextTick, ref } from 'vue'
 import Icon from '../components/Icon.vue'
 import Toggle from '../components/Toggle.vue'
+import TargetDeleteDialog from '../components/TargetDeleteDialog.vue'
 import {
   state,
   isLive,
   channelMeta,
   deliveryLabels,
   formatTime,
-  notify,
   testTarget,
   resend,
   confirmAction,
   setTargetEnabled,
-  cancelTargetRetries,
 } from '@workspace'
 import type { Target, Delivery, DeliveryStatus } from '@workspace'
 const props = withDefaults(defineProps<{ tab?: string; recordId?: string }>(), { tab: 'targets' })
 const emit = defineEmits<{ navigate: [path: string] }>()
+const deletingTarget = ref<Target>()
 const query = ref(''),
   status = ref('all'),
   channel = ref('all'),
@@ -52,22 +52,7 @@ function openTarget(event: MouseEvent, target: Target) {
   if (shouldOpenNotificationCard(event)) emit('navigate', '/target/' + target.id)
 }
 function remove(target: Target) {
-  const linked = state.tasks.filter((t) => t.targets.includes(target.id))
-  if (linked.length) {
-    notify('此目标被 ' + linked.length + ' 个任务使用，请先在任务中取消选择。')
-    return
-  }
-  confirmAction(
-    '删除「' + target.name + '」？',
-    '删除配置并保留投递历史。此操作仅影响浏览器演示。',
-    () => {
-      cancelTargetRetries(target.id)
-      state.targets = state.targets.filter((t) => t.id !== target.id)
-      state.settings.alertTargets = state.settings.alertTargets.filter((id) => id !== target.id)
-      notify('目标已删除，投递历史保留。')
-    },
-    '删除目标',
-  )
+  deletingTarget.value = target
 }
 async function openTest(target: Target) {
   testId.value = target.id
@@ -381,6 +366,11 @@ function canRetry(record: Delivery) {
       </div>
     </section></template
   >
+  <TargetDeleteDialog
+    v-if="deletingTarget"
+    :target="deletingTarget"
+    @close="deletingTarget = undefined"
+  />
   <dialog ref="testDialog" class="dialog" @cancel.prevent="!testing && testDialog?.close()">
     <div class="dialog-top">
       <span class="dialog-icon"><Icon name="play" :size="23" /></span

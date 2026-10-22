@@ -4,44 +4,17 @@ import { computed, ref } from 'vue'
 import Icon from '../prototype/components/Icon.vue'
 import NotificationTabs from './NotificationTabs.vue'
 import Toggle from '../prototype/components/Toggle.vue'
-import { state, channelMeta, setTargetEnabled, confirmAction, removeTarget, notify } from './store'
+import { state, channelMeta, setTargetEnabled } from './store'
+import TargetDeleteDialog from '../prototype/components/TargetDeleteDialog.vue'
 import type { Target } from '../prototype/shared'
 import SendDialog from './SendDialog.vue'
 const emit = defineEmits<{ navigate: [path: string] }>()
 const q = ref(''),
   channel = ref('all'),
   testId = ref('')
-const deleting = ref(false)
-const deleteError = ref('')
+const deletingTarget = ref<Target>()
 function openTarget(event: MouseEvent, target: Target) {
   if (shouldOpenNotificationCard(event)) emit('navigate', '/target/' + target.id)
-}
-function remove(target: Target) {
-  if (deleting.value) return
-  if (state.tasks.some((task) => task.targets.includes(target.id))) {
-    notify('请先在关联任务中取消选择此目标，包括暂停的任务。')
-    return
-  }
-  if (state.settings.alertTargets.includes(target.id)) {
-    notify('请先在系统告警设置中取消选择此目标。')
-    return
-  }
-  confirmAction(
-    '删除「' + target.name + '」？',
-    '删除当前配置并取消等待投递，历史记录保留。在途消息可能已经发出，无法撤回。',
-    async () => {
-      deleting.value = true
-      deleteError.value = ''
-      try {
-        await removeTarget(target)
-      } catch (error) {
-        deleteError.value = (error as Error).message
-      } finally {
-        deleting.value = false
-      }
-    },
-    '删除目标',
-  )
 }
 const targets = computed(() =>
   state.targets.filter(
@@ -78,7 +51,6 @@ function completed(path: string) {
       <option v-for="(meta, id) in channelMeta" :key="id" :value="id">{{ meta.type }}</option>
     </select>
   </div>
-  <p v-if="deleteError" class="form-errors" role="alert">{{ deleteError }}</p>
   <div class="target-card-grid">
     <article
       v-for="target in targets"
@@ -114,9 +86,8 @@ function completed(path: string) {
         ><button class="button" @click="emit('navigate', '/target/' + target.id)">编辑</button>
         <button
           class="icon-button danger-text"
-          :disabled="deleting"
           :aria-label="'删除' + target.name"
-          @click="remove(target)"
+          @click="deletingTarget = target"
         >
           <Icon name="trash" :size="16" />
         </button>
@@ -133,6 +104,11 @@ function completed(path: string) {
     <Icon name="shield" :size="18" />
     <p>目标独立启停。同一帖子到同一目标合并发送；恢复目标不会自动补发积压消息。</p>
   </div>
+  <TargetDeleteDialog
+    v-if="deletingTarget"
+    :target="deletingTarget"
+    @close="deletingTarget = undefined"
+  />
   <SendDialog
     v-if="testId"
     :key="testId"

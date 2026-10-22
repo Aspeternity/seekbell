@@ -407,3 +407,31 @@ test('unsaved settings are guarded on browser back and corrupt storage falls bac
   await expect(page.getByRole('heading', { name: '从第一个关心的网站开始' })).toBeVisible()
   await expect(page.getByRole('status')).toContainText('恢复默认')
 })
+
+test('demo target deletion shares the sole-target list and pauses tasks after confirmation', async ({
+  page,
+}) => {
+  await go(page, '/notifications/targets')
+  const card = page.locator('.notification-card').filter({ hasText: 'Telegram 私人通知' })
+  await card.getByRole('button', { name: '删除Telegram 私人通知', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: '删除「Telegram 私人通知」？', exact: true })
+  const list = dialog.getByRole('list', { name: '删除后没有通知目标的任务' })
+  await expect(list).toContainText('自托管灵感收集')
+  await expect(dialog).not.toContainText('好价服务器雷达')
+  await dialog.getByRole('button', { name: '取消', exact: true }).click()
+  await expect(card).toBeVisible()
+  await card.getByRole('button', { name: '删除Telegram 私人通知', exact: true }).click()
+  await dialog.getByRole('button', { name: '删除', exact: true }).click()
+  await expect(card).toHaveCount(0)
+  await go(page, '/tasks')
+  const toggle = page.getByRole('switch', { name: '自托管灵感收集启用状态', exact: true })
+  await expect(toggle).toHaveAttribute('aria-checked', 'false')
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-checked', 'false')
+  await expect(page.getByRole('status').filter({ hasText: '请先为任务选择通知目标' })).toBeVisible()
+  await expect(
+    page.getByRole('switch', { name: '好价服务器雷达启用状态', exact: true }),
+  ).toHaveAttribute('aria-checked', 'true')
+  await page.reload()
+  await expect(toggle).toHaveAttribute('aria-checked', 'false')
+})

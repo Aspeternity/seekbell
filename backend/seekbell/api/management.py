@@ -24,7 +24,7 @@ from seekbell.db.transactions import write_session
 from seekbell.domain.posts import PostFields
 from seekbell.domain.rules import Rule, evaluate
 from seekbell.services import alerts
-from seekbell.services.configuration import Configuration, TargetInUse
+from seekbell.services.configuration import Configuration, TargetDeleteChanged, TargetInUse
 from seekbell.services.display import DisplayConflict, get_display, update_display
 from seekbell.services.retention import PolicyConflict, get_policy, update_policy
 from seekbell.services.rule_trial import trial_history
@@ -311,11 +311,22 @@ def runtime(request: Request):
     return runtime_status(request)
 
 
+class TargetDeleteInput(Input):
+    confirmation: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+@router.get("/targets/{key}/delete-preview")
+def target_delete_preview(key: str, request: Request):
+    return config(request).target_delete_preview(key)
+
+
 @router.delete("/targets/{key}")
-def delete_target(key: str, request: Request):
+def delete_target(key: str, request: Request, values: TargetDeleteInput | None = None):
     try:
-        config(request).delete_target(key, at=time.time())
-    except TargetInUse as error:
+        config(request).delete_target(
+            key, at=time.time(), confirmation=values.confirmation if values else None
+        )
+    except (TargetInUse, TargetDeleteChanged) as error:
         raise HTTPException(409, str(error)) from None
     return {"ok": True}
 
