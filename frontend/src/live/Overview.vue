@@ -16,6 +16,7 @@ const selectedSource = ref('')
 const remote = useRemote(
   () => request<OverviewData>('manage/overview?range=' + range.value),
   () => [range.value],
+  { cacheKey: () => 'overview:' + range.value },
 )
 const data = remote.data
 const stamp = (value: number | null) =>
@@ -100,7 +101,14 @@ async function toggle(id: string) {
       刷新概览<span v-if="data"> · {{ stamp(data.end) }}</span>
     </button>
   </div>
-  <Feedback :loading="remote.loading.value" :error="remote.error.value" @retry="remote.reload" />
+  <Feedback
+    :loading="remote.loading.value"
+    :error="remote.error.value"
+    :retained="!!data"
+    :delay="200"
+    subtle
+    @retry="remote.reload"
+  />
   <template v-if="data">
     <div v-if="!data.runtime_active && data.runtime.status !== 'failed'" class="warning-note">
       <Icon name="clock" :size="18" /><span

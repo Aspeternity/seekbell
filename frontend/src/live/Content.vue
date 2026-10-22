@@ -28,6 +28,7 @@ const evaluationPage = ref(1),
 const options = useRemote(
   () => historyGet<Options>('options'),
   () => [],
+  { cacheKey: () => 'content:options' },
 )
 watch([q, status, task, category, day, website], () => (page.value = 1), { flush: 'sync' })
 const listing = useRemote(
@@ -53,7 +54,25 @@ const listing = useRemote(
     day.value,
     website.value,
     page.value,
+    state.settings.timezone,
   ],
+  {
+    cacheKey: () =>
+      props.selectedId
+        ? undefined
+        : JSON.stringify([
+            'content:posts',
+            q.value,
+            status.value,
+            task.value,
+            category.value,
+            day.value,
+            website.value,
+            page.value,
+            state.settings.timezone,
+          ]),
+    debounce: () => q.value,
+  },
 )
 const detail = useRemote(
   () =>
@@ -83,6 +102,10 @@ const deliveries = useRemote(
 )
 const time = (at: number | null) =>
   at === null ? '未记录' : formatTime(new Date(at * 1000).toISOString())
+function reloadListing() {
+  options.reload()
+  listing.reload()
+}
 function clear() {
   q.value = ''
   status.value = 'all'
@@ -135,7 +158,7 @@ function clear() {
             </div>
             <a
               v-if="detail.data.value.original_url"
-              class="button"
+              class="button original-post-link"
               :href="detail.data.value.original_url"
               target="_blank"
               rel="noopener noreferrer"
@@ -321,19 +344,17 @@ function clear() {
           >发现日期<input v-model="day" type="date" aria-label="发现日期"
         /></label>
       </div>
-      <Feedback
-        :loading="options.loading.value"
-        :error="options.error.value"
-        @retry="options.reload"
-      />
       <p v-if="task" class="small-note">匹配结果按所选任务的历史判定筛选；详情可查看其他任务。</p>
       <p v-if="options.data.value?.truncated" class="small-note">
         筛选选项较多，仅列出前 200 项；可结合内容搜索定位。
       </p>
       <Feedback
-        :loading="listing.loading.value"
-        :error="listing.error.value"
-        @retry="listing.reload"
+        :loading="listing.loading.value || options.loading.value"
+        :error="[listing.error.value, options.error.value].filter(Boolean).join('；')"
+        :retained="!!listing.data.value"
+        :delay="200"
+        subtle
+        @retry="reloadListing"
       />
       <template v-if="listing.data.value">
         <article v-for="post in listing.data.value.items" :key="post.id" class="content-row">
@@ -373,3 +394,9 @@ function clear() {
       </template></section
   ></template>
 </template>
+
+<style scoped>
+.original-post-link {
+  margin-top: 16px;
+}
+</style>

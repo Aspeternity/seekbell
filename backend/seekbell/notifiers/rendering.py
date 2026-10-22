@@ -3,6 +3,8 @@
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from seekbell.sites.labels import category_label, website_label
+
 
 def clip(value: str, limit: int) -> str:
     if limit <= 0:
@@ -95,13 +97,14 @@ def telegram_message(payload: dict, config: dict) -> dict:
     else:
         post = payload["post"]
         details = [
-            "作者："
-            + clip(line(post.get("author")), 100)
-            + " · 版块："
-            + clip(line(post.get("category")), 100),
-            post_time(payload, show_timezone=False),
-            "命中任务："
+            clip(line(website_label(post.get("website_id"))), 80)
+            + " · "
+            + clip(line(category_label(post.get("website_id"), post.get("category"))), 100)
+            + " · 作者："
+            + clip(line(post.get("author")), 100),
+            "🎯 命中任务："
             + clip("、".join(line(task["name"]) for task in payload["matched_tasks"]), 1000),
+            "🕒 " + post_time(payload, show_timezone=False),
         ]
     text = title + "\n\n" + "\n".join(details)
     if payload.get("type") != "system_alert" and config["include_summary"]:

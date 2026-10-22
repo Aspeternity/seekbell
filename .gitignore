@@ -48,3 +48,5 @@ frontend/test-results-backup/
 .seekbell-web-*/
 
 frontend/test-results-proxy/
+
+/frontend/test-results-loading/

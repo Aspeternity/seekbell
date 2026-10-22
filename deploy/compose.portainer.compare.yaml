@@ -2,7 +2,7 @@
 # Reuse the same Stack and volume to upgrade; a new Stack starts with an empty volume.
 services:
   seekbell:
-    image: ghcr.io/aspeternity/seekbell:ui-restore-2
+    image: ghcr.io/aspeternity/seekbell:ui-restore-3
     restart: unless-stopped
     init: true
     ports:

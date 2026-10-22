@@ -45,6 +45,16 @@ test('stored history filters, pages, snapshots, uncertainty and read errors rema
     'href',
     'https://www.nodeseek.com/post-8005-1',
   )
+  const spacing = await page.locator('.original-post-link').evaluate((button) => {
+    const note = button.previousElementSibling!.getBoundingClientRect()
+    const scale =
+      parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue('--workspace-scale'),
+      ) || 1
+    return (button.getBoundingClientRect().top - note.bottom) / scale
+  })
+  expect(spacing).toBeCloseTo(16, 0)
+  await page.screenshot({ path: info.outputPath('post-detail-spacing.png'), fullPage: true })
   expect(await page.evaluate(() => Reflect.get(window, 'historyInjected'))).toBeUndefined()
   await page.goto('/#/content')
   await page.getByLabel('匹配结果', { exact: true }).selectOption('insufficient_data')
