@@ -1,6 +1,6 @@
 # 当前状态
 
-更新时间：2026-10-22（Asia/Shanghai）。M0～M3完成，M4工程退出通过，现M5用户实测修正。本轮获批三项已实现，SEEKBELL按用户最新要求保留；本地实现/检查完成，尚未发布，尚未发布或用户实机验收。
+更新时间：2026-10-22（Asia/Shanghai）。M0～M3完成，M4工程退出通过，现M5用户实测修正。本轮获批三项已实现，SEEKBELL按用户最新要求保留；本地实现/检查完成，尚未发布或用户实机验收。
 
 ## 环境与基准
 
@@ -21,4 +21,5 @@ TG真实帖显示RSS发布时间，缺失/无效为“发布时间：来源未�
 
 当前公开ghcr.io/aspeternity/seekbell:ui-restore-3，代码679bcf0ee09c9da63f01f2fbbe99347bc7f5a01c，digest sha256:328f888d8b616e45947edb512e5c7f9d1e6b27ded11ff0c33ee43021277f97e4；[564后端/74浏览器/双架构及匿名证据](history/2026-10-22-详情通知与页面加载修正.md)。源码private/包public、关联not-reported，临时开关恢复缺失。本轮仅授权修复，未合并/推送/发布，Compose仍原镜像。
 8001:8000及seekbell_compare_data保留，更新沿用同一Stack/卷，禁双实例共用SQLite卷；保护18081项目seekbell-acceptance-b45fc2c-20261020及容器/卷/backup-local、旧Stack/卷/8000/4175/18080。仅NodeSeek，多站为合成测试；Safari/真机未验收。
+本次仅解释规则试算：截图选“标题+摘要”并勾摘要缺失；vmiss/tri已由标题满足，core/收排除词在未知摘要中无法判定，故信息不足且不生成命中通知。依据domain/rules.py、TaskEditor.vue及services/ingestion.py；未修改业务代码、未新增需求或发布授权。已知空摘要与缺失摘要不同，取消模拟缺失或仅标题均可验证。
 无外部阻塞。修复工作已本地完成，下一步按用户指示发布验收镜像或处理反馈；未擅自合并/发布。交接读本状态、本轮记录、UI_DESIGN和影响代码，发布时按需IMAGE_RELEASE。
