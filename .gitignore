@@ -50,3 +50,4 @@ frontend/test-results-backup/
 frontend/test-results-proxy/
 
 /frontend/test-results-loading/
+/frontend/test-results-history-ui-fixes/

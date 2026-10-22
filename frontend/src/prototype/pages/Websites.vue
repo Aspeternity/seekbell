@@ -312,7 +312,7 @@ onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
     </div>
   </section>
   <template v-else>
-    <div class="website-toolbar">
+    <div class="filter-toolbar free-toolbar website-toolbar">
       <label class="search-input"
         ><Icon name="search" :size="17" /><input
           v-model="search"

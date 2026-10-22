@@ -47,6 +47,25 @@ def options(reader: Reader):
     return reader.options()
 
 
+@router.get("/counts")
+def counts(reader: Reader):
+    return reader.counts()
+
+
+@router.get("/dates")
+def dates(
+    reader: Reader,
+    scope: Literal["posts", "deliveries", "manual", "tests"] = "posts",
+    timezone: str = Query("Asia/Shanghai", max_length=64),
+    before: date | None = None,
+    limit: int = Query(100, ge=1, le=100),
+):
+    try:
+        return reader.dates(scope, timezone=timezone, before=before, limit=limit)
+    except (ValueError, OverflowError, KeyError):
+        raise HTTPException(422, "记录日期或显示时区无效。") from None
+
+
 @router.get("/posts")
 def posts(
     params: Paging,

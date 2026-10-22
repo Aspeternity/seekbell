@@ -1,25 +1,21 @@
 # 当前状态
 
-更新时间：2026-10-23（Asia/Shanghai）。M0～M3完成、M4工程退出通过，M5用户实测修正。ui-restore-5已公开发布并匿名拉取通过，待用户更新实机验收。
+更新时间：2026-10-23（Asia/Shanghai）。M0～M3完成、M4工程退出通过，M5实测修正。本轮筛选/日期/通知计数已本地实现并验证，未发布；数字点击按用户要求搁置。
 
 ## 环境、代码与授权
 
-仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。当前main，镜像代码基准c8be41c9a1f85650be6447e773b73a204dba9b88（实现b7ae06e907977cc3f4189bad8414cbbc7b9855aa），其后仅发布回执/Compose文档提交；原功能分支保留。用户明确要求发布新镜像供实机测试，授权必要合并/推送、公开GHCR发布及临时开关；不代部署、不真实采集发送。源码private、包public，不组织多代理；原D盘/Ubuntu/全局WSL不动。
+仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu通过wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。本轮基于main ee3bc8d853f0b80461b1a6058a1bc91f0e2ae598，分支codex/history-filter-stability-fixes，状态与实现同提交。用户授权先修复此前批准四项及新增四项；不重设计UI、不改统计口径、不加数字点击。两套版式/新增结果按钮组均拒绝并撤回，[讨论存档](history/2026-10-23-内容筛选统一优化设计.md)不可实施。内嵌可视化通道不可用，后续用文字/实际页面截图。无本轮推送、公开发布、部署或真实采集/发送授权；源码private、包public，不组织多代理，原D盘/Ubuntu/全局WSL不动。
 
-## 实现与边界
+## 本轮实现与证据
 
-通知管理四标签正确透传路径，当前态/切换/前进后退/刷新正常。文字输入/原生下拉改自身细边框与浅阴影，搜索由外壳统一反馈、内部填满；按钮/链接/复选单选保留键盘焦点，标题无外框。正式/演示概览与任务列表共享点击保护，信息格与空白打开配置；开关/状态区/按钮、修饰键和拖选文字独立。原UI布局/比例保持，稳定约定见UI_DESIGN。
+[根因、修改路径、检查命令与证据](history/2026-10-23-筛选日期与通知计数修复.md)：任务说明对齐筛选区；统计外壳保持、读取中保留列表高度，防搜索/下拉跳动；帖子详情立即读取、反馈延迟200ms。内容/投递/手动重发/测试四处恢复“全部日期”下拉，真实日期按保存时区游标读取。网站搜索/状态同高且手机输入16px。普通任务选项排除软删除，历史快照保留；中文版块显示与原始值分离。通知共享计数/在途合并/写后更新/会话隔离，切标签不回退“—”。无迁移、规则或后台发送变更，原布局/配色/统计保持。
 
-前轮删除确认仅列无目标任务，确认后解除引用、无目标者暂停并保留规则/历史；RSS联合范围缺摘要按标题判断；TG去两Emoji、发布时间、真实预览与整卡配置（保留SEEKBELL）均包含。历史不回算不补发，本轮无数据库/接口语义改动。
+修复前两例复现失败已归档；最终SeekBell-Dev后端history15项、浏览器76项（正式22、演示44、合成sending4/operations6）、两版类型/构建、Ruff/Prettier/隐私/diff检查通过。覆盖实际滚动下筛选几何稳定、详情199/200ms反馈、四处日期/时区与DST、通知跨标签/失败/写后更新/注销迟到响应。新增6浏览器独立8021临时服务并接入CI，未放宽登录限流。全部临时库与模拟服务，不冒充远程CI、真实RSS/消息、Safari/手机真机或用户验收。
 
-## 验证与发布
+证据在/home/dev/.local/state/seekbell/acceptance/2026-10-23-filter-fixes；本聊天filter-fixes目录含实际页面截图副本，已核对。原始问题与批准边界见[最初审查](history/2026-10-23-五项界面问题审查方案.md)。新增截图未入Git。
 
-[本轮实现/命令/证据](history/2026-10-23-通知导航焦点与概览任务行修复.md)。修复前新增三例均准确复现；本地正式UI8项32.8秒、history4项19.1秒、原型44项45.2秒共56浏览器及两版类型/构建/格式通过，桌面/手机截图已核对。新增UI套件与管理员轮换使用独立临时服务，未放宽产品登录限流。
+## 当前公开镜像与保护
 
-[最终工作流](https://github.com/Aspeternity/seekbell/actions/runs/39847575735)同SHA完整616后端/88浏览器、类型/格式/隐私、wheel/迁移、容器持久化/锁、加密恢复/升级回退/隔离TLS，以及原生amd64/arm64通过；复用已测归档发布，发布后digest拉取再验容器。均独立库与模拟服务，不等同真实论坛/通知、Safari/手机真机验收。
+仍为ghcr.io/aspeternity/seekbell:ui-restore-5，代码c8be41c9a1f85650be6447e773b73a204dba9b88，索引sha256:089289552719774057aa527bbd055e7c33370e6cc5c1811c0da4583b0675f7ff；其后仅文档。本轮本地修复尚不在镜像内。[旧发布/匿名拉取回执](history/2026-10-23-通知导航焦点与概览任务行修复.md)及日志/home/dev/.local/state/seekbell/releases/ui-restore-5保留，旧CI616/88不作为新修复证据。
 
-当前ghcr.io/aspeternity/seekbell:ui-restore-5，索引sha256:089289552719774057aa527bbd055e7c33370e6cc5c1811c0da4583b0675f7ff。空Docker配置实际匿名拉取amd64并核对代码/UID/两平台manifest/config；arm64运行证据来自原生CI。五旧标签ui4/ui3/ui2/ui1/ui-fix-1 digest未变，临时发布开关已恢复原缺失。回执/匿名JSON在本轮记录旁，原始日志/ZIP在/home/dev/.local/state/seekbell/releases/ui-restore-5。
-
-## 保护与下一步
-
-Compose已更新，8001:8000与seekbell_compare_data沿用原Stack/卷，禁双实例共用SQLite卷。保护18081项目seekbell-acceptance-b45fc2c-20261020及容器/卷/backup-local、旧Stack/卷/8000/4175/18080；本地5174/8012/8019已退出，未代部署。仅NodeSeek。无外部阻塞，下一步用户重新拉取/更新原Stack，验收四标签、完整焦点与整行交互。交接读本状态/本轮记录，发布维护按IMAGE_RELEASE。
+Compose沿用8001:8000/seekbell_compare_data，禁双实例共用SQLite卷。保护18081项目seekbell-acceptance-b45fc2c-20261020及容器/卷/backup-local、旧Stack/卷/8000/4175/18080。仅NodeSeek；临时测试服务已退出，未操作部署。无技术阻塞，下一步审阅修复；本轮发布需用户明确指示。交接先读本状态/本轮记录/受影响代码，发布再读IMAGE_RELEASE。

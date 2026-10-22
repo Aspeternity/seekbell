@@ -1836,10 +1836,14 @@ h1[tabindex='-1']:focus-visible {
   margin-bottom: 20px;
 }
 .website-toolbar .search-input {
-  width: 300px;
+  width: 400px;
+  max-width: 100%;
+  height: 36px;
+  min-height: 36px;
 }
 .website-toolbar select {
   width: 136px;
+  height: 36px;
   margin: 0;
 }
 .website-toolbar > span {
@@ -2336,6 +2340,12 @@ h1[tabindex='-1']:focus-visible {
   }
   .website-toolbar .search-input {
     width: 100%;
+    flex: 0 0 100%;
+    height: 40px;
+    min-height: 40px;
+  }
+  .website-toolbar select {
+    height: 40px;
   }
   .website-grid {
     gap: 16px;

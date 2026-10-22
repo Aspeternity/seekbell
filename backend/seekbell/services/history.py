@@ -23,6 +23,7 @@ from seekbell.db.models import (
     TaskVersion,
     Website,
 )
+from seekbell.sites.labels import category_label
 from seekbell.sites.nodeseek import NodeSeekAdapter
 
 
@@ -217,6 +218,7 @@ class History:
             "summary": post.summary if detail or post.summary is None else post.summary[:400],
             "author": post.author,
             "category": post.category,
+            "category_label": category_label(post.website_id, post.category),
             "first_seen_at": post.first_seen_at,
             "published_at": post.published_at,
             "original_url": original_url(post.website_id, post.external_post_id, post.url),
@@ -568,6 +570,45 @@ class History:
                 raise MissingHistory("目标测试记录不存在或已清理。")
             return self.test_item(row)
 
+    def counts(self):
+        with read_session(self.engine) as session:
+            return {
+                name: session.scalar(select(func.count()).select_from(model))
+                for name, model in (
+                    ("deliveries", Outbox),
+                    ("manual", ManualDelivery),
+                    ("tests", TargetTestAttempt),
+                )
+            }
+
+    def dates(self, scope, *, timezone="Asia/Shanghai", before=None, limit=100):
+        # Seek one stored timestamp per local day, not every post or only the current page.
+        # Local midnight boundaries preserve IANA/DST semantics used by the list filters.
+        zone = ZoneInfo(timezone)
+        column = {
+            "posts": Post.first_seen_at,
+            "deliveries": Outbox.created_at,
+            "manual": ManualDelivery.started_at,
+            "tests": TargetTestAttempt.started_at,
+        }[scope]
+        boundary = date_window(before, timezone)[0] if before else None
+        values = []
+        with read_session(self.engine) as session:
+            for _ in range(limit + 1):
+                statement = select(column)
+                if boundary is not None:
+                    statement = statement.where(column < boundary)
+                latest = session.scalar(statement.order_by(column.desc()).limit(1))
+                if latest is None:
+                    break
+                local_day = datetime.fromtimestamp(latest, zone).date()
+                values.append(local_day.isoformat())
+                boundary = date_window(local_day, timezone)[0]
+        return {
+            "items": values[:limit],
+            "next_before": values[limit - 1] if len(values) > limit else None,
+        }
+
     def options(self):
         with read_session(self.engine) as session:
             task_rows = session.execute(
@@ -578,18 +619,18 @@ class History:
                         TaskVersion.task_id == Task.id, TaskVersion.version == Task.current_version
                     ),
                 )
+                .where(Task.deleted_at.is_(None))
                 .order_by(Task.created_at.desc(), Task.id)
                 .limit(201)
             ).all()
-            categories = list(
-                session.scalars(
-                    select(Post.category)
-                    .where(Post.category.is_not(None))
-                    .distinct()
-                    .order_by(Post.category)
-                    .limit(201)
-                )
-            )
+            category_rows = session.execute(
+                select(Post.website_id, Post.category)
+                .where(Post.category.is_not(None))
+                .distinct()
+                .order_by(Post.website_id, Post.category)
+                .limit(201)
+            ).all()
+            categories = sorted({value for _, value in category_rows[:200]})
             targets = session.execute(
                 select(NotificationTarget.id, NotificationTarget.name)
                 .order_by(NotificationTarget.name, NotificationTarget.id)
@@ -600,13 +641,21 @@ class History:
                     {"id": task.id, "name": version.name, "deleted": task.deleted_at is not None}
                     for task, version in task_rows[:200]
                 ],
-                "categories": categories[:200],
+                "categories": categories,
+                "category_options": [
+                    {
+                        "website_id": website,
+                        "value": value,
+                        "label": category_label(website, value),
+                    }
+                    for website, value in category_rows[:200]
+                ],
                 "targets": [{"id": key, "name": name} for key, name in targets[:200]],
                 "websites": [
                     {"id": key, "name": name}
                     for key, name in session.execute(select(Website.id, Website.name).limit(100))
                 ],
-                "truncated": len(task_rows) > 200 or len(categories) > 200 or len(targets) > 200,
+                "truncated": len(task_rows) > 200 or len(category_rows) > 200 or len(targets) > 200,
             }
 
     @staticmethod

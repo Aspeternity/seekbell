@@ -80,7 +80,8 @@ def test_stable_server_pagination_literal_search_and_filters(history_client):
     )
     assert client.get(url, params={"page": 100}).json()["items"] == []
     options = client.get("/api/manage/history/options").json()
-    assert any(t["id"] == ids["secondary"] and t["deleted"] for t in options["tasks"])
+    assert all(t["id"] != ids["secondary"] and not t["deleted"] for t in options["tasks"])
+    assert any(t["id"] == ids["primary"] for t in options["tasks"])
 
 
 def test_delivery_status_uncertainty_snapshot_and_attempt_pages(history_client):
@@ -114,6 +115,8 @@ def test_history_is_readonly_and_never_serializes_credentials_or_leases(history_
         before = "\n".join(connection.connection.driver_connection.iterdump())
     urls = [
         "/api/manage/history/options",
+        "/api/manage/history/counts",
+        "/api/manage/history/dates",
         "/api/manage/history/posts",
         "/api/manage/history/posts/" + ids["posts"][1],
         "/api/manage/history/posts/" + ids["posts"][1] + "/evaluations",
@@ -137,7 +140,8 @@ def test_history_is_readonly_and_never_serializes_credentials_or_leases(history_
     assert before == after
     assert client.post("/api/manage/history/posts", json={}).status_code == 405
     client.post("/api/auth/logout")
-    assert client.get("/api/manage/history/posts").status_code == 401
+    for path in ("posts", "counts", "dates"):
+        assert client.get("/api/manage/history/" + path).status_code == 401
 
 
 def test_independent_test_records_and_pruned_post_snapshot(history_client):
@@ -307,3 +311,82 @@ def test_read_snapshot_does_not_block_ingestion_or_change_mid_page(core):
             pool.submit(core.ingest, 9001, 9002, 9003, at=30).result(timeout=5)
         assert session.scalar(count) == 2
     assert History(core.engine).list_posts()["total"] == 3
+
+
+def test_history_dates_are_real_local_days_with_complete_cursor_pagination(history_client):
+    client, app, _ = history_client
+    with write_session(app.state.engine) as session:
+        rows = session.scalars(select(Post).order_by(Post.external_post_id)).all()
+        for index, row in enumerate(rows[:4]):
+            row.first_seen_at += index * 86400
+    url = "/api/manage/history/dates"
+    first = client.get(url, params={"scope": "posts", "limit": 2}).json()
+    assert first == {"items": ["2026-10-22", "2026-10-21"], "next_before": "2026-10-21"}
+    second = client.get(
+        url, params={"scope": "posts", "limit": 2, "before": first["next_before"]}
+    ).json()
+    assert second == {"items": ["2026-10-20", "2026-10-19"], "next_before": None}
+    west = client.get(
+        url, params={"scope": "posts", "timezone": "America/Los_Angeles", "limit": 1}
+    ).json()
+    assert west["items"] == ["2026-10-21"]
+    for scope in ("deliveries", "tests"):
+        assert client.get(url, params={"scope": scope}).json()["items"] == ["2026-10-19"]
+    assert client.get(url, params={"scope": "manual"}).json() == {"items": [], "next_before": None}
+    for params in ({"timezone": "invalid"}, {"scope": "invalid"}, {"limit": 101}):
+        assert client.get(url, params=params).status_code == 422
+
+
+def test_category_display_labels_do_not_change_raw_values_or_filtering(history_client):
+    client, app, ids = history_client
+    with write_session(app.state.engine) as session:
+        rows = session.scalars(select(Post).order_by(Post.external_post_id)).all()
+        for row, value in zip(rows, ("daily", "tech", "unknown-category"), strict=False):
+            row.category = value
+    options = client.get("/api/manage/history/options").json()
+    labels = {c["value"]: c["label"] for c in options["category_options"]}
+    assert labels["daily"] == "日常" and labels["tech"] == "技术"
+    assert labels["unknown-category"] == "unknown-category"
+    for index, value, label in ((0, "daily", "日常"), (1, "tech", "技术")):
+        post = client.get("/api/manage/history/posts/" + ids["posts"][index]).json()
+        assert post["category"] == value and post["category_label"] == label
+        result = client.get("/api/manage/history/posts", params={"category": value}).json()
+        assert result["total"] == 1 and result["items"][0]["category_label"] == label
+
+
+def test_notification_counts_match_each_unfiltered_history_total(history_client):
+    client, _, _ = history_client
+    counts = client.get("/api/manage/history/counts").json()
+    assert counts == {"deliveries": 24, "manual": 0, "tests": 2}
+    for name, count in counts.items():
+        result = client.get("/api/manage/history/" + name, params={"q": "absent"}).json()
+        assert result["total"] == 0
+        assert count == client.get("/api/manage/history/" + name).json()["total"]
+
+
+def test_history_dates_handle_both_sides_of_dst_transition(history_client):
+    from datetime import UTC, datetime
+
+    client, app, _ = history_client
+    with write_session(app.state.engine) as session:
+        rows = session.scalars(select(Post).order_by(Post.external_post_id)).all()
+        for row, at in zip(
+            rows,
+            (
+                datetime(2026, 11, 1, 8, 30, tzinfo=UTC),
+                datetime(2026, 11, 1, 9, 30, tzinfo=UTC),
+                datetime(2026, 11, 2, 7, 30, tzinfo=UTC),
+                datetime(2026, 11, 2, 8, 30, tzinfo=UTC),
+            ),
+            strict=False,
+        ):
+            row.first_seen_at = at.timestamp()
+    result = client.get(
+        "/api/manage/history/dates", params={"timezone": "America/Los_Angeles", "limit": 2}
+    ).json()
+    assert result == {"items": ["2026-11-02", "2026-11-01"], "next_before": "2026-11-01"}
+    page = client.get(
+        "/api/manage/history/posts",
+        params={"timezone": "America/Los_Angeles", "discovered_on": "2026-11-01"},
+    ).json()
+    assert page["total"] == 3

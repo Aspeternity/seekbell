@@ -1,5 +1,6 @@
 import { reactive, ref } from 'vue'
 import { clearReadCache } from './readCache'
+import { clearNotificationCounts, invalidateNotificationCounts } from './notificationCounts'
 import type {
   TelegramPreviewMessage,
   NotificationPreviewOptions,
@@ -76,13 +77,17 @@ export async function sendRequest(
       (path.startsWith('manage/') || path === 'auth/administrator' || path === 'auth/logout')
     ) {
       clearReadCache()
+      clearNotificationCounts()
       signedIn.value = false
       Object.assign(state, empty())
       window.dispatchEvent(new Event('seekbell-session-expired'))
     }
     throw new Error(typeof data.detail === 'string' ? data.detail : '操作失败，请检查配置后重试。')
   }
-  if (method !== 'GET' && path !== 'auth/logout') clearReadCache()
+  if (method !== 'GET' && path !== 'auth/logout') {
+    clearReadCache()
+    invalidateNotificationCounts()
+  }
   return response
 }
 function applyAuth(info: any) {
@@ -125,6 +130,7 @@ export async function setSession(value: boolean) {
   if (value) return
   if (signedIn.value) await request('auth/logout', 'POST')
   clearReadCache()
+  clearNotificationCounts()
   signedIn.value = false
   Object.assign(state, empty())
   applyAuth(await request('auth/status'))

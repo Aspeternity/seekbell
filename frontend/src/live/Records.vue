@@ -22,6 +22,8 @@ import type {
 import Pagination from './Pagination.vue'
 import SendDialog from './SendDialog.vue'
 import Feedback from './Feedback.vue'
+import DateFilter from './DateFilter.vue'
+import { useReadHeight } from './readHeight'
 const props = withDefaults(defineProps<{ tab?: string; recordId?: string }>(), {
   tab: 'deliveries',
 })
@@ -39,6 +41,7 @@ watch([q, status, target, day, uncertain], () => (page.value = 1), { flush: 'syn
 const options = useRemote(
   () => historyGet<Options>('options'),
   () => [],
+  { cacheKey: () => 'content:options' },
 )
 const listing = useRemote<Page<DeliveryRecord> | Page<TestRecord> | Page<ManualRecord> | undefined>(
   () =>
@@ -72,7 +75,25 @@ const listing = useRemote<Page<DeliveryRecord> | Page<TestRecord> | Page<ManualR
     uncertain.value,
     page.value,
   ],
+  {
+    cacheKey: () =>
+      props.recordId
+        ? undefined
+        : JSON.stringify([
+            'records',
+            props.tab,
+            q.value,
+            status.value,
+            target.value,
+            day.value,
+            uncertain.value,
+            page.value,
+            state.settings.timezone,
+          ]),
+    debounce: () => q.value,
+  },
 )
+const results = useReadHeight(listing.loading)
 const detail = useRemote(
   () =>
     props.recordId && props.tab === 'deliveries'
@@ -451,66 +472,72 @@ function clear() {
           <option value="true">曾有结果未知</option>
           <option value="false">未标记结果未知</option>
         </select>
-        <label class="check-label"
-          >记录日期<input v-model="day" type="date" aria-label="记录日期"
-        /></label>
+        <DateFilter v-model="day" :scope="tab" label="记录日期" />
       </div>
       <Feedback
-        :loading="options.loading.value"
-        :error="options.error.value"
-        @retry="options.reload"
+        :loading="listing.loading.value || options.loading.value"
+        :error="[listing.error.value, options.error.value].filter(Boolean).join('；')"
+        :retained="!!listing.data.value"
+        :delay="200"
+        subtle
+        @retry="
+          () => {
+            listing.reload()
+            options.reload()
+          }
+        "
       />
-      <Feedback
-        :loading="listing.loading.value"
-        :error="listing.error.value"
-        @retry="listing.reload"
-      />
-      <template v-if="listing.data.value">
-        <article v-for="record in listing.data.value.items" :key="record.id" class="delivery-row">
-          <span class="icon-tile" :class="channelStyle(record.kind).color"
-            ><Icon :name="channelStyle(record.kind).icon" :size="18"
-          /></span>
-          <div class="management-copy">
+      <div
+        :ref="(el) => (results.element.value = el as HTMLElement | undefined)"
+        :style="results.style()"
+      >
+        <template v-if="listing.data.value">
+          <article v-for="record in listing.data.value.items" :key="record.id" class="delivery-row">
+            <span class="icon-tile" :class="channelStyle(record.kind).color"
+              ><Icon :name="channelStyle(record.kind).icon" :size="18"
+            /></span>
+            <div class="management-copy">
+              <button
+                class="text-link task-title"
+                @click="emit('navigate', '/notifications/' + tab + '/' + record.id)"
+              >
+                {{ title(record) }}
+              </button>
+              <p>
+                {{ record.target_name }} · {{ time(created(record)) }} ·
+                {{ kindLabels[record.kind] || '历史渠道' }}
+              </p>
+              <p v-if="'uncertain' in record && record.uncertain" class="amber-text">
+                曾有结果未知，可能重复
+              </p>
+              <p v-if="record.error_code">错误代码：{{ record.error_code }}</p>
+            </div>
+            <span class="result-pill" :class="resultClass(value(record))">{{
+              record.kind === 'smtp' && value(record) === 'sent' ? '服务器已接受' : label(record)
+            }}</span>
             <button
-              class="text-link task-title"
+              class="icon-button"
+              :aria-label="'查看投递' + record.id"
               @click="emit('navigate', '/notifications/' + tab + '/' + record.id)"
             >
-              {{ title(record) }}
+              <Icon name="arrow" :size="17" />
             </button>
-            <p>
-              {{ record.target_name }} · {{ time(created(record)) }} ·
-              {{ kindLabels[record.kind] || '历史渠道' }}
-            </p>
-            <p v-if="'uncertain' in record && record.uncertain" class="amber-text">
-              曾有结果未知，可能重复
-            </p>
-            <p v-if="record.error_code">错误代码：{{ record.error_code }}</p>
+          </article>
+          <div v-if="!listing.data.value.total" class="empty-state">
+            <Icon name="inbox" :size="32" />
+            <h3>这里还没有记录</h3>
+            <p>服务端尚无记录，或筛选条件未匹配。</p>
+            <button class="button" @click="clear">清除筛选</button>
           </div>
-          <span class="result-pill" :class="resultClass(value(record))">{{
-            record.kind === 'smtp' && value(record) === 'sent' ? '服务器已接受' : label(record)
-          }}</span>
-          <button
-            class="icon-button"
-            :aria-label="'查看投递' + record.id"
-            @click="emit('navigate', '/notifications/' + tab + '/' + record.id)"
-          >
-            <Icon name="arrow" :size="17" />
-          </button>
-        </article>
-        <div v-if="!listing.data.value.total" class="empty-state">
-          <Icon name="inbox" :size="32" />
-          <h3>这里还没有记录</h3>
-          <p>服务端尚无记录，或筛选条件未匹配。</p>
-          <button class="button" @click="clear">清除筛选</button>
-        </div>
-        <Pagination
-          :page="page"
-          :total="listing.data.value.total"
-          :page-size="listing.data.value.page_size"
-          label="投递记录"
-          @change="(v) => (page = v)"
-        />
-      </template></section
+          <Pagination
+            :page="page"
+            :total="listing.data.value.total"
+            :page-size="listing.data.value.page_size"
+            label="投递记录"
+            @change="(v) => (page = v)"
+          />
+        </template>
+      </div></section
   ></template>
   <SendDialog
     v-if="resendOpen && recordId"

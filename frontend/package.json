@@ -29,7 +29,8 @@
     "test:backup": "playwright test --config playwright.backup.config.ts",
     "test:proxy": "playwright test --config playwright.proxy.config.ts",
     "test:approved-ui": "playwright test --config playwright.approved-ui.config.ts",
-    "test:loading": "playwright test --config playwright.loading.config.ts"
+    "test:loading": "playwright test --config playwright.loading.config.ts",
+    "test:history-ui-fixes": "playwright test --config playwright.history-ui-fixes.config.ts"
   },
   "dependencies": {
     "naive-ui": "2.45.3",

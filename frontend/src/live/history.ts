@@ -16,6 +16,7 @@ export interface PostRecord {
   summary: string | null
   author: string | null
   category: string | null
+  category_label: string | null
   first_seen_at: number
   published_at: number | null
   original_url: string | null
@@ -104,6 +105,7 @@ export interface ManualRecord extends TestRecord {
 export interface Options {
   tasks: { id: string; name: string; deleted: boolean }[]
   categories: string[]
+  category_options: { website_id: string; value: string; label: string }[]
   targets: { id: string; name: string }[]
   websites: { id: string; name: string }[]
   truncated: boolean
