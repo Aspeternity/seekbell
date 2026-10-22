@@ -72,7 +72,20 @@ test('editor tests match, exclusion, missing field and history without sending',
   await page.getByLabel('帖子标题').fill('DMIT 套餐更新')
   await page.getByRole('checkbox', { name: '模拟摘要字段缺失' }).check()
   await page.getByRole('button', { name: '试匹配这条帖子' }).click()
+  await expect(page.locator('.match-result')).toHaveClass(/no/)
+  await page.getByLabel('帖子标题').fill('DMIT 优惠')
+  await page.getByRole('button', { name: '试匹配这条帖子' }).click()
+  await expect(page.locator('.match-result')).toHaveClass(/yes/)
+  await expect(page.locator('.field-help')).toContainText(['摘要缺失时仅按标题判断'])
+  await page.getByRole('checkbox', { name: '模拟摘要字段缺失' }).uncheck()
+  await page.getByLabel('帖子摘要', { exact: true }).fill('已出')
+  await page.getByRole('button', { name: '试匹配这条帖子' }).click()
+  await expect(page.locator('.match-result')).toHaveClass(/no/)
+  await page.getByRole('radio', { name: '仅摘要' }).check()
+  await page.getByRole('checkbox', { name: '模拟摘要字段缺失' }).check()
+  await page.getByRole('button', { name: '试匹配这条帖子' }).click()
   await expect(page.locator('.match-result')).toHaveClass(/unknown/)
+  await page.getByRole('radio', { name: '标题 + 摘要 覆盖更多线索' }).check()
   await page.getByRole('button', { name: '历史样本', exact: true }).click()
   await page.getByRole('button', { name: '试匹配 5 条样本' }).click()
   await expect(page.locator('.history-results article')).toHaveCount(5)
@@ -142,7 +155,23 @@ test('rule preview handles empty groups, field boundaries and precision', () => 
   task.exclude = ['求购']
   expect(
     evaluate(task, { title: 'DMIT', summary: null, author: null, category: null }).status,
+  ).toBe('yes')
+  expect(
+    evaluate(task, { title: '无关帖子', summary: null, author: null, category: null }).status,
+  ).toBe('no')
+  expect(
+    evaluate(task, { title: 'DMIT', summary: '求购', author: null, category: null }).status,
+  ).toBe('no')
+  expect(
+    evaluate(task, { title: '求购 DMIT', summary: null, author: null, category: null }).status,
+  ).toBe('no')
+  task.scope = 'summary'
+  expect(
+    evaluate(task, { title: 'DMIT', summary: null, author: null, category: null }).status,
   ).toBe('unknown')
+  expect(evaluate(task, { title: 'DMIT', summary: '', author: null, category: null }).status).toBe(
+    'no',
+  )
   task.scope = 'title'
   task.wholeWord = true
   expect(

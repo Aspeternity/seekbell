@@ -108,7 +108,8 @@ def evaluate(rule: Rule, post: PostFields) -> MatchResult:
     fields: list[str | None] = {
         "title": [post.title],
         "summary": [post.summary],
-        "title_summary": [post.title, post.summary],
+        # Combined scope uses received fields; summary-only keeps missing as unknown.
+        "title_summary": [field for field in (post.title, post.summary) if field is not None],
     }[rule.scope]
     reasons = []
 
@@ -184,6 +185,7 @@ def explain(rule: Rule) -> str:
         parts.append("不限制关键词。")
     if rule.scope == "title_summary":
         parts.append("标题与摘要分别匹配，各词可分布在两字段，不跨字段拼词。")
+        parts.append("摘要缺失时仅按标题判断。")
     if rule.mode == "english_word":
         parts.append("英文词边界使用英文字母、数字和下划线，中文按包含匹配。")
     if not any(

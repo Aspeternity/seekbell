@@ -309,7 +309,13 @@ function jump(id: string) {
                 ></label
               >
             </div>
-            <p class="field-help">摘要可能缺失或被截断，规则不会读取全文。</p>
+            <p class="field-help">
+              {{
+                draft.scope === 'title_summary'
+                  ? '按已获取的标题和摘要匹配；摘要缺失时仅按标题判断，不读取全文。'
+                  : '摘要可能缺失或被截断，规则不会读取全文。'
+              }}
+            </p>
           </fieldset>
           <div class="label-row">
             <label class="field-label">关键词条件</label

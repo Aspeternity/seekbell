@@ -243,6 +243,46 @@ def test_history_trial_uses_draft_rule_recent_local_rows_and_missing_vs_empty_wi
     assert tables(app.state.engine) == before
 
 
+def test_combined_scope_manual_and_history_trials_use_received_fields_without_writes(history):
+    app, client, _, _ = history
+    before = tables(app.state.engine)
+    rule = {
+        "scope": "title_summary",
+        "groups": [{"all_of": ["读取样本"]}],
+        "exclude": ["求购", "已出"],
+    }
+    response = client.post(
+        "/api/manage/rules/history",
+        json={"website_id": "nodeseek", "rule": rule, "limit": 100},
+    )
+    assert response.status_code == 200, response.text
+    items = response.json()["items"]
+    missing = [item for item in items if item["sample"]["summary"] is None]
+    empty = [item for item in items if item["sample"]["summary"] == ""]
+    assert missing and empty
+    assert all(item["result"]["status"] == "match" for item in missing + empty)
+    for item in items:
+        trial = client.post(
+            "/api/manage/rules/evaluate", json={"rule": rule, "post": item["sample"]}
+        )
+        assert trial.status_code == 200, trial.text
+        assert trial.json() == item["result"]
+        assert item["result"]["status"] != "insufficient_data"
+    example = client.post(
+        "/api/manage/rules/evaluate",
+        json={
+            "rule": {
+                "scope": "title_summary",
+                "groups": [{"all_of": ["vmiss", "tri"]}],
+                "exclude": ["core", "收"],
+            },
+            "post": {"title": "[出]180出Vmiss Tri 来", "summary": None},
+        },
+    )
+    assert example.status_code == 200 and example.json()["status"] == "match"
+    assert tables(app.state.engine) == before
+
+
 @pytest.mark.parametrize(
     "values",
     [

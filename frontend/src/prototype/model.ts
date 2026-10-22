@@ -155,7 +155,9 @@ export function evaluate(task: Task, sample: Sample): { status: Truth; reasons: 
       ? [sample.title]
       : task.scope === 'summary'
         ? [sample.summary]
-        : [sample.title, sample.summary]
+        : sample.summary === null
+          ? [sample.title]
+          : [sample.title, sample.summary]
   const normalize = (value: string) => (task.caseSensitive ? value : value.toLowerCase())
   const contains = (text: string, term: string): boolean => {
     const haystack = normalize(text),
