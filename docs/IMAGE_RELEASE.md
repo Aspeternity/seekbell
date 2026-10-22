@@ -1,6 +1,6 @@
 # 双架构镜像候选与GHCR流程（M4第五子阶段）
 
-当前用户验收镜像为ghcr.io/aspeternity/seekbell:ui-restore-3，代码679bcf0ee09c9da63f01f2fbbe99347bc7f5a01c，索引sha256:328f888d8b616e45947edb512e5c7f9d1e6b27ded11ff0c33ee43021277f97e4。本轮三项已审核修正及上一轮五项UI修正均已包含；564后端/74浏览器、原生amd64/arm64及公开匿名拉取通过，[实现与发布回执](history/2026-10-22-详情通知与页面加载修正.md)。[Portainer对比模板](../deploy/compose.portainer.compare.yaml)保持8001:8000及原对比数据卷；旧ui-restore-2、ui-restore-1、ui-fix-1及8000原模板保留，旧digest未变。
+当前用户验收镜像为ghcr.io/aspeternity/seekbell:ui-restore-4，代码0499f8b1972f9131e0d977ea96305ccb93d5d327，索引sha256:09d7af1aa081594c2bb77f949f4bdcd534728618eef3bd3b667d708619a87e3a。包含通知目标删除确认/批量解除、RSS缺摘要按标题匹配及Telegram真实样式/预览/通知卡片修正（保留SEEKBELL）；616后端/82浏览器、原生amd64/arm64及实际公开匿名拉取通过，[实现与发布回执](history/2026-10-22-通知目标删除与ui-restore-4发布.md)。[Portainer对比模板](../deploy/compose.portainer.compare.yaml)保持8001:8000及原对比数据卷；旧ui-restore-3、ui-restore-2、ui-restore-1、ui-fix-1及8000模板保留，四旧digest未变。
 
 本流程不部署服务。`.github/workflows/images.yml`只有`workflow_dispatch`入口；普通push/PR不登录或写GHCR；codex/开发分支的push在完整CI成功后调用同一原生双架构检查，便于合并主分支前验证。新流程默认`publish=false`，分别使用`ubuntu-24.04`和`ubuntu-24.04-arm`原生构建Linux amd64/arm64，不安装QEMU或修改本机Docker。私有仓库使用账户Actions额度，runner/额度是否可用须实际运行确认。
 
@@ -68,7 +68,7 @@ python3 scripts/release_images.py --revision "$SEEKBELL_REVISION" --repository a
 PVE部署可跳过原说明中的Token、docker login/logout，直接执行：
 
 ~~~bash
-docker pull ghcr.io/aspeternity/seekbell:ui-restore-3
+docker pull ghcr.io/aspeternity/seekbell:ui-restore-4
 ~~~
 
 仓库维护compose.yaml的pull_policy=never仍要求预先拉取；Portainer模板直接使用已发布短标签，首次部署会拉取。已有8001对比实例请在原Stack更新deploy/compose.portainer.compare.yaml并重新拉取镜像，保留Stack名称和原数据卷；尚未部署对比实例时才新建Stack（建议seekbell-compare），访问服务器8001端口。旧Stack/8000/原卷保留；新卷需首次初始化及配置，不共享运行中的SQLite卷。同IP不同端口共享Cookie，新版建议在无痕窗口/独立浏览器配置中打开，避免会话覆盖。以后升级单个实例才保留该实例的Stack/端口/数据卷。操作者是否加sudo取决于目标Docker权限。
