@@ -1,21 +1,25 @@
 # 当前状态
 
-更新时间：2026-10-23（Asia/Shanghai）。M0～M3完成、M4工程退出通过，M5实测修正。筛选/日期/通知计数修复及单一正式前端结构清理已本地实现、验证并提交，未发布；统计数字点击搁置。
+更新时间：2026-10-23（Asia/Shanghai）。M0～M3完成、M4工程退出通过，M5实测修正。筛选/日期/通知计数修复、单一正式前端清理已提交；用户已授权并启动最新代码的本地Docker实例供实测。统计数字点击仍搁置。
 
-## 环境与授权
+## 环境、代码与授权
 
-仅SeekBell-Dev:/home/dev/projects/seekbell开发；聊天在原Ubuntu时经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。当前codex/single-production-frontend，最后实现d224853a2f24cd003ff02eafb27a1532e78e54bf，其后仅证据文档。用户授权“进行结构清理”“继续任务”，保持批准UI及统计口径，拒绝的改版/结果按钮组不得实施。内嵌可视化不可用，使用文字/实际截图。用户追加授权清理无用旧Docker实例，已退役18080/18081及同批失败容器，旧数据先在仓库外归档。无本轮推送、公开发布、新部署、真实采集/消息授权；不组织多代理，不动旧D盘/Ubuntu/全局WSL。
+仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。分支codex/single-production-frontend，最后产品实现d224853a2f24cd003ff02eafb27a1532e78e54bf；本地镜像源34aedc41ddf2d2c2cd7f5f6d1a138f83254f6b76，其后仅启动记录。保持批准UI/统计口径，不实施拒绝的改版或结果按钮组。用户已授权结构清理、旧Docker退役和最新代码本地Docker实测；没有推送、公开发布、远程部署或代用户采集/消息授权。不组织多代理，不动旧D盘/Ubuntu/全局WSL。
+
+## 当前本地实例
+
+[启动记录与管理命令](history/2026-10-23-最新代码本地Docker实测启动.md)：访问http://localhost:8001/（127.0.0.1亦可），Compose项目seekbell-local、容器seekbell-local-seekbell-1、独立新卷seekbell-local_data，镜像seekbell:local-34aedc41ddf2，索引sha256:22ceca76da2093a5ec3d9cd70243df934cbeff82bde385dab0228abd3cc37cc6。healthy、unless-stopped，保持运行供用户验收；首次由用户创建管理员，未载示例/旧库，不可重置其后用户数据。当前应保护此容器/卷/镜像及8001。
+
+WSL空闲退出曾导致访问中断，现用独立隐藏wsl.exe保活，仅当前进程、不改全局设置；身份在仓库外windows-keeper.json。Windows两地址首页/ready/version通过，连续70秒/8次ready；容器启动时间保持、重启0。打包页面Chromium只读打开无错误。证据/home/dev/.local/state/seekbell/local-runtime；重启Windows后运行方式见记录。
 
 ## 实现与证据
 
-[结构清理](history/2026-10-23-单一正式前端结构清理.md)含原因、测试迁移与命令。唯一正式入口App/Bootstrap，pages/components/styles和真实store/API模块；移除live/prototype双目录、组件注入/别名、独立演示入口/构建/账号/备份/规则引擎及重复页面，预览只用正式API。离线合成运行器供CI检查，不是第二产品。既有UI/业务/迁移不变，旧说明归档、当前运行/CI统一。
+[结构清理](history/2026-10-23-单一正式前端结构清理.md)：唯一正式入口，pages/components/styles及真实API状态；演示入口/构建/账号/备份/JS规则引擎、重复页面退役。测试用同一正式界面配临时库，离线合成运行器继续供CI；既有UI/业务/迁移不变。
 
-SeekBell-Dev、实现d224853：后端659项、浏览器58项（含新增通用UI8及实际TLS代理2）、类型/正式构建、Ruff/Prettier/隐私/diff、离线核心/后台/加密备份、wheel和无外网容器检查通过。结构审计23个迁移正式组件/页面仅导入路径变化，CSS有效声明相同；dist仅index.html，无演示状态键。截图已核对，证据/home/dev/.local/state/seekbell/acceptance/2026-10-23-single-frontend。临时端口/容器退出、检查镜像移除，原运行实例前后一致。不冒充远程CI、真实RSS/通知、Safari/真机或用户验收。
+SeekBell-Dev、d224853：后端659、浏览器58、类型/正式构建、Ruff/Prettier/隐私/diff、离线核心/后台/加密备份、wheel及容器/TLS通过。23个迁移组件/页面仅导入路径变化，CSS有效声明相同。证据/home/dev/.local/state/seekbell/acceptance/2026-10-23-single-frontend。包含[a7435a2筛选修复](history/2026-10-23-筛选日期与通知计数修复.md)。不冒充远程CI、真实RSS/通知、Safari/真机或用户验收。
 
-此前修复a7435a2包含说明对齐、筛选/详情闪动、四处全部日期、任务选项/中文版块、网站控件与通知共享计数；[记录](history/2026-10-23-筛选日期与通知计数修复.md)保留原证据，已纳入本次正式浏览器验证。
+## 退役、公开状态与下一步
 
-## 发布状态与下一步
+[旧Docker清理](history/2026-10-23-旧Docker实例退役清理.md)已删除3容器/3卷/2网络/2镜像，18080/18081释放。旧数据归档/home/dev/.local/state/seekbell/maintenance/2026-10-23-retired-docker/archives（0600，SQLite/SHA校验），未入Git；该记录的容器清单为空是新实例启动前事实。
 
-公开镜像仍ui-restore-5，代码c8be41c9a1f85650be6447e773b73a204dba9b88，digest sha256:089289552719774057aa527bbd055e7c33370e6cc5c1811c0da4583b0675f7ff，[旧回执](history/2026-10-23-通知导航焦点与概览任务行修复.md)。本轮未更新镜像/部署。
-
-[旧Docker已定向清理](history/2026-10-23-旧Docker实例退役清理.md)：3容器、3专属卷、2网络、2旧镜像移除，18080/18081释放；rootless现无容器/卷，其他镜像标签保持。旧数据归档在/home/dev/.local/state/seekbell/maintenance/2026-10-23-retired-docker/archives，权限0600、SQLite和SHA校验通过，未入Git。原Ubuntu、远程Stack及8000/4175仍未动。Compose沿用8001与seekbell_compare_data，禁同SQLite卷双实例。结构清理及旧Docker清理完成，无阻塞，下一步用户审阅；发布/部署需明确指示。恢复读本状态、结构记录与受影响代码。
+公开镜像仍ui-restore-5，代码c8be41c9a1f85650be6447e773b73a204dba9b88，digest sha256:089289552719774057aa527bbd055e7c33370e6cc5c1811c0da4583b0675f7ff。未更新远程Stack或8000/4175。下一步用户在8001实测并反馈；本地实例继续保留，发布/远程部署需明确指示。恢复读本状态、启动记录及受影响代码。
