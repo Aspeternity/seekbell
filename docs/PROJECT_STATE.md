@@ -4,7 +4,7 @@
 
 ## 环境与基准
 
-仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。当前codex/telegram-preview-card-fixes，基于main f5cac4d（已发布实现679bcf0）；前轮实现ee750a2008fee07c51d0906b260f9762de680172，本轮基于ca2068d，代码/规格/测试/状态同提交，提交后补录代码SHA。原D盘/Ubuntu/全局WSL及旧分支保留，不组织多代理。
+仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。当前codex/telegram-preview-card-fixes，基于main f5cac4d（已发布实现679bcf0）；前轮实现ee750a2008fee07c51d0906b260f9762de680172，本轮实现172f6b7c3bea3575e1f6f6fe7b65ce6e1b14ed12（基于ca2068d，代码/规格/测试/状态同提交；后续仅文档收尾）。原D盘/Ubuntu/全局WSL及旧分支保留，不组织多代理。
 
 ## 本轮批准与实现
 
@@ -22,4 +22,4 @@
 当前公开ghcr.io/aspeternity/seekbell:ui-restore-3，代码679bcf0ee09c9da63f01f2fbbe99347bc7f5a01c，digest sha256:328f888d8b616e45947edb512e5c7f9d1e6b27ded11ff0c33ee43021277f97e4；[564后端/74浏览器/双架构及匿名证据](history/2026-10-22-详情通知与页面加载修正.md)。源码private/包public、关联not-reported，临时开关恢复缺失。本轮仅授权修复，未合并/推送/发布，Compose仍原镜像。
 8001:8000及seekbell_compare_data保留，更新沿用同一Stack/卷，禁双实例共用SQLite卷；保护18081项目seekbell-acceptance-b45fc2c-20261020及容器/卷/backup-local、旧Stack/卷/8000/4175/18080。仅NodeSeek；Safari/真机未验收。
 
-无外部阻塞。下一步收尾本轮提交，后续按用户指示发布或处理反馈；未擅自合并/发布。交接读本状态、本轮记录、相关规则/试算代码，发布时按需IMAGE_RELEASE。
+无外部阻塞。本轮本地提交完成，下一步按用户指示发布或处理反馈；未擅自合并/发布。交接读本状态、本轮记录、相关规则/试算代码，发布时按需IMAGE_RELEASE。
