@@ -4,7 +4,7 @@
 
 ## 环境与基准
 
-仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。当前codex/telegram-preview-card-fixes，基于main f5cac4d（已发布实现679bcf0）。改动在backend消息渲染/只读预览/测试样本、frontend正式与演示store/预览组件/目标卡、测试/导出脚本及SPEC/UI_DESIGN；同阶段本地提交，不覆盖用户工作。原D盘/Ubuntu/全局WSL及旧分支保留，不组织多代理。
+仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。当前codex/telegram-preview-card-fixes，基于main f5cac4d（已发布实现679bcf0）。实现基准ee750a2008fee07c51d0906b260f9762de680172，代码/规格/测试/检查记录同提交；后续仅本地文档收尾，不改变实现基准。原D盘/Ubuntu/全局WSL及旧分支保留，不组织多代理。
 
 ## 本轮已批准与实现
 
@@ -15,10 +15,10 @@ TG真实帖显示RSS发布时间，缺失/无效为“发布时间：来源未�
 
 ## 本地验证
 
-154后端通过（24.46秒，一条既有warning），含实际HTTP发送与预览一致、认证/参数/不回显、不写业务表或调用发送器、时区/摘要/离线快照、缺失时间/独立发送回归。原型42通过，增强其中4例后针对复核通过；标题加粗后再复核相关桌面/手机2例；发送4、原UI2通过，正式接入6通过，共54项独立浏览器用例（增强复核不重复计数）。生产/演示类型构建、Ruff/Prettier/快照/隐私/diff通过。截图已人工核对；标题显式600加粗后重建两版本、发送桌面/手机两例复核通过，详见本轮记录。均临时合成库，无真实采集/发送；不冒充用户验收。
+154后端通过（24.46秒，一条既有warning），含实际HTTP发送与预览一致、认证/参数/不回显、不写业务表或调用发送器、时区/摘要/离线快照、缺失时间/独立发送回归。原型42通过，增强其中4例后针对复核通过；标题加粗后再复核相关桌面/手机2例；发送4、原UI2通过，正式接入6通过，共54项独立浏览器用例（增强复核不重复计数）。生产/演示类型构建、Ruff/Prettier/快照/隐私/diff通过。截图已人工核对；标题显式600加粗后重建两版本、发送桌面/手机两例复核通过，详见本轮记录。均临时合成库，无真实采集/发送；临时5174/8011/8013/8019均已退出，不冒充用户验收。
 
 ## 已发布与保护
 
 当前公开ghcr.io/aspeternity/seekbell:ui-restore-3，代码679bcf0ee09c9da63f01f2fbbe99347bc7f5a01c，digest sha256:328f888d8b616e45947edb512e5c7f9d1e6b27ded11ff0c33ee43021277f97e4；[564后端/74浏览器/双架构及匿名证据](history/2026-10-22-详情通知与页面加载修正.md)。源码private/包public、关联not-reported，临时开关恢复缺失。本轮仅授权修复，未合并/推送/发布，Compose仍原镜像。
 8001:8000及seekbell_compare_data保留，更新沿用同一Stack/卷，禁双实例共用SQLite卷；保护18081项目seekbell-acceptance-b45fc2c-20261020及容器/卷/backup-local、旧Stack/卷/8000/4175/18080。仅NodeSeek，多站为合成测试；Safari/真机未验收。
-无外部阻塞。下一步记录本地实现基准，后续按用户指示发布验收镜像或处理反馈。交接读本状态、本轮记录、UI_DESIGN和影响代码，发布时按需IMAGE_RELEASE。
+无外部阻塞。修复工作已本地完成，下一步按用户指示发布验收镜像或处理反馈；未擅自合并/发布。交接读本状态、本轮记录、UI_DESIGN和影响代码，发布时按需IMAGE_RELEASE。
