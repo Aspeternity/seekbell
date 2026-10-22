@@ -22,6 +22,12 @@ const emit = defineEmits<{
 }>()
 const draft = reactive<Task>(JSON.parse(JSON.stringify(props.task)))
 const baseline = JSON.stringify(draft)
+const selectedWebsite = computed(() =>
+  state.websites.find((website) => website.id === draft.websiteId),
+)
+const websiteLabel = computed(() =>
+  selectedWebsite.value ? websiteName(selectedWebsite.value.id) : '待选择网站',
+)
 const errors = ref<string[]>([])
 const testing = ref(false),
   testError = ref('')
@@ -101,6 +107,10 @@ function toggleCategory(category: string) {
 }
 async function runTest() {
   if (testing.value) return
+  if (!selectedWebsite.value) {
+    testError.value = '请选择已添加的监控网站。'
+    return
+  }
   testing.value = true
   testError.value = ''
   const snapshot = JSON.stringify({
@@ -167,7 +177,7 @@ function jump(id: string) {
       <div>
         <div class="editor-title-line">
           <h1 tabindex="-1">{{ draft.id ? '编辑监控任务' : '新建监控任务' }}</h1>
-          <span class="small-badge neutral">{{ websiteName(draft.websiteId) }}</span>
+          <span class="small-badge neutral">{{ websiteLabel }}</span>
         </div>
         <p class="subtitle">告诉 SeekBell，你想留意什么。</p>
       </div>
@@ -244,7 +254,7 @@ function jump(id: string) {
             maxlength="160"
           />
           <div class="task-website-field">
-            <label class="field-label" for="task-website">监控网站</label>
+            <span id="task-website-label" class="field-label">监控网站</span>
             <WebsiteSelect
               v-model="draft.websiteId"
               :disabled="!!draft.id"
@@ -263,10 +273,7 @@ function jump(id: string) {
                 : '只显示已添加的网站。采集频率在网站配置中统一设置。'
             }}
           </p>
-          <p
-            v-if="!state.websites.find((w) => w.id === draft.websiteId)?.enabled"
-            class="warning-note"
-          >
+          <p v-if="selectedWebsite && !selectedWebsite.enabled" class="warning-note">
             {{
               isLive
                 ? '网站已暂停，可以保存任务；启用网站后才会采集新帖。'
@@ -431,16 +438,13 @@ function jump(id: string) {
           <span class="small-badge neutral">已选 {{ draft.targets.length }}</span>
         </div>
         <div class="form-content">
-          <p v-if="!targets.length" class="warning-note">请先添加一个通知目标。</p>
-          <button
-            v-if="!targets.length"
-            type="button"
-            class="button"
-            @click="emit('navigate', '/target/new')"
-          >
-            添加通知目标
-          </button>
-          <div class="target-options">
+          <div v-if="!targets.length" class="target-empty">
+            <p class="warning-note">请先添加一个通知目标。</p>
+            <button type="button" class="button" @click="emit('navigate', '/target/new')">
+              添加通知目标
+            </button>
+          </div>
+          <div v-else class="target-options">
             <label
               v-for="target in targets"
               :key="target.id"
@@ -453,7 +457,7 @@ function jump(id: string) {
               ><input v-model="draft.targets" type="checkbox" :value="target.id"
             /></label>
           </div>
-          <p class="field-help">
+          <p class="field-help target-explanation">
             <Icon name="help" :size="14" />同一帖子命中多个任务时，同一目标合并为一条通知。
           </p>
         </div>
@@ -466,9 +470,10 @@ function jump(id: string) {
           <h2>这条规则，会做什么？</h2>
           <span class="live-label">实时</span>
         </div>
-        <p>
-          当 <strong>{{ websiteName(draft.websiteId) }}</strong> 出现新帖，
+        <p v-if="selectedWebsite">
+          当 <strong>{{ websiteLabel }}</strong> 出现新帖，
         </p>
+        <p v-else>请选择监控网站，再查看规则说明。</p>
         <div class="summary-quote">{{ summary }}。</div>
         <p v-if="draft.exclude.length">
           同时排除 <strong>{{ draft.exclude.join('、') }}</strong
@@ -659,5 +664,22 @@ function jump(id: string) {
 <style scoped>
 .task-website-field {
   margin-top: 22px;
+}
+.target-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+.target-empty .warning-note {
+  width: 100%;
+  margin: 0;
+}
+.target-empty + .target-explanation {
+  margin-top: 16px;
+}
+.target-explanation {
+  justify-content: flex-start;
+  gap: 6px;
 }
 </style>

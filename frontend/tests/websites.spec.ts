@@ -30,6 +30,20 @@ test('fresh workspace, catalog, website configuration and removal are complete',
   await page.getByRole('button', { name: '清除搜索' }).click()
   await page.getByRole('button', { name: '添加 NodeSeek', exact: true }).click()
   await expect(drawer).not.toBeVisible()
+  await page.goto('/prototype.html#/task/new')
+  await expect(page.getByRole('combobox', { name: '监控网站', exact: true })).toContainText(
+    'NodeSeek',
+  )
+  const empty = page.locator('.target-empty')
+  const notice = await empty.locator('.warning-note').boundingBox()
+  const add = await empty.getByRole('button', { name: '添加通知目标', exact: true }).boundingBox()
+  const explanation = await page.locator('.target-explanation').boundingBox()
+  expect(add!.y - notice!.y - notice!.height).toBeGreaterThanOrEqual(11.5)
+  expect(explanation!.y - add!.y - add!.height).toBeGreaterThanOrEqual(15.5)
+  await page
+    .locator('#delivery')
+    .screenshot({ path: info.outputPath('task-empty-notifications.png') })
+  await page.goto('/prototype.html#/websites')
   await page.getByRole('button', { name: '配置 NodeSeek', exact: true }).click()
   await expect(page.getByLabel('共享采集间隔')).toHaveValue('10')
   await expect(drawer.getByRole('switch')).not.toBeChecked()
@@ -163,7 +177,19 @@ test('future built-in adapters keep independent settings in the same card layout
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   }
   await page.goto('/prototype.html#/task/new')
-  const picker = page.locator('.task-website-picker')
+  const picker = page.getByRole('combobox', { name: '监控网站', exact: true })
+  await expect(picker).toHaveText('请选择监控网站')
+  await expect(page.locator('.editor-title-line')).toContainText('待选择网站')
+  await expect(page.locator('.rule-summary')).toContainText('请选择监控网站')
+  await expect(page.locator('.rule-summary')).not.toContainText('NodeSeek')
+  await expect(
+    page.getByText('该网站已暂停。任务可以保存，启用网站后才会采集新帖。', { exact: true }),
+  ).toHaveCount(0)
+  await page.getByRole('button', { name: '保存任务', exact: true }).click()
+  await expect(page.locator('[data-form-errors]')).toContainText('请选择已添加的监控网站')
+  expect(
+    await page.evaluate(() => JSON.parse(localStorage.getItem('seekbell-demo-v3')!).tasks.length),
+  ).toBe(0)
   await picker.click()
   const menu = page.locator('.task-website-menu')
   await expect(menu.getByRole('option')).toHaveCount(4)

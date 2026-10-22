@@ -62,7 +62,7 @@ const authPage = computed(() => ['login', 'setup'].includes(page.value))
 const editId = computed(() => parts.value[1] || 'new')
 const editing = computed(() =>
   editId.value === 'new'
-    ? { ...emptyTask(), websiteId: state.websites[0]?.id || '' }
+    ? { ...emptyTask(), websiteId: state.websites.length === 1 ? state.websites[0]!.id : '' }
     : state.tasks.find((t) => t.id === editId.value),
 )
 const targetEditing = computed(() =>
@@ -356,7 +356,7 @@ function showInfo() {
             :aria-busy="loggingOut"
             @click="logout"
           >
-            <Icon name="logout" :size="19" />
+            <Icon name="logout" :size="16" />
           </button>
         </div>
       </div>

@@ -5,6 +5,20 @@ import type { OverviewData } from '../../src/live/overview'
 export async function checkCollection(page: Page, info: TestInfo, data: OverviewData) {
   const card = page.locator('.collection-card')
   const real = data.sources[0]!
+  await expect(page.getByText('采集与运行详情', { exact: true })).toHaveCount(0)
+  await expect(
+    page.getByText('部分网站已暂停，关联任务暂不采集新帖。', { exact: true }),
+  ).toHaveCount(0)
+  if (info.project.name === 'desktop') {
+    const chart = await page.locator('.chart-panel').boundingBox()
+    const collection = await card.boundingBox()
+    expect(Math.abs(chart!.y + chart!.height - collection!.y - collection!.height)).toBeLessThan(2)
+    const exit = page.locator('.profile-logout')
+    const size = await exit.boundingBox()
+    expect(size!.width).toBeCloseTo(35.2, 0)
+    await expect(exit.locator('svg')).toHaveAttribute('width', '16')
+    await page.locator('.profile').screenshot({ path: info.outputPath('account-exit-small.png') })
+  }
   await expect(card.locator('h3')).toHaveText(real.name)
   await expect(card.locator('.source-data dt')).toHaveText([
     '最近成功采集',
@@ -107,6 +121,20 @@ export async function checkCollection(page: Page, info: TestInfo, data: Overview
   await refresh()
   await expect(card.locator('h3')).toHaveText(real.name)
   await expect(card.locator('.collection-summary')).toHaveCount(0)
+  const workspace = await (await page.request.get('/api/manage/workspace')).json()
+  await page.route('**/api/manage/workspace', (route) =>
+    route.fulfill({
+      json: {
+        ...workspace,
+        websites: workspace.websites.map((w: any) => ({ ...w, enabled: true, health: 'error' })),
+      },
+    }),
+  )
+  await page.reload()
+  await expect(page.getByText('来源连接异常，请检查采集设置。', { exact: true })).toBeVisible()
+  await page.unroute('**/api/manage/workspace')
+  await page.reload()
+  await expect(page.getByText('来源连接异常，请检查采集设置。', { exact: true })).toHaveCount(0)
 }
 
 export async function checkWebsitePicker(page: Page, info: TestInfo) {
@@ -114,10 +142,40 @@ export async function checkWebsitePicker(page: Page, info: TestInfo) {
   const picker = page.locator('.task-website-picker')
   await expect(picker).toContainText('NodeSeek')
   const description = await page.locator('#task-description').boundingBox()
-  const label = await page.locator('label[for="task-website"]').boundingBox()
+  const label = await page.locator('#task-website-label').boundingBox()
   expect(label!.y - description!.y - description!.height).toBeGreaterThanOrEqual(20)
-  await picker.click()
-  const menu = page.locator('.task-website-menu')
+  const control = page.getByRole('combobox', { name: '监控网站', exact: true })
+  const menu = page.getByRole('listbox', { name: '监控网站', exact: true })
+  const websiteLabel = page.locator('#task-website-label')
+  const bounds = await websiteLabel.boundingBox()
+  await websiteLabel.click({ position: { x: bounds!.width - 4, y: bounds!.height / 2 } })
+  await expect(control).toHaveAttribute('aria-expanded', 'false')
+  await control.click()
+  await expect(menu).toBeVisible()
+  await control.click()
+  await expect(menu).not.toBeVisible()
+  await control.click()
+  await menu.getByRole('option').first().click()
+  await expect(menu).not.toBeVisible()
+  await expect(control).toBeFocused()
+  await control.click()
+  await page.locator('#task-description').click()
+  await expect(menu).not.toBeVisible()
+  await control.focus()
+  await page.keyboard.press('Space')
+  await expect(menu.getByRole('option').first()).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(menu).not.toBeVisible()
+  await expect(page.locator('[data-form-errors]')).toHaveCount(0)
+  await control.click()
+  await page.keyboard.press('Tab')
+  await expect(menu).not.toBeVisible()
+  await expect(page.getByRole('radio', { name: '仅标题 信号更聚焦', exact: true })).toBeFocused()
+  await control.click()
+  await page.keyboard.press('Shift+Tab')
+  await expect(menu).not.toBeVisible()
+  await expect(page.locator('#task-description')).toBeFocused()
+  await control.click()
   await expect(menu).toBeVisible()
   const option = menu.getByRole('option').first()
   await expect(option).toContainText('NodeSeek')
