@@ -4,7 +4,7 @@
 
 ## 环境与基准
 
-仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发；[环境入口](DEVELOPMENT_ENVIRONMENT.md)。当前codex/ui-interaction-polish，基于main b417069；本轮前端/测试/文档待同提交，代码SHA收尾补录。旧D盘/Ubuntu/全局WSL保留，不组织多代理。原collection-card-task-picker分支保留，不覆盖用户工作。
+仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发；[环境入口](DEVELOPMENT_ENVIRONMENT.md)。当前codex/ui-interaction-polish，基于main b417069；本轮实现基准2925cef5342e8145f8b1dd72b6c5f0127777b506，前端/测试/权威文档已同提交；后续仅本地文档收尾。旧D盘/Ubuntu/全局WSL保留，不组织多代理。原collection-card-task-picker分支保留，不覆盖用户工作。
 
 ## 已确认与实现
 
