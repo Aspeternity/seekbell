@@ -335,8 +335,8 @@ svg {
   flex-shrink: 0;
 }
 .profile .profile-logout {
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
   color: #796455;
   border: 1px solid #eee6dd;
@@ -2833,5 +2833,12 @@ textarea:disabled {
   .save-bar > div:first-child {
     max-width: 105px;
     font-size: 10px;
+  }
+}
+
+@media (pointer: coarse) {
+  .profile .profile-logout {
+    width: 40px;
+    height: 40px;
   }
 }

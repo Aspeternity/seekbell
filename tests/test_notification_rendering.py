@@ -130,3 +130,70 @@ def test_target_test_uses_saved_timezone_and_discovery_time(core):
     telegram = telegram_message(event, validate_config("telegram", CONFIGS["telegram"]))["text"]
     assert "发现时间：1970-01-01 08:00:00" in telegram
     assert "Asia/Shanghai" not in telegram
+
+
+@pytest.mark.parametrize(
+    "website,category,expected",
+    [
+        ("nodeseek", "daily", "日常"),
+        ("nodeseek", "tech", "技术"),
+        ("nodeseek", "info", "情报"),
+        ("nodeseek", "review", "测评"),
+        ("nodeseek", "trade", "交易"),
+        ("nodeseek", "carpool", "拼车"),
+        ("nodeseek", "promotion", "推广"),
+        ("nodeseek", "life", "生活"),
+        ("nodeseek", "dev", "Dev"),
+        ("nodeseek", "photo-share", "贴图"),
+        ("nodeseek", "expose", "曝光"),
+        ("nodeseek", "sandbox", "沙盒"),
+        ("nodeseek", "future-category", "future-category"),
+        ("nodeseek", "交易", "交易"),
+        ("nodeseek", None, "未知"),
+        ("synthetic-site", "trade", "trade"),
+    ],
+)
+def test_telegram_translates_only_known_site_categories_without_changing_snapshots(
+    website, category, expected
+):
+    event = payload()
+    event["post"]["website_id"] = website
+    event["post"]["category"] = category
+    before = copy.deepcopy(event)
+    config = validate_config("telegram", CONFIGS["telegram"])
+    message = telegram_message(event, config)
+    source = "NodeSeek" if website == "nodeseek" else website
+    assert source + " · " + expected + " · 作者：" in message["text"]
+    assert (
+        webhook_payload(event, validate_config("webhook", CONFIGS["webhook"]))["post"]["category"]
+        == category
+    )
+    assert event == before
+
+
+def test_telegram_groups_compact_metadata_and_optional_summary_with_literal_external_text():
+    event = payload()
+    event["post"]["category"] = "trade"
+    event["post"]["summary"] = "<b>literal summary</b> & 😀"
+    event["matched_tasks"].append({"id": "synthetic-second", "version": 2, "name": "第二个任务"})
+    config = validate_config(
+        "telegram", {**CONFIGS["telegram"], "include_summary": True, "summary_limit": 100}
+    )
+    message = telegram_message(event, config)
+    assert message["text"].split("\n") == [
+        event["post"]["title"],
+        "",
+        "NodeSeek · 交易 · 作者：synthetic author",
+        "🎯 命中任务：synthetic rule、第二个任务",
+        "🕒 发布时间：2026-10-18 00:00:00",
+        "",
+        "摘要：<b>literal summary</b> & 😀",
+    ]
+    assert message["entities"] == [
+        {
+            "type": "bold",
+            "offset": 0,
+            "length": len(event["post"]["title"].encode("utf-16-le")) // 2,
+        }
+    ]
+    assert "parse_mode" not in message

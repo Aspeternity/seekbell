@@ -16,6 +16,7 @@ const selectedSource = ref('')
 const remote = useRemote(
   () => request<OverviewData>('manage/overview?range=' + range.value),
   () => [range.value],
+  { cacheKey: () => 'overview:' + range.value },
 )
 const data = remote.data
 const stamp = (value: number | null) =>
@@ -100,7 +101,14 @@ async function toggle(id: string) {
       刷新概览<span v-if="data"> · {{ stamp(data.end) }}</span>
     </button>
   </div>
-  <Feedback :loading="remote.loading.value" :error="remote.error.value" @retry="remote.reload" />
+  <Feedback
+    :loading="remote.loading.value"
+    :error="remote.error.value"
+    :retained="!!data"
+    :delay="200"
+    subtle
+    @retry="remote.reload"
+  />
   <template v-if="data">
     <div v-if="!data.runtime_active && data.runtime.status !== 'failed'" class="warning-note">
       <Icon name="clock" :size="18" /><span
@@ -121,15 +129,11 @@ async function toggle(id: string) {
       </button>
     </section>
     <div
-      v-else-if="state.websites.some((w) => !w.enabled || w.health === 'error')"
+      v-else-if="state.websites.some((w) => w.enabled && w.health === 'error')"
       class="warning-note"
     >
-      <Icon name="alert" :size="18" /><span>{{
-        state.websites.some((w) => w.enabled && w.health === 'error')
-          ? '来源连接异常，请检查采集设置。'
-          : '部分网站已暂停，关联任务暂不采集新帖。'
-      }}</span
-      ><button class="text-link" @click="emit('navigate', '/websites')">查看网站</button>
+      <Icon name="alert" :size="18" /><span>来源连接异常，请检查采集设置。</span>
+      <button class="text-link" @click="emit('navigate', '/websites')">查看网站</button>
     </div>
     <section class="stats-grid" aria-label="概览统计">
       <article class="stat-card">
@@ -275,35 +279,12 @@ async function toggle(id: string) {
           <span v-for="label in chartLabels" :key="label">{{ label }}</span>
         </div>
       </section>
-      <div class="overview-source-column">
-        <CollectionStatus
-          v-model="selectedSource"
-          :sources="data.sources"
-          :stamp="stamp"
-          :timezone="data.today.timezone"
-        />
-        <details class="advanced overview-diagnostics">
-          <summary>采集与运行详情</summary>
-          <div v-for="source in data.sources" :key="source.source_id" class="small-note">
-            <strong>{{ source.name }}</strong>
-            <p>
-              最后尝试：{{ stamp(source.last_attempt_at) }} · 连续失败 {{ source.failures
-              }}{{ source.error_code ? ' · ' + source.error_code : '' }}
-            </p>
-            <p>下次可尝试：{{ stamp(source.next_attempt_at) }}</p>
-            <p v-if="source.possible_gap">曾发现可能缺口：{{ stamp(source.last_gap_at) }}</p>
-          </div>
-          <p class="small-note">
-            本地帖子 {{ data.window.posts }} · 信息不足 {{ data.window.insufficient_data }} ·
-            采集失败 {{ data.window.source_failures }}
-          </p>
-          <p class="small-note">
-            自动队列：等待 {{ data.current.queue.pending || 0 }} · 重试
-            {{ data.current.queue.retry || 0 }} · 在途 {{ data.current.queue.leased || 0 }} · 曾未知
-            {{ data.current.uncertain }}
-          </p>
-        </details>
-      </div>
+      <CollectionStatus
+        v-model="selectedSource"
+        :sources="data.sources"
+        :stamp="stamp"
+        :timezone="data.today.timezone"
+      />
     </div>
     <section class="panel tasks-panel">
       <div class="panel-heading">
@@ -431,12 +412,6 @@ async function toggle(id: string) {
 .activity-copy {
   min-width: 0;
   overflow-wrap: anywhere;
-}
-.overview-source-column {
-  min-width: 0;
-}
-.overview-diagnostics {
-  margin: 10px 0 0;
 }
 .task-name strong {
   overflow-wrap: anywhere;

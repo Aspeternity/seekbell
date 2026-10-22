@@ -1,11 +1,36 @@
 <script setup lang="ts">
-defineProps<{ loading: boolean; error: string }>()
-defineEmits<{ retry: [] }>()
+import { onBeforeUnmount, ref, watch } from 'vue'
+const props = withDefaults(
+  defineProps<{
+    loading: boolean
+    error: string
+    delay?: number
+    retained?: boolean
+    subtle?: boolean
+  }>(),
+  { delay: 0, retained: false, subtle: false },
+)
+const emit = defineEmits<{ retry: [] }>()
+const visible = ref(false)
+let timer: ReturnType<typeof setTimeout> | undefined
+watch(
+  () => props.loading,
+  (loading) => {
+    clearTimeout(timer)
+    visible.value = loading && !props.delay
+    if (loading && props.delay) timer = setTimeout(() => (visible.value = true), props.delay)
+  },
+  { immediate: true },
+)
+onBeforeUnmount(() => clearTimeout(timer))
 </script>
 <template>
-  <p v-if="loading" class="info-note" role="status">正在读取服务端记录…</p>
+  <p v-if="visible" :class="subtle ? 'small-note remote-feedback' : 'info-note'" role="status">
+    {{ retained ? '正在更新…' : subtle ? '加载中…' : '正在读取服务端记录…' }}
+  </p>
   <div v-else-if="error" class="form-errors" role="alert">
+    <p v-if="retained">刷新失败，当前显示上次结果。</p>
     <p>{{ error }}</p>
-    <button class="button" @click="$emit('retry')">重新加载</button>
+    <button class="button" @click="emit('retry')">重新加载</button>
   </div>
 </template>

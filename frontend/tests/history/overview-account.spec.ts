@@ -47,7 +47,8 @@ test('real overview and administrator forms preserve records and rotate sessions
   )
   await page.getByRole('button', { name: '刷新概览', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('合成统计故障')
-  await expect(page.locator('.stats-grid')).toHaveCount(0)
+  await expect(page.locator('.stats-grid')).toHaveCount(1)
+  await expect(page.getByRole('alert')).toContainText('刷新失败，当前显示上次结果。')
   await page.getByRole('button', { name: '重新加载', exact: true }).click()
   await expect(page.getByTestId('overview-matches')).toContainText('24条')
   for (const width of [320, 390, 768, 1440]) {

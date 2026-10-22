@@ -1,5 +1,6 @@
 import { onBeforeUnmount, shallowRef, ref, watch } from 'vue'
 import { request } from './store'
+import { cachedRead, readCacheRevision, rememberRead } from './readCache'
 export interface Page<T> {
   items: T[]
   total: number
@@ -196,7 +197,15 @@ export function historyGet<T>(
     if (value !== undefined && value !== '') query.set(key, String(value))
   return request<T>('manage/history/' + path + (query.size ? '?' + query.toString() : ''))
 }
-export function useRemote<T>(loader: () => Promise<T>, inputs: () => unknown) {
+interface RemoteOptions {
+  cacheKey?: () => string | undefined
+  debounce?: () => unknown
+}
+export function useRemote<T>(
+  loader: () => Promise<T>,
+  inputs: () => unknown,
+  options: RemoteOptions = {},
+) {
   const data = shallowRef<T>(),
     loading = ref(false),
     error = ref('')
@@ -205,22 +214,39 @@ export function useRemote<T>(loader: () => Promise<T>, inputs: () => unknown) {
   function reload(delay = 0) {
     clearTimeout(timer)
     const current = ++generation
+    const revision = readCacheRevision.value
+    const key = options.cacheKey?.()
     loading.value = true
     error.value = ''
-    data.value = undefined
-    timer = setTimeout(async () => {
+    data.value = key ? cachedRead<T>(key) : undefined
+    const run = async () => {
       try {
         const value = await loader()
-        if (current === generation) data.value = value
+        if (current === generation && (!key || revision === readCacheRevision.value)) {
+          data.value = value
+          if (key) rememberRead(key, value, revision)
+        }
       } catch (e) {
         if (current === generation)
           error.value = e instanceof Error ? e.message : '加载失败，请重试。'
       } finally {
         if (current === generation) loading.value = false
       }
-    }, delay)
+    }
+    if (delay) timer = setTimeout(run, delay)
+    else void run()
   }
-  watch(inputs, () => reload(180), { immediate: true, deep: true })
+  let previousDebounce = options.debounce?.()
+  watch(
+    () => [inputs(), options.cacheKey ? readCacheRevision.value : 0],
+    () => {
+      const nextDebounce = options.debounce?.()
+      const delay = options.cacheKey ? (nextDebounce !== previousDebounce ? 180 : 0) : 180
+      previousDebounce = nextDebounce
+      reload(delay)
+    },
+    { immediate: true, deep: true },
+  )
   onBeforeUnmount(() => {
     ++generation
     clearTimeout(timer)
