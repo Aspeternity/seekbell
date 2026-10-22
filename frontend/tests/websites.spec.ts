@@ -17,6 +17,7 @@ test.beforeEach(async ({ page }) => {
 test('fresh workspace, catalog, website configuration and removal are complete', async ({
   page,
 }, info) => {
+  test.setTimeout(60000)
   await expect(page.getByRole('heading', { name: '从第一个关心的网站开始' })).toBeVisible()
   await expect(page.locator('.website-card')).toHaveCount(0)
   await page.screenshot({ path: info.outputPath('websites-empty.png'), fullPage: true })
@@ -31,6 +32,9 @@ test('fresh workspace, catalog, website configuration and removal are complete',
   await page.getByRole('button', { name: '添加 NodeSeek', exact: true }).click()
   await expect(drawer).not.toBeVisible()
   await page.goto('/prototype.html#/task/new')
+  await expect(page.getByRole('combobox', { name: '监控网站', exact: true })).toBeVisible({
+    timeout: 15000,
+  })
   await expect(page.getByRole('combobox', { name: '监控网站', exact: true })).toContainText(
     'NodeSeek',
   )
@@ -137,6 +141,7 @@ test('existing v2 work migrates without loss and attached tasks prevent removal'
 test('future built-in adapters keep independent settings in the same card layout', async ({
   page,
 }) => {
+  test.setTimeout(60000)
   // Test-only catalog fixtures. No additional adapters or unsupported sites are shipped.
   await page.route('**/src/prototype/websites*', async (route) => {
     const response = await route.fetch()
@@ -177,6 +182,9 @@ test('future built-in adapters keep independent settings in the same card layout
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   }
   await page.goto('/prototype.html#/task/new')
+  await expect(page.getByRole('combobox', { name: '监控网站', exact: true })).toBeVisible({
+    timeout: 15000,
+  })
   const picker = page.getByRole('combobox', { name: '监控网站', exact: true })
   await expect(picker).toHaveText('请选择监控网站')
   await expect(page.locator('.editor-title-line')).toContainText('待选择网站')

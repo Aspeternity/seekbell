@@ -1,10 +1,10 @@
 # 当前状态
 
-更新时间：2026-10-22（Asia/Shanghai）。M0～M3完成、M4工程退出通过，M5用户实测修正。删除流程及前轮Telegram/RSS修正本地完成，ui-restore-4首次CI失败，已定位旧空请求体兼容问题并修复中，尚未发布或用户验收。
+更新时间：2026-10-22（Asia/Shanghai）。M0～M3完成、M4工程退出通过，M5用户实测修正。删除流程及前轮Telegram/RSS修正本地完成，功能与兼容修正本地通过，当前处理远端下载超时及异步测试就绪条件，ui-restore-4尚未发布。
 
 ## 环境与授权
 
-仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。当前main 9783c0f1859ff41eaacda4c7043f14f8797e783e，已合并本轮40bc7ba及前轮ee750a2/172f6b7；codex/telegram-preview-card-fixes保留。用户明确批准最终删除交互并要求构建镜像、给Compose自测；本次公开GHCR发布及必要合并/开关已授权，不代部署、不真实发送。源码仍private、包public，不组织多代理，原D盘/Ubuntu/全局WSL不动。
+仅SeekBell-Dev:/home/dev/projects/seekbell开发，原Ubuntu经wsl.exe派发，[入口](DEVELOPMENT_ENVIRONMENT.md)。当前main 99bb6542366094001039e8e363944cb6a8c2c62a，已合并本轮40bc7ba及前轮ee750a2/172f6b7；codex/telegram-preview-card-fixes保留。用户明确批准最终删除交互并要求构建镜像、给Compose自测；本次公开GHCR发布及必要合并/开关已授权，不代部署、不真实发送。源码仍private、包public，不组织多代理，原D盘/Ubuntu/全局WSL不动。
 
 ## 已实现与本地证据
 
@@ -15,7 +15,6 @@
 
 ## 发布中与保护
 
-目标ghcr.io/aspeternity/seekbell:ui-restore-4原不存在；工作流39779628607在容器检查失败，native/publish均跳过，未写镜像。根因：旧脚本DELETE传{}，新可选请求体模型却要求confirmation，返回422；修复为缺省None继续旧依赖保护，新增None/{}两种回归，不放宽有依赖的无确认删除。原614后端及80个非代理浏览器均已通过，最终数量待日志整理。
-SEEKBELL_GHCR_ENABLED已DELETE并GET404，恢复原缺失。操作目录/home/dev/.local/state/seekbell/releases/ui-restore-4保留失败日志，待本地容器复验后新SHA重启全流程。兼容修正及相关管理回归45项通过（19.06秒）；准备提交API/测试/两份进度文档并本地构建容器复验后再发布。
+目标ui-restore-4尚未发布：首轮39779628607旧空JSON兼容失败已修复；39782236136 attempt1因Azure Ubuntu字体下载停滞取消，attempt2及main重跑继续停在同源，已主动停止并恢复开关404。当前只改CI源优先级/有限等待及两处异步选择器就绪等待，原功能断言与产品UI/业务不变。未提交.github/workflows/ci.yml、frontend/tests/websites.spec.ts及两份文档；本地4项相关浏览器6.0秒、类型/格式/隐私及APT临时映射试跑通过，准备新SHA全流程，后端616项不变。失败/超时日志在发布目录，旧标签未动。
 当前可用镜像仍ui-restore-3，代码679bcf0ee09c9da63f01f2fbbe99347bc7f5a01c，digest sha256:328f888d8b616e45947edb512e5c7f9d1e6b27ded11ff0c33ee43021277f97e4。旧ui3/ui2/ui1/ui-fix-1 digest已留底；成功及匿名核对后才更新Compose。
 8001:8000与seekbell_compare_data沿用原Stack，禁双实例共用SQLite卷。保护18081项目seekbell-acceptance-b45fc2c-20261020及容器/卷/backup-local、旧Stack/卷/8000/4175/18080。仅NodeSeek；Safari/真机未验收。无外部阻塞；下一步等待CI并完成发布回执、匿名核对、Compose交付。交接读本状态/本轮记录与IMAGE_RELEASE。

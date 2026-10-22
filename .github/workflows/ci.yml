@@ -20,14 +20,14 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
       - uses: astral-sh/setup-uv@v6
         with:
-          version: '0.13.1'
+          version: "0.13.1"
           enable-cache: true
       - uses: actions/setup-node@v4
         with:
-          node-version-file: '.node-version'
+          node-version-file: ".node-version"
       - uses: pnpm/action-setup@v4
         with:
           package_json_file: frontend/package.json
@@ -45,7 +45,24 @@ jobs:
       - run: pnpm --dir frontend format:check
       - run: pnpm --dir frontend build
       - run: pnpm --dir frontend build:prototype
-      - run: pnpm --dir frontend exec playwright install --with-deps chromium
+      - name: Prefer Ubuntu archives and bound browser dependency downloads
+        run: |
+          sudo python3 - <<'PY'
+          from pathlib import Path
+          mirrors = Path("/etc/apt/apt-mirrors.txt")
+          if mirrors.is_file():
+              mirrors.write_text(
+                  "https://archive.ubuntu.com/ubuntu/\tpriority:1\n"
+                  "https://security.ubuntu.com/ubuntu/\tpriority:2\n"
+                  "http://azure.archive.ubuntu.com/ubuntu/\tpriority:3\n"
+              )
+          Path("/etc/apt/apt.conf.d/99seekbell-ci-network").write_text(
+              'Acquire::Retries "2";\n'
+              'Acquire::http::Timeout "30";\n'
+              'Acquire::https::Timeout "30";\n'
+          )
+          PY
+          timeout --signal=TERM --kill-after=10s 4m pnpm --dir frontend exec playwright install --with-deps chromium
       - run: pnpm --dir frontend test:prototype
       - run: pnpm --dir frontend test:live
       - run: pnpm --dir frontend test:history
