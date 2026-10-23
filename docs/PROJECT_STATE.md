@@ -1,12 +1,12 @@
 # 当前状态
 
-更新时间：2026-10-23（Asia/Shanghai）。社区热榜和概览模块显隐/排序已实现，本地自动验证通过，隔离镜像/TLS检查也已通过；尚未更新8001或完成用户验收。
+更新时间：2026-10-23（Asia/Shanghai）。社区热榜和概览模块显隐/排序已实现，本地自动验证通过，隔离镜像/TLS检查也已通过；已更新同一8001供用户实测，用户验收待完成。
 
 ## 环境、分支与授权
 
 唯一环境SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe派发；[入口](DEVELOPMENT_ENVIRONMENT.md)。本轮按用户“新建一个分支并开发”从仅规格的7f8c15b新建codex/overview-modules-and-hotlist；祖先main为2c682de（此前修复[PR #1](https://github.com/Aspeternity/seekbell/pull/1)合并）。此前完整CI和amd64/arm64通过，见[合并记录](history/2026-10-23-本地修复合并与热榜分支.md)。
 
-本轮授权为已确认功能的本地实现与验证，不含新功能推送/合并、公开发布、远程部署或真实发送；本地8001保留旧产品。产品提交e53d89e850eb01763a2750f5adcd9354f65d49b0。无多代理，不改D盘、旧Ubuntu或全局WSL。实现已本地提交；本状态与开发记录为镜像验证后的文档交接，随后本地提交。没有其他用户改动。
+用户随后明确授权最新版部署本地Docker实测，已保留数据升级同一8001；不含新功能推送/合并、公开发布、远程部署或主动真实发送。产品提交e53d89e850eb01763a2750f5adcd9354f65d49b0。无多代理，不改D盘、旧Ubuntu或全局WSL。实现已本地提交；本轮仅本地交付证据文档更新，无产品变更或其他用户改动。
 
 ## 实现
 
@@ -20,6 +20,8 @@ SeekBell-Dev、产品e53d89e：完整后端679项通过；15组既有Chromium桌
 
 ## 本地实例与下一步
 
-同一http://localhost:8001/、seekbell-local/seekbell-local-seekbell-1、seekbell-local_data仍为seekbell:local-58bee30ff55a，digest sha256:5886d4f1b9e1d6de5c922ca0bf9af8141099eee3f6a72e594f80daf58f364202。本轮未更新，原账号/配置/历史未读写；备份/管理命令见[本地运行](history/2026-10-23-最新代码本地Docker实测启动.md)。公开仍ui-restore-5；远程Stack及8000/4175未动，旧18080/18081已退役。
+同一http://localhost:8001/（127.0.0.1亦可），seekbell-local/seekbell-local-seekbell-1、原卷seekbell-local_data已运行seekbell:hotlist-e53d89e850eb，镜像ID sha256:a856571243b6de09742b693708c5c74a0c184160cd1a0350418f94debf2f770c；healthy/read-only/unless-stopped，仅127.0.0.1:8001。Windows两地址首页/ready/version/静态资源通过，原保活PID14716身份/创建时间一致。运行元数据已更新。
 
-下一步交用户审阅源码与截图，再按明确的交付范围更新本地实例或推送新功能；不可宣称8001已有热榜。恢复读本状态、开发记录和相关实现；无技术阻塞。
+[交付记录](history/2026-10-23-社区热榜本地Docker交付.md)：停服整卷备份local-runtime/backups/before-e53d89e850eb-20261023-181745.tar.gz（0700/0600），文件SHA/SQLite及副本迁移验证通过；009→010保留原29表记录，实际更新后11类配置指纹一致。账号/配置/历史保留，未导入合成数据。旧58bee30镜像保留；010库不能直接切旧镜像，需配合备份恢复。证据/home/dev/.local/state/seekbell/acceptance/2026-10-23-hotlist-local-update。公开仍ui-restore-5，远程Stack及8000/4175未动。
+
+下一步请用户在8001实测模块显隐/排序、刷新与跨设备保持、热榜实时/每日/每周和失败反馈；按反馈修复后再处理新功能推送/合并。恢复读本状态、开发记录和相关实现；无技术阻塞。
