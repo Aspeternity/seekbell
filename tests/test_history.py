@@ -1,14 +1,21 @@
 import json
-from datetime import date
+from datetime import UTC, date, datetime
 
 import pytest
 from fastapi.testclient import TestClient
 from seekbell.config import Settings
-from seekbell.db.models import Outbox, Post, RuleHit, TaskEvaluation
+from seekbell.db.models import (
+    ManualDelivery,
+    Outbox,
+    Post,
+    RuleHit,
+    TargetTestAttempt,
+    TaskEvaluation,
+)
 from seekbell.db.runtime import create_database_engine, migrate, schema_revision
 from seekbell.db.transactions import write_session
 from seekbell.main import create_app
-from seekbell.services.history import History, date_window, post_key
+from seekbell.services.history import History, date_range_window, date_window, post_key
 from sqlalchemy import event, inspect, select, text
 from sqlalchemy.orm import Session
 
@@ -80,7 +87,8 @@ def test_stable_server_pagination_literal_search_and_filters(history_client):
     )
     assert client.get(url, params={"page": 100}).json()["items"] == []
     options = client.get("/api/manage/history/options").json()
-    assert any(t["id"] == ids["secondary"] and t["deleted"] for t in options["tasks"])
+    assert all(t["id"] != ids["secondary"] and not t["deleted"] for t in options["tasks"])
+    assert any(t["id"] == ids["primary"] for t in options["tasks"])
 
 
 def test_delivery_status_uncertainty_snapshot_and_attempt_pages(history_client):
@@ -114,6 +122,8 @@ def test_history_is_readonly_and_never_serializes_credentials_or_leases(history_
         before = "\n".join(connection.connection.driver_connection.iterdump())
     urls = [
         "/api/manage/history/options",
+        "/api/manage/history/counts",
+        "/api/manage/history/dates",
         "/api/manage/history/posts",
         "/api/manage/history/posts/" + ids["posts"][1],
         "/api/manage/history/posts/" + ids["posts"][1] + "/evaluations",
@@ -137,7 +147,8 @@ def test_history_is_readonly_and_never_serializes_credentials_or_leases(history_
     assert before == after
     assert client.post("/api/manage/history/posts", json={}).status_code == 405
     client.post("/api/auth/logout")
-    assert client.get("/api/manage/history/posts").status_code == 401
+    for path in ("posts", "counts", "dates"):
+        assert client.get("/api/manage/history/" + path).status_code == 401
 
 
 def test_independent_test_records_and_pruned_post_snapshot(history_client):
@@ -307,3 +318,209 @@ def test_read_snapshot_does_not_block_ingestion_or_change_mid_page(core):
             pool.submit(core.ingest, 9001, 9002, 9003, at=30).result(timeout=5)
         assert session.scalar(count) == 2
     assert History(core.engine).list_posts()["total"] == 3
+
+
+def test_history_dates_are_real_local_days_with_complete_cursor_pagination(history_client):
+    client, app, _ = history_client
+    with write_session(app.state.engine) as session:
+        rows = session.scalars(select(Post).order_by(Post.external_post_id)).all()
+        for index, row in enumerate(rows[:4]):
+            row.first_seen_at += index * 86400
+    url = "/api/manage/history/dates"
+    first = client.get(url, params={"scope": "posts", "limit": 2}).json()
+    assert first == {"items": ["2026-10-22", "2026-10-21"], "next_before": "2026-10-21"}
+    second = client.get(
+        url, params={"scope": "posts", "limit": 2, "before": first["next_before"]}
+    ).json()
+    assert second == {"items": ["2026-10-20", "2026-10-19"], "next_before": None}
+    west = client.get(
+        url, params={"scope": "posts", "timezone": "America/Los_Angeles", "limit": 1}
+    ).json()
+    assert west["items"] == ["2026-10-21"]
+    for scope in ("deliveries", "tests"):
+        assert client.get(url, params={"scope": scope}).json()["items"] == ["2026-10-19"]
+    assert client.get(url, params={"scope": "manual"}).json() == {"items": [], "next_before": None}
+    for params in ({"timezone": "invalid"}, {"scope": "invalid"}, {"limit": 101}):
+        assert client.get(url, params=params).status_code == 422
+
+
+def test_category_display_labels_do_not_change_raw_values_or_filtering(history_client):
+    client, app, ids = history_client
+    with write_session(app.state.engine) as session:
+        rows = session.scalars(select(Post).order_by(Post.external_post_id)).all()
+        for row, value in zip(rows, ("daily", "tech", "unknown-category"), strict=False):
+            row.category = value
+    options = client.get("/api/manage/history/options").json()
+    labels = {c["value"]: c["label"] for c in options["category_options"]}
+    assert labels["daily"] == "日常" and labels["tech"] == "技术"
+    assert labels["unknown-category"] == "unknown-category"
+    for index, value, label in ((0, "daily", "日常"), (1, "tech", "技术")):
+        post = client.get("/api/manage/history/posts/" + ids["posts"][index]).json()
+        assert post["category"] == value and post["category_label"] == label
+        result = client.get("/api/manage/history/posts", params={"category": value}).json()
+        assert result["total"] == 1 and result["items"][0]["category_label"] == label
+
+
+def test_notification_counts_match_each_unfiltered_history_total(history_client):
+    client, _, _ = history_client
+    counts = client.get("/api/manage/history/counts").json()
+    assert counts == {"deliveries": 24, "manual": 0, "tests": 2}
+    for name, count in counts.items():
+        result = client.get("/api/manage/history/" + name, params={"q": "absent"}).json()
+        assert result["total"] == 0
+        assert count == client.get("/api/manage/history/" + name).json()["total"]
+
+
+def test_history_dates_handle_both_sides_of_dst_transition(history_client):
+    from datetime import UTC, datetime
+
+    client, app, _ = history_client
+    with write_session(app.state.engine) as session:
+        rows = session.scalars(select(Post).order_by(Post.external_post_id)).all()
+        for row, at in zip(
+            rows,
+            (
+                datetime(2026, 11, 1, 8, 30, tzinfo=UTC),
+                datetime(2026, 11, 1, 9, 30, tzinfo=UTC),
+                datetime(2026, 11, 2, 7, 30, tzinfo=UTC),
+                datetime(2026, 11, 2, 8, 30, tzinfo=UTC),
+            ),
+            strict=False,
+        ):
+            row.first_seen_at = at.timestamp()
+    result = client.get(
+        "/api/manage/history/dates", params={"timezone": "America/Los_Angeles", "limit": 2}
+    ).json()
+    assert result == {"items": ["2026-11-02", "2026-11-01"], "next_before": "2026-11-01"}
+    page = client.get(
+        "/api/manage/history/posts",
+        params={"timezone": "America/Los_Angeles", "discovered_on": "2026-11-01"},
+    ).json()
+    assert page["total"] == 3
+
+
+def test_posts_in_one_collection_batch_follow_source_publication_order_without_rewriting_times(
+    history_client,
+):
+    client, app, ids = history_client
+    seen = ids["base"] + 10000
+    published = seen - 5400
+    with Session(app.state.engine) as session, session.begin():
+        for index, value in ((0, published), (1, published + 60), (2, None)):
+            post = session.get(Post, ("nodeseek", str(8000 + index)))
+            post.first_seen_at = seen
+            post.published_at = value
+    response = client.get("/api/manage/history/posts", params={"page_size": 3}).json()
+    assert [post["id"] for post in response["items"]] == [
+        ids["posts"][1],
+        ids["posts"][0],
+        ids["posts"][2],
+    ]
+    assert all(post["first_seen_at"] == seen for post in response["items"])
+    assert [post["published_at"] for post in response["items"]] == [
+        published + 60,
+        published,
+        None,
+    ]
+    for index in (0, 1, 2):
+        detail = client.get("/api/manage/history/posts/" + ids["posts"][index]).json()
+        assert detail["external_post_id"] == str(8000 + index)
+        assert detail["original_url"] == f"https://www.nodeseek.com/post-{8000 + index}-1"
+    # Discovery dates still filter discovery, even when the source post is much older.
+    absent = datetime.fromtimestamp(published - 86400, UTC).date().isoformat()
+    assert (
+        client.get(
+            "/api/manage/history/posts", params={"discovered_on": absent, "timezone": "UTC"}
+        ).json()["total"]
+        == 0
+    )
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "model", "column"),
+    [
+        ("posts", Post, "first_seen_at"),
+        ("deliveries", Outbox, "created_at"),
+        ("manual", ManualDelivery, "started_at"),
+        ("tests", TargetTestAttempt, "started_at"),
+    ],
+)
+def test_history_ranges_include_both_local_days_and_exclude_adjacent_instants(
+    history_client, endpoint, model, column
+):
+    client, app, ids = history_client
+    start, end = date_range_window(date(2026, 10, 18), date(2026, 10, 19), "Asia/Shanghai")
+    with write_session(app.state.engine) as session:
+        if model in (ManualDelivery, TargetTestAttempt):
+            event = session.get(Outbox, ids["sent"])
+            for i in range(4):
+                fields = dict(
+                    id=f"range-{endpoint}-{i}",
+                    target_id=event.target_id,
+                    target_snapshot=event.target_snapshot,
+                    started_at=start,
+                    result="success",
+                )
+                if model is ManualDelivery:
+                    fields.update(source_event_id=event.id, payload=event.payload)
+                session.add(model(**fields))
+            session.flush()
+        rows = session.scalars(select(model)).all()
+        for row in rows:
+            setattr(row, column, end + 86400)
+        for row, instant in zip(rows[:4], (start - 0.001, start, end - 0.001, end), strict=True):
+            setattr(row, column, instant)
+    url = "/api/manage/history/" + endpoint
+    params = dict(date_from="2026-10-18", date_to="2026-10-19", timezone="Asia/Shanghai")
+    response = client.get(url, params=params)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["total"] == len(data["items"]) == 2
+    assert {item[column] for item in data["items"]} == {start, end - 0.001}
+    first = client.get(url, params={**params, "page_size": 1}).json()
+    second = client.get(url, params={**params, "page_size": 1, "page": 2}).json()
+    assert first["total"] == second["total"] == 2
+    assert first["items"][0]["id"] != second["items"][0]["id"]
+    assert client.get(url, params={**params, "q": "absent-range-search"}).json()["total"] == 0
+    same_day = client.get(
+        url, params={**params, "date_from": "2026-10-19", "date_to": "2026-10-19"}
+    ).json()
+    assert same_day["total"] == 1
+    legacy = client.get(
+        url, params={"discovered_on": "2026-10-19", "timezone": "Asia/Shanghai"}
+    ).json()
+    assert legacy == same_day
+    assert (
+        client.get(
+            url, params={**params, "date_from": "2025-01-01", "date_to": "2025-01-02"}
+        ).json()["total"]
+        == 0
+    )
+    assert client.get(url).json()["total"] == len(rows)
+    if endpoint == "posts":
+        assert sum(data["summary"].values()) == first["total"]
+
+
+@pytest.mark.parametrize("endpoint", ["posts", "deliveries", "manual", "tests"])
+def test_range_validation_is_shared_by_all_history_lists(history_client, endpoint):
+    client, _, _ = history_client
+    for params in (
+        {"date_from": "2026-10-18"},
+        {"date_to": "2026-10-19"},
+        {"date_from": "2026-10-20", "date_to": "2026-10-19"},
+        {"date_from": "2026-02-30", "date_to": "2026-03-01"},
+        {"date_from": "2026-10-18", "date_to": "9999-12-31"},
+        {"date_from": "2026-10-18", "date_to": "2026-10-19", "discovered_on": "2026-10-18"},
+        {"date_from": "2026-10-18", "date_to": "2026-10-19", "timezone": "Unknown/Zone"},
+    ):
+        assert client.get("/api/manage/history/" + endpoint, params=params).status_code == 422
+
+
+def test_range_midnights_observe_dst_and_year_boundaries():
+    for first, last, hours in (
+        (date(2026, 3, 7), date(2026, 3, 9), 71),
+        (date(2026, 10, 31), date(2026, 11, 2), 73),
+        (date(2026, 12, 31), date(2027, 1, 1), 48),
+    ):
+        start, end = date_range_window(first, last, "America/Los_Angeles")
+        assert end - start == hours * 3600

@@ -42,7 +42,7 @@ test('retention confirms changes, handles stale revisions and cleans with the br
   )
   await page.goto('/#/settings/retention')
   await expect(page.getByRole('alert')).toContainText('合成策略读取失败')
-  await page.getByRole('button', { name: '重新读取策略与状态' }).click()
+  await page.getByRole('alert').getByRole('button', { name: '重新加载', exact: true }).click()
   const input = page.getByLabel('普通历史保留天数')
   await expect(input).toBeVisible()
   await input.fill(String(days))

@@ -4,11 +4,9 @@
 
 当前已实现 **M1核心闭环与M2四渠道通知**：RSS解析、规则、基线/身份账本、事务outbox、可恢复投递，以及Telegram Bot/Bark/SMTP/Webhook适配、加密目标配置和独立目标测试记录。M2通过模拟验证；M3已接入真实初始化/登录、网站/任务、加密通知配置、工作空间保存、内容/命中/投递历史只读查询、真实概览统计、管理员修改、显式通知测试/手动重发和服务端采集/自动投递生命周期、保留策略与分批历史清理、显示时区及系统故障/恢复告警；版本信息已接入，M3本地自动退出核对已通过；已提供M4停服加密备份/独立恢复维护命令，网页加密下载/上传生成独立副本已接入，保留原卷的切换/升级回退维护流程已实现，真实验收仍未完成。真实通知与用户验收待Web完成后统一组织，当前证据以[PROJECT_STATE](docs/PROJECT_STATE.md)为准。
 
-## 完整管理界面（模拟数据版）
+## 管理界面
 
-首轮视觉已获确认，现已补齐六个管理模块、四渠道目标编辑、初始化/登录及全部手机布局。网站管理使用居中内置库、卡片与右侧配置面板；工作空间名称及说明可在设置中自定义；首次空工作空间，可显式载入示例。支持跨页操作、演示账号和普通配置备份恢复，仅浏览器本地保存，尚未接入真实后端。运行、页面清单和源码结构见 [界面说明](docs/UI_PROTOTYPE.md)，完整视觉与交互规则见 [设计规范](docs/UI_DESIGN.md)。独立模拟入口保留用于界面演示；默认生产入口已接入真实API，完成范围见下文。前端演示交付不等同M3完成。
-
-## 真实管理入口（M3分阶段接入）
+仅维护一个正式前端入口，页面、导航与样式遵循已确认的[设计规范](docs/UI_DESIGN.md)。旧独立演示版已退役，不再提供模拟账户、浏览器备份、载入示例工作台或第二套构建。源码集中在frontend/src的pages、components、styles和API服务模块，结构见[ARCHITECTURE](docs/ARCHITECTURE.md)。
 
 默认index.html保留v0.4界面，初始化创建唯一管理员，后续登录使用服务端会话。新库无已添加网站：添加内置NodeSeek→配置一个通知目标→创建任务；任务备注、规则、网站配置与工作空间名称/说明存入SQLite，刷新、重启及重新登录后保留。通知目标完整配置加密，读取不回显敏感值，保存不会发送消息。正式入口不读取演示浏览器数据。
 
@@ -39,7 +37,7 @@ pnpm --dir frontend format:check
 pnpm --dir frontend build
 ```
 
-Python 测试使用临时 SQLite 和进程内 HTTP 客户端，并拒绝测试进程的外网连接。原型浏览器套件只收集frontend/tests根目录的spec；真实API、备份和HTTPS等专项放子目录，通过各自独立配置和服务运行。普通CI执行这些检查及迁移命令、镜像构建；独立手动双架构候选流程默认不发布，显式启用后可写GHCR，详见[镜像流程](docs/IMAGE_RELEASE.md)。尚无远程部署或真实发送步骤。远程 Actions 的执行结果和对应提交见 [PROJECT_STATE](docs/PROJECT_STATE.md)。
+Python 测试使用临时 SQLite 和进程内 HTTP 客户端，并拒绝测试进程的外网连接。所有浏览器套件直接运行同一frontend/dist正式构建；test:ui覆盖通用交互，其余按API/历史/备份/HTTPS等专项使用独立临时服务。测试夹具与合成发送器不构成额外产品版本。普通CI执行这些检查及迁移命令、镜像构建；独立手动双架构候选流程默认不发布，显式启用后可写GHCR，详见[镜像流程](docs/IMAGE_RELEASE.md)。尚无远程部署或真实发送步骤。远程 Actions 的执行结果和对应提交见 [PROJECT_STATE](docs/PROJECT_STATE.md)。
 
 ## M1 离线闭环演示
 
@@ -93,10 +91,11 @@ uv run --frozen python -m seekbell
 
 反代头默认不信任。外部HTTPS代理须保留Host（含非默认端口）并覆盖转发头，通过SEEKBELL_TRUSTED_PROXY_IPS明确指定应用实际看到的代理IP；ASGI层统一处理，Uvicorn入口保持--no-proxy-headers。受信HTTPS设置Secure Cookie，普通本机HTTP仍可登录。配置示例、只读检查与本地真实Nginx/TLS演练见[HTTPS部署](docs/PROXY_DEPLOYMENT.md)，实际目标环境部署仍待授权验证。存活不依赖外部服务；就绪检查验证数据库/迁移及后台actor存活。初始化后按已安装网站及启停配置自动采集和投递；空库不请求外网。
 
-真实浏览器复验使用一次性临时服务/数据库：首闭环8011为空库，历史8012、显式发送8013、后台8014、管理操作8015、保留清理8016、时区/系统告警8017使用各自合成夹具，备份8018/8019使用独立空库和浏览器合成账号；不读上述开发数据，不访问论坛或发送消息：
+浏览器复验使用一次性临时服务/数据库：首闭环8011为空库；历史8012、显式发送8013、后台8014、管理操作8015、保留清理8016、时区/系统告警8017使用各自合成夹具；备份8018/8019为独立空库，加载8020、筛选修复8021、通用UI8022和内容稳定性8023为临时服务；不读上述开发数据，不访问论坛或发送消息：
 
 ~~~bash
 pnpm --dir frontend build
+pnpm --dir frontend test:ui
 pnpm --dir frontend test:live
 pnpm --dir frontend test:history
 pnpm --dir frontend test:sending
@@ -105,6 +104,12 @@ pnpm --dir frontend test:operations
 pnpm --dir frontend test:retention
 pnpm --dir frontend test:system
 pnpm --dir frontend test:backup
+pnpm --dir frontend test:approved-ui
+pnpm --dir frontend test:loading
+pnpm --dir frontend test:history-ui-fixes
+pnpm --dir frontend test:content-stability
+pnpm --dir frontend test:workspace-stability
+pnpm --dir frontend test:first-entry
 ~~~
 
 

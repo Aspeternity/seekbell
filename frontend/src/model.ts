@@ -1,0 +1,58 @@
+export interface Group {
+  all: string[]
+  any: string[]
+}
+export interface Task {
+  websiteId: string
+  id: string
+  name: string
+  description: string
+  enabled: boolean
+  scope: 'title' | 'summary' | 'title_summary'
+  groups: Group[]
+  exclude: string[]
+  categories: string[]
+  authorsInclude: string[]
+  authorsExclude: string[]
+  caseSensitive: boolean
+  wholeWord: boolean
+  targets: string[]
+  hits: number
+  lastHit: string
+  color: string
+  icon: string
+}
+export interface Sample {
+  title: string
+  summary: string | null
+  author: string | null
+  category: string | null
+}
+export function emptyTask(): Task {
+  return {
+    id: '',
+    websiteId: '',
+    name: '',
+    description: '',
+    enabled: true,
+    scope: 'title',
+    groups: [{ all: [], any: [] }],
+    exclude: [],
+    categories: [],
+    authorsInclude: [],
+    authorsExclude: [],
+    caseSensitive: false,
+    wholeWord: false,
+    targets: [],
+    hits: 0,
+    lastHit: '暂无命中',
+    color: 'orange',
+    icon: 'layers',
+  }
+}
+export type Truth = 'yes' | 'no' | 'unknown'
+export interface MatchResult {
+  status: Truth
+  reasons: string[]
+}
+export const statusLabel: Record<Truth, string> = { yes: '命中', no: '不命中', unknown: '信息不足' }

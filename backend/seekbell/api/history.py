@@ -4,7 +4,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from seekbell.api.auth import require_admin
-from seekbell.services.history import History, MissingHistory, date_window
+from seekbell.services.history import History, MissingHistory, date_range_window
 
 router = APIRouter(prefix="/api/manage/history", dependencies=[Depends(require_admin)])
 
@@ -20,19 +20,26 @@ def paging(
     return {"page": page, "page_size": page_size}
 
 
-def day(
+def date_filter(
     discovered_on: date | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
     timezone: str = Query("Asia/Shanghai", max_length=64),
 ):
     try:
-        return date_window(discovered_on, timezone)
+        # Retain single-day API compatibility; mixed semantics must not be ambiguous.
+        if discovered_on is not None:
+            if date_from is not None or date_to is not None:
+                raise ValueError("Conflicting date filters")
+            date_from = date_to = discovered_on
+        return date_range_window(date_from, date_to, timezone)
     except (ValueError, OverflowError):
-        raise HTTPException(422, "发现日期或显示时区无效。") from None
+        raise HTTPException(422, "日期范围或显示时区无效。") from None
 
 
 Reader = Annotated[History, Depends(history)]
 Paging = Annotated[dict, Depends(paging)]
-Day = Annotated[tuple[float, float] | None, Depends(day)]
+DateWindow = Annotated[tuple[float, float] | None, Depends(date_filter)]
 
 
 def found(action, *args, **kwargs):
@@ -47,10 +54,29 @@ def options(reader: Reader):
     return reader.options()
 
 
+@router.get("/counts")
+def counts(reader: Reader):
+    return reader.counts()
+
+
+@router.get("/dates")
+def dates(
+    reader: Reader,
+    scope: Literal["posts", "deliveries", "manual", "tests"] = "posts",
+    timezone: str = Query("Asia/Shanghai", max_length=64),
+    before: date | None = None,
+    limit: int = Query(100, ge=1, le=100),
+):
+    try:
+        return reader.dates(scope, timezone=timezone, before=before, limit=limit)
+    except (ValueError, OverflowError, KeyError):
+        raise HTTPException(422, "记录日期或显示时区无效。") from None
+
+
 @router.get("/posts")
 def posts(
     params: Paging,
-    window: Day,
+    window: DateWindow,
     reader: Reader,
     q: str = Query("", max_length=200),
     status: Literal[
@@ -84,7 +110,7 @@ def evaluations(key: str, params: Paging, reader: Reader):
 @router.get("/deliveries")
 def deliveries(
     params: Paging,
-    window: Day,
+    window: DateWindow,
     reader: Reader,
     q: str = Query("", max_length=200),
     status: Literal["all", "pending", "retry", "leased", "sent", "failed", "cancelled"] = "all",
@@ -126,7 +152,7 @@ def delivery(
 @router.get("/tests")
 def tests(
     params: Paging,
-    window: Day,
+    window: DateWindow,
     reader: Reader,
     q: str = Query("", max_length=200),
     target_id: str = Query("", max_length=80),
@@ -145,7 +171,7 @@ def target_test(key: str, reader: Reader):
 @router.get("/manual")
 def manual(
     params: Paging,
-    window: Day,
+    window: DateWindow,
     reader: Reader,
     q: str = Query("", max_length=200),
     target_id: str = Query("", max_length=80),

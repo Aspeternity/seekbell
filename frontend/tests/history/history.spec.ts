@@ -1,3 +1,4 @@
+import { selectChoice } from '../select'
 import { expect, test } from '@playwright/test'
 const credentials = { username: 'history_admin', password: 'Synthetic-History-2026' }
 test('stored history filters, pages, snapshots, uncertainty and read errors remain accurate', async ({
@@ -57,7 +58,7 @@ test('stored history filters, pages, snapshots, uncertainty and read errors rema
   await page.screenshot({ path: info.outputPath('post-detail-spacing.png'), fullPage: true })
   expect(await page.evaluate(() => Reflect.get(window, 'historyInjected'))).toBeUndefined()
   await page.goto('/#/content')
-  await page.getByLabel('匹配结果', { exact: true }).selectOption('insufficient_data')
+  await selectChoice(page.getByLabel('匹配结果', { exact: true }), 'insufficient_data')
   await expect(page.locator('.content-row')).toHaveCount(1)
   await page.locator('.content-title').click()
   await expect(page.locator('.history-evaluation').filter({ hasText: '摘要关注' })).toHaveCount(1)
@@ -67,12 +68,12 @@ test('stored history filters, pages, snapshots, uncertainty and read errors rema
   await expect(page.getByText('来源未提供摘要，无法据此推断完整内容。')).toBeVisible()
   await expect(page.locator('.support-panel')).toContainText('摘要缺失')
   await page.goto('/#/content')
-  await page.getByLabel('关联任务', { exact: true }).selectOption({ label: '当前任务名称' })
-  await page.getByLabel('匹配结果', { exact: true }).selectOption('no_match')
+  await selectChoice(page.getByLabel('关联任务', { exact: true }), { label: '当前任务名称' })
+  await selectChoice(page.getByLabel('匹配结果', { exact: true }), 'no_match')
   await expect(page.locator('.content-row')).toHaveCount(2)
   await expect(page.locator('.content-row').filter({ hasText: '特别结果' })).toContainText('不命中')
-  await page.getByLabel('关联任务', { exact: true }).selectOption('')
-  await page.getByLabel('匹配结果', { exact: true }).selectOption('not_evaluated')
+  await selectChoice(page.getByLabel('关联任务', { exact: true }), '')
+  await selectChoice(page.getByLabel('匹配结果', { exact: true }), 'not_evaluated')
   await expect(page.locator('.content-row')).toHaveCount(1)
   await page.locator('.content-title').click()
   await expect(page.getByText('基线帖子：首次采集时登记，未执行规则匹配或生成通知。')).toBeVisible()
@@ -89,7 +90,8 @@ test('stored history filters, pages, snapshots, uncertainty and read errors rema
   )
   await page.getByLabel('搜索内容').fill('不存在的内容')
   await expect(page.getByRole('alert')).toContainText('合成查询故障')
-  await expect(page.locator('.content-row')).toHaveCount(0)
+  await expect(page.getByRole('alert')).toContainText('上次结果')
+  await expect(page.locator('.content-row')).toHaveCount(20)
   await page.getByRole('button', { name: '重新加载', exact: true }).click()
   await expect(page.getByText('没有符合条件的内容', { exact: true })).toBeVisible()
   await page.getByLabel('搜索内容').fill('')
@@ -121,8 +123,8 @@ test('stored history filters, pages, snapshots, uncertainty and read errors rema
   await expect(page.locator('.delivery-row')).toHaveCount(20)
   await page.getByLabel('下一页投递记录', { exact: true }).click()
   await expect(page.locator('.delivery-row')).toHaveCount(4)
-  await page.getByLabel('投递状态筛选').selectOption('sent')
-  await page.getByLabel('结果未知筛选').selectOption('true')
+  await selectChoice(page.getByLabel('投递状态筛选'), 'sent')
+  await selectChoice(page.getByLabel('结果未知筛选'), 'true')
   await expect(page.locator('.delivery-row')).toHaveCount(2)
   await expect(page.locator('.delivery-row').first()).toContainText('历史 Webhook 名称')
   await page

@@ -16,7 +16,6 @@ from seekbell.services.display import get_display, update_display
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from scripts.export_notification_preview import DEMO_TIMEZONES, DESTINATION, sample_fixture
 from tests.notifier_helpers import CONFIGS
 from tests.test_management import authenticate
 
@@ -127,21 +126,10 @@ def test_preview_validates_options_and_rejects_credentials(preview_app, values):
     assert business_counts(app.state.engine) == before
 
 
-def test_demo_snapshot_and_all_summary_suffixes_match_the_production_renderer():
-    sample = json.loads(DESTINATION.read_text())
-    assert sample == sample_fixture()
-    assert set(sample["messages"]) == set(DEMO_TIMEZONES)
-    for zone in DEMO_TIMEZONES:
-        for limit in (*range(len(sample["summary_suffixes"])), 160, 1000):
-            for include in (True, False):
-                message = copy.deepcopy(sample["messages"][zone])
-                if include:
-                    message["text"] += sample["summary_suffixes"][
-                        min(limit, len(sample["summary_suffixes"]) - 1)
-                    ]
-                assert message == telegram_preview(
-                    zone, include_summary=include, summary_limit=limit
-                )
-    assert telegram_preview("UTC", include_summary=False) == telegram_message(
-        telegram_preview_payload("UTC"), {"include_summary": False, "summary_limit": 160}
+@pytest.mark.parametrize("zone", ["UTC", "Asia/Shanghai", "Asia/Tokyo", "America/Los_Angeles"])
+@pytest.mark.parametrize("limit", [0, 1, 7, 160, 1000])
+@pytest.mark.parametrize("include", [True, False])
+def test_preview_options_match_the_single_production_renderer(zone, limit, include):
+    assert telegram_preview(zone, include_summary=include, summary_limit=limit) == telegram_message(
+        telegram_preview_payload(zone), {"include_summary": include, "summary_limit": limit}
     )

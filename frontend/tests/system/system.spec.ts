@@ -1,3 +1,4 @@
+import { selectChoice } from '../select'
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 const credentials = { username: 'system_admin', password: 'Synthetic-System-2026' }
@@ -44,9 +45,9 @@ test('browser timezone initializes once, settings persist and calendar-day filte
   const before = await (await page.request.get('/api/manage/history/posts')).json()
   await page.goto('/#/settings/display')
   const input = page.getByLabel('显示时区', { exact: true })
-  await expect(input).toHaveValue('UTC')
+  await expect(input).toHaveAttribute('data-value', 'UTC')
   const current = await (await page.request.get('/api/manage/display')).json()
-  await input.selectOption('America/Los_Angeles')
+  await selectChoice(input, 'America/Los_Angeles')
   await page.getByRole('button', { name: '管理员', exact: true }).click()
   await expect(page.getByRole('dialog')).toContainText('尚未保存')
   await page.getByRole('button', { name: '继续编辑', exact: true }).click()
@@ -60,11 +61,11 @@ test('browser timezone initializes once, settings persist and calendar-day filte
   ).toBe(true)
   await page.getByRole('button', { name: '保存显示时区', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('其他页面改变')
-  await expect(input).toHaveValue('America/Los_Angeles')
+  await expect(input).toHaveAttribute('data-value', 'America/Los_Angeles')
   await page.getByRole('button', { name: '重新读取时区', exact: true }).click()
   await page.getByRole('button', { name: '放弃修改并读取', exact: true }).click()
-  await expect(input).toHaveValue('Asia/Tokyo')
-  await input.selectOption('America/Los_Angeles')
+  await expect(input).toHaveAttribute('data-value', 'Asia/Tokyo')
+  await selectChoice(input, 'America/Los_Angeles')
   await page.route(
     '**/api/manage/display',
     (route) =>
@@ -79,7 +80,7 @@ test('browser timezone initializes once, settings persist and calendar-day filte
   )
   await page.getByRole('button', { name: '保存显示时区', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('合成时区保存失败')
-  await expect(input).toHaveValue('America/Los_Angeles')
+  await expect(input).toHaveAttribute('data-value', 'America/Los_Angeles')
   await page.getByRole('button', { name: '保存显示时区', exact: true }).click()
   await expect(page.getByRole('status').filter({ hasText: '显示时区已保存' })).toBeVisible()
   expect(await (await page.request.get('/api/manage/history/posts')).json()).toEqual(before)
@@ -95,7 +96,10 @@ test('browser timezone initializes once, settings persist and calendar-day filte
     await context.close()
   }
   await page.goto('/#/content')
-  await page.getByLabel('发现日期', { exact: true }).fill('2026-10-18')
+  await page.getByRole('button', { name: '发现日期', exact: true }).click()
+  await page.getByLabel('开始日期', { exact: true }).fill('2026-10-18')
+  await page.getByLabel('结束日期', { exact: true }).fill('2026-10-18')
+  await page.getByRole('button', { name: '应用', exact: true }).click()
   await expect(page.locator('.content-row')).toHaveCount(1)
   await expect(page.locator('.content-row')).toContainText('时区边界夜帖')
   const utc = await (
@@ -146,22 +150,30 @@ test('browser timezone initializes once, settings persist and calendar-day filte
     ).toBe(true)
     await page.getByRole('button', { name: '偏好与保留', exact: true }).click()
     await page.getByRole('button', { name: '查看时区详情', exact: true }).click()
-    await expect(input).toHaveValue('UTC')
+    await expect(input).toHaveAttribute('data-value', 'UTC')
     release()
     await finished
     await page.goto('/#/content')
+    const utcDay = await (
+      await page.request.get('/api/manage/history/posts?discovered_on=2026-10-19&timezone=UTC')
+    ).json()
+    expect(utcDay.total).toBeGreaterThan(0)
     const filtered = page.waitForResponse((response) => {
       const url = new URL(response.url())
       return (
         url.pathname === '/api/manage/history/posts' &&
-        url.searchParams.get('discovered_on') === '2026-10-18'
+        url.searchParams.get('date_from') === '2026-10-19' &&
+        url.searchParams.get('date_to') === '2026-10-19'
       )
     })
-    await page.getByLabel('发现日期', { exact: true }).fill('2026-10-18')
+    await page.getByRole('button', { name: '发现日期', exact: true }).click()
+    await page.getByLabel('开始日期', { exact: true }).fill('2026-10-19')
+    await page.getByLabel('结束日期', { exact: true }).fill('2026-10-19')
+    await page.getByRole('button', { name: '应用', exact: true }).click()
     const applied = await filtered
     expect(new URL(applied.url()).searchParams.get('timezone')).toBe('UTC')
-    expect((await applied.json()).total).toBe(0)
-    await expect(page.locator('.content-row')).toHaveCount(0)
+    expect((await applied.json()).total).toBe(utcDay.total)
+    await expect(page.locator('.content-row')).toHaveCount(Math.min(20, utcDay.total))
   } finally {
     release()
   }
@@ -243,7 +255,18 @@ test('confirmed independent alerts record a single fault and recovery even when 
   ).toBe(true)
   const captured = await (await page.request.get('/api/manage/alerts/history')).json()
   expect(captured.items.slice(0, 2).map((event: any) => event.phase)).toEqual(['recovery', 'fault'])
-  await page.getByRole('button', { name: '刷新系统事件', exact: true }).click()
+  await Promise.all([
+    page.waitForResponse((response) =>
+      response.url().includes('/api/manage/alerts/history?page=1'),
+    ),
+    page.getByRole('button', { name: '刷新系统事件', exact: true }).click(),
+  ])
+  await expect(
+    page
+      .locator('.read-region')
+      .filter({ has: page.locator('.system-event') })
+      .first(),
+  ).toHaveAttribute('aria-busy', 'false')
   await expect(page.getByText('当前没有已记录的故障。')).toBeVisible()
   const newest = page.locator('.system-event').first()
   await expect(newest).toContainText('恢复')

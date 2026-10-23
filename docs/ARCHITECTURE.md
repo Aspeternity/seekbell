@@ -100,26 +100,27 @@ Codex 可在授权 SSH 范围内部署测试环境；没有 SSH 则提供含固�
 
 发布 amd64/arm64 镜像；架构构建成功不等于两种架构均已原生实机验证。正式环境不自动升级。回退需结合数据库版本和备份，不能仅更换旧镜像。
 
-## 管理界面原型隔离（2026-10-19）
+## 单一正式管理界面（2026-10-23）
 
-按用户确认的先审原型顺序，frontend/prototype.html和src/prototype独立于生产入口；vite.prototype.config.ts输出dist-prototype。沿用Vue/TypeScript/Vite，自定义UI组件，不移除既有Naive UI依赖。原型数据源、存储与试算均只在浏览器，不能调用正式API或写应用数据库，不进入默认Docker构建。正式接入时由后端RuleEngine统一判断，移除原型专用试算路径；UI细节与运行说明见UI_DESIGN/UI_PROTOTYPE。
+用户授权结构清理后，仅维护frontend/index.html → src/main.ts → Bootstrap.vue → App.vue一个正式入口。App负责既有Hash路由、认证跳转、导航与未保存保护；pages集中实际页面，components放共用控件，styles保持批准视觉。store.ts只接真实认证和配置API，history/overview/readCache等服务模块维持原契约；model/shared/websites为实际表单类型与目录定义。
 
-用户确认后扩展v0.2，pages按六个模块及Auth拆分，store.ts集中管理模拟状态与操作，App.vue负责Hash路由、访问跳转和未保存保护。普通数据采用有版本标识的白名单导入/持久化；连接凭据仅在表单内存，演示账号摘要和会话与普通导出分离。该浏览器认证不构成安全边界，不得替代服务端认证。跨页模拟支持目标停用取消重试、历史快照、独立测试/手动重发，但没有真实后台执行。交付ZIP可附dist-prototype，通过仅绑定本机的serve-prototype.mjs免依赖预览，Git不跟踪构建产物。
+删除独立原型入口/构建、重复概览/内容/通知/设置页、演示store、浏览器演示账户与备份、前端JS规则试算及组件注入/构建别名。所有规则试匹配仍由后端RuleEngine计算；预览仍调用正式预览API与发送formatter，不维护额外离线JSON模板。既有批准UI与统计口径不变，统计数字不增加点击。
 
-## 网站库与实例（v0.3界面调整，2026-10-19）
+仅构建frontend/dist，开发/CI/容器共用该产物。浏览器套件使用同一正式界面，scripts/run_web_smoke.py在一次性临时库配合被动或合成运行器验证，退出清理；不安装测试版产品、不读取正式库。backend/services中的离线demo命令是核心/调度/备份的合成验证工具，继续供CI和容器检查使用。旧原型说明与交接已[归档](history/2026-10-23-原型退役前说明.md)，不是第二套运行指南。
 
-内置适配器目录与用户已添加实例分开。原型websites.ts声明目录及能力，store.websites保存实例数组；每个实例独立启停、间隔、健康与测试时间。Task/Post记录websiteId，历史可追踪；任务只能绑定已添加网站，已有任务固定网站。有任务依赖时阻止移除；无依赖时移除配置、保留历史并取消相关未发送模拟重试。界面原生dialog侧栏支持键盘/未保存保护，移动端全屏。
+useRemote初读/非搜索立即请求，仅明确的搜索字段变化防抖180ms。同查询保留快照，内容/通知列表及概览等显式keepPrevious跨条件保留，并以stale禁用旧结果交互；scope约束告警详情只能保留同一事件分页，不借用其他对象。新响应原子替换数据/统计/分页。readCache最多20项，以数据revision标记写后过期、session revision处理身份失效；写后保留旧快照并刷新，退出/失效立即清空。迟到响应同时检查generation、数据和会话revision。ReadRegion统一稳定占位、200ms覆盖反馈、失败重试及旧快照交互隔离，取代分散的高度补丁；概览仅允许标记的查询控件继续操作。编辑草稿和密码不使用只读缓存。列表后端保留first_seen_at主排序，同批以published_at倒序（缺失置后）及稳定身份收尾；发现日过滤不改。
 
-新浏览器/重置默认为空工作空间；示例只能主动载入。存储v3白名单化网站与关联字段；v2单一隐含来源迁移成已添加NodeSeek并保留任务、记录和设置，旧备份同样迁移；不清空用户旧数据。实际目录仍只注册NodeSeek，测试中临时注入多个合成目录项验证独立配置，不随产品交付额外适配器。
+usePopup把按钮和portalled面板作为单一边界，统一外部/焦点离开关闭；DateFilter与AppSelect复用，不叠加库捕获阶段clickoutside。AppSelect归并15处原生选择与旧WebsiteSelect，以preventScroll聚焦、仅滚动菜单选项，保留不同场景尺寸和类型；Bootstrap的abstract NConfigProvider禁用组件库全局preflight，防止首次挂载改写body字体。Notifications外壳持有标题与NotificationTabs，内容按菜单/记录键隔离；Settings内部换分类保留外壳并清空获准放弃的草稿，避免跨页面KeepAlive敏感表单。
 
-v0.3原型阶段未迁移后端。M3首个接入阶段通过独立WebsiteInstallation表达安装实例，保留Website/Source作为适配器身份与历史锚点；新库无安装记录，旧部署保留原实例/配置/身份账本，具体迁移契约见下节。
+2026-10-23补修：recordQueries集中通知记录的默认/筛选参数、缓存键及加载器，预读与Records使用同一契约。readCache.fetchRead按会话/数据revision/查询键合并在途读取；所有useRemote读取共用它，清会话时清在途索引并拒绝旧请求回填。Notifications区分请求目的地与实际展示对象，只在目标列表/选项完成后整体提交；从冷预读交接的首次useRemote消费已完成快照，后续筛选/重试仍正常请求。只读区域占位和反馈同时延迟200ms，原有身份/写后失效规则保留。
 
-2026-10-20 v0.4：网站目录选择以居中原生dialog展示，配置仍右侧面板；添加完成关闭选择器，不自动切换或叠加配置。偏好新增workspaceName/workspaceDescription普通字段，App侧栏读取已保存值，Settings保留草稿和预览；沿用v3兼容格式，对缺失新字段的v2/v3数据及备份补默认值，校验长度并白名单导出，不修改账号模型或后端。
+## 网站库与实例
 
+src/websites.ts声明已实现适配器及能力，服务端WebsiteInstallation表示用户安装关系，Website/Source保留适配器身份与历史锚点。新库没有安装实例；目前目录仅NodeSeek。已有任务固定网站，有未删除任务依赖时阻止移除；无依赖时移除安装配置、保留历史并按正式服务契约取消待发送动作。网站库使用居中原生dialog，安装完成关闭；实例配置仍右侧面板，支持键盘/未保存保护，手机全屏。工作空间名称/说明由SQLite偏好保存并显示在侧栏，不读取旧演示浏览器数据。
 
 ## M3首个真实接入契约（2026-10-20）
 
-默认生产入口复用v0.4页面与样式，Vite的@workspace别名分别选择live或模拟store。共享纯类型/渠道元数据位于prototype/shared.ts；正式Bootstrap传入正式概览/设置视图，模拟构建不导入live模块。正式状态来自/api/manage/workspace，不迁移演示账号/浏览器备份，不写演示localStorage。保留独立prototype.html及dist-prototype。
+2026-10-20首个接入沿用批准v0.4页面与样式，正式状态来自/api/manage/workspace，不迁移演示账号/浏览器备份。2026-10-23已收敛为上节单入口结构；下文保留各接入阶段的后端契约和证据，完成范围以PROJECT_STATE为准。
 
 0004_management增加单例Administrator、LoginSession、WebsiteInstallation、WorkspacePreferences；TaskVersion增加最多160字符description。SQLite迁移入口持BEGIN IMMEDIATE后识别空库/既有迁移版本：空库安装实例表为空，从既有M0/M1/M2升级保留原网站实例。适配器身份行不是用户已安装实例；移除实例仅删除安装关系、禁用来源并重建后续基线，保留历史身份。活跃任务依赖阻止移除；创建任务在同一配置写事务检查安装关系。任务所属网站固定，备注随规则版本留证。
 
@@ -163,7 +164,7 @@ PUT /api/auth/administrator接受username、current_password及可选new_passwor
 
 0006_manual_delivery仅增加manual_deliveries及开始/目标/来源索引；保存原自动事件ID、当前目标的加密配置快照、原消息快照、开始/完成时间及结果。原ID不是外键，原自动可读历史清理不破坏独立留证；目标身份仍为外键。重发使用当前目标配置及原消息内容/任务快照，生成新消息事件ID，不重写原outbox、attempt、贡献、SeenPost或DeliveredPost，不重新执行规则；不会因手动成功修改自动去重，不进入自动队列或重试。明确接受/拒绝/临时错误/未知均单独记录。
 
-GET /api/manage/history/manual及/{id}复用只读快照、分页/日期/目标/状态/目标名筛选；支持source_event_id查询关联记录。详情含当前操作时目标名称/配置版本、消息/任务快照分页和原记录入口，只按白名单返回，无密文/地址/租约。概览回执指标明确为自动投递，独立测试与手动重发不计入。正式目标列表/确认弹窗通过Bootstrap注入；原型保留模拟行为。弹窗确认前无发送，取消不改变数据，未知明确提示可能重复；普通HTTP也可生成操作UUID，不依赖secure-context的randomUUID。
+GET /api/manage/history/manual及/{id}复用只读快照、分页/日期/目标/状态/目标名筛选；支持source_event_id查询关联记录。详情含当前操作时目标名称/配置版本、消息/任务快照分页和原记录入口，只按白名单返回，无密文/地址/租约。概览回执指标明确为自动投递，独立测试与手动重发不计入。目标列表/确认弹窗使用正式页面和共享组件。弹窗确认前无发送，取消不改变数据，未知明确提示可能重复；普通HTTP也可生成操作UUID，不依赖secure-context的randomUUID。
 
 浏览器发送验证使用独立--sending临时库/8013及测试依赖覆盖，全部渠道替换为合成Notifier，产品无模拟渠道开关；正常生产端只在管理员确认POST时调用真实适配器。离线CLI演练增加显式操作，仍只用临时库、合成配置及模拟发送。检查、授权和限制见[阶段证据](history/2026-10-20-通知测试与手动重发.md)。
 
@@ -197,7 +198,7 @@ SourceProbe每来源仅存最近一次测试的开始/完成时间、结果/固�
 
 ## M3保留策略与历史清理（2026-10-20，第七子阶段）
 
-0008_retention新增单例RetentionPolicy：days（1–365，默认30）、revision、next_run_at、last_run_at及last_counts；只修改保留天数时提升版本。GET/PUT /api/manage/retention沿用管理员会话/no-store和写入CSRF/Origin；PUT严格校验天数/期望revision，过期版本409，不能覆盖另一个页面的新策略。GET和保存请求不执行清理；更改天数将next_run_at置0，由服务端actor处理。workspace返回实际retention天数。正式设置新增独立保留策略页，确认清理不可逆、保存成功后更新基准；失败/409保留草稿，可明确重新读取，沿用导航未保存保护。原型保持原有模拟保存。
+0008_retention新增单例RetentionPolicy：days（1–365，默认30）、revision、next_run_at、last_run_at及last_counts；只修改保留天数时提升版本。GET/PUT /api/manage/retention沿用管理员会话/no-store和写入CSRF/Origin；PUT严格校验天数/期望revision，过期版本409，不能覆盖另一个页面的新策略。GET和保存请求不执行清理；更改天数将next_run_at置0，由服务端actor处理。workspace返回实际retention天数。正式设置新增独立保留策略页，确认清理不可逆、保存成功后更新基准；失败/409保留草稿，可明确重新读取，沿用导航未保存保护。
 
 新HistoryRetention与采集、投递同属唯一Runtime，初始化前不工作；无需网站启用或浏览器保持打开。默认每小时完成一次检查，候选达到每类100个父项时每秒续批，不补跑错过的轮次。未到期/初始化前的唤醒只读；真正清理持BEGIN IMMEDIATE，同事务重查策略/到期并删除依赖、父项及更新检查点。与摄取/认领/完成/配置取消串行，避免检查后被另一写入改变。停止复用database_call的屏蔽取消/join规则，先等待数据库线程，再dispose；actor意外失败使用固定retention_stopped代码并降低就绪，日志不输出异常/SQL参数。
 
@@ -229,7 +230,7 @@ Runtime增加独立alert_stop；其他actor意外失败降低就绪并停止采�
 
 正式设置AboutSettings复用/api/version、/health/ready及受认证/api/manage/runtime，不新增后端或数据库结构。api.ts分离版本/就绪读取及协议校验，两者各自限8秒/禁止缓存；就绪503仍允许显示可读版本，非约定健康响应显示读取错误。原独立状态入口loadSystemInfo仍要求就绪。界面保留完整构建版本，development标明未固定提交，迁移null不冒充管理员未初始化；真实Runtime状态另行读取，401沿用会话过期处理。共享useRemote忽略过期/卸载响应，手动刷新/重试不写配置或发送消息。就绪只说明数据库与运行循环，不作为外部RSS可用或实际收信的证明。
 
-正式导航提供版本信息；生产备份恢复按M4，既有备份直达地址明确未可用，不提供模拟导入/导出。未知设置地址404，正式空态与帮助说明以已接入范围为准；模拟原型独立。M3操作/路由核对及证据见[退出矩阵](history/2026-10-20-版本信息与M3退出核对.md)，用户验收与真实服务验证另记。
+正式导航提供版本信息；生产备份恢复按M4，既有备份直达地址明确未可用，不提供模拟导入/导出。未知设置地址404，正式空态与帮助说明以已接入范围为准；旧模拟原型已退役。M3操作/路由核对及证据见[退出矩阵](history/2026-10-20-版本信息与M3退出核对.md)，用户验收与真实服务验证另记。
 
 
 ## M4本地Compose与停服加密备份（2026-10-20，第一子阶段）
