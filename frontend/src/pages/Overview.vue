@@ -118,7 +118,10 @@ async function toggle(id: string) {
     @retry="remote.reload"
   >
     <template v-if="data">
-      <div v-if="!data.runtime_active && data.runtime.status !== 'failed'" class="warning-note">
+      <div
+        v-if="!data.runtime_active && data.runtime.status !== 'failed'"
+        class="warning-note overview-notice"
+      >
         <Icon name="clock" :size="18" /><span
           >后台采集与通知发送尚未启动。已启用的配置不会自动执行。</span
         >
@@ -138,7 +141,7 @@ async function toggle(id: string) {
       </section>
       <div
         v-else-if="state.websites.some((w) => w.enabled && w.health === 'error')"
-        class="warning-note"
+        class="warning-note overview-notice"
       >
         <Icon name="alert" :size="18" /><span>来源连接异常，请检查采集设置。</span>
         <button class="text-link" @click="emit('navigate', '/websites')">查看网站</button>
@@ -461,6 +464,9 @@ async function toggle(id: string) {
 </template>
 
 <style scoped>
+.overview-notice {
+  margin: 0 0 22px;
+}
 .overview-modules {
   display: grid;
   gap: 22px;
