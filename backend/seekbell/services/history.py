@@ -323,7 +323,7 @@ class History:
             return self.post_item(session, *row, detail=True)
 
     def evaluations(self, key, *, page=1, page_size=20, group="all"):
-        if group not in {"all", "primary", "other"}:
+        if group not in {"all", "matched", "primary", "other"}:
             raise ValueError("Unknown evaluation group")
         website, external = decode_post_key(key)
         d = self.decisions.c
@@ -357,7 +357,7 @@ class History:
             matched_total = counts.get("match", 0)
             other_total = sum(counts.values()) - matched_total
             total = matched_total + other_total
-            if group == "primary" and matched_total:
+            if group == "matched" or (group == "primary" and matched_total):
                 statement = statement.where(d.status == "match")
                 total = matched_total
             elif group == "other":

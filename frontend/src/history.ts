@@ -45,10 +45,6 @@ export interface Evaluation {
   at: number
   result: { status: PostStatus; reasons: Reason[] }
 }
-export interface EvaluationPage extends Page<Evaluation> {
-  matched_total: number
-  other_total: number
-}
 export interface PostPage extends Page<PostRecord> {
   summary: Partial<Record<PostStatus, number>>
 }

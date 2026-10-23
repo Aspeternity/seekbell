@@ -6,14 +6,7 @@ import Icon from '../components/Icon.vue'
 import { channelMeta } from '../store'
 import { state, websiteName, formatTime } from '../store'
 import { historyGet, useRemote, postLabels, deliveryLabels, resultClass } from '../history'
-import type {
-  Options,
-  PostRecord,
-  PostPage,
-  Page,
-  EvaluationPage,
-  DeliveryRecord,
-} from '../history'
+import type { Options, PostRecord, PostPage, Page, Evaluation, DeliveryRecord } from '../history'
 import Pagination from '../components/Pagination.vue'
 import DateFilter from '../components/DateFilter.vue'
 import { dateRangeParams, type HistoryDateRange } from '../dateRange'
@@ -29,15 +22,11 @@ const q = ref(''),
   website = ref(''),
   page = ref(1)
 const evaluationPage = ref(1),
-  otherEvaluationPage = ref(1),
-  otherExpanded = ref(false),
   deliveryPage = ref(1)
 watch(
   () => props.selectedId,
   () => {
     evaluationPage.value = 1
-    otherEvaluationPage.value = 1
-    otherExpanded.value = false
     deliveryPage.value = 1
   },
   { flush: 'sync' },
@@ -108,37 +97,16 @@ const detail = useRemote(
 const evaluations = useRemote(
   () =>
     props.selectedId
-      ? historyGet<EvaluationPage>('posts/' + props.selectedId + '/evaluations', {
+      ? historyGet<Page<Evaluation>>('posts/' + props.selectedId + '/evaluations', {
           page: evaluationPage.value,
-          group: 'primary',
+          group: 'matched',
         })
       : Promise.resolve(undefined),
   () => [props.selectedId, evaluationPage.value],
   {
     cacheKey: () =>
       props.selectedId
-        ? JSON.stringify(['content:evaluations', props.selectedId, 'primary', evaluationPage.value])
-        : undefined,
-  },
-)
-const otherEvaluations = useRemote(
-  () =>
-    props.selectedId && otherExpanded.value
-      ? historyGet<EvaluationPage>('posts/' + props.selectedId + '/evaluations', {
-          page: otherEvaluationPage.value,
-          group: 'other',
-        })
-      : Promise.resolve(undefined),
-  () => [props.selectedId, otherExpanded.value, otherEvaluationPage.value],
-  {
-    cacheKey: () =>
-      props.selectedId && otherExpanded.value
-        ? JSON.stringify([
-            'content:evaluations',
-            props.selectedId,
-            'other',
-            otherEvaluationPage.value,
-          ])
+        ? JSON.stringify(['content:evaluations', props.selectedId, 'matched', evaluationPage.value])
         : undefined,
   },
 )
@@ -158,6 +126,22 @@ const deliveries = useRemote(
         : undefined,
   },
 )
+const emptyMatchMessage = computed(() => {
+  const record = detail.data.value
+  if (record?.baseline === true) return '基线帖子：首次采集时登记，未执行规则匹配或生成通知。'
+  switch (record?.status) {
+    case 'no_match':
+      return '该内容未命中任何任务。'
+    case 'insufficient_data':
+      return '信息不足，暂无法确定是否命中。'
+    case 'not_evaluated':
+      return '该内容未执行规则匹配。'
+    case 'unrecorded':
+      return '没有可确认的历史命中记录。'
+    default:
+      return '暂无可展示的命中依据，请刷新后重试。'
+  }
+})
 const time = (at: number | null) =>
   at === null ? '未记录' : formatTime(new Date(at * 1000).toISOString())
 function openPost(id: string) {
@@ -289,16 +273,9 @@ function clear() {
             </section>
           </div>
           <aside class="panel support-panel">
-            <h2><Icon name="filter" :size="18" />为什么会得到这个结果？</h2>
-            <h3 class="section-subtitle">任务匹配快照</h3>
-            <p v-if="detail.data.value.baseline === true" class="info-note">
-              基线帖子：首次采集时登记，未执行规则匹配或生成通知。
-            </p>
-            <p v-else-if="detail.data.value.baseline === null" class="info-note">
+            <h2><Icon name="filter" :size="18" />命中依据</h2>
+            <p v-if="detail.data.value.baseline === null" class="info-note">
               旧版本可能未保存完整判定。只展示已留存证据，不按当前规则重算历史。
-            </p>
-            <p v-else-if="detail.data.value.status === 'not_evaluated'" class="info-note">
-              没有留存的任务判定。不会按当前规则补写历史。
             </p>
             <ReadRegion
               :loading="evaluations.loading.value"
@@ -314,64 +291,22 @@ function clear() {
                   :evaluation="evaluation"
                   @navigate="emit('navigate', $event)"
                 />
-                <p v-if="!evaluations.data.value.total" class="small-note">
-                  没有可展示的任务判定。
+                <p v-if="!evaluations.data.value.total" class="small-note" role="status">
+                  {{ emptyMatchMessage }}
                 </p>
                 <Pagination
+                  v-if="evaluations.data.value.total > evaluations.data.value.page_size"
                   :page="evaluationPage"
                   :total="evaluations.data.value.total"
                   :page-size="evaluations.data.value.page_size"
-                  :label="evaluations.data.value.matched_total ? '命中任务判定' : '任务判定'"
+                  label="命中任务判定"
                   @change="(value) => (evaluationPage = value)"
                 />
-                <div
-                  v-if="evaluations.data.value.matched_total && evaluations.data.value.other_total"
-                  class="other-evaluations"
-                >
-                  <button
-                    class="text-link other-evaluations-toggle"
-                    :aria-expanded="otherExpanded"
-                    aria-controls="other-task-evaluations"
-                    @click="otherExpanded = !otherExpanded"
-                  >
-                    {{ otherExpanded ? '收起其他任务判定' : '查看其他任务判定' }}（{{
-                      evaluations.data.value.other_total
-                    }}）
-                    <Icon name="down" :size="14" />
-                  </button>
-                  <div v-if="otherExpanded" id="other-task-evaluations">
-                    <ReadRegion
-                      :loading="otherEvaluations.loading.value"
-                      :error="otherEvaluations.error.value"
-                      :has-data="!!otherEvaluations.data.value"
-                      :stale="otherEvaluations.stale.value"
-                      :min-height="160"
-                      @retry="otherEvaluations.reload"
-                    >
-                      <template v-if="otherEvaluations.data.value">
-                        <TaskEvaluationCard
-                          v-for="evaluation in otherEvaluations.data.value.items"
-                          :key="evaluation.task_id + ':' + evaluation.version"
-                          :evaluation="evaluation"
-                          @navigate="emit('navigate', $event)"
-                        />
-                        <p v-if="!otherEvaluations.data.value.total" class="small-note">
-                          没有可展示的其他任务判定。
-                        </p>
-                        <Pagination
-                          :page="otherEvaluationPage"
-                          :total="otherEvaluations.data.value.total"
-                          :page-size="otherEvaluations.data.value.page_size"
-                          label="其他任务判定"
-                          @change="(value) => (otherEvaluationPage = value)"
-                        />
-                      </template>
-                    </ReadRegion>
-                  </div>
-                </div>
               </template>
             </ReadRegion>
-            <p class="small-note">显示保存时的名称、版本与原因；修改或删除任务不重写已有记录。</p>
+            <p v-if="evaluations.data.value?.total" class="small-note">
+              显示保存时的名称、版本与原因；修改或删除任务不重写已有记录。
+            </p>
           </aside>
         </div>
       </template></ReadRegion
@@ -560,19 +495,6 @@ function clear() {
 .content-row:hover,
 .content-row:focus-within {
   background: #fafbfc;
-}
-.support-panel > .section-subtitle {
-  margin-top: 0;
-}
-.other-evaluations {
-  margin: 16px 0;
-}
-.other-evaluations-toggle {
-  text-align: left;
-  white-space: normal;
-}
-.other-evaluations-toggle[aria-expanded='true'] svg {
-  transform: rotate(180deg);
 }
 .original-post-link {
   margin-top: 16px;

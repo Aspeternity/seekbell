@@ -26,16 +26,20 @@ async function post(page: Page, status: string, index = 0) {
 }
 async function go(page: Page, id: string) {
   await page.goto('/#/content/' + id)
-  await expect(page.getByRole('heading', { name: '任务匹配快照', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '命中依据', exact: true })).toBeVisible()
 }
-test('matched tasks and reasons are primary, other decisions load only when expanded', async ({
+test('one match shows only its own evidence even with nine other decisions', async ({
   page,
 }, info) => {
-  let otherReads = 0
-  page.on('request', (request) => {
-    const url = new URL(request.url())
-    if (url.pathname.endsWith('/evaluations') && url.searchParams.get('group') === 'other')
-      otherReads++
+  const groups: string[] = []
+  await page.route('**/api/manage/history/posts/*/evaluations?*', async (route) => {
+    const group = new URL(route.request().url()).searchParams.get('group')!
+    groups.push(group)
+    expect(group).toBe('matched')
+    const response = await route.fetch()
+    const data = await response.json()
+    data.other_total = 9
+    await route.fulfill({ json: data })
   })
   await go(page, await post(page, 'match'))
   const rows = page.locator('.history-evaluation')
@@ -44,110 +48,93 @@ test('matched tasks and reasons are primary, other decisions load only when expa
   await expect(rows.first().locator('.result-pill')).toHaveText('命中')
   await expect(rows.first().locator('.evaluation-reasons')).toContainText('VPS')
   await expect(rows.first().locator('.evaluation-reasons')).not.toContainText('特别')
-  await expect(page.locator('.match-result .evaluation-reasons, .match-result p')).toHaveCount(0)
-  expect(otherReads).toBe(0)
-  const expand = page.getByRole('button', { name: '查看其他任务判定（1）', exact: true })
-  await expect(expand).toHaveAttribute('aria-expanded', 'false')
-  await page
-    .locator('.support-panel')
-    .screenshot({ path: info.outputPath('evaluations-collapsed.png') })
-  await expand.focus()
-  await page.keyboard.press('Enter')
-  await expect(rows).toHaveCount(2)
-  expect(otherReads).toBe(1)
-  const other = page.locator('#other-task-evaluations .history-evaluation')
-  await expect(other).toContainText('特别标题关注 · 已删除')
-  await expect(other.locator('button')).toHaveCount(0)
-  await expect(other.locator('.result-pill')).toHaveText('不命中')
-  await expect(other.locator('.evaluation-reasons')).toContainText('特别')
-  const collapse = page.getByRole('button', { name: '收起其他任务判定（1）', exact: true })
-  await expect(collapse).toHaveAttribute('aria-expanded', 'true')
-  await expect(collapse.locator('svg')).toHaveCSS('transform', 'matrix(-1, 0, 0, -1, 0, 0)')
-  await page
-    .locator('.support-panel')
-    .screenshot({ path: info.outputPath('evaluations-expanded.png') })
-  await collapse.click()
-  await expect(rows).toHaveCount(1)
+  await expect(page.getByRole('button', { name: /其他任务判定/ })).toHaveCount(0)
+  await expect(page.getByText('特别标题关注', { exact: true })).toHaveCount(0)
+  await expect(page.getByLabel('下一页命中任务判定', { exact: true })).toHaveCount(0)
+  expect(groups).toEqual(['matched'])
+  await page.locator('.support-panel').screenshot({ path: info.outputPath('matched-evidence.png') })
   await page.setViewportSize({ width: 320, height: 900 })
   await expect
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
     .toBe(true)
 })
-test('no matches and insufficient data show every decision while baseline remains empty', async ({
+test('no match, insufficient data, baseline and unknown history have distinct compact states', async ({
   page,
 }) => {
-  await go(page, await post(page, 'no_match'))
-  const rows = page.locator('.history-evaluation')
-  await expect(rows).toHaveCount(2)
-  await expect(rows.locator('.result-pill')).toHaveText(['不命中', '不命中'])
-  await expect(page.locator('.other-evaluations-toggle')).toHaveCount(0)
-  await go(page, await post(page, 'insufficient_data'))
-  await expect(rows).toHaveCount(2)
-  await expect(rows.filter({ hasText: '信息不足' })).toContainText('摘要缺失')
-  await expect(page.locator('.other-evaluations-toggle')).toHaveCount(0)
-  await go(page, await post(page, 'not_evaluated'))
-  await expect(rows).toHaveCount(0)
-  await expect(page.getByText('基线帖子：首次采集时登记，未执行规则匹配或生成通知。')).toBeVisible()
+  for (const [status, message] of [
+    ['no_match', '该内容未命中任何任务。'],
+    ['insufficient_data', '信息不足，暂无法确定是否命中。'],
+    ['not_evaluated', '基线帖子：首次采集时登记，未执行规则匹配或生成通知。'],
+  ]) {
+    await go(page, await post(page, status!))
+    await expect(page.locator('.history-evaluation')).toHaveCount(0)
+    await expect(page.getByText(message!, { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: /其他任务判定/ })).toHaveCount(0)
+    await expect(page.getByLabel('下一页命中任务判定', { exact: true })).toHaveCount(0)
+  }
+  const id = await post(page, 'no_match')
+  await page.route('**/api/manage/history/posts/' + id, async (route) => {
+    const response = await route.fetch()
+    const data = await response.json()
+    data.baseline = null
+    data.status = 'unrecorded'
+    await route.fulfill({ json: data })
+  })
+  await go(page, id)
+  await expect(page.getByText('没有可确认的历史命中记录。', { exact: true })).toBeVisible()
+  await expect(page.locator('.history-evaluation')).toHaveCount(0)
 })
-function decision(name: string, status: 'match' | 'no_match'): Evaluation {
+function decision(name: string, deleted = false): Evaluation {
   return {
     task_id: name,
     version: 3,
     name,
-    deleted: false,
+    deleted,
     at: 1792368000,
-    result: {
-      status,
-      reasons: [
-        { code: 'all_of', truth: status === 'match' ? 'true' : 'false', term: name, group: 0 },
-      ],
-    },
+    result: { status: 'match', reasons: [{ code: 'all_of', truth: 'true', term: name, group: 0 }] },
   }
 }
-test('primary and other pagination remain independent and a failed expansion preserves matches', async ({
+test('multiple matches paginate, keep deleted snapshots and expose retry without a false empty state', async ({
   page,
 }) => {
   const id = await post(page, 'match')
-  const matches = ['命中甲', '命中乙', '命中丙'].map((name) => decision(name, 'match'))
-  const others = ['其他甲', '其他乙', '其他丙', '其他丁'].map((name) => decision(name, 'no_match'))
+  const matches = [decision('命中甲'), decision('命中乙', true), decision('命中丙')]
   let fail = true
   await page.route('**/api/manage/history/posts/' + id + '/evaluations?*', async (route) => {
     const url = new URL(route.request().url())
-    const primary = url.searchParams.get('group') === 'primary'
-    if (!primary && fail)
-      return route.fulfill({ status: 503, json: { detail: '合成其他判定读取失败' } })
-    const items = primary ? matches : others
+    expect(url.searchParams.get('group')).toBe('matched')
     const pageNumber = Number(url.searchParams.get('page') || 1)
+    if (pageNumber === 2 && fail)
+      return route.fulfill({ status: 503, json: { detail: '合成命中依据读取失败' } })
     await route.fulfill({
       json: {
-        total: items.length,
+        total: 3,
         matched_total: 3,
-        other_total: 4,
+        other_total: 9,
         page: pageNumber,
         page_size: 2,
-        items: items.slice((pageNumber - 1) * 2, pageNumber * 2),
+        items: matches.slice((pageNumber - 1) * 2, pageNumber * 2),
       },
     })
   })
   await go(page, id)
   await expect(page.locator('.history-evaluation')).toHaveCount(2)
+  const deleted = page.locator('.history-evaluation').filter({ hasText: '命中乙 · 已删除' })
+  await expect(deleted).toContainText('任务配置 v3')
+  await expect(deleted.locator('button')).toHaveCount(0)
+  await expect(deleted.locator('.evaluation-reasons')).toContainText('命中乙')
   await page.getByRole('button', { name: '下一页命中任务判定', exact: true }).click()
-  await expect(page.locator('.history-evaluation')).toHaveCount(1)
-  await expect(page.locator('.history-evaluation')).toContainText('命中丙')
-  await page.getByRole('button', { name: '查看其他任务判定（4）', exact: true }).click()
-  await expect(page.getByRole('alert')).toContainText('合成其他判定读取失败')
-  await expect(page.locator('.history-evaluation')).toContainText('命中丙')
+  await expect(page.getByRole('alert')).toContainText('合成命中依据读取失败')
+  await expect(page.getByText('该内容未命中任何任务。', { exact: true })).toHaveCount(0)
   fail = false
   await page.getByRole('button', { name: '重新加载', exact: true }).click()
-  await expect(page.locator('#other-task-evaluations .history-evaluation')).toHaveCount(2)
-  await page.getByRole('button', { name: '下一页其他任务判定', exact: true }).click()
-  await expect(page.locator('#other-task-evaluations')).toContainText('其他丙')
-  await expect(page.locator('#other-task-evaluations')).not.toContainText('其他甲')
-  await expect(page.locator('.history-evaluation').first()).toContainText('命中丙')
-  await page.getByRole('button', { name: '收起其他任务判定（4）', exact: true }).click()
   await expect(page.locator('.history-evaluation')).toHaveCount(1)
+  await expect(page.locator('.history-evaluation')).toContainText('命中丙')
+  await expect(page.getByRole('button', { name: /其他任务判定/ })).toHaveCount(0)
 })
-test('collapse and changing content discard a late other-decision response', async ({ page }) => {
+test('cold reads do not pretend to be no match and changing content rejects late evidence', async ({
+  page,
+}) => {
   const id = await post(page, 'match')
   const next = await post(page, 'no_match')
   let release = () => {},
@@ -156,8 +143,6 @@ test('collapse and changing content discard a late other-decision response', asy
   const held = new Promise<void>((resolve) => (release = resolve))
   const done = new Promise<void>((resolve) => (finished = resolve))
   await page.route('**/api/manage/history/posts/' + id + '/evaluations?*', async (route) => {
-    if (new URL(route.request().url()).searchParams.get('group') !== 'other')
-      return route.continue()
     const response = await route.fetch()
     started = true
     await held
@@ -165,17 +150,16 @@ test('collapse and changing content discard a late other-decision response', asy
     finished()
   })
   await go(page, id)
-  await expect(page.locator('.history-evaluation')).toHaveCount(1)
-  await page.getByRole('button', { name: '查看其他任务判定（1）', exact: true }).click()
   await expect.poll(() => started).toBe(true)
-  await expect(page.locator('#other-task-evaluations').getByRole('status')).toHaveText('加载中…')
-  await expect(page.locator('.history-evaluation')).toHaveCount(1)
-  await page.getByRole('button', { name: '收起其他任务判定（1）', exact: true }).click()
+  await expect(page.locator('.support-panel').getByRole('status')).toHaveText('加载中…')
+  await expect(page.getByText('该内容未命中任何任务。', { exact: true })).toHaveCount(0)
   await page.evaluate((id) => (location.hash = '/content/' + id), next)
-  await expect(page.locator('.history-evaluation')).toHaveCount(2)
+  await expect(page.getByText('该内容未命中任何任务。', { exact: true })).toBeVisible()
   release()
   await done
-  await expect(page.locator('.history-evaluation')).toHaveCount(2)
-  await expect(page.locator('.history-evaluation .result-pill')).toHaveText(['不命中', '不命中'])
-  await expect(page.locator('.other-evaluations-toggle')).toHaveCount(0)
+  await expect(page.locator('.history-evaluation')).toHaveCount(0)
+  await expect(page.getByText('该内容未命中任何任务。', { exact: true })).toBeVisible()
+  await page.unroute('**/api/manage/history/posts/' + id + '/evaluations?*')
+  await page.evaluate((id) => (location.hash = '/content/' + id), id)
+  await expect(page.locator('.history-evaluation')).toHaveCount(1)
 })

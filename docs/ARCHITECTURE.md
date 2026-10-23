@@ -297,8 +297,8 @@ Preferences复用草稿、部分保存、冲突与导航保护；设置支持鼠
 
 test:hotlist在8028临时库验证；所有run_web_smoke浏览器环境注入synthetic_hotlists，不访问真实论坛。hotlist_factory仅为Python测试注入，无生产模拟开关。后端验证迁移/冲突/重启、缓存/并发/退避/异常及加密恢复；合成多站只验证UI能力，不增加产品适配器。验证结果见开发记录；用户验收和真实来源长期稳定性独立。
 
-## 内容详情的任务判定分组（2026-10-23）
+## 内容详情的命中依据（2026-10-23后续确认）
 
-GET /api/manage/history/posts/{key}/evaluations新增group=all|primary|other，默认all兼容旧调用。History在同一只读快照先聚合全部已保存判定，返回matched_total/other_total；primary有命中时只分页命中，没有命中则分页全部，other分页非match。过滤在OFFSET/LIMIT之前，不由前端筛当前页；继续使用既有TaskEvaluation与legacy RuleHit合并视图、历史TaskVersion和脱敏快照，不重算规则、不写库或迁移。
+GET /api/manage/history/posts/{key}/evaluations增加group=matched，始终在OFFSET/LIMIT前过滤status=match，没有命中也不回退全部。默认all及已交付primary/other读接口保持兼容；matched_total/other_total元数据继续保留，不新增界面入口。继续基于TaskEvaluation/legacy RuleHit合并视图、历史TaskVersion与脱敏快照；判定数据不删除、不重算，不新增迁移。
 
-Content独立缓存primary/other的帖子身份/页码；其他判定仅展开时GET，展开错误不清空命中，折叠和换帖子沿用generation/session fencing，换帖同步重置展开和页码。TaskEvaluationCard负责各任务的结果/原因归属与历史版本说明；当前任务配置入口和软删除展示保持。
+Content仅请求matched，缓存身份含帖子/筛选/页码，删除其他判定的状态、加载器、折叠和样式；匹配卡片继续按任务显示原因与历史版本。零命中时按帖子已保存总状态区分不命中/信息不足/未执行/历史未知，匹配读取成功前不渲染空态；match状态却缺少依据时仅提示刷新，不冒充不命中。超过单页容量才显示分页，换帖重置页码/投递页并沿用generation/session隔离。

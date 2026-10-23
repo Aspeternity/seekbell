@@ -579,6 +579,8 @@ def test_evaluation_groups_filter_before_pagination_and_preserve_saved_decisions
     assert primary["items"][0]["name"] == "摘要关注"
     assert primary["items"][0]["version"] == 1
     assert primary["items"][0]["result"]["status"] == "match"
+    matched = client.get(url, params={"group": "matched"}).json()
+    assert matched["total"] == 1 and matched["items"] == primary["items"]
     first = client.get(url, params={"group": "other", "page_size": 20}).json()
     second = client.get(url, params={"group": "other", "page_size": 20, "page": 2}).json()
     assert first["total"] == second["total"] == 26
@@ -595,5 +597,14 @@ def test_evaluation_groups_filter_before_pagination_and_preserve_saved_decisions
         ).json()
         assert data["matched_total"] == 0 and data["total"] == data["other_total"] == 2
         assert len(data["items"]) == 2
+        strict = client.get(
+            "/api/manage/history/posts/" + ids["posts"][index] + "/evaluations",
+            params={"group": "matched"},
+        ).json()
+        assert strict["total"] == strict["matched_total"] == 0 and strict["items"] == []
+        assert strict["other_total"] == 2
+        assert client.get("/api/manage/history/posts/" + ids["posts"][index]).json()["status"] == (
+            "insufficient_data" if index == 3 else "no_match"
+        )
     with app.state.engine.connect() as connection:
         assert before == list(connection.connection.driver_connection.iterdump())

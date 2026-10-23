@@ -407,7 +407,7 @@ test('recent matches are whole-row links and explain the historical task version
   const href = (await row.getAttribute('href'))!
   await row.locator('time').click()
   await expect(page).toHaveURL('http://127.0.0.1:8028/' + href)
-  await expect(page.getByRole('heading', { name: '为什么会得到这个结果？' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '命中依据' })).toBeVisible()
   await page.goto('/')
   await row.focus()
   await page.keyboard.press('Enter')
