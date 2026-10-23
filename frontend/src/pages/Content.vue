@@ -369,7 +369,7 @@ function clear() {
       </div>
     </div>
     <section class="panel">
-      <div class="filter-toolbar">
+      <div class="filter-toolbar content-filter-toolbar">
         <label class="search-input grow"
           ><Icon name="search" :size="16" /><input
             v-model="q"
@@ -388,6 +388,7 @@ function clear() {
         />
         <AppSelect
           v-model="task"
+          class="content-task-filter"
           aria-label="关联任务"
           :options="[
             { value: '', label: '全部任务' },
@@ -399,6 +400,7 @@ function clear() {
         />
         <AppSelect
           v-model="website"
+          class="content-website-filter"
           aria-label="历史网站"
           :options="[
             { value: '', label: '全部网站' },
@@ -410,6 +412,7 @@ function clear() {
         />
         <AppSelect
           v-model="category"
+          class="content-category-filter"
           aria-label="版块筛选"
           :options="[
             { value: '', label: '全部版块' },

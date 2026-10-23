@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+const placeholderVisible = ref(false)
+let placeholderTimer: ReturnType<typeof setTimeout> | undefined
 import Feedback from './Feedback.vue'
 const props = withDefaults(
   defineProps<{
@@ -11,6 +13,15 @@ const props = withDefaults(
     allowControls?: boolean
   }>(),
   { stale: false, minHeight: 220 },
+)
+watch(
+  () => !props.hasData && props.loading,
+  (waiting) => {
+    clearTimeout(placeholderTimer)
+    placeholderVisible.value = false
+    if (waiting) placeholderTimer = setTimeout(() => (placeholderVisible.value = true), 200)
+  },
+  { immediate: true },
 )
 const emit = defineEmits<{ retry: [] }>()
 const content = ref<HTMLElement>(),
@@ -41,7 +52,10 @@ function guardKey(event: KeyboardEvent) {
     return
   guard(event)
 }
-onBeforeUnmount(() => observer.disconnect())
+onBeforeUnmount(() => {
+  observer.disconnect()
+  clearTimeout(placeholderTimer)
+})
 </script>
 <template>
   <div
@@ -60,9 +74,11 @@ onBeforeUnmount(() => observer.disconnect())
         @retry="emit('retry')"
       />
     </div>
-    <div v-if="!hasData" class="read-placeholder" aria-hidden="true"><span /><span /><span /></div>
+    <div v-if="!hasData && placeholderVisible" class="read-placeholder" aria-hidden="true">
+      <span /><span /><span />
+    </div>
     <div
-      v-else
+      v-if="hasData"
       ref="content"
       class="read-snapshot"
       :inert="stale && !allowControls"

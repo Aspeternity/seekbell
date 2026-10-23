@@ -6,6 +6,7 @@ import {
   readSessionRevision,
   readIsFresh,
   rememberRead,
+  fetchRead,
 } from './readCache'
 export interface Page<T> {
   items: T[]
@@ -210,6 +211,7 @@ interface RemoteOptions {
   debounce?: () => unknown
   keepPrevious?: boolean
   scope?: () => string | undefined
+  prepared?: boolean
 }
 export function useRemote<T>(
   loader: () => Promise<T>,
@@ -226,7 +228,7 @@ export function useRemote<T>(
     dataSession = readSessionRevision.value
   let generation = 0,
     timer: ReturnType<typeof setTimeout> | undefined
-  function reload(delay = 0) {
+  function reload(delay = 0, prepared = false) {
     clearTimeout(timer)
     const current = ++generation
     const revision = readCacheRevision.value,
@@ -253,9 +255,13 @@ export function useRemote<T>(
     }
     stale.value =
       data.value !== undefined && (dataIdentity !== identity || dataRevision !== revision)
+    if (prepared && cached !== undefined && !stale.value) {
+      loading.value = false
+      return
+    }
     const run = async () => {
       try {
-        const value = await loader()
+        const value = await fetchRead(key, loader)
         if (
           current === generation &&
           session === readSessionRevision.value &&
@@ -279,6 +285,7 @@ export function useRemote<T>(
     if (delay) timer = setTimeout(run, delay)
     else void run()
   }
+  let initial = true
   let previousDebounce = options.debounce?.()
   watch(
     () => [inputs(), readCacheRevision.value],
@@ -286,7 +293,8 @@ export function useRemote<T>(
       const next = options.debounce?.()
       const delay = options.debounce && next !== previousDebounce ? 180 : 0
       previousDebounce = next
-      reload(delay)
+      reload(delay, initial && options.prepared)
+      initial = false
     },
     { immediate: true, deep: true },
   )

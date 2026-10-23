@@ -37,6 +37,7 @@ function completed(path: string) {
         placeholder="搜索通知目标…" /></label
     ><AppSelect
       v-model="channel"
+      class="target-channel-filter"
       aria-label="通知渠道筛选"
       :options="[
         { value: 'all', label: '全部渠道' },

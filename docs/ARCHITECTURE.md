@@ -112,6 +112,8 @@ useRemote初读/非搜索立即请求，仅明确的搜索字段变化防抖180m
 
 usePopup把按钮和portalled面板作为单一边界，统一外部/焦点离开关闭；DateFilter与AppSelect复用，不叠加库捕获阶段clickoutside。AppSelect归并15处原生选择与旧WebsiteSelect，以preventScroll聚焦、仅滚动菜单选项，保留不同场景尺寸和类型；Bootstrap的abstract NConfigProvider禁用组件库全局preflight，防止首次挂载改写body字体。Notifications外壳持有标题与NotificationTabs，内容按菜单/记录键隔离；Settings内部换分类保留外壳并清空获准放弃的草稿，避免跨页面KeepAlive敏感表单。
 
+2026-10-23补修：recordQueries集中通知记录的默认/筛选参数、缓存键及加载器，预读与Records使用同一契约。readCache.fetchRead按会话/数据revision/查询键合并在途读取；所有useRemote读取共用它，清会话时清在途索引并拒绝旧请求回填。Notifications区分请求目的地与实际展示对象，只在目标列表/选项完成后整体提交；从冷预读交接的首次useRemote消费已完成快照，后续筛选/重试仍正常请求。只读区域占位和反馈同时延迟200ms，原有身份/写后失效规则保留。
+
 ## 网站库与实例
 
 src/websites.ts声明已实现适配器及能力，服务端WebsiteInstallation表示用户安装关系，Website/Source保留适配器身份与历史锚点。新库没有安装实例；目前目录仅NodeSeek。已有任务固定网站，有未删除任务依赖时阻止移除；无依赖时移除安装配置、保留历史并按正式服务契约取消待发送动作。网站库使用居中原生dialog，安装完成关闭；实例配置仍右侧面板，支持键盘/未保存保护，手机全屏。工作空间名称/说明由SQLite偏好保存并显示在侧栏，不读取旧演示浏览器数据。

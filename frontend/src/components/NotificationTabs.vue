@@ -10,7 +10,7 @@ import {
   countsRevision,
   loadNotificationCounts,
 } from '../notificationCounts'
-const props = defineProps<{ tab: string }>()
+const props = defineProps<{ tab: string; pendingTab?: string }>()
 const emit = defineEmits<{ navigate: [path: string] }>()
 function reload() {
   if (signedIn.value) void loadNotificationCounts(() => historyGet('counts'))
@@ -42,6 +42,7 @@ onBeforeUnmount(() => {
         :key="item.id"
         :class="{ active: tab === item.id }"
         :aria-current="tab === item.id ? 'page' : undefined"
+        :aria-busy="pendingTab === item.id || undefined"
         @click="emit('navigate', '/notifications/' + item.id)"
       >
         {{ item.label

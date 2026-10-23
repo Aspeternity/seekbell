@@ -11,20 +11,19 @@ import {
   kindLabels,
   resultClass,
 } from '../history'
-import type {
-  Page,
-  Options,
-  DeliveryRecord,
-  DeliveryDetail,
-  TestRecord,
-  ManualRecord,
-} from '../history'
+import type { DeliveryRecord, DeliveryDetail, TestRecord, ManualRecord } from '../history'
 import Pagination from '../components/Pagination.vue'
 import SendDialog from '../components/SendDialog.vue'
 import DateFilter from '../components/DateFilter.vue'
-import { dateRangeParams, type HistoryDateRange } from '../dateRange'
+import type { HistoryDateRange } from '../dateRange'
+import {
+  recordListKey,
+  loadRecordList,
+  recordOptionsKey,
+  loadRecordOptions,
+} from '../recordQueries'
 import ReadRegion from '../components/ReadRegion.vue'
-const props = withDefaults(defineProps<{ tab?: string; recordId?: string }>(), {
+const props = withDefaults(defineProps<{ tab?: string; recordId?: string; prepared?: boolean }>(), {
   tab: 'deliveries',
 })
 const emit = defineEmits<{ navigate: [path: string] }>()
@@ -38,61 +37,27 @@ const resendOpen = ref(false)
 const attemptPage = ref(1),
   taskPage = ref(1)
 watch([q, status, target, dateRange, uncertain], () => (page.value = 1), { flush: 'sync' })
-const options = useRemote(
-  () => historyGet<Options>('options'),
-  () => [],
-  { cacheKey: () => 'content:options' },
-)
-const listing = useRemote<Page<DeliveryRecord> | Page<TestRecord> | Page<ManualRecord> | undefined>(
-  () =>
-    props.recordId
-      ? Promise.resolve(undefined)
-      : props.tab !== 'deliveries'
-        ? historyGet<Page<TestRecord> | Page<ManualRecord>>(props.tab, {
-            q: q.value,
-            status: status.value,
-            target_id: target.value,
-            ...dateRangeParams(dateRange.value),
-            timezone: state.settings.timezone,
-            page: page.value,
-          })
-        : historyGet<Page<DeliveryRecord>>('deliveries', {
-            q: q.value,
-            status: status.value,
-            target_id: target.value,
-            ...dateRangeParams(dateRange.value),
-            timezone: state.settings.timezone,
-            page: page.value,
-            uncertain: uncertain.value === 'all' ? undefined : uncertain.value === 'true',
-          }),
-  () => [
-    props.recordId,
-    props.tab,
-    q.value,
-    status.value,
-    target.value,
-    dateRange.value,
-    uncertain.value,
-    page.value,
-    state.settings.timezone,
-  ],
+const filters = () => ({
+  q: q.value,
+  status: status.value,
+  target: target.value,
+  dateRange: dateRange.value,
+  uncertain: uncertain.value,
+  page: page.value,
+  timezone: state.settings.timezone,
+})
+const options = useRemote(loadRecordOptions, () => [], {
+  cacheKey: () => recordOptionsKey,
+  prepared: props.prepared,
+})
+const listing = useRemote(
+  () => (props.recordId ? Promise.resolve(undefined) : loadRecordList(props.tab, filters())),
+  () => [props.recordId, props.tab, filters()],
   {
-    cacheKey: () =>
-      props.recordId
-        ? undefined
-        : JSON.stringify([
-            'records',
-            props.tab,
-            q.value,
-            status.value,
-            target.value,
-            dateRange.value,
-            uncertain.value,
-            page.value,
-            state.settings.timezone,
-          ]),
+    cacheKey: () => (props.recordId ? undefined : recordListKey(props.tab, filters())),
     debounce: () => q.value,
     keepPrevious: true,
+    prepared: props.prepared,
   },
 )
 const detail = useRemote(
@@ -473,6 +438,7 @@ function clear() {
         />
         <AppSelect
           v-model="target"
+          class="record-target-filter"
           aria-label="投递目标筛选"
           :options="[
             { value: '', label: '全部目标' },
