@@ -1,23 +1,25 @@
 # 当前状态
 
-更新时间：2026-10-23（Asia/Shanghai）。社区热榜/模块设置已实现并部署本地8001；用户实测反馈正在修正，尚未验收。
+更新时间：2026-10-23（Asia/Shanghai）。用户实测反馈已修正并更新同一本地8001，等待继续验收。
 
 ## 环境与授权
 
-唯一环境SeekBell-Dev:/home/dev/projects/seekbell，由原Ubuntu经wsl.exe派发，见[环境](DEVELOPMENT_ENVIRONMENT.md)。当前codex/overview-modules-and-hotlist，HEAD c509816仅为交付文档，产品e53d89e850eb01763a2750f5adcd9354f65d49b0；祖先main 2c682de与规格7f8c15b。此前修复PR #1已合并，见[记录](history/2026-10-23-本地修复合并与热榜分支.md)。
+唯一环境SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe派发，见[环境](DEVELOPMENT_ENVIRONMENT.md)。分支codex/overview-modules-and-hotlist；最新产品2665aa605f537770f207db2a434a8861993b2c90，随后仅交付文档；此前功能产品e53d89e、规格7f8c15b、main 2c682de。此前PR #1已合并，见[记录](history/2026-10-23-本地修复合并与热榜分支.md)。
 
-用户已授权本分支开发、本地Docker实测及本次入口/箭头修正；沿用同一8001保留数据更新。不含新功能推送/合并、公开发布、远程部署或主动真实发送。无多代理，不改D盘、旧Ubuntu、全局WSL、8000/4175。
+已授权本分支开发、本地Docker实测及反馈修正，沿用8001保留数据更新；不含新功能推送/合并、公开发布、远程部署或主动真实发送。无多代理，不改D盘、旧Ubuntu、全局WSL或8000/4175。产品与交付记录已本地提交，无其他用户改动。
 
-## 实现与本轮反馈
+## 实现与反馈
 
-SPEC 6.1、ARCHITECTURE及UI_DESIGN为契约。[开发记录](history/2026-10-23-概览模块与热榜开发.md)：0010保存模块布局和浏览选择，revision独立；显隐、鼠标/触屏拖动、键盘排序、默认草稿、冲突保护及跨浏览器保持；上方统计固定。热榜仅NodeSeek第三方三周期，按站能力切换/记忆，5/10条、来源时间/署名及旧快照反馈；独立600秒按需缓存/并发合并/退避，不入规则、历史或通知。Linux DO/V2EX未接入，合成多站仅验证UI。
+契约SPEC 6.1、ARCHITECTURE、UI_DESIGN；[开发记录](history/2026-10-23-概览模块与热榜开发.md)。0010独立保存三模块布局/浏览选择；显隐、鼠标/触屏/键盘排序、默认草稿、冲突保护及跨设备保持，上方统计固定。热榜首接NodeSeek第三方三周期，网站按能力切换/记忆、默认5/展开10、来源时间/署名与旧快照。Linux DO/V2EX未接入，合成多站仅验证UI。独立600秒按需缓存/并发合并/退避，不入规则、历史或通知。
 
-本轮修正已完成且自动验证通过，待本地提交/镜像更新。已移除概览“自定义显示”入口和无效样式，全部隐藏提示改从系统设置恢复；设置显隐/排序保留。“收起”箭头朝上并同步aria-expanded。周期首次读取/缓存过期等待来源属正常，浏览选择保存不阻塞取榜；已访问周期先显示对应缓存，慢读200ms后显示反馈。未改刷新策略。本轮路径：Overview.vue、CommunityHotlist.vue、hotlist.spec.ts，及上述三契约文档、本状态和[本轮记录](history/2026-10-23-热榜入口与折叠箭头修正.md)。
+[本轮记录](history/2026-10-23-热榜入口与折叠箭头修正.md)：Overview移除“自定义显示”和无效样式，全隐藏提示从系统设置恢复；偏好内显隐/排序保留。CommunityHotlist的收起箭头朝上，展开更多向下，同步aria-expanded。周期首次读取/缓存过期需等待来源，选择保存不阻塞；已访问周期先显示对应缓存，冷读200ms后显示提示。未改后端/刷新策略。
 
-## 证据与下一步
+## 验证与本地实例
 
-e53d89e基线：后端679、17组浏览器98、类型/构建/格式及隔离服务/加密恢复/升级回退/TLS通过；证据acceptance/2026-10-23-overview-hotlist。另正式适配器一次读取真实实时榜30条，未存真实样本；不代表长期可用性。当前改动生产构建/类型/Prettier/diff通过，热榜桌面/手机18项及加载回归4项全通过；冷读提示、缓存快速返回与箭头方向已覆盖。证据根/home/dev/.local/state/seekbell/acceptance/2026-10-23-hotlist-ui-feedback。
+2665aa6：生产构建/类型/Prettier/diff/隐私钩子通过；桌面/手机热榜18项、加载4项通过，含慢读、缓存、迟到响应与箭头。镜像禁外网服务/静态资源/重启/配置持久化检查通过。后端未变，复用e53d89e完整679项及98浏览器/加密恢复/升级/TLS证据，未无效重跑。自动测试仅临时合成库/模拟HTTP；真机/Safari/读屏、来源长期稳定性及用户验收独立。
 
-同一http://localhost:8001/仍运行seekbell:hotlist-e53d89e850eb，镜像ID sha256:a856571243b6de09742b693708c5c74a0c184160cd1a0350418f94debf2f770c；seekbell-local/seekbell-local-seekbell-1、原卷seekbell-local_data、0010库、healthy/read-only、仅127.0.0.1:8001。Windows两地址/资源及保活PID14716已验证，见[交付记录](history/2026-10-23-社区热榜本地Docker交付.md)。私有整卷备份local-runtime/backups/before-e53d89e850eb-20261023-181745.tar.gz；旧58bee30需配合旧库备份恢复。
+同一http://localhost:8001/或127.0.0.1:8001，seekbell-local/seekbell-local-seekbell-1、原卷seekbell-local_data；运行seekbell:hotlist-ui-2665aa605f53，镜像ID sha256:c7cddb2b9ff4cd06b6c54bac4b9ae18322677c3a38a4e5d45d3cdb4ddeb20cbc。0010、healthy/read-only/unless-stopped、仅本机8001。Windows两地址/版本/资源通过，原保活PID14716身份/创建时间一致。
 
-下一步提交修正并构建隔离验镜像；备份当前用户实测数据后更新同一8001、验证版本/配置与Windows访问并记录证据。之后交用户继续实测，推送/合并另行处理。无技术阻塞。
+已停服整卷备份before-2665aa605f53-20261023-190257.tar.gz（local-runtime/backups，0700/0600），逐文件SHA、解包副本SQLite与12类配置指纹一致，账号/配置/历史保持，未导入合成数据。首次只读源WAL校验失败自动恢复旧实例，改副本校验后成功；无真实库补丁。旧e53d89e同0010可回退；更旧58bee30需配旧库备份。运行元数据已更新。证据/home/dev/.local/state/seekbell/acceptance/2026-10-23-hotlist-ui-feedback；完整SHA和命令见本轮记录。
+
+下一步用户刷新8001继续实测；据反馈修复，新功能推送/合并另行处理。恢复只读本状态、本轮记录及相关实现；无技术阻塞。
