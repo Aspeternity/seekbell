@@ -1,12 +1,12 @@
 # 当前状态
 
-更新时间：2026-10-23（Asia/Shanghai）。社区热榜和概览模块显隐/排序已实现，本地自动验证通过，正在进行隔离镜像检查；尚未更新8001或完成用户验收。
+更新时间：2026-10-23（Asia/Shanghai）。社区热榜和概览模块显隐/排序已实现，本地自动验证通过，隔离镜像/TLS检查也已通过；尚未更新8001或完成用户验收。
 
 ## 环境、分支与授权
 
 唯一环境SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe派发；[入口](DEVELOPMENT_ENVIRONMENT.md)。本轮按用户“新建一个分支并开发”从仅规格的7f8c15b新建codex/overview-modules-and-hotlist；祖先main为2c682de（此前修复[PR #1](https://github.com/Aspeternity/seekbell/pull/1)合并）。此前完整CI和amd64/arm64通过，见[合并记录](history/2026-10-23-本地修复合并与热榜分支.md)。
 
-本轮授权为已确认功能的本地实现与验证，不含新功能推送/合并、公开发布、远程部署或真实发送；本地8001保留旧产品。无多代理，不改D盘、旧Ubuntu或全局WSL。代码、测试、文档为本轮待提交改动，意图及路径见开发记录；没有其他用户改动。
+本轮授权为已确认功能的本地实现与验证，不含新功能推送/合并、公开发布、远程部署或真实发送；本地8001保留旧产品。产品提交e53d89e850eb01763a2750f5adcd9354f65d49b0。无多代理，不改D盘、旧Ubuntu或全局WSL。实现已本地提交；本状态与开发记录为镜像验证后的文档交接，随后本地提交。没有其他用户改动。
 
 ## 实现
 
@@ -16,10 +16,10 @@ SPEC 6.1、ARCHITECTURE及UI_DESIGN已回写。[开发记录](history/2026-10-23
 
 ## 验证与证据
 
-SeekBell-Dev、本轮工作区：完整后端679项通过；15组既有Chromium桌面/手机80项与新增热榜16项通过（合计96，不含TLS浏览器）。类型/生产构建、锁/wheel、Prettier/Ruff/diff通过。补验非默认布局/选择加密恢复、鼠标/触屏连续拖动、跨浏览器保存、并发/退避、迟到响应和320px。拆分统计模块后的重复反馈已修正，既有加载用例按统计区域精确定位。所有测试用临时合成库与模拟HTTP，不访问真实论坛或通知。证据/home/dev/.local/state/seekbell/acceptance/2026-10-23-overview-hotlist；镜像与TLS检查待完成。Safari/真机/读屏和用户验收独立待完成。
+SeekBell-Dev、产品e53d89e：完整后端679项通过；15组既有Chromium桌面/手机80项、新热榜16项及TLS浏览器2项通过（17组98项）。类型/生产构建、锁/wheel、Prettier/Ruff/diff通过。补验非默认布局/选择加密恢复、鼠标/触屏连续拖动、跨浏览器保存、并发/退避、迟到响应和320px。拆分统计模块后的重复反馈已修正，既有加载用例按统计区域精确定位。所有测试用临时合成库与模拟HTTP，不访问真实论坛或通知。证据/home/dev/.local/state/seekbell/acceptance/2026-10-23-overview-hotlist；镜像seekbell:hotlist-e53d89e850eb，本地ID sha256:a856571243b6de09742b693708c5c74a0c184160cd1a0350418f94debf2f770c；禁外网服务/持久化、加密恢复、模拟升级失败/切换/回退及TLS检查通过，临时容器已清理。另以正式适配器一次性读取真实实时榜，30条且作者/版块齐全；未保存真实样本，不代表长期可用性或部署验收。Safari/真机/读屏和用户验收独立待完成。
 
 ## 本地实例与下一步
 
 同一http://localhost:8001/、seekbell-local/seekbell-local-seekbell-1、seekbell-local_data仍为seekbell:local-58bee30ff55a，digest sha256:5886d4f1b9e1d6de5c922ca0bf9af8141099eee3f6a72e594f80daf58f364202。本轮未更新，原账号/配置/历史未读写；备份/管理命令见[本地运行](history/2026-10-23-最新代码本地Docker实测启动.md)。公开仍ui-restore-5；远程Stack及8000/4175未动，旧18080/18081已退役。
 
-下一步本地提交实现、构建带产品SHA的镜像并在禁外网临时容器验证迁移/备份/回退/TLS，再记录最终证据。恢复读本状态、开发记录和相关实现；无技术阻塞。
+下一步交用户审阅源码与截图，再按明确的交付范围更新本地实例或推送新功能；不可宣称8001已有热榜。恢复读本状态、开发记录和相关实现；无技术阻塞。
