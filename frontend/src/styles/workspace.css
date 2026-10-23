@@ -323,7 +323,7 @@
   width: 100%;
   font-size: 12px;
 }
-.filter-toolbar select {
+.filter-toolbar .app-select {
   min-width: 110px;
   max-width: 220px;
   padding: 8px 26px 8px 10px;
@@ -335,8 +335,8 @@
 }
 /* Composite search fields show focus on their shell, never on the inner text. */
 .search-input:focus-within,
-.task-tools select:focus,
-.filter-toolbar select:focus {
+.task-tools .app-select:focus,
+.filter-toolbar .app-select:focus {
   border-color: #cba280;
   box-shadow: 0 0 0 3px #bf86521a;
 }
@@ -1399,7 +1399,7 @@
   .filter-toolbar .search-input input {
     font-size: 16px;
   }
-  .filter-toolbar select {
+  .filter-toolbar .app-select {
     flex: 1;
     min-width: 120px;
     max-width: 100%;
@@ -1668,7 +1668,7 @@
     max-width: none;
     width: 100%;
   }
-  .filter-toolbar select {
+  .filter-toolbar .app-select {
     min-width: 110px;
   }
   .content-row-meta {
@@ -1821,7 +1821,7 @@ h1[tabindex='-1']:focus-visible {
   height: 36px;
   min-height: 36px;
 }
-.website-toolbar select {
+.website-toolbar .app-select {
   width: 136px;
   height: 36px;
   margin: 0;
@@ -2324,7 +2324,7 @@ h1[tabindex='-1']:focus-visible {
     height: 40px;
     min-height: 40px;
   }
-  .website-toolbar select {
+  .website-toolbar .app-select {
     height: 40px;
   }
   .website-grid {
@@ -2576,4 +2576,15 @@ h1[tabindex='-1']:focus-visible {
     grid-column: 1 / -1;
     justify-self: end;
   }
+}
+
+/* Filter labels have stable widths before async choices or component styles mount. */
+.filter-toolbar > .app-select {
+  width: 110px;
+}
+.filter-toolbar > .content-result-filter,
+.filter-toolbar > .record-result-filter,
+.filter-toolbar > .record-uncertainty-filter {
+  width: 156px;
+  min-width: 156px;
 }

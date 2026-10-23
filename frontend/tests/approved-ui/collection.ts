@@ -139,7 +139,7 @@ export async function checkCollection(page: Page, info: TestInfo, data: Overview
 
 export async function checkWebsitePicker(page: Page, info: TestInfo) {
   await page.goto('/#/task/new')
-  const picker = page.locator('.task-website-picker')
+  const picker = page.locator('.task-website-trigger')
   await expect(picker).toContainText('NodeSeek')
   const description = await page.locator('#task-description').boundingBox()
   const label = await page.locator('#task-website-label').boundingBox()

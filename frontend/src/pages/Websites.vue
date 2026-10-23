@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppSelect from '../components/AppSelect.vue'
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import Icon from '../components/Icon.vue'
 import Toggle from '../components/Toggle.vue'
@@ -290,12 +291,17 @@ onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
           aria-label="搜索已添加网站"
           placeholder="搜索网站名称或域名…"
       /></label>
-      <select v-model="filter" class="text-input" aria-label="筛选网站状态">
-        <option value="all">全部状态</option>
-        <option value="enabled">已启用</option>
-        <option value="paused">已暂停</option>
-        <option value="error">连接异常</option>
-      </select>
+      <AppSelect
+        v-model="filter"
+        class="text-input"
+        aria-label="筛选网站状态"
+        :options="[
+          { value: 'all', label: '全部状态' },
+          { value: 'enabled', label: '已启用' },
+          { value: 'paused', label: '已暂停' },
+          { value: 'error', label: '连接异常' },
+        ]"
+      />
       <span class="muted">{{ visible.length }} 个网站</span>
     </div>
     <div class="website-grid">

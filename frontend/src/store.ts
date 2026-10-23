@@ -1,5 +1,5 @@
 import { reactive, ref } from 'vue'
-import { clearReadCache } from './readCache'
+import { clearReadCache, invalidateReadCache } from './readCache'
 import { clearNotificationCounts, invalidateNotificationCounts } from './notificationCounts'
 import type { TelegramPreviewMessage, NotificationPreviewOptions } from './notificationPreview'
 import type { Task, Sample } from './model'
@@ -78,7 +78,7 @@ export async function sendRequest(
     throw new Error(typeof data.detail === 'string' ? data.detail : '操作失败，请检查配置后重试。')
   }
   if (method !== 'GET' && path !== 'auth/logout') {
-    clearReadCache()
+    invalidateReadCache()
     invalidateNotificationCounts()
   }
   return response

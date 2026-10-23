@@ -1,17 +1,16 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
+import { computed, nextTick, ref, useId, watch } from 'vue'
 import { NPopover } from 'naive-ui'
 import Icon from './Icon.vue'
 import type { HistoryDateRange } from '../dateRange'
+import { usePopup } from '../usePopup'
 const props = defineProps<{ modelValue: HistoryDateRange; label: string }>()
 const emit = defineEmits<{ 'update:modelValue': [value: HistoryDateRange] }>()
-const open = ref(false),
-  start = ref(''),
+const { open, trigger, panel: menu, close } = usePopup()
+const start = ref(''),
   end = ref(''),
   error = ref('')
-const trigger = ref<HTMLButtonElement>(),
-  first = ref<HTMLInputElement>(),
-  menu = ref<HTMLElement>()
+const first = ref<HTMLInputElement>()
 const id = useId()
 const caption = computed(() => {
   const range = props.modelValue
@@ -20,10 +19,6 @@ const caption = computed(() => {
     to = range[1].replaceAll('-', '/')
   return from === to ? from : from + ' – ' + to
 })
-function close(focus = false) {
-  open.value = false
-  if (focus) nextTick(() => trigger.value?.focus())
-}
 async function toggle() {
   if (open.value) return close()
   start.value = props.modelValue?.[0] || ''
@@ -31,7 +26,7 @@ async function toggle() {
   error.value = ''
   open.value = true
   await nextTick()
-  first.value?.focus()
+  first.value?.focus({ preventScroll: true })
 }
 function apply(event: Event) {
   if (!start.value || !end.value) {
@@ -64,22 +59,10 @@ function keys(event: KeyboardEvent) {
     event.target === menu.value?.querySelector('[type="submit"]')
   ) {
     // Continue document tab order from the trigger after the portalled form.
-    trigger.value?.focus()
+    trigger.value?.focus({ preventScroll: true })
     close()
   }
 }
-function outsideFocus(event: FocusEvent) {
-  const target = event.target
-  if (
-    open.value &&
-    target instanceof Node &&
-    !menu.value?.contains(target) &&
-    !trigger.value?.contains(target)
-  )
-    close()
-}
-onMounted(() => document.addEventListener('focusin', outsideFocus))
-onBeforeUnmount(() => document.removeEventListener('focusin', outsideFocus))
 watch(
   () => props.modelValue,
   () => close(),
@@ -95,7 +78,6 @@ watch(
       :animated="false"
       class="history-date-popover"
       raw
-      @clickoutside="close()"
     >
       <template #trigger>
         <button

@@ -1,3 +1,4 @@
+import { selectChoice } from '../select'
 import { expect, test } from '@playwright/test'
 import { checkCollection, checkWebsitePicker } from './collection'
 const credentials = { username: 'history_admin', password: 'Synthetic-History-2026' }
@@ -77,7 +78,7 @@ test('production pages preserve the approved UI while using real persisted data'
     if (request.method() === 'PUT') writes.push(new URL(request.url()).pathname)
   })
   await page.getByLabel('工作空间名称', { exact: true }).fill('UI验收-' + info.project.name)
-  await page.getByLabel('显示时区', { exact: true }).selectOption(nextZone)
+  await selectChoice(page.getByLabel('显示时区', { exact: true }), nextZone)
   await page.route(
     '**/api/manage/display',
     (route) =>
@@ -88,7 +89,7 @@ test('production pages preserve the approved UI while using real persisted data'
   )
   await page.getByRole('button', { name: '保存偏好设置', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('合成偏好保存失败')
-  await expect(page.getByLabel('显示时区', { exact: true })).toHaveValue(nextZone)
+  await expect(page.getByLabel('显示时区', { exact: true })).toHaveAttribute('data-value', nextZone)
   expect(writes.filter((path) => path === '/api/manage/workspace')).toHaveLength(1)
   await page.getByRole('button', { name: '保存偏好设置', exact: true }).click()
   await expect
@@ -96,7 +97,7 @@ test('production pages preserve the approved UI while using real persisted data'
     .toBe(nextZone)
   expect(writes.filter((path) => path === '/api/manage/workspace')).toHaveLength(1)
   await page.getByLabel('工作空间名称', { exact: true }).fill(original.settings.workspaceName)
-  await page.getByLabel('显示时区', { exact: true }).selectOption(display.timezone)
+  await selectChoice(page.getByLabel('显示时区', { exact: true }), display.timezone)
   await page.getByRole('button', { name: '保存偏好设置', exact: true }).click()
   await expect(page.locator('.workspace-label')).toContainText(original.settings.workspaceName)
 
@@ -104,7 +105,7 @@ test('production pages preserve the approved UI while using real persisted data'
     .poll(async () => (await (await page.request.get('/api/manage/display')).json()).timezone)
     .toBe(display.timezone)
   const previous = await (await page.request.get('/api/manage/display')).json()
-  await page.getByLabel('显示时区', { exact: true }).selectOption(nextZone)
+  await selectChoice(page.getByLabel('显示时区', { exact: true }), nextZone)
   const csrf = (await (await page.request.get('/api/auth/status')).json()).csrf
   const otherZone = ['UTC', 'Asia/Shanghai', 'Asia/Tokyo'].find(
     (zone) => zone !== previous.timezone && zone !== nextZone,
@@ -119,12 +120,15 @@ test('production pages preserve the approved UI while using real persisted data'
   ).toBe(true)
   await page.getByRole('button', { name: '保存偏好设置', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('其他页面改变')
-  await expect(page.getByLabel('显示时区', { exact: true })).toHaveValue(nextZone)
+  await expect(page.getByLabel('显示时区', { exact: true })).toHaveAttribute('data-value', nextZone)
   await page.getByRole('button', { name: '重新读取偏好设置', exact: true }).click()
   await expect(page.getByRole('dialog')).toContainText('尚未保存')
   await page.getByRole('button', { name: '放弃修改并读取', exact: true }).click()
-  await expect(page.getByLabel('显示时区', { exact: true })).toHaveValue(otherZone)
-  await page.getByLabel('显示时区', { exact: true }).selectOption(display.timezone)
+  await expect(page.getByLabel('显示时区', { exact: true })).toHaveAttribute(
+    'data-value',
+    otherZone,
+  )
+  await selectChoice(page.getByLabel('显示时区', { exact: true }), display.timezone)
   await page.getByRole('button', { name: '保存偏好设置', exact: true }).click()
   await expect
     .poll(async () => (await (await page.request.get('/api/manage/display')).json()).timezone)

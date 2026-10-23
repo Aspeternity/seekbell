@@ -108,6 +108,7 @@ pnpm --dir frontend test:approved-ui
 pnpm --dir frontend test:loading
 pnpm --dir frontend test:history-ui-fixes
 pnpm --dir frontend test:content-stability
+pnpm --dir frontend test:workspace-stability
 ~~~
 
 

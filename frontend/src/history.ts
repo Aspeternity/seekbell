@@ -1,6 +1,12 @@
 import { onBeforeUnmount, shallowRef, ref, watch } from 'vue'
 import { request } from './store'
-import { cachedRead, readCacheRevision, rememberRead } from './readCache'
+import {
+  cachedRead,
+  readCacheRevision,
+  readSessionRevision,
+  readIsFresh,
+  rememberRead,
+} from './readCache'
 export interface Page<T> {
   items: T[]
   total: number
@@ -203,6 +209,7 @@ interface RemoteOptions {
   cacheKey?: () => string | undefined
   debounce?: () => unknown
   keepPrevious?: boolean
+  scope?: () => string | undefined
 }
 export function useRemote<T>(
   loader: () => Promise<T>,
@@ -213,34 +220,52 @@ export function useRemote<T>(
     loading = ref(false),
     error = ref(''),
     stale = ref(false)
-  let dataKey: string | undefined
-  let dataRevision = readCacheRevision.value
+  let dataScope: string | undefined
+  let dataIdentity: string | undefined
+  let dataRevision = readCacheRevision.value,
+    dataSession = readSessionRevision.value
   let generation = 0,
     timer: ReturnType<typeof setTimeout> | undefined
   function reload(delay = 0) {
     clearTimeout(timer)
     const current = ++generation
-    const revision = readCacheRevision.value
-    const key = options.cacheKey?.()
+    const revision = readCacheRevision.value,
+      session = readSessionRevision.value
+    const key = options.cacheKey?.(),
+      identity = key ?? JSON.stringify(inputs())
     loading.value = true
     error.value = ''
+    const scope = options.scope?.()
     const cached = key ? cachedRead<T>(key) : undefined
     if (cached !== undefined) {
       data.value = cached
-      dataKey = key
-      dataRevision = revision
-    } else if (!options.keepPrevious || dataRevision !== revision) {
+      dataIdentity = identity
+      dataScope = scope
+      dataRevision = readIsFresh(key!) ? revision : -1
+      dataSession = session
+    } else if (
+      dataSession !== session ||
+      (dataIdentity !== identity &&
+        (!options.keepPrevious || (options.scope && dataScope !== scope)))
+    ) {
       data.value = undefined
-      dataKey = undefined
+      dataIdentity = undefined
     }
-    stale.value = data.value !== undefined && dataKey !== key
+    stale.value =
+      data.value !== undefined && (dataIdentity !== identity || dataRevision !== revision)
     const run = async () => {
       try {
         const value = await loader()
-        if (current === generation && (!key || revision === readCacheRevision.value)) {
+        if (
+          current === generation &&
+          session === readSessionRevision.value &&
+          revision === readCacheRevision.value
+        ) {
           data.value = value
-          dataKey = key
+          dataIdentity = identity
+          dataScope = scope
           dataRevision = revision
+          dataSession = session
           stale.value = false
           if (key) rememberRead(key, value, revision)
         }
@@ -256,11 +281,11 @@ export function useRemote<T>(
   }
   let previousDebounce = options.debounce?.()
   watch(
-    () => [inputs(), options.cacheKey ? readCacheRevision.value : 0],
+    () => [inputs(), readCacheRevision.value],
     () => {
-      const nextDebounce = options.debounce?.()
-      const delay = options.cacheKey ? (nextDebounce !== previousDebounce ? 180 : 0) : 180
-      previousDebounce = nextDebounce
+      const next = options.debounce?.()
+      const delay = options.debounce && next !== previousDebounce ? 180 : 0
+      previousDebounce = next
       reload(delay)
     },
     { immediate: true, deep: true },

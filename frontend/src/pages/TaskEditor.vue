@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, reactive, ref, watch } from 'vue'
+import AppSelect from '../components/AppSelect.vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import Icon from '../components/Icon.vue'
 import Toggle from '../components/Toggle.vue'
 import TagInput from '../components/TagInput.vue'
 import { statusLabel } from '../model'
 import type { MatchResult, Sample, Task } from '../model'
 import { state, websiteName, evaluateTask, trialHistory, formatTime } from '../store'
-const WebsiteSelect = defineAsyncComponent(() => import('../components/WebsiteSelect.vue'))
 const targets = computed(() => state.targets)
 const props = withDefaults(
   defineProps<{
@@ -258,7 +258,11 @@ function jump(id: string) {
           />
           <div class="task-website-field">
             <span id="task-website-label" class="field-label">监控网站</span>
-            <WebsiteSelect
+            <AppSelect
+              id="task-website"
+              class="task-website-trigger"
+              aria-labelledby="task-website-label"
+              placeholder="请选择监控网站"
               v-model="draft.websiteId"
               :disabled="!!draft.id"
               :options="
@@ -562,16 +566,17 @@ function jump(id: string) {
           <strong>本地已保存帖子</strong>
           <p>使用当前草稿，按首次发现时间选取最近样本（含基线）。不会联网补齐历史。</p>
           <label class="field-label" for="history-limit">最多试算条数</label>
-          <select
+          <AppSelect
             id="history-limit"
             v-model="historyLimit"
             :disabled="testing"
             @change="clearHistory"
-          >
-            <option :value="20">20 条</option>
-            <option :value="50">50 条</option>
-            <option :value="100">100 条</option>
-          </select>
+            :options="[
+              { value: 20, label: '20 条' },
+              { value: 50, label: '50 条' },
+              { value: 100, label: '100 条' },
+            ]"
+          />
         </div>
 
         <p v-if="testError" class="form-errors" role="alert">{{ testError }}</p>

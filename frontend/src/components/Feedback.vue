@@ -9,7 +9,7 @@ const props = withDefaults(
     subtle?: boolean
     message?: string
   }>(),
-  { delay: 0, retained: false, subtle: false, message: '' },
+  { delay: 200, retained: false, subtle: false, message: '' },
 )
 const emit = defineEmits<{ retry: [] }>()
 const visible = ref(false)

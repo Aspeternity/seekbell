@@ -108,7 +108,9 @@ Codex 可在授权 SSH 范围内部署测试环境；没有 SSH 则提供含固�
 
 仅构建frontend/dist，开发/CI/容器共用该产物。浏览器套件使用同一正式界面，scripts/run_web_smoke.py在一次性临时库配合被动或合成运行器验证，退出清理；不安装测试版产品、不读取正式库。backend/services中的离线demo命令是核心/调度/备份的合成验证工具，继续供CI和容器检查使用。旧原型说明与交接已[归档](history/2026-10-23-原型退役前说明.md)，不是第二套运行指南。
 
-内容列表的useRemote显式启用keepPrevious：跨条件保留同一会话的完成快照，返回stale标志供界面禁用交互并标注；新响应原子替换行/统计/页码。详情、通知操作等默认仍按原查询隔离，不借用其他条件数据；缓存revision改变立即丢弃旧快照，迟到响应受generation/revision保护。选项/日期异步返回不改变控件宽度，加载提示在结果内覆盖显示。列表后端保留first_seen_at主排序，同批以published_at倒序（缺失置后）及稳定身份收尾；发现日过滤不改。
+useRemote初读/非搜索立即请求，仅明确的搜索字段变化防抖180ms。同查询保留快照，内容/通知列表及概览等显式keepPrevious跨条件保留，并以stale禁用旧结果交互；scope约束告警详情只能保留同一事件分页，不借用其他对象。新响应原子替换数据/统计/分页。readCache最多20项，以数据revision标记写后过期、session revision处理身份失效；写后保留旧快照并刷新，退出/失效立即清空。迟到响应同时检查generation、数据和会话revision。ReadRegion统一稳定占位、200ms覆盖反馈、失败重试及旧快照交互隔离，取代分散的高度补丁；概览仅允许标记的查询控件继续操作。编辑草稿和密码不使用只读缓存。列表后端保留first_seen_at主排序，同批以published_at倒序（缺失置后）及稳定身份收尾；发现日过滤不改。
+
+usePopup把按钮和portalled面板作为单一边界，统一外部/焦点离开关闭；DateFilter与AppSelect复用，不叠加库捕获阶段clickoutside。AppSelect归并15处原生选择与旧WebsiteSelect，以preventScroll聚焦、仅滚动菜单选项，保留不同场景尺寸和类型；Bootstrap的abstract NConfigProvider禁用组件库全局preflight，防止首次挂载改写body字体。Notifications外壳持有标题与NotificationTabs，内容按菜单/记录键隔离；Settings内部换分类保留外壳并清空获准放弃的草稿，避免跨页面KeepAlive敏感表单。
 
 ## 网站库与实例
 

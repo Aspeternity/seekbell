@@ -1,3 +1,4 @@
+import { selectChoice, readChoices } from '../select'
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 
@@ -68,15 +69,15 @@ test('content filters preserve geometry, task notes are inset and post details a
     await route.fulfill({ response })
   })
   const beforeSelect = (await search.boundingBox())!
-  await page.getByLabel('匹配结果', { exact: true }).selectOption('no_match')
+  await selectChoice(page.getByLabel('匹配结果', { exact: true }), 'no_match')
   await expect.poll(() => selectStarted).toBe(true)
   await expect(page.locator('.metric-strip')).toHaveCount(1)
   expect(Math.abs((await search.boundingBox())!.y - beforeSelect.y)).toBeLessThan(1)
   selectHold.release()
   await expect(page.locator('.content-row')).toHaveCount(1)
-  await page.getByLabel('匹配结果', { exact: true }).selectOption('all')
+  await selectChoice(page.getByLabel('匹配结果', { exact: true }), 'all')
   await expect(page.locator('.content-row')).toHaveCount(20)
-  await page.getByLabel('关联任务', { exact: true }).selectOption({ label: '当前任务名称' })
+  await selectChoice(page.getByLabel('关联任务', { exact: true }), { label: '当前任务名称' })
   const note = page.getByText('匹配结果按所选任务的历史判定筛选；详情可查看其他任务。', {
     exact: true,
   })
@@ -90,7 +91,7 @@ test('content filters preserve geometry, task notes are inset and post details a
   })
   expect(inset).toBeGreaterThan(12)
   await page.screenshot({ path: info.outputPath('content-task-note.png'), fullPage: true })
-  await page.getByLabel('关联任务', { exact: true }).selectOption('')
+  await selectChoice(page.getByLabel('关联任务', { exact: true }), '')
   await expect(page.locator('.content-row')).toHaveCount(20)
   const detail = gate()
   let detailStarted = false
@@ -134,6 +135,10 @@ test('approved date ranges cover all four lists, compose with filters and cancel
     await date.click()
     const menu = page.getByRole('dialog', { name: label + '范围', exact: true })
     await expect(menu).toBeVisible()
+    await date.click()
+    await expect(menu).toHaveCount(0)
+    await date.click()
+    await expect(menu).toBeVisible()
     await menu.getByRole('button', { name: '应用', exact: true }).focus()
     await menu.getByRole('button', { name: '应用', exact: true }).press('Tab')
     await expect(menu).toHaveCount(0)
@@ -156,13 +161,13 @@ test('approved date ranges cover all four lists, compose with filters and cancel
     await expect.poll(() => requests.some((url) => url.searchParams.has('q'))).toBe(true)
     const status = page.getByLabel(tab === 'posts' ? '匹配结果' : '投递状态筛选', { exact: true })
     const filter = tab === 'posts' ? 'match' : tab === 'deliveries' ? 'pending' : 'success'
-    await status.selectOption(filter)
+    await selectChoice(status, filter)
     await expect
       .poll(() => requests.some((url) => url.searchParams.get('status') === filter))
       .toBe(true)
     if (tab === 'posts') {
       await search.fill('')
-      await status.selectOption('all')
+      await selectChoice(status, 'all')
       await expect(page.locator('.content-row')).toHaveCount(20)
       await page.getByRole('button', { name: '下一页内容', exact: true }).click()
       await expect.poll(() => requests.at(-1)?.searchParams.get('page')).toBe('2')
@@ -221,9 +226,7 @@ test('approved date ranges cover all four lists, compose with filters and cancel
     page.off('request', capture)
   }
   await navigate(page, '/content')
-  expect(
-    (await page.getByLabel('关联任务').locator('option').allTextContents()).join(''),
-  ).not.toContain('已删除')
+  expect((await readChoices(page.getByLabel('关联任务'))).join('')).not.toContain('已删除')
   await navigate(page, '/websites')
   const input = page.getByLabel('搜索已添加网站')
   const shell = page.locator('.search-input').filter({ has: input })

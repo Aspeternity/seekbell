@@ -27,7 +27,8 @@
     "test:loading": "playwright test --config playwright.loading.config.ts",
     "test:history-ui-fixes": "playwright test --config playwright.history-ui-fixes.config.ts",
     "test:ui": "playwright test --config playwright.ui.config.ts",
-    "test:content-stability": "playwright test --config playwright.content-stability.config.ts"
+    "test:content-stability": "playwright test --config playwright.content-stability.config.ts",
+    "test:workspace-stability": "playwright test --config playwright.workspace-stability.config.ts"
   },
   "dependencies": {
     "naive-ui": "2.45.3",

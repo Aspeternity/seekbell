@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onBeforeUnmount } from 'vue'
 import App from './App.vue'
+import { NConfigProvider } from 'naive-ui'
 import { initialize, signedIn, refreshRuntime, runtime } from './store'
 const ready = ref(false),
   error = ref(''),
@@ -33,10 +34,12 @@ const runtimeTimer = setInterval(async () => {
 onBeforeUnmount(() => clearInterval(runtimeTimer))
 </script>
 <template>
-  <App v-if="ready" />
-  <main v-else class="panel empty-state">
-    <h1>SeekBell</h1>
-    <p role="status">{{ error || '正在连接工作空间…' }}</p>
-    <button v-if="error" class="button primary" :disabled="busy" @click="start">重新连接</button>
-  </main>
+  <NConfigProvider abstract preflight-style-disabled>
+    <App v-if="ready" />
+    <main v-else class="panel empty-state">
+      <h1>SeekBell</h1>
+      <p role="status">{{ error || '正在连接工作空间…' }}</p>
+      <button v-if="error" class="button primary" :disabled="busy" @click="start">重新连接</button>
+    </main>
+  </NConfigProvider>
 </template>

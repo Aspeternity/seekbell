@@ -1,3 +1,4 @@
+import { selectChoice, readChoices } from '../select'
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 const credentials = { username: 'history_admin', password: 'Synthetic-History-2026' }
@@ -51,7 +52,7 @@ test('cold entry keeps the heading and all filter geometry stable while options 
   const start = await input.boundingBox()
   await expect(page.locator('.page-heading > .small-badge')).toHaveCount(1)
   options.release()
-  await expect(page.getByLabel('关联任务').locator('option')).toHaveCount(2)
+  await expect.poll(async () => (await readChoices(page.getByLabel('关联任务'))).length).toBe(2)
   let box = (await input.boundingBox())!
   expect(Math.abs(box.y - start!.y)).toBeLessThan(1)
   expect(Math.abs(box.width - start!.width)).toBeLessThan(1)
@@ -87,7 +88,7 @@ test('filtering retains one inert result snapshot and commits counts and rows to
   await expect.poll(() => started).toBe(true)
   await expect(page.locator('.content-row')).toHaveCount(20)
   await expect(page.locator('.metric-strip strong')).toHaveText(metrics)
-  await expect(page.locator('.content-result-snapshot')).toHaveAttribute('inert', '')
+  await expect(page.locator('.read-snapshot')).toHaveAttribute('inert', '')
   const pending = await input.boundingBox()
   expect(Math.abs(pending!.y - before!.y)).toBeLessThan(1)
   await expect(page.locator('.remote-feedback')).toContainText('上次结果')
@@ -98,7 +99,7 @@ test('filtering retains one inert result snapshot and commits counts and rows to
   held.release()
   await expect(page.locator('.content-row')).toHaveCount(1)
   await expect(page.locator('.metric-strip strong').first()).toHaveText('1')
-  await expect(page.locator('.content-result-snapshot')).not.toHaveAttribute('inert', '')
+  await expect(page.locator('.read-snapshot')).not.toHaveAttribute('inert', '')
   await expect(page.locator('.remote-feedback')).toHaveCount(0)
   await page.route(
     /\/api\/manage\/history\/posts(?:\?|$)/,
@@ -169,22 +170,26 @@ test('complete result labels fit and every noninteractive part of a post opens i
   await expect(page.locator('.metric-strip button, .metric-strip a')).toHaveCount(0)
   const select = page.getByLabel('匹配结果', { exact: true })
   for (const option of ['all', 'unrecorded']) {
-    await select.selectOption(option)
-    const fit = await select.evaluate((node: HTMLSelectElement) => {
-      const style = getComputedStyle(node),
+    await selectChoice(select, option)
+    const fit = await select.evaluate((node: HTMLButtonElement) => {
+      const label = node.querySelector('.app-select-label')!
+      const style = getComputedStyle(label),
         canvas = document.createElement('canvas')
       const context = canvas.getContext('2d')!
       context.font = style.font
-      return (
+      const control = getComputedStyle(node)
+      const icon = node.querySelector('svg')!
+      const available =
         node.clientWidth -
-        parseFloat(style.paddingLeft) -
-        parseFloat(style.paddingRight) -
-        context.measureText(node.selectedOptions[0]!.text).width
-      )
+        parseFloat(control.paddingLeft) -
+        parseFloat(control.paddingRight) -
+        parseFloat(control.columnGap) -
+        parseFloat(getComputedStyle(icon).width)
+      return available - context.measureText(label.textContent || '').width
     })
-    expect(fit).toBeGreaterThanOrEqual(18)
+    expect(fit).toBeGreaterThanOrEqual(4)
   }
-  await select.selectOption('all')
+  await selectChoice(select, 'all')
   for (const part of [
     '.content-excerpt',
     '.content-row-meta',

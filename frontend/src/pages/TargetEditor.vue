@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppSelect from '../components/AppSelect.vue'
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import Icon from '../components/Icon.vue'
 import Toggle from '../components/Toggle.vue'
@@ -365,11 +366,15 @@ async function save() {
               /></label>
             </div>
             <label
-              >连接安全<select v-model="draft.security" class="text-input">
-                <option value="tls">隐式 TLS</option>
-                <option value="starttls">STARTTLS</option>
-                <option value="plain">明文（需明确允许）</option>
-              </select></label
+              >连接安全<AppSelect
+                v-model="draft.security"
+                aria-label="连接安全"
+                class="text-input"
+                :options="[
+                  { value: 'tls', label: '隐式 TLS' },
+                  { value: 'starttls', label: 'STARTTLS' },
+                  { value: 'plain', label: '明文（需明确允许）' },
+                ]" /></label
             ><label v-if="draft.security === 'plain'" class="check-label"
               ><input
                 v-model="insecure"
@@ -431,11 +436,15 @@ async function save() {
                 placeholder='{"X-Demo-Key":"sample"}'
               /></label
             ><label
-              >成功判定<select v-model="draft.responseMode" class="text-input">
-                <option value="json_ok">JSON 响应中 ok 为 true</option>
-                <option value="status">任意 HTTP 2xx</option>
-              </select></label
-            >
+              >成功判定<AppSelect
+                v-model="draft.responseMode"
+                aria-label="成功判定"
+                class="text-input"
+                :options="[
+                  { value: 'json_ok', label: 'JSON 响应中 ok 为 true' },
+                  { value: 'status', label: '任意 HTTP 2xx' },
+                ]"
+            /></label>
             <p class="small-note">
               固定 JSON 消息结构，包含 schema_version 与稳定
               event_id。不执行脚本，不自定义消息代码。

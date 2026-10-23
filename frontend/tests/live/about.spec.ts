@@ -75,7 +75,8 @@ test('version and readiness remain independent, retry safely and perform no conf
   await page.getByRole('button', { name: '刷新运行信息', exact: true }).click()
   const version = page.getByRole('region', { name: '版本信息', exact: true })
   await expect(version.getByRole('alert')).toContainText('无法读取版本信息')
-  await expect(page.getByTestId('build-revision')).toHaveCount(0)
+  await expect(page.getByTestId('build-revision')).toHaveText(original.build_revision)
+  await expect(version.getByRole('alert')).toContainText('上次结果')
   await expect(page.getByText('异常停止', { exact: true })).toBeVisible()
 
   const fixed = '0123456789abcdef'.repeat(4)
@@ -95,7 +96,9 @@ test('version and readiness remain independent, retry safely and perform no conf
   await page.route('**/health/ready', (route) => route.fulfill({ json: { status: 'unexpected' } }))
   await page.getByRole('button', { name: '刷新运行信息', exact: true }).click()
   const status = page.getByRole('region', { name: '服务状态', exact: true })
-  await expect(status.getByRole('alert')).toContainText('无法读取就绪状态')
+  await expect(status.getByRole('alert').filter({ hasText: '无法读取就绪状态' })).toContainText(
+    '上次结果',
+  )
   await expect(page.getByText('服务已就绪', { exact: true })).toHaveCount(0)
   await expect(page.getByTestId('build-revision')).toHaveText(fixed)
   for (const width of [320, 390, 768, 1440]) {

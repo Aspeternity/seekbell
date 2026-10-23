@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppSelect from '../components/AppSelect.vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import Icon from '../components/Icon.vue'
 import Toggle from '../components/Toggle.vue'
@@ -14,7 +15,7 @@ const loaded = ref(false),
   busy = ref(false),
   errors = ref<string[]>([])
 const revisions = reactive({ display: 0, retention: 0, alerts: 0 })
-const zones = ref<string[]>([])
+const zones = ref<string[]>([state.settings.timezone])
 const zoneLabels: Record<string, string> = {
   'Asia/Shanghai': '中国标准时间 · Asia/Shanghai',
   UTC: '协调世界时 · UTC',
@@ -242,12 +243,12 @@ onMounted(load)
         <h3>时间与历史</h3>
 
         <label
-          >显示时区<select v-model="draft.timezone" class="text-input" aria-label="显示时区">
-            <option v-for="zone in zones" :key="zone" :value="zone">
-              {{ zoneLabels[zone] || zone }}
-            </option>
-          </select></label
-        >
+          >显示时区<AppSelect
+            v-model="draft.timezone"
+            class="text-input"
+            aria-label="显示时区"
+            :options="zones.map((zone) => ({ value: zone, label: zoneLabels[zone] || zone }))"
+        /></label>
         <p class="small-note">帖子与投递存储 UTC，展示按所选时区转换。</p>
         <label
           >普通历史保留天数

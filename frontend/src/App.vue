@@ -8,8 +8,7 @@ import TargetEditor from './pages/TargetEditor.vue'
 import Auth from './pages/Auth.vue'
 import Overview from './pages/Overview.vue'
 import Content from './pages/Content.vue'
-import Records from './pages/Records.vue'
-import Targets from './pages/Targets.vue'
+import Notifications from './pages/Notifications.vue'
 import Settings from './pages/Settings.vue'
 import { emptyTask } from './model'
 import type { Task } from './model'
@@ -113,6 +112,11 @@ function accept() {
   action?.()
 }
 function applyRoute(next: string, push = true) {
+  const sectionTabs = /^\/(notifications|settings)\/[^/]+$/
+  const internalTab =
+    sectionTabs.test(path.value) &&
+    sectionTabs.test(next) &&
+    path.value.split('/')[1] === next.split('/')[1]
   if (!signedIn.value && !['/login', '/setup'].includes(next)) next = '/login'
   if (next.startsWith('/task/') && !path.value.startsWith('/task/'))
     taskReturn.value = path.value === '/tasks' ? '/tasks' : '/'
@@ -122,8 +126,10 @@ function applyRoute(next: string, push = true) {
   saveError.value = ''
   dirty.value = false
   mobileMenu.value = false
-  window.scrollTo(0, 0)
-  nextTick(() => document.querySelector<HTMLElement>('h1')?.focus())
+  if (!internalTab) {
+    window.scrollTo(0, 0)
+    nextTick(() => document.querySelector<HTMLElement>('h1')?.focus())
+  }
 }
 function navigate(next: string) {
   next = normalize(next)
@@ -361,22 +367,18 @@ function showInfo() {
       </header>
       <main id="main-content" tabindex="-1">
         <Overview v-if="page === 'overview'" @navigate="navigate" />
-        <Targets
-          v-else-if="page === 'notifications' && parts[1] === 'targets'"
-          @navigate="navigate"
-        />
         <Content
           v-else-if="page === 'content'"
           :key="path"
           :selected-id="parts[1]"
           @navigate="navigate"
         />
-        <Records
+        <Notifications
           v-else-if="
-            page === 'notifications' && ['deliveries', 'tests', 'manual'].includes(parts[1] || '')
+            page === 'notifications' &&
+            ['targets', 'deliveries', 'tests', 'manual'].includes(parts[1] || '')
           "
-          :key="path"
-          :tab="parts[1]"
+          :tab="parts[1]!"
           :record-id="parts[2]"
           @navigate="navigate"
         />
@@ -413,7 +415,6 @@ function showInfo() {
         />
         <Settings
           v-else-if="page === 'settings' && validPage"
-          :key="path"
           :tab="parts[1]"
           @dirty="(value: boolean) => (dirty = value)"
           @navigate="navigate"

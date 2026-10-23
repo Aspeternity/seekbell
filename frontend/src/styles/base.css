@@ -859,7 +859,7 @@ main {
   font-size: 11px;
   padding: 1px 0;
 }
-.task-tools select {
+.task-tools .app-select {
   border: 1px solid #e6e9ed;
   border-radius: 6px;
   padding: 7px 8px;
@@ -2387,7 +2387,7 @@ textarea:disabled {
     width: 100%;
     font-size: 12px;
   }
-  .task-tools select {
+  .task-tools .app-select {
     font-size: 11px;
     height: 36px;
   }

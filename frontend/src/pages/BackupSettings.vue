@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { request, sendRequest, state } from '../store'
+import Feedback from '../components/Feedback.vue'
 import Icon from '../components/Icon.vue'
 import { historyGet, useRemote } from '../history'
 import type { Page } from '../history'
@@ -13,6 +14,7 @@ const totals = useRemote(
     return { posts: posts.total, deliveries: deliveries.total }
   },
   () => [],
+  { cacheKey: () => 'backup:totals' },
 )
 const emit = defineEmits<{ dirty: [value: boolean] }>()
 const currentPassword = ref(''),
@@ -144,20 +146,31 @@ async function restore() {
         <Icon name="download" :size="21" />
       </div>
       <div class="form-content form-stack">
-        <div class="backup-summary">
-          <span
-            ><strong>{{ state.tasks.length }}</strong
-            >任务</span
-          ><span
-            ><strong>{{ state.targets.length }}</strong
-            >目标</span
-          ><span
-            ><strong>{{ totals.data.value?.posts ?? '—' }}</strong
-            >帖子</span
-          ><span
-            ><strong>{{ totals.data.value?.deliveries ?? '—' }}</strong
-            >记录</span
-          >
+        <div class="backup-summary-region">
+          <div class="backup-summary" :aria-busy="totals.loading.value">
+            <span
+              ><strong>{{ state.tasks.length }}</strong
+              >任务</span
+            ><span
+              ><strong>{{ state.targets.length }}</strong
+              >目标</span
+            ><span
+              ><strong>{{ totals.data.value?.posts ?? '—' }}</strong
+              >帖子</span
+            ><span
+              ><strong>{{ totals.data.value?.deliveries ?? '—' }}</strong
+              >记录</span
+            >
+          </div>
+          <div class="backup-count-feedback">
+            <Feedback
+              :loading="totals.loading.value"
+              :error="totals.error.value"
+              :retained="!!totals.data.value"
+              subtle
+              @retry="totals.reload"
+            />
+          </div>
         </div>
         <p>
           备份包含管理员、规则、历史、去重账本、队列和原凭据密钥。下载使用一致性快照，后台继续运行；快照之后的修改与回执不在备份中。
@@ -295,3 +308,16 @@ async function restore() {
     </section>
   </div>
 </template>
+
+<style scoped>
+.backup-summary-region {
+  position: relative;
+}
+.backup-count-feedback {
+  position: absolute;
+  right: 0;
+  top: 0;
+  z-index: 2;
+  background: #fff;
+}
+</style>

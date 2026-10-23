@@ -1,3 +1,4 @@
+import { selectChoice } from '../select'
 import { expect, test } from '@playwright/test'
 const credentials = { username: 'operations_admin', password: 'Synthetic-Operations-2026' }
 test('draft history trials, confirmed source checks and dependency-safe deletion use real APIs', async ({
@@ -81,7 +82,7 @@ test('draft history trials, confirmed source checks and dependency-safe deletion
   await page.getByRole('button', { name: '历史样本', exact: true }).click()
   await expect(page.locator('.history-intro')).toContainText('本地已保存帖子')
   await expect(page.locator('.history-intro')).not.toContainText('合成历史样本')
-  await page.getByLabel('最多试算条数').selectOption('100')
+  await selectChoice(page.getByLabel('最多试算条数'), '100')
   await page.route(
     '**/api/manage/rules/history',
     (route) =>

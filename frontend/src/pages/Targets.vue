@@ -1,8 +1,8 @@
 <script setup lang="ts">
+import AppSelect from '../components/AppSelect.vue'
 import { shouldOpenNotificationCard } from '../notificationCard'
 import { computed, ref } from 'vue'
 import Icon from '../components/Icon.vue'
-import NotificationTabs from '../components/NotificationTabs.vue'
 import Toggle from '../components/Toggle.vue'
 import { state, channelMeta, setTargetEnabled } from '../store'
 import TargetDeleteDialog from '../components/TargetDeleteDialog.vue'
@@ -29,27 +29,20 @@ function completed(path: string) {
 }
 </script>
 <template>
-  <section class="page-heading">
-    <div>
-      <p class="eyebrow">GOOD NEWS, YOUR WAY</p>
-      <h1 tabindex="-1">通知管理</h1>
-      <p class="subtitle">把关心的消息，送到你习惯的地方。</p>
-    </div>
-    <button class="button primary" @click="emit('navigate', '/target/new')">
-      <Icon name="plus" :size="18" />添加通知目标
-    </button>
-  </section>
-  <NotificationTabs tab="targets" @navigate="(path) => emit('navigate', path)" />
   <div class="filter-toolbar free-toolbar">
     <label class="search-input grow"
       ><Icon name="search" :size="16" /><input
         v-model="q"
         aria-label="搜索通知目标"
         placeholder="搜索通知目标…" /></label
-    ><select v-model="channel" aria-label="通知渠道筛选">
-      <option value="all">全部渠道</option>
-      <option v-for="(meta, id) in channelMeta" :key="id" :value="id">{{ meta.type }}</option>
-    </select>
+    ><AppSelect
+      v-model="channel"
+      aria-label="通知渠道筛选"
+      :options="[
+        { value: 'all', label: '全部渠道' },
+        ...Object.entries(channelMeta).map(([value, meta]) => ({ value, label: meta.type })),
+      ]"
+    />
   </div>
   <div class="target-card-grid">
     <article

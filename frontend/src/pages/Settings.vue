@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import AboutSettings from './AboutSettings.vue'
 import Preferences from './Preferences.vue'
 import BackupSettings from './BackupSettings.vue'
@@ -15,9 +15,16 @@ const preferenceTabs = ['preferences', 'retention', 'display', 'alerts']
 const selectedTab = computed(() =>
   preferenceTabs.includes(props.tab || '') ? 'preferences' : props.tab,
 )
-onMounted(() =>
-  tabs.value?.querySelector('.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }),
-)
+function scrollTab() {
+  const container = tabs.value,
+    selected = container?.querySelector<HTMLElement>('.active')
+  if (!container || !selected) return
+  const offset = selected.offsetLeft - container.offsetLeft
+  if (offset < container.scrollLeft) container.scrollLeft = offset
+  else if (offset + selected.offsetWidth > container.scrollLeft + container.clientWidth)
+    container.scrollLeft = offset + selected.offsetWidth - container.clientWidth
+}
+onMounted(scrollTab)
 const retentionDirty = ref(false)
 const auxiliaryDirty = ref(false)
 const username = ref(account.username),
@@ -40,6 +47,21 @@ watch(dirty, (value) => emit('dirty', value))
 const error = ref(''),
   busy = ref(false),
   saved = ref(false)
+watch(
+  () => props.tab,
+  () => {
+    username.value = account.username
+    currentPassword.value = ''
+    newPassword.value = ''
+    confirmPassword.value = ''
+    error.value = ''
+    saved.value = false
+    auxiliaryDirty.value = false
+    retentionDirty.value = false
+    emit('dirty', false)
+    nextTick(scrollTab)
+  },
+)
 async function saveAccount() {
   if (busy.value) return
   error.value = ''

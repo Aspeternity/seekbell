@@ -1,3 +1,4 @@
+import { selectChoice } from '../select'
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 
@@ -280,7 +281,7 @@ test('all four target forms validate and save encrypted configuration without br
       await page.getByLabel('SMTP 服务器').fill('smtp.example.test')
       await page.getByLabel('发件地址').fill('sender@example.test')
       await page.getByLabel('收件地址').fill('reader@example.test')
-      await page.getByLabel('连接安全').selectOption('plain')
+      await selectChoice(page.getByLabel('连接安全'), 'plain')
       await page.getByRole('button', { name: '保存目标', exact: true }).click()
       await expect(page.getByRole('alert')).toContainText('明确确认')
       await page.getByRole('checkbox', { name: '我了解明文连接不加密，明确允许此配置' }).check()
