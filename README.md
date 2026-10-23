@@ -145,3 +145,13 @@ uv run --frozen python -m seekbell.services.backup_demo
 远程仓库为私有的 [Aspeternity/seekbell](https://github.com/Aspeternity/seekbell)。镜像发布、SSH、真实通知目标和许可证尚未提供；相关动作按明确授权执行。原始规格文件保存在初始 Git 提交中。
 
 提交身份使用GitHub noreply地址。首次克隆后执行`git config --local core.hooksPath .githooks`启用提交/推送前邮箱检查；CI也检查全部提交身份及Git历史/索引中的非示例邮箱，失败日志不输出被拒地址。真实通知凭据只保存在运行配置，不写入Git。
+
+### 概览模块与社区热榜验证
+
+概览模块显隐/顺序在系统设置→偏好与保留保存；首接NodeSeek第三方热榜，生产无需额外服务。热榜不参与规则或通知，隐藏后不再专用刷新。
+
+    uv run --frozen pytest -q tests/test_hotlists.py tests/test_release.py tests/test_backup.py
+    pnpm --dir frontend build
+    pnpm --dir frontend test:hotlist
+
+浏览器命令启动一次性临时库和合成HTTP服务（8028），退出清理；不读取正式数据库或访问真实热榜。迁移0010沿用既有启动流程，正式更新前沿用备份/回退检查。

@@ -23,6 +23,7 @@ if __name__ == "__main__":
     seeded = args.history or args.sending or args.operations or args.retention or args.system
     root = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(root))
+    from tests.hotlist_helpers import synthetic_hotlists
     from tests.retention_helpers import retention_runtime_factory, seed_retention
     from tests.runtime_helpers import (
         PassiveRuntime,
@@ -57,6 +58,7 @@ if __name__ == "__main__":
                     engine.dispose()
         app = create_app(
             Settings(data_dir=Path(directory), static_dir=static),
+            hotlist_factory=synthetic_hotlists,
             runtime_factory=(
                 system_runtime_factory
                 if args.system

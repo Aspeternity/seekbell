@@ -11,6 +11,7 @@ from seekbell.api.history import Paging
 from seekbell.db.models import (
     AlertSettings,
     NotificationTarget,
+    OverviewPreferences,
     RetentionPolicy,
     Source,
     SourceState,
@@ -150,6 +151,7 @@ def workspace(request: Request):
                 "timezone": preferences.timezone,
                 "alertTargets": session.get(AlertSettings, 1).target_ids,
                 "recoveryAlerts": session.get(AlertSettings, 1).enabled,
+                "overviewModules": session.get(OverviewPreferences, 1).modules,
             },
         }
     result["targets"] = [config(request).get_target(key) for key in target_ids]

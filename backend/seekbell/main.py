@@ -14,6 +14,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from seekbell.api.auth import router as auth_router
 from seekbell.api.backups import router as backups_router
 from seekbell.api.history import router as history_router
+from seekbell.api.hotlists import router as hotlists_router
 from seekbell.api.management import router as management_router
 from seekbell.api.overview import router as overview_router
 from seekbell.api.sending import install_errors
@@ -31,6 +32,7 @@ from seekbell.db.runtime import create_database_engine, instance_lock, migrate
 from seekbell.notifiers.credentials import CredentialError, CredentialVault
 from seekbell.notifiers.registry import NotifierRegistry
 from seekbell.services.authentication import LoginLimiter
+from seekbell.services.hotlists import HotlistService
 from seekbell.services.manual_sending import ConfiguredTargetTesting, ManualSending
 from seekbell.services.runtime import Runtime
 
@@ -59,7 +61,9 @@ def stored_credentials(session):
     return values
 
 
-def create_app(settings: Settings | None = None, *, runtime_factory=None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None, *, runtime_factory=None, hotlist_factory=None
+) -> FastAPI:
     settings = settings or Settings()
 
     @asynccontextmanager
@@ -81,6 +85,7 @@ def create_app(settings: Settings | None = None, *, runtime_factory=None) -> Fas
                 for key, kind, ciphertext in encrypted:
                     app.state.vault.unseal(key, kind, ciphertext)
                 registry = NotifierRegistry(app.state.vault)
+                app.state.hotlists = (hotlist_factory or HotlistService)()
                 try:
                     app.state.target_testing = ConfiguredTargetTesting(engine, registry.notifiers)
                     app.state.manual_sending = ManualSending(engine, registry.notifiers)
@@ -94,6 +99,7 @@ def create_app(settings: Settings | None = None, *, runtime_factory=None) -> Fas
                     finally:
                         await runtime.aclose()
                 finally:
+                    await app.state.hotlists.aclose()
                     await registry.aclose()
             finally:
                 engine.dispose()
@@ -137,6 +143,7 @@ def create_app(settings: Settings | None = None, *, runtime_factory=None) -> Fas
     app.include_router(router)
     app.include_router(auth_router)
     app.include_router(management_router)
+    app.include_router(hotlists_router)
     app.include_router(backups_router)
     app.include_router(history_router)
     app.include_router(overview_router)

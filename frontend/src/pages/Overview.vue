@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppSelect from '../components/AppSelect.vue'
+import CommunityHotlist from '../components/CommunityHotlist.vue'
 import { computed, ref } from 'vue'
 import Icon from '../components/Icon.vue'
 import Toggle from '../components/Toggle.vue'
@@ -62,6 +63,7 @@ const chartLabels = computed(() =>
       })
     : [],
 )
+const modules = computed(() => state.settings.overviewModules.filter((row) => row.visible))
 const activities = computed(() => data.value?.recent_matches || [])
 function setRange(value: '24h' | '7d') {
   range.value = value
@@ -297,136 +299,182 @@ async function toggle(id: string) {
           :timezone="data.today.timezone"
         />
       </div>
-      <section class="panel tasks-panel">
-        <div class="panel-heading">
-          <div class="inline-title">
-            <h2>监控任务</h2>
-            <span class="count-badge">{{ tasks.length }}</span>
-          </div>
-          <div class="task-tools" data-read-control>
-            <label class="search-input"
-              ><Icon name="search" :size="16" /><input
-                v-model="query"
-                aria-label="搜索任务"
-                placeholder="搜索任务…" /></label
-            ><AppSelect
-              v-model="filter"
-              aria-label="筛选任务状态"
-              :options="[
-                { value: 'all', label: '全部状态' },
-                { value: 'active', label: '已启用' },
-                { value: 'paused', label: '已暂停' },
-              ]"
-            />
-          </div>
-        </div>
-        <div class="task-table-head">
-          <span>任务名称</span><span>通知目标</span
-          ><span>{{ displayedRange === '24h' ? '近24小时命中' : '近7天命中' }}</span
-          ><span>最近命中</span><span>状态</span><span />
-        </div>
-        <div
-          v-for="task in filtered"
-          :key="task.id"
-          class="task-row is-clickable"
-          @click="(event) => openTask(event, task.id)"
-        >
-          <button class="task-name" @click="emit('navigate', '/task/' + task.id)">
-            <span class="icon-tile" :class="task.color"><Icon :name="task.icon" /></span
-            ><span
-              ><strong>{{ task.name }}</strong
-              ><small>{{
-                task.description || websiteName(task.websiteId) + ' · 新帖监控'
-              }}</small></span
-            >
-          </button>
-          <div class="target-icons">
-            <span
-              v-for="target in targets.filter((t) => task.targets.includes(t.id))"
-              :key="target.id"
-              :title="target.name"
-              class="target-icon"
-              :class="target.color"
-              ><Icon :name="target.icon" :size="16" /><span class="sr-only">{{
-                target.name
-              }}</span></span
-            >
-          </div>
-          <span class="task-hits"
-            >{{ task.hits
-            }}<small class="mobile-only">
-              {{ displayedRange === '24h' ? '近24小时命中' : '近7天命中' }}</small
-            ></span
-          ><span class="muted task-time">{{ task.lastHit }}</span>
-          <div class="task-status">
-            <Toggle
-              :model-value="task.enabled"
-              :label="task.name + '启用状态'"
-              @update:model-value="toggle(task.id)"
-            /><span>{{ task.enabled ? '已启用' : '已暂停' }}</span>
-          </div>
-          <button
-            class="icon-button task-edit"
-            :aria-label="'编辑' + task.name"
-            @click="emit('navigate', '/task/' + task.id)"
-          >
-            <Icon name="arrow" :size="17" />
-          </button>
-        </div>
-        <div v-if="!tasks.length" class="empty-state">
-          <Icon name="layers" :size="28" />
-          <h3>还没有监控任务</h3>
-          <p>添加网站后，为你关心的内容设置一条规则。</p>
-        </div>
-        <div v-else-if="!filtered.length" class="empty-state">
-          <Icon name="search" :size="28" />
-          <h3>没有找到匹配的任务</h3>
-          <p>试试其他关键词，或查看全部状态。</p>
-          <button class="button" @click="clearFilters">清除筛选</button>
-        </div>
-        <div class="table-footer">
-          <span>显示 {{ filtered.length }} 个任务</span
-          ><span><Icon name="help" :size="14" />暂停后恢复，不补发期间的帖子</span>
-        </div>
-      </section>
-      <section class="panel activity-panel">
-        <div class="panel-heading">
-          <div>
-            <h2>最近命中</h2>
-            <p>从信息流中，找到与你有关的内容</p>
-          </div>
-          <button class="text-link" @click="emit('navigate', '/content')">查看内容与命中</button>
-        </div>
-        <div v-for="(item, index) in activities" :key="index" class="activity-row">
-          <span class="timeline-dot orange"><Icon name="spark" :size="17" /></span>
-          <div class="activity-copy">
-            <button v-if="item.post_id" @click="emit('navigate', '/content/' + item.post_id)">
-              {{ item.title }}</button
-            ><strong v-else>原内容已清理</strong>
-            <p>
-              <span>{{ item.task_name }}</span
-              ><span
-                >版本 {{ item.task_version }}{{ item.task_deleted ? ' · 任务已删除' : '' }}</span
-              >
-            </p>
-          </div>
-          <span class="result-pill yes"><span class="status-dot" />命中</span
-          ><time>{{ stamp(item.at) }}</time>
-        </div>
-        <div v-if="!activities.length" class="empty-state">
-          <Icon name="inbox" :size="28" />
-          <p>还没有命中记录。</p>
-        </div>
-      </section>
-      <footer class="page-footer">
-        <span><Icon name="bell" :size="14" /> SeekBell · 留意你关心的</span
-        ><span>管理界面 <span class="separator">·</span> v0.4</span>
-      </footer>
     </template>
   </ReadRegion>
+  <div class="overview-customize">
+    <button
+      class="text-link"
+      @click="emit('navigate', '/settings/preferences?section=overview-modules')"
+    >
+      <Icon name="settings" :size="15" />自定义显示
+    </button>
+  </div>
+  <div class="overview-modules">
+    <template v-for="module in modules" :key="module.id">
+      <CommunityHotlist v-if="module.id === 'hotlist'" @navigate="emit('navigate', $event)" />
+      <ReadRegion
+        v-else
+        :loading="remote.loading.value"
+        :error="remote.error.value"
+        :has-data="!!data"
+        :stale="remote.stale.value"
+        allow-controls
+        :show-feedback="false"
+        :min-height="200"
+        @retry="remote.reload"
+      >
+        <section
+          v-if="module.id === 'tasks' && data"
+          class="panel tasks-panel"
+          data-overview-module="tasks"
+        >
+          <div class="panel-heading">
+            <div class="inline-title">
+              <h2>监控任务</h2>
+              <span class="count-badge">{{ tasks.length }}</span>
+            </div>
+            <div class="task-tools" data-read-control>
+              <label class="search-input"
+                ><Icon name="search" :size="16" /><input
+                  v-model="query"
+                  aria-label="搜索任务"
+                  placeholder="搜索任务…" /></label
+              ><AppSelect
+                v-model="filter"
+                aria-label="筛选任务状态"
+                :options="[
+                  { value: 'all', label: '全部状态' },
+                  { value: 'active', label: '已启用' },
+                  { value: 'paused', label: '已暂停' },
+                ]"
+              />
+            </div>
+          </div>
+          <div class="task-table-head">
+            <span>任务名称</span><span>通知目标</span
+            ><span>{{ displayedRange === '24h' ? '近24小时命中' : '近7天命中' }}</span
+            ><span>最近命中</span><span>状态</span><span />
+          </div>
+          <div
+            v-for="task in filtered"
+            :key="task.id"
+            class="task-row is-clickable"
+            @click="(event) => openTask(event, task.id)"
+          >
+            <button class="task-name" @click="emit('navigate', '/task/' + task.id)">
+              <span class="icon-tile" :class="task.color"><Icon :name="task.icon" /></span
+              ><span
+                ><strong>{{ task.name }}</strong
+                ><small>{{
+                  task.description || websiteName(task.websiteId) + ' · 新帖监控'
+                }}</small></span
+              >
+            </button>
+            <div class="target-icons">
+              <span
+                v-for="target in targets.filter((t) => task.targets.includes(t.id))"
+                :key="target.id"
+                :title="target.name"
+                class="target-icon"
+                :class="target.color"
+                ><Icon :name="target.icon" :size="16" /><span class="sr-only">{{
+                  target.name
+                }}</span></span
+              >
+            </div>
+            <span class="task-hits"
+              >{{ task.hits
+              }}<small class="mobile-only">
+                {{ displayedRange === '24h' ? '近24小时命中' : '近7天命中' }}</small
+              ></span
+            ><span class="muted task-time">{{ task.lastHit }}</span>
+            <div class="task-status">
+              <Toggle
+                :model-value="task.enabled"
+                :label="task.name + '启用状态'"
+                @update:model-value="toggle(task.id)"
+              /><span>{{ task.enabled ? '已启用' : '已暂停' }}</span>
+            </div>
+            <button
+              class="icon-button task-edit"
+              :aria-label="'编辑' + task.name"
+              @click="emit('navigate', '/task/' + task.id)"
+            >
+              <Icon name="arrow" :size="17" />
+            </button>
+          </div>
+          <div v-if="!tasks.length" class="empty-state">
+            <Icon name="layers" :size="28" />
+            <h3>还没有监控任务</h3>
+            <p>添加网站后，为你关心的内容设置一条规则。</p>
+          </div>
+          <div v-else-if="!filtered.length" class="empty-state">
+            <Icon name="search" :size="28" />
+            <h3>没有找到匹配的任务</h3>
+            <p>试试其他关键词，或查看全部状态。</p>
+            <button class="button" @click="clearFilters">清除筛选</button>
+          </div>
+          <div class="table-footer">
+            <span>显示 {{ filtered.length }} 个任务</span
+            ><span><Icon name="help" :size="14" />暂停后恢复，不补发期间的帖子</span>
+          </div>
+        </section>
+        <section
+          v-if="module.id === 'matches' && data"
+          class="panel activity-panel"
+          data-overview-module="matches"
+        >
+          <div class="panel-heading">
+            <div>
+              <h2>最近命中</h2>
+              <p>从信息流中，找到与你有关的内容</p>
+            </div>
+            <button class="text-link" @click="emit('navigate', '/content')">查看内容与命中</button>
+          </div>
+          <div v-for="(item, index) in activities" :key="index" class="activity-row">
+            <span class="timeline-dot orange"><Icon name="spark" :size="17" /></span>
+            <div class="activity-copy">
+              <button v-if="item.post_id" @click="emit('navigate', '/content/' + item.post_id)">
+                {{ item.title }}</button
+              ><strong v-else>原内容已清理</strong>
+              <p>
+                <span>{{ item.task_name }}</span
+                ><span
+                  >版本 {{ item.task_version }}{{ item.task_deleted ? ' · 任务已删除' : '' }}</span
+                >
+              </p>
+            </div>
+            <span class="result-pill yes"><span class="status-dot" />命中</span
+            ><time>{{ stamp(item.at) }}</time>
+          </div>
+          <div v-if="!activities.length" class="empty-state">
+            <Icon name="inbox" :size="28" />
+            <p>还没有命中记录。</p>
+          </div>
+        </section>
+      </ReadRegion>
+    </template>
+  </div>
+  <p v-if="!modules.length" class="small-note">内容模块已隐藏，可通过自定义显示恢复。</p>
+  <footer class="page-footer">
+    <span><Icon name="bell" :size="14" /> SeekBell · 留意你关心的</span
+    ><span>管理界面 <span class="separator">·</span> v0.4</span>
+  </footer>
 </template>
 
 <style scoped>
+.overview-modules {
+  display: grid;
+  gap: 22px;
+}
+.overview-modules :deep(.activity-panel) {
+  margin-top: 0;
+}
+.overview-customize {
+  display: flex;
+  justify-content: flex-end;
+  margin: 18px 0 12px;
+}
 .chart-x,
 .chart-legend {
   gap: 12px;

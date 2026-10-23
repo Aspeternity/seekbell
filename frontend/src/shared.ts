@@ -1,3 +1,4 @@
+import type { OverviewModule } from './overviewPreferences'
 import type { Task } from './model'
 import type { InstalledWebsite } from './websites'
 export type Channel = 'telegram' | 'bark' | 'smtp' | 'webhook'
@@ -29,6 +30,7 @@ export interface WorkspaceState {
     retention: number
     alertTargets: string[]
     recoveryAlerts: boolean
+    overviewModules: OverviewModule[]
   }
 }
 export const channelMeta = {

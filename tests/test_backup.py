@@ -350,3 +350,30 @@ def test_interactive_cli_roundtrip_does_not_echo_passwords(source, tmp_path):
         ],
     )
     assert backup.validate_database(destination / "seekbell.sqlite3")
+
+
+def test_custom_overview_layout_and_selection_survive_encrypted_restore(source, tmp_path):
+    modules = [
+        {"id": "hotlist", "visible": True},
+        {"id": "tasks", "visible": False},
+        {"id": "matches", "visible": True},
+    ]
+    with closing(sqlite3.connect(source.database_path)) as connection:
+        connection.execute(
+            "UPDATE overview_preferences SET modules=?,revision=7,website_id=?,"
+            "periods=?,selection_revision=4",
+            (json.dumps(modules), "nodeseek", json.dumps({"nodeseek": "weekly"})),
+        )
+        connection.commit()
+    path, destination = tmp_path / "overview.sbbackup", tmp_path / "overview-restored"
+    backup.create_backup(source, path, password=PASSWORD)
+    restore(source, path, destination)
+    with closing(sqlite3.connect(destination / "seekbell.sqlite3")) as connection:
+        row = connection.execute(
+            "SELECT modules,revision,website_id,periods,selection_revision "
+            "FROM overview_preferences"
+        ).fetchone()
+        assert json.loads(row[0]) == modules
+        assert row[1:3] == (7, "nodeseek")
+        assert json.loads(row[3]) == {"nodeseek": "weekly"}
+        assert row[4] == 4

@@ -1,3 +1,4 @@
+import { defaultOverviewModules } from './overviewPreferences'
 import { reactive, ref } from 'vue'
 import { clearReadCache, invalidateReadCache } from './readCache'
 import { clearNotificationCounts, invalidateNotificationCounts } from './notificationCounts'
@@ -20,6 +21,7 @@ const empty = (): WorkspaceState => ({
     retention: 30,
     alertTargets: [],
     recoveryAlerts: false,
+    overviewModules: defaultOverviewModules(),
   },
 })
 export const state = reactive<WorkspaceState>(empty())
@@ -77,7 +79,7 @@ export async function sendRequest(
     }
     throw new Error(typeof data.detail === 'string' ? data.detail : '操作失败，请检查配置后重试。')
   }
-  if (method !== 'GET' && path !== 'auth/logout') {
+  if (method !== 'GET' && path !== 'auth/logout' && path !== 'manage/hotlists/selection') {
     invalidateReadCache()
     invalidateNotificationCounts()
   }

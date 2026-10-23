@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import AppSelect from '../components/AppSelect.vue'
+import OverviewModuleSettings from '../components/OverviewModuleSettings.vue'
+import type { OverviewPreferences } from '../overviewPreferences'
+import { clone } from '../shared'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import Icon from '../components/Icon.vue'
 import Toggle from '../components/Toggle.vue'
@@ -9,12 +12,16 @@ let active = true
 onBeforeUnmount(() => {
   active = false
 })
-const draft = reactive({ ...state.settings, alertTargets: [...state.settings.alertTargets] })
+const draft = reactive({
+  ...state.settings,
+  alertTargets: [...state.settings.alertTargets],
+  overviewModules: clone(state.settings.overviewModules),
+})
 const baseline = ref(JSON.stringify(draft))
 const loaded = ref(false),
   busy = ref(false),
   errors = ref<string[]>([])
-const revisions = reactive({ display: 0, retention: 0, alerts: 0 })
+const revisions = reactive({ display: 0, retention: 0, alerts: 0, overview: 0 })
 const zones = ref<string[]>([state.settings.timezone])
 const zoneLabels: Record<string, string> = {
   'Asia/Shanghai': '中国标准时间 · Asia/Shanghai',
@@ -29,15 +36,17 @@ async function load() {
   busy.value = true
   errors.value = []
   try {
-    const [display, retention, alerts] = await Promise.all([
+    const [display, retention, alerts, overview] = await Promise.all([
       request('manage/display'),
       request('manage/retention'),
       request('manage/alerts'),
+      request<OverviewPreferences>('manage/overview-preferences'),
     ])
     if (!active) return
     revisions.display = display.revision
     revisions.retention = retention.revision
     revisions.alerts = alerts.revision
+    revisions.overview = overview.revision
     zones.value = display.available
     Object.assign(draft, {
       ...state.settings,
@@ -45,6 +54,7 @@ async function load() {
       retention: retention.days,
       recoveryAlerts: alerts.enabled,
       alertTargets: [...alerts.target_ids],
+      overviewModules: clone(overview.modules),
     })
     baseline.value = JSON.stringify(draft)
     loaded.value = true
@@ -134,6 +144,17 @@ async function persist() {
         workspaceDescription: draft.workspaceDescription,
       })
     }
+    if (JSON.stringify(draft.overviewModules) !== JSON.stringify(prior.overviewModules)) {
+      const value = await request<OverviewPreferences>('manage/overview-preferences', 'PUT', {
+        modules: draft.overviewModules,
+        revision: revisions.overview,
+      })
+      if (!active) return
+      revisions.overview = value.revision
+      state.settings.overviewModules = clone(value.modules)
+      draft.overviewModules = clone(value.modules)
+      remember({ overviewModules: clone(value.modules) })
+    }
     if (draft.timezone !== prior.timezone) {
       const value = await request('manage/display', 'PUT', {
         timezone: draft.timezone,
@@ -183,7 +204,11 @@ async function persist() {
     busy.value = false
   }
 }
-onMounted(load)
+onMounted(async () => {
+  await load()
+  if (new URLSearchParams(location.hash.split('?')[1]).get('section') === 'overview-modules')
+    document.getElementById('overview-modules')?.scrollIntoView({ block: 'center' })
+})
 </script>
 <template>
   <section class="panel settings-card">
@@ -239,6 +264,8 @@ onMounted(load)
           <span class="workspace-dot" aria-hidden="true" />
         </div>
         <p class="small-note">上方为外观预览，保存后同步到导航；此名称不会更改管理员登录账号。</p>
+        <div class="subtle-divider" />
+        <OverviewModuleSettings v-model="draft.overviewModules" :disabled="busy || !loaded" />
         <div class="subtle-divider" />
         <h3>时间与历史</h3>
 

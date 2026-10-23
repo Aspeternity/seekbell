@@ -441,3 +441,14 @@ class AlertDelivery(Base):
     error_code: Mapped[str | None] = mapped_column(String(80))
     started_at: Mapped[float | None] = mapped_column(Float)
     finished_at: Mapped[float | None] = mapped_column(Float)
+
+
+class OverviewPreferences(Base):
+    __tablename__ = "overview_preferences"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_overview_singleton"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    modules: Mapped[list] = mapped_column(JSON)
+    revision: Mapped[int] = mapped_column(Integer)
+    website_id: Mapped[str | None] = mapped_column(String(80))
+    periods: Mapped[dict] = mapped_column(JSON)
+    selection_revision: Mapped[int] = mapped_column(Integer)

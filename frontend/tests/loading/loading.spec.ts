@@ -157,7 +157,9 @@ test('overview keeps results on refresh errors and logout discards cache and lat
   await page.getByRole('button', { name: '7 天', exact: true }).click()
   await expect.poll(() => rangeBegan).toBe(true)
   await expect(page.locator('.stats-grid')).toHaveCount(1)
-  await expect(page.locator('.read-snapshot')).toHaveAttribute('aria-label', /上次结果/)
+  await expect(
+    page.locator('.read-snapshot').filter({ has: page.locator('.stats-grid') }),
+  ).toHaveAttribute('aria-label', /上次结果/)
   await expect(page.locator('.remote-feedback')).toContainText('上次结果')
   range.release()
   await expect(page.locator('.chart-point')).toHaveCount(7)
