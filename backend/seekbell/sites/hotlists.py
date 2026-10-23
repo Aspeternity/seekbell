@@ -5,7 +5,9 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from seekbell.collectors.rss import parse_rss
 from seekbell.sites.labels import category_label
+from seekbell.sites.linuxdo import LinuxDoAdapter
 from seekbell.sites.nodeseek import NodeSeekAdapter
 
 
@@ -59,6 +61,30 @@ def parse_nodeseek_snapshot(raw, now):
     return {"source_updated_at": updated, "fetched_at": now, "items": items[:100]}
 
 
+def parse_linuxdo_snapshot(raw, now):
+    batch = LinuxDoAdapter().normalize(parse_rss(bytes(raw)))
+    items, seen = [], set()
+    for index, post in enumerate(batch.posts):
+        if post.external_post_id in seen:
+            continue
+        seen.add(post.external_post_id)
+        items.append(
+            {
+                "id": post.external_post_id,
+                "rank": index + 1,
+                "title": post.title[:1000],
+                "url": post.url,
+                "author": text(post.author_display_name, 100),
+                "category": text(post.category, 80),
+                "views": None,
+                "comments": None,
+            }
+        )
+    # Discourse lastBuildDate is the first ranked topic's created_at.
+    # It is neither the ranking generation time nor a monotonic timestamp.
+    return {"source_updated_at": None, "fetched_at": now, "items": items[:100]}
+
+
 @dataclass(frozen=True)
 class HotlistSource:
     website_id: str
@@ -69,13 +95,14 @@ class HotlistSource:
     endpoints: dict[str, str]
     parse: Callable[[bytes, float], dict]
     default_period: str = "realtime"
+    format: str = "json"
 
     @property
     def periods(self):
         return tuple(self.endpoints)
 
     def metadata(self):
-        labels = {"realtime": "实时", "daily": "每日", "weekly": "每周"}
+        labels = {"realtime": "实时", "hot": "热门", "daily": "每日", "weekly": "每周"}
         return {
             "website_id": self.website_id,
             "name": self.name,
@@ -99,5 +126,20 @@ HOTLIST_SOURCES = {
             for period, filename in (("realtime", "hot"), ("daily", "daily"), ("weekly", "weekly"))
         },
         parse=parse_nodeseek_snapshot,
-    )
+    ),
+    "linuxdo": HotlistSource(
+        "linuxdo",
+        "LINUX DO",
+        "linuxdo-rss",
+        "LINUX DO 官方 RSS",
+        "https://linux.do/top",
+        {
+            "hot": "https://linux.do/hot.rss",
+            "daily": "https://linux.do/top.rss?period=daily",
+            "weekly": "https://linux.do/top.rss?period=weekly",
+        },
+        parse=parse_linuxdo_snapshot,
+        default_period="hot",
+        format="rss",
+    ),
 }

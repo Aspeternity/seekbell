@@ -150,6 +150,7 @@ class Post(Base):
     title: Mapped[str] = mapped_column(Text)
     summary: Mapped[str | None] = mapped_column(Text)
     author: Mapped[str | None] = mapped_column(String(500))
+    author_display_name: Mapped[str | None] = mapped_column(String(500))
     category: Mapped[str | None] = mapped_column(String(500))
     url: Mapped[str] = mapped_column(String(2048))
     published_at: Mapped[float | None] = mapped_column(Float)
@@ -452,3 +453,22 @@ class OverviewPreferences(Base):
     website_id: Mapped[str | None] = mapped_column(String(80))
     periods: Mapped[dict] = mapped_column(JSON)
     selection_revision: Mapped[int] = mapped_column(Integer)
+
+
+class WebsiteRequestState(Base):
+    __tablename__ = "website_request_states"
+    website_id: Mapped[str] = mapped_column(ForeignKey("websites.id"), primary_key=True)
+    next_request_at: Mapped[float] = mapped_column(Float, default=0)
+    blocked_until: Mapped[float] = mapped_column(Float, default=0)
+    failures: Mapped[int] = mapped_column(Integer, default=0)
+    error_code: Mapped[str | None] = mapped_column(String(80))
+
+
+class HotlistSnapshot(Base):
+    __tablename__ = "hotlist_snapshots"
+    website_id: Mapped[str] = mapped_column(ForeignKey("websites.id"), primary_key=True)
+    provider_id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    period: Mapped[str] = mapped_column(String(32), primary_key=True)
+    fetched_at: Mapped[float] = mapped_column(Float)
+    source_updated_at: Mapped[float | None] = mapped_column(Float)
+    items: Mapped[list] = mapped_column(JSON)

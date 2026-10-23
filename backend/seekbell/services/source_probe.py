@@ -1,6 +1,7 @@
 """Explicit checks have their own cooldown, sharing only network exclusion and error backoff."""
 
 import math
+import time
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -8,8 +9,9 @@ from sqlalchemy.orm import Session
 from seekbell.db.models import Source, SourceProbe, SourceState, WebsiteInstallation
 from seekbell.db.transactions import database_call, write_session
 from seekbell.domain.delivery import SourcePolicy
-from seekbell.domain.errors import SourceFailure
-from seekbell.sites.nodeseek import BUILTIN_ADAPTERS
+from seekbell.domain.errors import SourceDeferred, SourceFailure
+from seekbell.services.request_budget import request_state
+from seekbell.sites.registry import BUILTIN_ADAPTERS
 
 TEST_COOLDOWN_SECONDS = 2
 
@@ -41,7 +43,10 @@ def get_probe(engine, website_id):
         probe = session.get(SourceProbe, source.id)
         result = probe_view(probe)
         if result:
-            result["next_attempt_at"] = test_due(session.get(SourceState, source.id), probe)
+            result["next_attempt_at"] = max(
+                test_due(session.get(SourceState, source.id), probe),
+                request_state(session, website_id, time.time())[0],
+            )
         return result
 
 
@@ -72,7 +77,7 @@ def reserve(engine, source_id, at):
             raise ProbeConflict("请先添加内置网站。")
         state = session.get(SourceState, source_id)
         probe = session.get(SourceProbe, source_id)
-        next_at = test_due(state, probe)
+        next_at = max(test_due(state, probe), request_state(session, source.website_id, at)[0])
         if at < next_at:
             delay = next_at - at
             reason = "连接测试操作过于频繁"
@@ -110,6 +115,15 @@ def finish(engine, source_id, at, *, count=None, error=None):
         return probe_view(probe)
 
 
+def finish_deferred(engine, source_id, at, error):
+    with write_session(engine) as session:
+        probe = session.get(SourceProbe, source_id)
+        probe.finished_at = at
+        probe.next_attempt_at = error.next_attempt_at
+        probe.status, probe.code, probe.item_count = "deferred", error.code, None
+        return probe_view(probe)
+
+
 async def check(runner):
     if runner._lock.locked():
         raise ProbeConflict("来源正在采集或测试，请稍后重试。")
@@ -122,6 +136,11 @@ async def check(runner):
             if adapter is None or url != adapter.rss_url:
                 raise SourceFailure("unsupported_source")
             batch = await runner.fetch_batch(adapter)
+        except SourceDeferred as error:
+            # Reservation/probe evidence remains honest: no successful fetch.
+            return await database_call(
+                finish_deferred, runner.engine, runner.source_id, runner.clock(), error
+            )
         except SourceFailure as error:
             return await database_call(
                 finish, runner.engine, runner.source_id, runner.clock(), error=error

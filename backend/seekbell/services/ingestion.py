@@ -27,6 +27,7 @@ from seekbell.domain.posts import Diagnostic, PostBatch, PostFields
 from seekbell.domain.rules import Rule, evaluate
 from seekbell.services.alerts import observe
 from seekbell.services.configuration import identifier, target_snapshot
+from seekbell.sites.labels import website_label
 
 
 @dataclass(frozen=True)
@@ -71,7 +72,12 @@ class Ingestion:
             )
             session.add(SourceRun(source_id=source_id, at=at, status="failure", code=code))
             observe(
-                session, "source:" + source_id, True, label="NodeSeek 官方 RSS", code=code, at=at
+                session,
+                "source:" + source_id,
+                True,
+                label=website_label(source.website_id) + " 官方 RSS",
+                code=code,
+                at=at,
             )
             return state.next_attempt_at
 
@@ -152,6 +158,7 @@ class Ingestion:
                         title=post.title,
                         summary=post.summary,
                         author=post.author,
+                        author_display_name=post.author_display_name,
                         category=post.category,
                         url=post.url,
                         published_at=post.published_at.timestamp() if post.published_at else None,
@@ -208,6 +215,7 @@ class Ingestion:
                             "title": post.title,
                             "summary": post.summary,
                             "author": post.author,
+                            "author_display_name": post.author_display_name,
                             "category": post.category,
                             "url": post.url,
                             "published_at": post.published_at.isoformat()
@@ -237,7 +245,13 @@ class Ingestion:
                         session.add(OutboxContribution(event_id=event_id, hit_id=hit.id))
                     queued += 1
 
-            observe(session, "source:" + source_id, False, label="NodeSeek 官方 RSS", at=at)
+            observe(
+                session,
+                "source:" + source_id,
+                False,
+                label=website_label(source.website_id) + " 官方 RSS",
+                at=at,
+            )
             state.initialized = True
             state.needs_baseline = False
             state.last_attempt_at = state.last_success_at = at

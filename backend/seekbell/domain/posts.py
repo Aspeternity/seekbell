@@ -14,6 +14,7 @@ class PostFields(BaseModel):
 
 
 class NormalizedPost(PostFields):
+    author_display_name: str | None = None
     website_id: str
     external_post_id: str
     source_item_id: str
@@ -30,6 +31,7 @@ class SourceEntry:
     author: str | None
     category: str | None
     published_at: datetime | None = None
+    description_html: str | None = None
 
 
 @dataclass(frozen=True)

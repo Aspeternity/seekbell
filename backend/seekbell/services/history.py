@@ -24,7 +24,7 @@ from seekbell.db.models import (
     Website,
 )
 from seekbell.sites.labels import category_label
-from seekbell.sites.nodeseek import NodeSeekAdapter
+from seekbell.sites.registry import BUILTIN_ADAPTERS
 
 
 class MissingHistory(LookupError):
@@ -97,8 +97,9 @@ def text(value, fallback=""):
 
 
 def original_url(website_id, external_id, url):
-    if website_id == "nodeseek" and NodeSeekAdapter.post_id(text(url)) == external_id:
-        return NodeSeekAdapter.canonical_url(external_id)
+    adapter = BUILTIN_ADAPTERS.get(website_id)
+    if adapter and adapter.post_id(text(url)) == external_id:
+        return adapter.canonical_url(external_id)
     return None
 
 
@@ -223,6 +224,7 @@ class History:
             "title": post.title,
             "summary": post.summary if detail or post.summary is None else post.summary[:400],
             "author": post.author,
+            "author_display_name": post.author_display_name,
             "category": post.category,
             "category_label": category_label(post.website_id, post.category),
             "first_seen_at": post.first_seen_at,
@@ -262,6 +264,7 @@ class History:
                     Post.title.icontains(q, autoescape=True),
                     Post.summary.icontains(q, autoescape=True),
                     Post.author.icontains(q, autoescape=True),
+                    Post.author_display_name.icontains(q, autoescape=True),
                 )
             )
         if task_id:
@@ -472,6 +475,7 @@ class History:
                     "title",
                     "summary",
                     "author",
+                    "author_display_name",
                     "category",
                     "published_at",
                     "first_seen_at",
@@ -708,6 +712,7 @@ class History:
                     "title",
                     "summary",
                     "author",
+                    "author_display_name",
                     "category",
                     "published_at",
                     "first_seen_at",

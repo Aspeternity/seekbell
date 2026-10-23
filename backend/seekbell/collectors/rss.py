@@ -11,6 +11,7 @@ import httpx
 from defusedxml import ElementTree
 from defusedxml.common import DefusedXmlException
 
+from seekbell.collectors.http import public_response
 from seekbell.domain.errors import SourceFailure
 from seekbell.domain.http import retry_after_seconds
 from seekbell.domain.posts import Diagnostic, ParsedFeed, SourceEntry
@@ -107,25 +108,41 @@ def parse_rss(data: bytes, *, max_bytes: int = MAX_RESPONSE_BYTES) -> ParsedFeed
                 author=author,
                 category=plain_text(categories[0].get("term", "")) or None if categories else None,
                 published_at=published_at,
+                description_html=raw_fields["description"].text
+                if "description" in raw_fields
+                else None,
             )
         )
     return ParsedFeed(tuple(entries), tuple(diagnostics))
 
 
 class RssCollector:
-    def __init__(self, client: httpx.AsyncClient, *, max_bytes: int = MAX_RESPONSE_BYTES):
+    def __init__(
+        self,
+        client: httpx.AsyncClient,
+        *,
+        max_bytes: int = MAX_RESPONSE_BYTES,
+        request_budget=None,
+        website_id=None,
+    ):
         self.client = client
         self.max_bytes = max_bytes
         self._limit = asyncio.Semaphore(1)
+        self.request_budget, self.website_id = request_budget, website_id
 
     async def fetch(self, url: str) -> ParsedFeed:
+        if self.request_budget is None:
+            return await self._fetch(url)
+        async with self.request_budget.request(self.website_id):
+            return await self._fetch(url)
+
+    async def _fetch(self, url: str) -> ParsedFeed:
         async with self._limit:
             try:
-                async with self.client.stream(
-                    "GET",
+                async with public_response(
+                    self.client,
                     url,
                     timeout=httpx.Timeout(10.0, connect=5.0),
-                    follow_redirects=False,
                     headers={
                         "Accept": "application/rss+xml, application/xml, text/xml",
                         "Accept-Encoding": "identity",
@@ -134,7 +151,12 @@ class RssCollector:
                 ) as response:
                     if response.status_code != 200:
                         raise SourceFailure(
-                            f"http_{response.status_code}",
+                            (
+                                "access_challenge"
+                                if response.status_code == 403
+                                and response.headers.get("cf-mitigated") == "challenge"
+                                else f"http_{response.status_code}"
+                            ),
                             retry_after=retry_after_seconds(
                                 response.headers.get("retry-after"), time.time()
                             ),

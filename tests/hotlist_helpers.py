@@ -6,6 +6,7 @@ import time
 import httpx
 from seekbell.services.hotlists import HotlistService
 
+from tests.linuxdo_helpers import linuxdo_rss
 from tests.rss_samples import Chunks
 
 
@@ -31,6 +32,16 @@ def snapshot(period="hot", count=12, now=None):
 
 def synthetic_hotlists():
     async def handler(request):
+        if request.url.host == "linux.do":
+            assert request.url.path in ("/hot.rss", "/top.rss")
+            period = request.url.params.get("period", "hot")
+            return httpx.Response(
+                200,
+                headers={"Content-Type": "application/rss+xml"},
+                stream=Chunks(
+                    linuxdo_rss(*range(9800, 9812), title="合成LinuxDO" + period + "热榜帖子")
+                ),
+            )
         assert request.url.host == "api.bimg.eu.org"
         period = request.url.path.strip("/").split(".")[0]
         return httpx.Response(200, stream=Chunks(json.dumps(snapshot(period)).encode()))

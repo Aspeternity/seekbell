@@ -22,6 +22,7 @@ export interface PostRecord {
   title: string
   summary: string | null
   author: string | null
+  author_display_name?: string | null
   category: string | null
   category_label: string | null
   first_seen_at: number
@@ -81,6 +82,7 @@ export interface DeliveryDetail extends DeliveryRecord {
     title: string | null
     summary: string | null
     author: string | null
+    author_display_name?: string | null
     category: string | null
     published_at: string | null
     first_seen_at: number | null

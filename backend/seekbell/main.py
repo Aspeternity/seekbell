@@ -34,6 +34,7 @@ from seekbell.notifiers.registry import NotifierRegistry
 from seekbell.services.authentication import LoginLimiter
 from seekbell.services.hotlists import HotlistService
 from seekbell.services.manual_sending import ConfiguredTargetTesting, ManualSending
+from seekbell.services.request_budget import WebsiteRequestBudget
 from seekbell.services.runtime import Runtime
 
 
@@ -85,13 +86,20 @@ def create_app(
                 for key, kind, ciphertext in encrypted:
                     app.state.vault.unseal(key, kind, ciphertext)
                 registry = NotifierRegistry(app.state.vault)
-                app.state.hotlists = (hotlist_factory or HotlistService)()
+                runtime = (runtime_factory or Runtime)(engine, registry.notifiers)
+                request_budget = getattr(runtime, "request_budget", None) or WebsiteRequestBudget(
+                    engine
+                )
+                app.state.hotlists = (
+                    hotlist_factory()
+                    if hotlist_factory
+                    else HotlistService(engine=engine, request_budget=request_budget)
+                )
                 try:
                     app.state.target_testing = ConfiguredTargetTesting(engine, registry.notifiers)
                     app.state.manual_sending = ManualSending(engine, registry.notifiers)
                     app.state.sending_gate = asyncio.Semaphore(2)
                     app.state.backup_gate = asyncio.Lock()
-                    runtime = (runtime_factory or Runtime)(engine, registry.notifiers)
                     app.state.runtime = runtime
                     try:
                         await runtime.start()

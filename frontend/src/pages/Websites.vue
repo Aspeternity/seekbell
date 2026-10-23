@@ -128,8 +128,13 @@ async function install(id: string) {
 async function save() {
   if (mutating.value) return
   if (!selected.value) return
-  if (!Number.isInteger(draft.interval) || draft.interval < 10 || draft.interval > 3600) {
-    error.value = '采集间隔应为 10–3600 之间的整数秒。'
+  if (
+    !Number.isInteger(draft.interval) ||
+    draft.interval < (definition.value?.minimumInterval || 10) ||
+    draft.interval > 3600
+  ) {
+    error.value =
+      '采集间隔应为 ' + (definition.value?.minimumInterval || 10) + '–3600 之间的整数秒。'
     return
   }
   mutating.value = true
@@ -194,7 +199,7 @@ function test() {
   const w = selected.value
   if (!w || testing.value) return
   confirmAction(
-    '测试 NodeSeek 官方 RSS 连接？',
+    '测试 ' + websiteDefinition(w.adapterId)?.name + ' 官方 RSS 连接？',
     '将请求一次官方 RSS；测试独立限频，并遵守来源错误退避。不会启用网站、改变采集周期、保存草稿间隔或创建帖子、命中及通知。',
     () => runLiveTest(w.id),
     '确认测试连接',
@@ -373,7 +378,7 @@ onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
     <Icon name="shield" :size="19" />
     <p>
       每个网站独立采集，同一网站下的任务共享来源。<br /><span
-        >当前可添加 NodeSeek；更多网站将在完成适配后加入内置库。</span
+        >当前可添加 NodeSeek 和 LINUX DO；各网站的能力与来源限制可在配置中查看。</span
       >
     </p>
   </div>
@@ -498,14 +503,16 @@ onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
                 v-model.number="draft.interval"
                 class="text-input"
                 type="number"
-                min="10"
+                :min="definition.minimumInterval"
                 max="3600"
                 step="1"
                 :aria-invalid="!!error"
               /><span>秒</span>
             </div>
             <p class="field-help">
-              仅作用于 {{ definition.name }}，该网站下的全部任务共享此频率。10
+              仅作用于 {{ definition.name }}，该网站下的全部任务共享此频率。{{
+                definition.defaultInterval
+              }}
               秒为候选默认值，不代表官方限频保证。
             </p>
             <p v-if="error" class="inline-error" role="alert">{{ error }}</p>
@@ -546,10 +553,22 @@ onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
                   ? 'RSS 连接与解析成功'
                   : connection.status === 'failure'
                     ? '连接测试失败'
-                    : '连接测试结果未知'
+                    : connection.status === 'deferred'
+                      ? '连接测试已延后'
+                      : '连接测试结果未知'
               }}</strong>
               <p v-if="connection.status === 'success'">
                 有效帖子 {{ connection.item_count }} 条，仅检查，未入库。
+              </p>
+              <p v-else-if="connection.status === 'deferred'">
+                来源正在处理其他请求或等待请求间隔，请稍后重试。
+              </p>
+              <p v-else-if="connection.code === 'access_challenge'">
+                来源要求 Cloudflare 验证，当前无法自动读取。正在退避，稍后可重试。
+              </p>
+              <p v-else-if="connection.code === 'http_403'">来源拒绝访问（403），正在退避。</p>
+              <p v-else-if="connection.code === 'http_429'">
+                来源请求受限（429），正在等待允许重试。
               </p>
               <p v-else>诊断代码：{{ connection.code }}</p>
               <p>最近测试：{{ connectionTime(connection.started_at) }}</p>

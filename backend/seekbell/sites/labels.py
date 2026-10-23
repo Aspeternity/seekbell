@@ -18,7 +18,7 @@ _NODESEEK_CATEGORIES = {
 
 
 def website_label(website_id: str | None) -> str:
-    return "NodeSeek" if website_id == "nodeseek" else website_id or "未知网站"
+    return {"nodeseek": "NodeSeek", "linuxdo": "LINUX DO"}.get(website_id, website_id or "未知网站")
 
 
 def category_label(website_id: str | None, category: str | None) -> str | None:

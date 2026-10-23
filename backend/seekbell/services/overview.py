@@ -23,6 +23,7 @@ from seekbell.db.models import (
     WorkspacePreferences,
 )
 from seekbell.services.history import date_window, decisions, error_code, post_key, read_session
+from seekbell.services.request_budget import request_state
 from seekbell.services.source_probe import probe_backoff
 
 
@@ -105,9 +106,12 @@ def overview(engine, range_name="24h", *, at=None):
                     "next_attempt_at": max(
                         state.next_attempt_at,
                         probe_backoff(session.get(SourceProbe, source.id)),
+                        request_state(session, website.id, end)[0],
                     ),
                     "failures": state.failures,
-                    "error_code": error_code(state.last_error_code),
+                    "error_code": error_code(
+                        state.last_error_code or request_state(session, website.id, end)[1]
+                    ),
                     "possible_gap": state.possible_gap,
                     "last_gap_at": state.last_gap_at,
                 }

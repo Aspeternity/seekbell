@@ -76,7 +76,14 @@ function schedule() {
 watch(snapshot, schedule)
 watch([source, snapshot], () => {
   const current = source.value
-  if (!active || document.hidden || !current || !snapshot.value) return
+  if (
+    !active ||
+    document.hidden ||
+    !current ||
+    !snapshot.value ||
+    snapshot.value.status !== 'ready'
+  )
+    return
   // Warm only this visible site's other periods, sharing any selected-period request.
   for (const value of current.periods) {
     if (value.id === period.value) continue
@@ -228,6 +235,9 @@ onBeforeUnmount(() => {
             <span v-if="snapshot?.source_updated_at" class="small-note"
               >来源更新 · {{ stamp(snapshot.source_updated_at) }}</span
             >
+            <span v-else-if="snapshot?.fetched_at" class="small-note"
+              >获取于 · {{ stamp(snapshot.fetched_at) }}</span
+            >
           </div>
           <ReadRegion
             :loading="remote.loading.value"
@@ -247,6 +257,12 @@ onBeforeUnmount(() => {
                     ? '更新失败，当前显示上次榜单。'
                     : '暂时无法获取榜单，请稍后重试。'
                 }}
+                <span v-if="['access_challenge', 'http_403'].includes(snapshot.error_code || '')">
+                  来源拒绝自动访问（403），正在退避；可在网站配置中测试连接。
+                </span>
+                <span v-else-if="snapshot.error_code === 'http_429'"
+                  >来源请求受限，正在等待允许重试。</span
+                >
                 <button class="text-link" :disabled="remote.loading.value" @click="remote.reload">
                   重试
                 </button>

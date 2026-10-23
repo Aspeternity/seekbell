@@ -33,7 +33,9 @@ for module in ('pytest', 'ruff'):
     assert importlib.util.find_spec(module) is None
 with sqlite3.connect('/data/seekbell.sqlite3') as connection:
     marker = connection.execute('SELECT * FROM installation').fetchall()
-    assert connection.execute('SELECT enabled FROM sources').fetchall() == [(0,)]
+    assert connection.execute('SELECT id, enabled FROM sources ORDER BY id').fetchall() == [
+        ('linuxdo-rss', 0), ('nodeseek-rss', 0)
+    ]
     assert connection.execute('SELECT COUNT(*) FROM notification_targets').fetchone() == (0,)
 # Verify the installed wheel includes channel schemas and working encryption.
 import tempfile

@@ -27,10 +27,12 @@ from seekbell.domain.rules import Rule, evaluate
 from seekbell.services import alerts
 from seekbell.services.configuration import Configuration, TargetDeleteChanged, TargetInUse
 from seekbell.services.display import DisplayConflict, get_display, update_display
+from seekbell.services.request_budget import request_state
 from seekbell.services.retention import PolicyConflict, get_policy, update_policy
 from seekbell.services.rule_trial import trial_history
 from seekbell.services.runtime import status as runtime_status
 from seekbell.services.source_probe import ProbeConflict, get_probe
+from seekbell.sites.registry import BUILTIN_ADAPTERS, WebsiteId, validate_rule_capabilities
 
 router = APIRouter(prefix="/api/manage", dependencies=[Depends(require_admin)])
 
@@ -44,7 +46,7 @@ class Input(BaseModel):
 
 
 class WebsiteInput(Input):
-    adapter_id: Literal["nodeseek"]
+    adapter_id: WebsiteId
 
 
 class WebsiteUpdate(Input):
@@ -60,7 +62,7 @@ class WorkspaceInput(Input):
 class TaskInput(Input):
     name: str = Field(min_length=1, max_length=80)
     description: str = Field(default="", max_length=160)
-    website_id: Literal["nodeseek"]
+    website_id: WebsiteId
     enabled: bool = True
     rule: Rule
     target_ids: list[str] = Field(min_length=1, max_length=64)
@@ -98,7 +100,7 @@ def websites(session):
                 "enabled": website.enabled and source.enabled,
                 "interval": source.interval_seconds,
                 "health": "error"
-                if state.last_error_code
+                if state.last_error_code or request_state(session, website.id, time.time())[1]
                 else "healthy"
                 if state.last_success_at
                 else "pending",
@@ -189,6 +191,9 @@ def add_website(values: WebsiteInput, request: Request):
 def update_website(key: str, values: WebsiteUpdate, request: Request):
     with write_session(request.app.state.engine) as session:
         installed(session, key)
+        adapter = BUILTIN_ADAPTERS.get(key)
+        if adapter is None or values.interval < adapter.minimum_interval:
+            raise HTTPException(422, "采集间隔小于该网站支持的最小值。")
         website = session.get(Website, key)
         source = session.scalar(select(Source).where(Source.website_id == key))
         state = session.get(SourceState, source.id)
@@ -232,6 +237,7 @@ def remove_website(key: str, request: Request):
 def validate_task(values, request, key=None):
     with Session(request.app.state.engine) as session:
         installed(session, values.website_id)
+        validate_rule_capabilities(values.website_id, values.rule)
         if key:
             task = session.get(Task, key)
             if task is None or task.deleted_at is not None:
@@ -335,7 +341,7 @@ def delete_target(key: str, request: Request, values: TargetDeleteInput | None =
 
 class HistoryTrial(BaseModel):
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
-    website_id: Literal["nodeseek"]
+    website_id: WebsiteId
     rule: Rule
     limit: int = Field(default=20, ge=1, le=100, strict=True)
 
@@ -344,11 +350,12 @@ class HistoryTrial(BaseModel):
 def evaluate_history(values: HistoryTrial, request: Request):
     with Session(request.app.state.engine) as session:
         installed(session, values.website_id)
+        validate_rule_capabilities(values.website_id, values.rule)
     return trial_history(request.app.state.engine, values.website_id, values.rule, values.limit)
 
 
 @router.get("/websites/{key}/connection-test")
-def connection_result(key: Literal["nodeseek"], request: Request):
+def connection_result(key: WebsiteId, request: Request):
     with Session(request.app.state.engine) as session:
         installed(session, key)
     try:
@@ -362,9 +369,9 @@ class ConnectionInput(BaseModel):
 
 
 @router.post("/websites/{key}/connection-test")
-async def connection_test(key: Literal["nodeseek"], values: ConnectionInput, request: Request):
+async def connection_test(key: WebsiteId, values: ConnectionInput, request: Request):
     try:
-        return await request.app.state.runtime.check_source()
+        return await request.app.state.runtime.check_source(key)
     except ProbeConflict as error:
         headers = {"Retry-After": str(error.retry_after)} if error.retry_after else None
         raise HTTPException(

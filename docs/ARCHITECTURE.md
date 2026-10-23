@@ -12,7 +12,7 @@ M0运行基线：Python 3.12、Node 24.22.0、uv 0.13.1、pnpm 10.34.7。直接�
 
 - backend/seekbell/api：路由、认证、配置校验。
 - backend/seekbell/domain：规范化帖子、规则三值判断、投递意图。
-- backend/seekbell/sites：NodeSeek 适配、能力声明、ID/分类映射。
+- backend/seekbell/sites：NodeSeek/Linux DO内置适配、能力声明、ID/分类映射。
 - backend/seekbell/collectors：RSS HTTP 获取与解析。
 - backend/seekbell/notifiers：Telegram、Bark、SMTP、Webhook。
 - backend/seekbell/services：调度、摄取、匹配、投递、备份。
@@ -25,7 +25,7 @@ M0目录调整：Alembic实际位于`backend/seekbell/migrations`，随Python包
 
 ## 模块契约
 
-SiteAdapter 声明标识、能力、采集配置、规范链接、帖子 ID 提取、分类映射。首版只注册 NodeSeek RSS；未来可以接入其他网站，但不提前实现主备、TG 会话或网页抓取。
+SiteAdapter 声明标识、能力、采集配置、规范链接、帖子 ID 提取、分类映射。当前注册NodeSeek/Linux DO固定RSS；未来可以接入其他内置网站，但不提前实现主备、TG 会话或网页抓取。
 
 Collector 返回来源条目及采集状态。只处理连接/解析，不运行关键词规则。RSS 使用异步 HTTP 获取；同步解析、大型备份及同步 SMTP 不阻塞事件循环。显式超时、响应大小限制、禁用 XML 外部实体/网络展开、并发上限。M1采用defusedxml先拒绝DTD/实体，再以内存流交给feedparser，避免把输入当URL/文件；解析在线程中执行。RSS请求要求identity编码，限1MiB并拒绝未协商的压缩响应。NodeSeek保留原始版块文字，不虚构稳定分类编号。
 
@@ -116,7 +116,7 @@ usePopup把按钮和portalled面板作为单一边界，统一外部/焦点离�
 
 ## 网站库与实例
 
-src/websites.ts声明已实现适配器及能力，服务端WebsiteInstallation表示用户安装关系，Website/Source保留适配器身份与历史锚点。新库没有安装实例；目前目录仅NodeSeek。已有任务固定网站，有未删除任务依赖时阻止移除；无依赖时移除安装配置、保留历史并按正式服务契约取消待发送动作。网站库使用居中原生dialog，安装完成关闭；实例配置仍右侧面板，支持键盘/未保存保护，手机全屏。工作空间名称/说明由SQLite偏好保存并显示在侧栏，不读取旧演示浏览器数据。
+src/websites.ts声明已实现适配器及能力，服务端WebsiteInstallation表示用户安装关系，Website/Source保留适配器身份与历史锚点。新库没有安装实例；当前目录含NodeSeek和Linux DO。已有任务固定网站，有未删除任务依赖时阻止移除；无依赖时移除安装配置、保留历史并按正式服务契约取消待发送动作。网站库使用居中原生dialog，安装完成关闭；实例配置仍右侧面板，支持键盘/未保存保护，手机全屏。工作空间名称/说明由SQLite偏好保存并显示在侧栏，不读取旧演示浏览器数据。
 
 ## M3首个真实接入契约（2026-10-20）
 
@@ -285,13 +285,13 @@ Settings新增精确可信代理IP（默认空、最多32个，拒绝*/CIDR/host
 
 产品契约见SPEC 6.1。0010_overview_preferences新增单例OverviewPreferences：modules/revision保存三模块布局，website_id/periods/selection_revision保存浏览选择，避免周期选择与布局编辑冲突；旧库默认三模块全显示，整库加密备份/恢复保留非默认布局和选择。workspace返回overviewModules。GET/PUT /api/manage/overview-preferences读取配置/来源能力及更新布局，PUT /api/manage/hotlists/selection只更新浏览选择；沿用认证、CSRF、no-store和版本冲突，严格校验模块集合。
 
-sites/hotlists.py独立声明网站、提供方、周期、固定HTTPS端点和解析函数。首接NodeSeek第三方三榜，Linux DO/V2EX未实现；只列已安装且有能力的网站。原帖URL由本站适配器生成，外部条目仅按文本展示，不补抓正文/评论，不进入Ingestion/RuleEngine/Outbox或监控历史/统计。
+sites/hotlists.py独立声明网站、提供方、周期、固定HTTPS端点和解析函数。NodeSeek第三方三榜及Linux DO官方RSS三榜已注册，V2EX未实现；只列已安装且有能力的网站。原帖URL由本站适配器生成，外部条目仅按文本展示，不补抓正文/评论，不进入Ingestion/RuleEngine/Outbox或监控历史/统计。
 
 GET /api/manage/hotlists/{website_id}?period=...校验安装和模块可见后调用独立HotlistService；overview统计不访问热榜网络。服务随生命周期创建/关闭，使用固定端点、TLS验证、无重定向/环境代理；总等待10秒，连接3秒/I/O8秒，流式限1MiB并拒绝未协商压缩。限制条数、标识、文本和数值，跳过无效/重复项，非空无有效项作为失败；仅返回固定错误码，不回显远端正文/异常。
 
-网站＋提供方＋周期隔离缓存/在途任务/退避，600秒按需刷新；同键并发共享任务。冷读等待共享任务且客户端取消不取消其他读者；已有快照立即返回并触发一次过期后台刷新。refreshing独立于失败状态，刷新期间客户端按next_attempt_at约2秒读完成结果，结束后恢复正常冷却，不轮询来源。生命周期关闭先取消/等待在途任务再关闭HTTP。失败30～600秒退避，遵守Retry-After（上限一天）；频率为工程候选，不冒充提供方限频保证。source_updated_at与fetched_at分开，不接受来源时间倒退；ready/stale/unavailable区分正常、失败旧快照和无数据。榜单缓存为进程内、重启重取；布局和浏览选择持久化。健康检查独立于热榜，无消费者周期轮询。
+网站＋提供方＋周期隔离缓存/在途任务/退避，600秒按需刷新；同键并发共享任务。冷读等待共享任务且客户端取消不取消其他读者；已有快照立即返回并触发一次过期后台刷新。refreshing独立于失败状态，刷新期间客户端按next_attempt_at约2秒读完成结果，结束后恢复正常冷却，不轮询来源。生命周期关闭先取消/等待在途任务再关闭HTTP。失败30～600秒退避，遵守Retry-After（上限一天）；频率为工程候选，不冒充提供方限频保证。source_updated_at与fetched_at分开，仅对可靠提供来源时间的提供方检查时间倒退；ready/stale/unavailable区分正常、失败旧快照和无数据。榜单成功快照经0011持久化、重启按需恢复，最多展示24小时，布局和浏览选择持久化。健康检查独立于热榜，无消费者周期轮询。
 
-概览固定统计与可排序内容区分开；同一统计请求只显示一处反馈，模块保留stale交互保护。热榜独立useRemote，身份含网站/周期，切换不串其他榜单，沿用会话/data revision和迟到响应隔离。选择串行保存，其专用写入不使监控查询缓存失效；保存冲突保留当前选择并可重试。页面隐藏/组件卸载停止刷新，手动刷新服从后端冷却。来源时间按保存时区展示。可见卡片在当前榜单就绪后预读当前网站其他支持周期，fresh缓存跳过，fetchRead合并点击与预取；预取不写选择，不预抓其他网站。HTTP仍no-store，仅服务进程/认证会话内缓存，不增加磁盘快照或Service Worker。
+概览固定统计与可排序内容区分开；同一统计请求只显示一处反馈，模块保留stale交互保护。热榜独立useRemote，身份含网站/周期，切换不串其他榜单，沿用会话/data revision和迟到响应隔离。选择串行保存，其专用写入不使监控查询缓存失效；保存冲突保留当前选择并可重试。页面隐藏/组件卸载停止刷新，手动刷新服从后端冷却。来源时间按保存时区展示。可见卡片在当前榜单就绪后预读当前网站其他支持周期，fresh缓存跳过，fetchRead合并点击与预取；预取不写选择，不预抓其他网站。HTTP仍no-store，保留服务进程/认证会话缓存，0011另加独立SQLite成功快照，不增加Service Worker。
 
 Preferences复用草稿、部分保存、冲突与导航保护；设置支持鼠标/触屏手柄、键盘上下键、上下按钮和默认草稿。概览不再显示设置快捷入口，模块设置从系统设置进入；设置定位参数仍支持直接链接，App只以路径部分识别页面。单站显示名称，多站标签、超过四站AppSelect，单周期不显示无效切换。
 
@@ -302,3 +302,17 @@ test:hotlist在8028临时库验证；所有run_web_smoke浏览器环境注入syn
 GET /api/manage/history/posts/{key}/evaluations增加group=matched，始终在OFFSET/LIMIT前过滤status=match，没有命中也不回退全部。默认all及已交付primary/other读接口保持兼容；matched_total/other_total元数据继续保留，不新增界面入口。继续基于TaskEvaluation/legacy RuleHit合并视图、历史TaskVersion与脱敏快照；判定数据不删除、不重算，不新增迁移。
 
 Content仅请求matched，缓存身份含帖子/筛选/页码，删除其他判定的状态、加载器、折叠和样式；匹配卡片继续按任务显示原因与历史版本。零命中时按帖子已保存总状态区分不命中/信息不足/未执行/历史未知，匹配读取成功前不渲染空态；match状态却缺少依据时仅提示刷新，不冒充不命中。超过单页容量才显示分页，换帖重置页码/投递页并沿用generation/session隔离。
+
+## Linux DO与多站采集（2026-10-23后续确认）
+
+0011_linuxdo新增默认关闭的Website/Source/SourceState身份行，不新增WebsiteInstallation；Post.author_display_name为可空展示字段，既有行/快照不回写。WebsiteRequestState保存Linux DO域名请求间隔/退避，HotlistSnapshot按网站＋提供方＋周期唯一保存成功结果；迁移失败整体回滚。新schema回退须使用匹配旧镜像的完整备份，不运行旧镜像直接读0011。
+
+sites/registry.py统一内置监控注册和WebsiteId，LinuxDoAdapter以主题ID/固定域名GUID对照并生成规范链接；RSS作者仅显示名，不填规则author。SourceEntry暂存原始description供适配层剔除已知Discourse尾注后纯文本化，不全局替换NodeSeek摘要。Post与通知快照留存显示名，可读通知回退展示它；纯规则不读取展示字段，管理保存/历史试算按能力拒绝用户名规则。历史原帖链接用统一注册表校验，显示名可搜索但不等于用户名匹配。
+
+Runtime.sources为按站映射，每站SourceRunner和RssCollector独立互斥，HTTP连接池容量覆盖已注册站点；collection actor通过TaskGroup拥有/关停全部来源，仍保留原固定actor诊断。SourceFailure只写当前来源；SourceDeferred不发HTTP且不伪造采集失败。连接测试按website_id选同一个runner，维持基线/历史/通知只读。
+
+WebsiteRequestBudget由Runtime与HotlistService共用，Linux DO同站HTTP互斥及2秒间隔；事务保存next_request_at、blocked_until、failures和固定错误码。403/CF挑战300～1800秒，其他HTTP/传输异常30～1800秒，Retry-After最多一天；总超时也共享退避，关停取消不冒充失败。SourceRunner到期判断、overview和连接测试读取共享状态。显式测试被并发预算延后只留deferred证据，不引入虚假60秒失败退避。NodeSeek不应用Linux DO预算。
+
+collectors/http.public_response构造匿名请求、显式移除Cookie且不跟随跳转，关闭响应；RSS与热榜共用。固定端点/TLS/无环境代理/1MiB/总超时保持。HotlistSource声明JSON或RSS格式和每站支持项，Linux DO不使用帖子时间冒充榜单更新时间。持久快照读取校验时间/条数/字段并重新生成规范链接；600秒TTL、24小时展示上限、按键共享更新和客户端取消隔离沿用。无消费者常驻轮询，持久化失败不能伪称网络成功。
+
+验证命令：uv run --frozen pytest tests/test_linuxdo.py tests/test_linuxdo_runtime.py -q；pnpm --dir frontend test:linuxdo（独立8030合成库）。所有浏览器环境注入合成两站热榜，不访问真实论坛或发送真实消息。正式来源可访问性与用户验收另行记录。

@@ -72,7 +72,7 @@ export interface ConnectionCheck {
   started_at: number
   finished_at: number | null
   next_attempt_at: number
-  status: 'success' | 'failure' | 'unknown'
+  status: 'success' | 'failure' | 'unknown' | 'deferred'
   code: string | null
   item_count: number | null
 }

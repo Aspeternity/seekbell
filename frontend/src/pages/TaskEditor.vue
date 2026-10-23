@@ -5,6 +5,7 @@ import Icon from '../components/Icon.vue'
 import Toggle from '../components/Toggle.vue'
 import TagInput from '../components/TagInput.vue'
 import { statusLabel } from '../model'
+import { websiteDefinition } from '../websites'
 import type { MatchResult, Sample, Task } from '../model'
 import { state, websiteName, evaluateTask, trialHistory, formatTime } from '../store'
 const targets = computed(() => state.targets)
@@ -33,6 +34,8 @@ const selectedWebsite = computed(() =>
 const websiteLabel = computed(() =>
   selectedWebsite.value ? websiteName(selectedWebsite.value.id) : '待选择网站',
 )
+const definition = computed(() => websiteDefinition(draft.websiteId))
+const supportsAuthor = computed(() => definition.value?.authorFilter !== false)
 const errors = ref<string[]>([])
 const testing = ref(false),
   testError = ref('')
@@ -97,6 +100,8 @@ function save() {
   errors.value = []
   if (!state.websites.some((w) => w.id === draft.websiteId))
     errors.value.push('请选择已添加的监控网站。')
+  if (!supportsAuthor.value && (draft.authorsInclude.length || draft.authorsExclude.length))
+    errors.value.push('该网站的 RSS 不提供可靠用户名，请清除作者条件。')
   if (!draft.name.trim()) errors.value.push('请填写任务名称。')
   if (!draft.targets.length) errors.value.push('请至少选择一个通知目标。')
   if (draft.targets.some((id) => !state.targets.some((t) => t.id === id)))
@@ -133,7 +138,7 @@ async function runTest() {
       const result = await evaluateTask(task, {
         ...sample,
         summary: missingSummary.value ? null : sample.summary,
-        author: sample.author || null,
+        author: supportsAuthor.value ? sample.author || null : null,
         category: sample.category || null,
       })
       if (
@@ -381,7 +386,7 @@ function jump(id: string) {
               >
                 全部版块</button
               ><button
-                v-for="category in ['优惠', '技术', '测评', '交易', '日常']"
+                v-for="category in definition?.categorySuggestions || []"
                 :key="category"
                 type="button"
                 :aria-pressed="draft.categories.includes(category)"
@@ -399,18 +404,31 @@ function jump(id: string) {
               ><span>作者 · 大小写 · 整词<Icon name="down" :size="14" /></span>
             </summary>
             <div class="advanced-content">
-              <label class="field-label">仅包含这些作者</label
-              ><TagInput
-                v-model="draft.authorsInclude"
-                label="包含作者"
-                placeholder="输入精确用户名"
-              /><label class="field-label">排除这些作者</label
-              ><TagInput
-                v-model="draft.authorsExclude"
-                label="排除作者"
-                placeholder="输入精确用户名"
-              />
-              <p class="field-help">按原帖用户名精确匹配；区分大小写，改名后不保证继续跟踪。</p>
+              <template v-if="supportsAuthor">
+                <label class="field-label">仅包含这些作者</label
+                ><TagInput
+                  v-model="draft.authorsInclude"
+                  label="包含作者"
+                  placeholder="输入精确用户名"
+                /><label class="field-label">排除这些作者</label
+                ><TagInput
+                  v-model="draft.authorsExclude"
+                  label="排除作者"
+                  placeholder="输入精确用户名"
+                />
+                <p class="field-help">按原帖用户名精确匹配；区分大小写，改名后不保证继续跟踪。</p>
+              </template>
+              <div v-else class="info-note">
+                <p>此网站 RSS 仅提供作者显示名，暂不支持精确用户名筛选。</p>
+                <button
+                  v-if="draft.authorsInclude.length || draft.authorsExclude.length"
+                  type="button"
+                  class="text-link"
+                  @click="((draft.authorsInclude = []), (draft.authorsExclude = []))"
+                >
+                  清除作者条件
+                </button>
+              </div>
               <div class="setting-row">
                 <div>
                   <strong>区分英文大小写</strong><small>开启后，DMIT 与 dmit 视为不同关键词</small>
@@ -550,6 +568,7 @@ function jump(id: string) {
             <label
               >作者<input
                 v-model="sample.author"
+                :disabled="!supportsAuthor"
                 class="text-input"
                 aria-label="样本作者"
                 placeholder="缺失" /></label

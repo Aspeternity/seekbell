@@ -62,8 +62,10 @@ def save_selection(values: SelectionInput, request: Request):
 
 
 @router.get("/hotlists/{website_id}")
-async def hotlist(website_id: str, request: Request, period: str = "realtime"):
+async def hotlist(website_id: str, request: Request, period: str | None = None):
     source = HOTLIST_SOURCES.get(website_id)
+    if source is not None and period is None:
+        period = source.default_period
     if source is None or period not in source.periods:
         raise HTTPException(404, "该网站或榜单周期尚未支持。")
     with Session(request.app.state.engine) as session:

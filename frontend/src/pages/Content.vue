@@ -180,8 +180,8 @@ function clear() {
             <h1 tabindex="-1" class="article-heading">{{ detail.data.value.title }}</h1>
             <p class="subtitle">
               {{ websiteName(detail.data.value.website_id) }} ·
-              {{ detail.data.value.author || '作者缺失' }} ·
-              {{ detail.data.value.category_label || detail.data.value.category || '版块缺失' }} ·
+              {{ detail.data.value.author || detail.data.value.author_display_name || '作者缺失' }}
+              · {{ detail.data.value.category_label || detail.data.value.category || '版块缺失' }} ·
               首次发现
               {{ time(detail.data.value.first_seen_at) }}
             </p>
@@ -458,7 +458,10 @@ function clear() {
               {{ post.summary === null ? '来源未提供摘要' : post.summary || '摘要为空' }}
             </p>
             <div class="content-row-meta">
-              <span><Icon name="user" :size="13" />{{ post.author || '作者缺失' }}</span
+              <span
+                ><Icon name="user" :size="13" />{{
+                  post.author || post.author_display_name || '作者缺失'
+                }}</span
               ><span>{{ post.category_label || post.category || '版块缺失' }}</span>
               <span
                 v-for="hit in post.hits"

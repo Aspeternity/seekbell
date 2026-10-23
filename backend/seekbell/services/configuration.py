@@ -24,7 +24,7 @@ from seekbell.db.transactions import write_session
 from seekbell.domain.rules import Rule
 from seekbell.notifiers.configs import public_config, validate_config
 from seekbell.notifiers.credentials import CredentialVault
-from seekbell.sites.nodeseek import BUILTIN_ADAPTERS
+from seekbell.sites.registry import BUILTIN_ADAPTERS, validate_rule_capabilities
 
 
 def identifier() -> str:
@@ -182,6 +182,7 @@ class Configuration:
     ) -> str:
         if website_id not in BUILTIN_ADAPTERS:
             raise ValueError("Unsupported website")
+        validate_rule_capabilities(website_id, rule)
         key = identifier()
         with write_session(self.engine) as session:
             if managed and session.get(WebsiteInstallation, website_id) is None:
@@ -231,6 +232,7 @@ class Configuration:
             task = session.get(Task, key)
             if task is None or task.deleted_at is not None:
                 raise ValueError("Unknown active task")
+            validate_rule_capabilities(task.website_id, rule)
             targets = self._targets(session, target_ids)
             if enabled is not None:
                 task.enabled = enabled
