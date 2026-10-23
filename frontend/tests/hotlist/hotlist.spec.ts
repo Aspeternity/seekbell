@@ -160,6 +160,8 @@ test('first period read shows feedback and a visited period displays its own cac
     await held
     await route.fulfill({ response })
   })
+  await page.reload()
+  await expect(page.locator('.hotlist-row')).toHaveCount(5)
   const periods = page.getByRole('group', { name: '热榜周期' })
   const hotlist = page.getByRole('region', { name: '社区热榜', exact: true })
   await periods.getByRole('button', { name: '每日', exact: true }).click()
@@ -348,4 +350,96 @@ test('no supported installed source has an actionable empty state', async ({ pag
   expect(reads).toBe(0)
   await page.getByRole('button', { name: '管理网站', exact: true }).click()
   await expect(page.getByRole('heading', { name: '监控网站', exact: true })).toBeVisible()
+})
+
+test('visible hotlist preloads other periods without changing the saved selection', async ({
+  page,
+}) => {
+  const before = (await (await page.request.get('/api/manage/overview-preferences')).json())
+    .selection
+  const reads = new Set<string>()
+  await page.route('**/api/manage/hotlists/nodeseek?*', async (route) => {
+    const response = await route.fetch()
+    await route.fulfill({ response })
+    reads.add(new URL(route.request().url()).searchParams.get('period')!)
+  })
+  await page.reload()
+  await expect.poll(() => Array.from(reads).sort()).toEqual(['daily', 'realtime', 'weekly'])
+  const after = (await (await page.request.get('/api/manage/overview-preferences')).json())
+    .selection
+  expect(after).toEqual(before)
+  await page.getByRole('button', { name: '每周', exact: true }).click()
+  await expect(page.locator('.hotlist-row').first()).toContainText('weekly')
+})
+
+test('hotlist rows open original posts from metadata and with the keyboard', async ({ page }) => {
+  await page
+    .context()
+    .route('https://www.nodeseek.com/**', (route) =>
+      route.fulfill({ contentType: 'text/html', body: '<p>Synthetic original post</p>' }),
+    )
+  const row = page.locator('.hotlist-row').first()
+  await expect(row).toHaveAttribute('target', '_blank')
+  await expect(row).toHaveAttribute('rel', 'noopener noreferrer')
+  const url = await row.getAttribute('href')
+  for (const keyboard of [false, true]) {
+    const popup = page.waitForEvent('popup')
+    if (keyboard) {
+      await row.focus()
+      await page.keyboard.press('Enter')
+    } else await row.locator('.hotlist-copy p').click()
+    const post = await popup
+    await expect(post).toHaveURL(url!)
+    await post.close()
+  }
+})
+
+test('recent matches are whole-row links and explain the historical task version', async ({
+  page,
+}) => {
+  const row = page.locator('.activity-row').first()
+  await expect(row).toHaveRole('link')
+  await expect(row).toContainText('任务配置 v')
+  await expect(row.locator('[title]')).toHaveAttribute(
+    'title',
+    '命中时使用的任务配置版本，历史记录保留原版本。',
+  )
+  const href = (await row.getAttribute('href'))!
+  await row.locator('time').click()
+  await expect(page).toHaveURL('http://127.0.0.1:8028/' + href)
+  await expect(page.getByRole('heading', { name: '为什么会得到这个结果？' })).toBeVisible()
+  await page.goto('/')
+  await row.focus()
+  await page.keyboard.press('Enter')
+  await expect(page).toHaveURL('http://127.0.0.1:8028/' + href)
+  await page.route('**/api/manage/overview?*', async (route) => {
+    const response = await route.fetch()
+    const data = await response.json()
+    data.recent_matches[0].post_id = null
+    data.recent_matches[0].title = null
+    await route.fulfill({ json: data })
+  })
+  await page.goto('/')
+  await expect(row).toContainText('原内容已清理')
+  await expect(row).not.toHaveAttribute('href')
+  await expect(row).not.toHaveRole('link')
+})
+
+test('background refresh keeps the displayed list and reports refresh separately from failure', async ({
+  page,
+}) => {
+  await page.route('**/api/manage/hotlists/nodeseek?period=realtime', async (route) => {
+    const response = await route.fetch()
+    const data = await response.json()
+    data.refreshing = true
+    data.next_attempt_at = Date.now() / 1000 + 600
+    await route.fulfill({ json: data })
+  })
+  await page.reload()
+  await expect(
+    page.getByRole('status').filter({ hasText: '正在后台更新，当前显示上次榜单。' }),
+  ).toBeVisible()
+  await expect(page.locator('.hotlist-row')).toHaveCount(5)
+  await expect(page.getByText('更新失败，当前显示上次榜单。', { exact: true })).toHaveCount(0)
+  await expect(page.locator('.hotlist-row').first()).toHaveRole('link')
 })

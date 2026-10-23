@@ -31,6 +31,7 @@ export interface OverviewPreferences {
 export interface HotlistData extends HotlistSource {
   period: string
   status: 'ready' | 'stale' | 'unavailable'
+  refreshing?: boolean
   error_code: string | null
   source_updated_at: number | null
   fetched_at: number | null

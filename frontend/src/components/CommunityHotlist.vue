@@ -5,7 +5,7 @@ import Icon from './Icon.vue'
 import ReadRegion from './ReadRegion.vue'
 import { request, formatTime } from '../store'
 import { useRemote } from '../history'
-import { readSessionRevision } from '../readCache'
+import { cachedRead, fetchRead, readIsFresh, readSessionRevision } from '../readCache'
 import type { HotlistData, OverviewPreferences } from '../overviewPreferences'
 const emit = defineEmits<{ navigate: [path: string] }>()
 const catalog = useRemote(
@@ -43,18 +43,15 @@ watch(catalog.data, (value) => {
       ''
   }
 })
+const cacheKey = (website: string, value: string) => 'hotlist:' + website + ':' + value
+const read = (website: string, value: string) =>
+  request<HotlistData>(
+    'manage/hotlists/' + encodeURIComponent(website) + '?period=' + encodeURIComponent(value),
+  )
 const remote = useRemote(
-  () =>
-    source.value
-      ? request<HotlistData>(
-          'manage/hotlists/' +
-            encodeURIComponent(site.value) +
-            '?period=' +
-            encodeURIComponent(period.value),
-        )
-      : Promise.resolve(null),
+  () => (source.value ? read(site.value, period.value) : Promise.resolve(null)),
   () => [site.value, period.value],
-  { cacheKey: () => (source.value ? 'hotlist:' + site.value + ':' + period.value : undefined) },
+  { cacheKey: () => (source.value ? cacheKey(site.value, period.value) : undefined) },
 )
 const snapshot = computed(() =>
   remote.data.value?.website_id === site.value && remote.data.value?.period === period.value
@@ -77,6 +74,18 @@ function schedule() {
   )
 }
 watch(snapshot, schedule)
+watch([source, snapshot], () => {
+  const current = source.value
+  if (!active || document.hidden || !current || !snapshot.value) return
+  // Warm only this visible site's other periods, sharing any selected-period request.
+  for (const value of current.periods) {
+    if (value.id === period.value) continue
+    const key = cacheKey(current.website_id, value.id)
+    const cached = cachedRead<HotlistData>(key)
+    if (cached && readIsFresh(key) && cached.next_attempt_at * 1000 > Date.now()) continue
+    void fetchRead(key, () => read(current.website_id, value.id)).catch(() => {})
+  }
+})
 function visibility() {
   if (!document.hidden && source.value) remote.reload()
   else clearTimeout(timer)
@@ -229,7 +238,10 @@ onBeforeUnmount(() => {
             @retry="remote.reload"
           >
             <template v-if="snapshot">
-              <p v-if="snapshot.status !== 'ready'" class="info-note" role="status">
+              <p v-if="snapshot.refreshing" class="small-note hotlist-updating" role="status">
+                正在后台更新，当前显示上次榜单。
+              </p>
+              <p v-else-if="snapshot.status !== 'ready'" class="info-note" role="status">
                 {{
                   snapshot.status === 'stale'
                     ? '更新失败，当前显示上次榜单。'
@@ -240,26 +252,22 @@ onBeforeUnmount(() => {
                 </button>
               </p>
               <ol v-if="items.length" class="hotlist-list">
-                <li v-for="item in items" :key="item.id" class="hotlist-row">
-                  <span class="hotlist-rank" :class="{ leading: item.rank <= 3 }">{{
-                    String(item.rank).padStart(2, '0')
-                  }}</span>
-                  <div class="hotlist-copy">
-                    <a
-                      :href="item.url"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      :title="item.title"
-                      >{{ item.title }}</a
-                    >
-                    <p>
-                      <span v-if="item.category">{{ item.category }}</span
-                      ><span v-if="item.author">{{ item.author }}</span
-                      ><span v-if="item.comments !== null"
-                        >{{ item.comments.toLocaleString() }} 条评论</span
-                      >
-                    </p>
-                  </div>
+                <li v-for="item in items" :key="item.id">
+                  <a class="hotlist-row" :href="item.url" target="_blank" rel="noopener noreferrer">
+                    <span class="hotlist-rank" :class="{ leading: item.rank <= 3 }">{{
+                      String(item.rank).padStart(2, '0')
+                    }}</span>
+                    <div class="hotlist-copy">
+                      <span class="hotlist-title" :title="item.title">{{ item.title }}</span>
+                      <p>
+                        <span v-if="item.category">{{ item.category }}</span
+                        ><span v-if="item.author">{{ item.author }}</span
+                        ><span v-if="item.comments !== null"
+                          >{{ item.comments.toLocaleString() }} 条评论</span
+                        >
+                      </p>
+                    </div>
+                  </a>
                 </li>
               </ol>
               <div v-else-if="snapshot.status === 'ready'" class="empty-state">
@@ -336,11 +344,23 @@ onBeforeUnmount(() => {
   padding: 0 22px;
   margin: 0;
 }
+.hotlist-updating {
+  padding: 0 22px;
+}
 .hotlist-row {
+  color: inherit;
+  text-decoration: none;
   display: flex;
   gap: 14px;
   padding: 16px 0;
   border-bottom: 1px solid #f0f1f3;
+}
+.hotlist-row:hover {
+  background: #fafbfc;
+}
+.hotlist-row:focus-visible {
+  outline: 2px solid #b75e32;
+  outline-offset: -2px;
 }
 .hotlist-rank {
   min-width: 23px;
@@ -354,7 +374,7 @@ onBeforeUnmount(() => {
   min-width: 0;
   flex: 1;
 }
-.hotlist-copy a {
+.hotlist-title {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -363,7 +383,7 @@ onBeforeUnmount(() => {
   color: #292e35;
   text-decoration: none;
 }
-.hotlist-copy a:hover {
+.hotlist-row:hover .hotlist-title {
   color: #b75e32;
 }
 .hotlist-copy p {
@@ -406,6 +426,9 @@ onBeforeUnmount(() => {
     padding: 0 16px 12px;
   }
   .hotlist-list {
+    padding: 0 16px;
+  }
+  .hotlist-updating {
     padding: 0 16px;
   }
   .hotlist-row {

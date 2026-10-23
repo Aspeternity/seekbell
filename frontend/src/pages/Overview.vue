@@ -423,22 +423,28 @@ async function toggle(id: string) {
             </div>
             <button class="text-link" @click="emit('navigate', '/content')">查看内容与命中</button>
           </div>
-          <div v-for="(item, index) in activities" :key="index" class="activity-row">
+          <component
+            :is="item.post_id ? 'a' : 'div'"
+            v-for="(item, index) in activities"
+            :key="index"
+            class="activity-row"
+            :class="{ 'activity-link': item.post_id }"
+            :href="item.post_id ? '#/content/' + item.post_id : undefined"
+          >
             <span class="timeline-dot orange"><Icon name="spark" :size="17" /></span>
             <div class="activity-copy">
-              <button v-if="item.post_id" @click="emit('navigate', '/content/' + item.post_id)">
-                {{ item.title }}</button
-              ><strong v-else>原内容已清理</strong>
+              <strong>{{ item.post_id ? item.title : '原内容已清理' }}</strong>
               <p>
                 <span>{{ item.task_name }}</span
-                ><span
-                  >版本 {{ item.task_version }}{{ item.task_deleted ? ' · 任务已删除' : '' }}</span
+                ><span title="命中时使用的任务配置版本，历史记录保留原版本。"
+                  >任务配置 v{{ item.task_version
+                  }}{{ item.task_deleted ? ' · 任务已删除' : '' }}</span
                 >
               </p>
             </div>
             <span class="result-pill yes"><span class="status-dot" />命中</span
             ><time>{{ stamp(item.at) }}</time>
-          </div>
+          </component>
           <div v-if="!activities.length" class="empty-state">
             <Icon name="inbox" :size="28" />
             <p>还没有命中记录。</p>
@@ -466,6 +472,20 @@ async function toggle(id: string) {
 .chart-legend {
   gap: 12px;
   flex-wrap: wrap;
+}
+.activity-link {
+  color: inherit;
+  text-decoration: none;
+}
+.activity-link:hover {
+  background: #fafbfc;
+}
+.activity-link:hover .activity-copy > strong {
+  color: #b75e32;
+}
+.activity-link:focus-visible {
+  outline: 2px solid #b75e32;
+  outline-offset: -2px;
 }
 .activity-copy {
   min-width: 0;

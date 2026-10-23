@@ -1044,15 +1044,9 @@ main {
 .activity-copy {
   min-width: 0;
 }
-.activity-copy button {
-  text-align: left;
-  padding: 0;
+.activity-copy > strong {
   font-size: 12px;
-  border: 0;
-  background: transparent;
-}
-.activity-copy button:hover {
-  color: var(--accent);
+  font-weight: 400;
 }
 .activity-copy p {
   display: flex;
@@ -2477,7 +2471,7 @@ textarea:disabled {
   .activity-copy {
     width: calc(100% - 36px);
   }
-  .activity-copy button {
+  .activity-copy > strong {
     font-size: 12px;
   }
   .activity-copy p {

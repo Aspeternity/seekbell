@@ -115,7 +115,9 @@ def test_cache_merges_concurrent_reads_and_isolates_periods():
             await service.get("nodeseek", "weekly")
             assert len(calls) == 2
             now[0] += 601
-            await service.get("nodeseek", "daily")
+            cached = await service.get("nodeseek", "daily")
+            assert cached["refreshing"] and cached["items"]
+            await asyncio.gather(*service.pending.values())
             assert len(calls) == 3
         finally:
             await service.aclose()
@@ -138,6 +140,9 @@ def test_failed_refresh_preserves_snapshot_and_respects_retry_after():
         try:
             original = await service.get("nodeseek", "realtime")
             now[0] += 601
+            pending = await service.get("nodeseek", "realtime")
+            assert pending["refreshing"] and pending["items"] == original["items"]
+            await asyncio.gather(*service.pending.values())
             stale = await service.get("nodeseek", "realtime")
             assert stale["status"] == "stale" and stale["items"] == original["items"]
             assert stale["source_updated_at"] == 1900 and stale["fetched_at"] == 2000
@@ -182,5 +187,96 @@ def test_untrusted_responses_are_bounded_and_do_not_expose_content(kind):
             assert "private-remote" not in json.dumps(data)
         finally:
             await service.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_expired_snapshot_returns_without_waiting_and_merges_background_refreshes():
+    async def scenario():
+        now = [2000]
+        calls = []
+        started, release = asyncio.Event(), asyncio.Event()
+
+        async def handler(request):
+            calls.append(request)
+            if len(calls) > 1:
+                started.set()
+                await release.wait()
+            return httpx.Response(200, stream=Chunks(json.dumps(snapshot(now=now[0])).encode()))
+
+        service = HotlistService(transport=httpx.MockTransport(handler), clock=lambda: now[0])
+        try:
+            first = await service.get("nodeseek", "daily")
+            now[0] += 601
+            responses = await asyncio.wait_for(
+                asyncio.gather(*(service.get("nodeseek", "daily") for _ in range(8))), 0.5
+            )
+            await started.wait()
+            assert len(calls) == 2 and len(service.pending) == 1
+            assert all(row["refreshing"] and row["items"] == first["items"] for row in responses)
+            assert responses[0]["source_updated_at"] == 2000
+            assert responses[0]["next_attempt_at"] == 2603
+            release.set()
+            await asyncio.gather(*service.pending.values())
+            fresh = await service.get("nodeseek", "daily")
+            assert not fresh["refreshing"] and fresh["source_updated_at"] == 2601
+            assert len(calls) == 2
+        finally:
+            await service.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_cold_reader_cancellation_does_not_cancel_shared_fetch():
+    async def scenario():
+        started, release = asyncio.Event(), asyncio.Event()
+        calls = []
+
+        async def handler(request):
+            calls.append(request)
+            started.set()
+            await release.wait()
+            return httpx.Response(200, stream=Chunks(json.dumps(snapshot(now=1900)).encode()))
+
+        service = HotlistService(transport=httpx.MockTransport(handler), clock=lambda: 2000)
+        try:
+            abandoned = asyncio.create_task(service.get("nodeseek", "daily"))
+            other = asyncio.create_task(service.get("nodeseek", "daily"))
+            await started.wait()
+            abandoned.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await abandoned
+            release.set()
+            assert (await other)["status"] == "ready"
+            assert len(calls) == 1
+        finally:
+            await service.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_shutdown_cancels_background_refresh_before_closing_http():
+    async def scenario():
+        now = [2000]
+        started, cancelled = asyncio.Event(), asyncio.Event()
+
+        async def handler(request):
+            if now[0] > 2000:
+                started.set()
+                try:
+                    await asyncio.Event().wait()
+                finally:
+                    cancelled.set()
+            return httpx.Response(200, stream=Chunks(json.dumps(snapshot(now=1900)).encode()))
+
+        service = HotlistService(transport=httpx.MockTransport(handler), clock=lambda: now[0])
+        await service.get("nodeseek", "daily")
+        now[0] += 601
+        assert (await service.get("nodeseek", "daily"))["refreshing"]
+        await started.wait()
+        await service.aclose()
+        assert cancelled.is_set() and not service.pending and service.client.is_closed
+        with pytest.raises(RuntimeError, match="closed"):
+            await service.get("nodeseek", "daily")
 
     asyncio.run(scenario())
