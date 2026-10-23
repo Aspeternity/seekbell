@@ -322,7 +322,9 @@ class History:
                 raise MissingHistory("内容不存在或已清理。")
             return self.post_item(session, *row, detail=True)
 
-    def evaluations(self, key, *, page=1, page_size=20):
+    def evaluations(self, key, *, page=1, page_size=20, group="all"):
+        if group not in {"all", "primary", "other"}:
+            raise ValueError("Unknown evaluation group")
         website, external = decode_post_key(key)
         d = self.decisions.c
         with read_session(self.engine) as session:
@@ -346,13 +348,29 @@ class History:
                 .join(Task, Task.id == d.task_id)
                 .where(d.website_id == website, d.external_post_id == external)
             )
-            total = session.scalar(select(func.count()).select_from(statement.subquery()))
+            all_rows = statement.subquery()
+            counts = dict(
+                session.execute(
+                    select(all_rows.c.status, func.count()).group_by(all_rows.c.status)
+                ).all()
+            )
+            matched_total = counts.get("match", 0)
+            other_total = sum(counts.values()) - matched_total
+            total = matched_total + other_total
+            if group == "primary" and matched_total:
+                statement = statement.where(d.status == "match")
+                total = matched_total
+            elif group == "other":
+                statement = statement.where(d.status != "match")
+                total = other_total
             rows = session.execute(
                 statement.order_by(d.task_id, d.task_version)
                 .offset((page - 1) * page_size)
                 .limit(page_size)
             ).all()
             return {
+                "matched_total": matched_total,
+                "other_total": other_total,
                 "total": total,
                 "page": page,
                 "page_size": page_size,

@@ -1,18 +1,19 @@
 <script setup lang="ts">
 import AppSelect from '../components/AppSelect.vue'
+import TaskEvaluationCard from '../components/TaskEvaluationCard.vue'
 import { computed, ref, watch } from 'vue'
 import Icon from '../components/Icon.vue'
 import { channelMeta } from '../store'
 import { state, websiteName, formatTime } from '../store'
-import {
-  historyGet,
-  useRemote,
-  postLabels,
-  deliveryLabels,
-  resultClass,
-  reasonText,
+import { historyGet, useRemote, postLabels, deliveryLabels, resultClass } from '../history'
+import type {
+  Options,
+  PostRecord,
+  PostPage,
+  Page,
+  EvaluationPage,
+  DeliveryRecord,
 } from '../history'
-import type { Options, PostRecord, PostPage, Page, Evaluation, DeliveryRecord } from '../history'
 import Pagination from '../components/Pagination.vue'
 import DateFilter from '../components/DateFilter.vue'
 import { dateRangeParams, type HistoryDateRange } from '../dateRange'
@@ -28,7 +29,19 @@ const q = ref(''),
   website = ref(''),
   page = ref(1)
 const evaluationPage = ref(1),
+  otherEvaluationPage = ref(1),
+  otherExpanded = ref(false),
   deliveryPage = ref(1)
+watch(
+  () => props.selectedId,
+  () => {
+    evaluationPage.value = 1
+    otherEvaluationPage.value = 1
+    otherExpanded.value = false
+    deliveryPage.value = 1
+  },
+  { flush: 'sync' },
+)
 const options = useRemote(
   () => historyGet<Options>('options'),
   () => [],
@@ -95,15 +108,37 @@ const detail = useRemote(
 const evaluations = useRemote(
   () =>
     props.selectedId
-      ? historyGet<Page<Evaluation>>('posts/' + props.selectedId + '/evaluations', {
+      ? historyGet<EvaluationPage>('posts/' + props.selectedId + '/evaluations', {
           page: evaluationPage.value,
+          group: 'primary',
         })
       : Promise.resolve(undefined),
   () => [props.selectedId, evaluationPage.value],
   {
     cacheKey: () =>
       props.selectedId
-        ? JSON.stringify(['content:evaluations', props.selectedId, evaluationPage.value])
+        ? JSON.stringify(['content:evaluations', props.selectedId, 'primary', evaluationPage.value])
+        : undefined,
+  },
+)
+const otherEvaluations = useRemote(
+  () =>
+    props.selectedId && otherExpanded.value
+      ? historyGet<EvaluationPage>('posts/' + props.selectedId + '/evaluations', {
+          page: otherEvaluationPage.value,
+          group: 'other',
+        })
+      : Promise.resolve(undefined),
+  () => [props.selectedId, otherExpanded.value, otherEvaluationPage.value],
+  {
+    cacheKey: () =>
+      props.selectedId && otherExpanded.value
+        ? JSON.stringify([
+            'content:evaluations',
+            props.selectedId,
+            'other',
+            otherEvaluationPage.value,
+          ])
         : undefined,
   },
 )
@@ -255,18 +290,7 @@ function clear() {
           </div>
           <aside class="panel support-panel">
             <h2><Icon name="filter" :size="18" />为什么会得到这个结果？</h2>
-            <div class="match-result" :class="resultClass(detail.data.value.status)">
-              <strong>{{ postLabels[detail.data.value.status] }}</strong>
-              <template
-                v-for="evaluation in evaluations.data.value?.items || []"
-                :key="evaluation.task_id + ':' + evaluation.version"
-              >
-                <p v-for="(reason, i) in evaluation.result.reasons" :key="i">
-                  {{ reasonText(reason) }}
-                </p>
-              </template>
-            </div>
-            <h3 class="section-subtitle">命中任务快照</h3>
+            <h3 class="section-subtitle">任务匹配快照</h3>
             <p v-if="detail.data.value.baseline === true" class="info-note">
               基线帖子：首次采集时登记，未执行规则匹配或生成通知。
             </p>
@@ -284,30 +308,12 @@ function clear() {
               :min-height="160"
               @retry="evaluations.reload"
               ><template v-if="evaluations.data.value">
-                <article
+                <TaskEvaluationCard
                   v-for="evaluation in evaluations.data.value.items"
                   :key="evaluation.task_id + ':' + evaluation.version"
-                  class="snapshot-task history-evaluation"
-                >
-                  <div>
-                    <Icon name="layers" :size="16" /><button
-                      v-if="!evaluation.deleted"
-                      class="text-link"
-                      @click="emit('navigate', '/task/' + evaluation.task_id)"
-                    >
-                      {{ evaluation.name }}</button
-                    ><strong v-else>{{ evaluation.name }} · 已删除</strong>
-                    <p class="small-note">
-                      版本 {{ evaluation.version }} · {{ time(evaluation.at) }}
-                    </p>
-                    <span class="result-pill" :class="resultClass(evaluation.result.status)">{{
-                      postLabels[evaluation.result.status]
-                    }}</span>
-                    <p v-if="!evaluation.result.reasons.length" class="small-note">
-                      未设置筛选条件，或旧记录未留下原因。
-                    </p>
-                  </div>
-                </article>
+                  :evaluation="evaluation"
+                  @navigate="emit('navigate', $event)"
+                />
                 <p v-if="!evaluations.data.value.total" class="small-note">
                   没有可展示的任务判定。
                 </p>
@@ -315,10 +321,56 @@ function clear() {
                   :page="evaluationPage"
                   :total="evaluations.data.value.total"
                   :page-size="evaluations.data.value.page_size"
-                  label="任务判定"
+                  :label="evaluations.data.value.matched_total ? '命中任务判定' : '任务判定'"
                   @change="(value) => (evaluationPage = value)"
-                /> </template
-            ></ReadRegion>
+                />
+                <div
+                  v-if="evaluations.data.value.matched_total && evaluations.data.value.other_total"
+                  class="other-evaluations"
+                >
+                  <button
+                    class="text-link other-evaluations-toggle"
+                    :aria-expanded="otherExpanded"
+                    aria-controls="other-task-evaluations"
+                    @click="otherExpanded = !otherExpanded"
+                  >
+                    {{ otherExpanded ? '收起其他任务判定' : '查看其他任务判定' }}（{{
+                      evaluations.data.value.other_total
+                    }}）
+                    <Icon name="down" :size="14" />
+                  </button>
+                  <div v-if="otherExpanded" id="other-task-evaluations">
+                    <ReadRegion
+                      :loading="otherEvaluations.loading.value"
+                      :error="otherEvaluations.error.value"
+                      :has-data="!!otherEvaluations.data.value"
+                      :stale="otherEvaluations.stale.value"
+                      :min-height="160"
+                      @retry="otherEvaluations.reload"
+                    >
+                      <template v-if="otherEvaluations.data.value">
+                        <TaskEvaluationCard
+                          v-for="evaluation in otherEvaluations.data.value.items"
+                          :key="evaluation.task_id + ':' + evaluation.version"
+                          :evaluation="evaluation"
+                          @navigate="emit('navigate', $event)"
+                        />
+                        <p v-if="!otherEvaluations.data.value.total" class="small-note">
+                          没有可展示的其他任务判定。
+                        </p>
+                        <Pagination
+                          :page="otherEvaluationPage"
+                          :total="otherEvaluations.data.value.total"
+                          :page-size="otherEvaluations.data.value.page_size"
+                          label="其他任务判定"
+                          @change="(value) => (otherEvaluationPage = value)"
+                        />
+                      </template>
+                    </ReadRegion>
+                  </div>
+                </div>
+              </template>
+            </ReadRegion>
             <p class="small-note">显示保存时的名称、版本与原因；修改或删除任务不重写已有记录。</p>
           </aside>
         </div>
@@ -508,6 +560,19 @@ function clear() {
 .content-row:hover,
 .content-row:focus-within {
   background: #fafbfc;
+}
+.support-panel > .section-subtitle {
+  margin-top: 0;
+}
+.other-evaluations {
+  margin: 16px 0;
+}
+.other-evaluations-toggle {
+  text-align: left;
+  white-space: normal;
+}
+.other-evaluations-toggle[aria-expanded='true'] svg {
+  transform: rotate(180deg);
 }
 .original-post-link {
   margin-top: 16px;

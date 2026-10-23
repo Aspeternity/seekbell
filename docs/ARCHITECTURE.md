@@ -296,3 +296,9 @@ GET /api/manage/hotlists/{website_id}?period=...校验安装和模块可见后�
 Preferences复用草稿、部分保存、冲突与导航保护；设置支持鼠标/触屏手柄、键盘上下键、上下按钮和默认草稿。概览不再显示设置快捷入口，模块设置从系统设置进入；设置定位参数仍支持直接链接，App只以路径部分识别页面。单站显示名称，多站标签、超过四站AppSelect，单周期不显示无效切换。
 
 test:hotlist在8028临时库验证；所有run_web_smoke浏览器环境注入synthetic_hotlists，不访问真实论坛。hotlist_factory仅为Python测试注入，无生产模拟开关。后端验证迁移/冲突/重启、缓存/并发/退避/异常及加密恢复；合成多站只验证UI能力，不增加产品适配器。验证结果见开发记录；用户验收和真实来源长期稳定性独立。
+
+## 内容详情的任务判定分组（2026-10-23）
+
+GET /api/manage/history/posts/{key}/evaluations新增group=all|primary|other，默认all兼容旧调用。History在同一只读快照先聚合全部已保存判定，返回matched_total/other_total；primary有命中时只分页命中，没有命中则分页全部，other分页非match。过滤在OFFSET/LIMIT之前，不由前端筛当前页；继续使用既有TaskEvaluation与legacy RuleHit合并视图、历史TaskVersion和脱敏快照，不重算规则、不写库或迁移。
+
+Content独立缓存primary/other的帖子身份/页码；其他判定仅展开时GET，展开错误不清空命中，折叠和换帖子沿用generation/session fencing，换帖同步重置展开和页码。TaskEvaluationCard负责各任务的结果/原因归属与历史版本说明；当前任务配置入口和软删除展示保持。

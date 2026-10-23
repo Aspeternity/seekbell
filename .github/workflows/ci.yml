@@ -71,6 +71,7 @@ jobs:
       - run: pnpm --dir frontend test:workspace-stability
       - run: pnpm --dir frontend test:first-entry
       - run: pnpm --dir frontend test:hotlist
+      - run: pnpm --dir frontend test:evaluations
       - run: pnpm --dir frontend test:approved-ui
       - run: pnpm --dir frontend test:sending
       - run: pnpm --dir frontend test:runtime

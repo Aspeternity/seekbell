@@ -103,8 +103,10 @@ def post(key: str, reader: Reader):
 
 
 @router.get("/posts/{key}/evaluations")
-def evaluations(key: str, params: Paging, reader: Reader):
-    return found(reader.evaluations, key, **params)
+def evaluations(
+    key: str, params: Paging, reader: Reader, group: Literal["all", "primary", "other"] = "all"
+):
+    return found(reader.evaluations, key, group=group, **params)
 
 
 @router.get("/deliveries")

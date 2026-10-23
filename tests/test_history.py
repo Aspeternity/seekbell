@@ -10,7 +10,9 @@ from seekbell.db.models import (
     Post,
     RuleHit,
     TargetTestAttempt,
+    Task,
     TaskEvaluation,
+    TaskVersion,
 )
 from seekbell.db.runtime import create_database_engine, migrate, schema_revision
 from seekbell.db.transactions import write_session
@@ -524,3 +526,74 @@ def test_range_midnights_observe_dst_and_year_boundaries():
     ):
         start, end = date_range_window(first, last, "America/Los_Angeles")
         assert end - start == hours * 3600
+
+
+def test_evaluation_groups_filter_before_pagination_and_preserve_saved_decisions(history_client):
+    client, app, ids = history_client
+    with write_session(app.state.engine) as session:
+        for index in range(25):
+            session.add(
+                Task(
+                    id=f"000-other-{index:02}",
+                    website_id="nodeseek",
+                    current_version=1,
+                    enabled=False,
+                    created_at=ids["base"],
+                )
+            )
+        session.flush()
+        for index in range(25):
+            session.add(
+                TaskVersion(
+                    task_id=f"000-other-{index:02}",
+                    version=1,
+                    name=f"未命中快照{index:02}",
+                    rule={},
+                    target_ids=[],
+                    created_at=ids["base"],
+                )
+            )
+        session.flush()
+        for index in range(25):
+            status = "insufficient_data" if index == 0 else "no_match"
+            session.add(
+                TaskEvaluation(
+                    task_id=f"000-other-{index:02}",
+                    task_version=1,
+                    website_id="nodeseek",
+                    external_post_id="8005",
+                    status=status,
+                    result={"status": status, "reasons": []},
+                    evaluated_at=ids["base"],
+                )
+            )
+    url = "/api/manage/history/posts/" + ids["posts"][5] + "/evaluations"
+    with app.state.engine.connect() as connection:
+        before = list(connection.connection.driver_connection.iterdump())
+    all_rows = client.get(url).json()
+    assert all_rows["total"] == 27 and len(all_rows["items"]) == 20
+    assert all(row["result"]["status"] != "match" for row in all_rows["items"])
+    primary = client.get(url, params={"group": "primary"}).json()
+    assert primary["total"] == primary["matched_total"] == 1
+    assert primary["other_total"] == 26
+    assert primary["items"][0]["name"] == "摘要关注"
+    assert primary["items"][0]["version"] == 1
+    assert primary["items"][0]["result"]["status"] == "match"
+    first = client.get(url, params={"group": "other", "page_size": 20}).json()
+    second = client.get(url, params={"group": "other", "page_size": 20, "page": 2}).json()
+    assert first["total"] == second["total"] == 26
+    assert len(first["items"]) == 20 and len(second["items"]) == 6
+    assert all(row["result"]["status"] != "match" for row in first["items"] + second["items"])
+    assert not {row["task_id"] for row in first["items"]} & {
+        row["task_id"] for row in second["items"]
+    }
+    assert client.get(url, params={"group": "invalid"}).status_code == 422
+    for index in (3, 4):
+        data = client.get(
+            "/api/manage/history/posts/" + ids["posts"][index] + "/evaluations",
+            params={"group": "primary"},
+        ).json()
+        assert data["matched_total"] == 0 and data["total"] == data["other_total"] == 2
+        assert len(data["items"]) == 2
+    with app.state.engine.connect() as connection:
+        assert before == list(connection.connection.driver_connection.iterdump())

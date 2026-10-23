@@ -38,9 +38,11 @@ test('stored history filters, pages, snapshots, uncertainty and read errors rema
   await page.screenshot({ path: info.outputPath('history-content.png'), fullPage: true })
   await page.locator('.content-title').click()
   await expect(page.getByRole('heading', { name: '为什么会得到这个结果？' })).toBeVisible()
+  await expect(page.locator('.history-evaluation')).toHaveCount(1)
+  await page.getByRole('button', { name: '查看其他任务判定（1）', exact: true }).click()
   await expect(page.locator('.history-evaluation')).toHaveCount(2)
   await expect(page.locator('.history-evaluation').filter({ hasText: '摘要关注' })).toContainText(
-    '版本 1',
+    '任务配置 v1',
   )
   await expect(page.getByRole('link', { name: '打开原帖' })).toHaveAttribute(
     'href',
