@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 import httpx
 from sqlalchemy.orm import Session
 
-from seekbell.collectors.http import public_response
+from seekbell.collectors.http import public_client, public_response
 from seekbell.db.models import HotlistSnapshot
 from seekbell.db.transactions import database_call, write_session
 from seekbell.domain.errors import SourceDeferred, SourceFailure
@@ -24,10 +24,8 @@ SNAPSHOT_MAX_AGE = 86400
 class HotlistService:
     def __init__(self, *, transport=None, clock=time.time, engine=None, request_budget=None):
         self.clock, self.engine, self.request_budget = clock, engine, request_budget
-        self.client = httpx.AsyncClient(
+        self.client = public_client(
             transport=transport,
-            trust_env=False,
-            follow_redirects=False,
             timeout=httpx.Timeout(8, connect=3),
             limits=httpx.Limits(max_connections=3),
             headers={

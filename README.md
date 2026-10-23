@@ -164,8 +164,8 @@ uv run --frozen python -m seekbell.services.backup_demo
 Linux DO从内置网站库添加，初始暂停；候选默认和最小采集间隔为60秒，不代表官方限频保证。仅公开主题RSS，作者显示名不能用于用户名条件。NodeSeek热榜为第三方实时/每日/每周，Linux DO为原站RSS热门/每日/每周；缺失来源更新时间时显示获取时间。热榜快照独立保存、最多展示24小时，不参与监控或通知。
 
 ~~~bash
-uv run --frozen pytest tests/test_linuxdo.py tests/test_linuxdo_runtime.py -q
+uv run --frozen pytest tests/test_public_http.py tests/test_linuxdo.py tests/test_linuxdo_runtime.py tests/test_hotlists.py tests/test_runtime.py -q
 pnpm --dir frontend test:linuxdo
 ~~~
 
-浏览器套件使用一次性8030服务和合成两站HTTP，不请求真实论坛。2026-10-23本机普通HTTP读取Linux DO RSS返回403，产品明确显示来源异常并共享请求退避；实现和模拟检查通过不等于真实数据源可用。新站不会随升级自动安装或启用。
+浏览器套件使用一次性8030服务和合成两站HTTP，不请求真实论坛。Linux DO三入口使用HTTPX HTTP/2（仅该域名），保留匿名请求、TLS与共享退避。2026-10-24本机四源HTTP/2匿名对照通过，HTTP/1.1仍返回403；部署环境/持续可用性需单独验收，遇挑战继续显示来源异常并退避。新站不会随升级自动安装或启用。

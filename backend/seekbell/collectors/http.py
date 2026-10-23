@@ -2,6 +2,29 @@
 
 from contextlib import asynccontextmanager
 
+import httpx
+
+
+def public_client(*, transport=None, **options):
+    # Injected transports own all test IO. Production enables HTTP/2 only for
+    # Linux DO; the default pool keeps other sources on their existing protocol.
+    mounts = None
+    if transport is None:
+        mounts = {
+            "https://linux.do": httpx.AsyncHTTPTransport(
+                http2=True,
+                trust_env=False,
+                limits=options.get("limits", httpx.Limits()),
+            )
+        }
+    return httpx.AsyncClient(
+        transport=transport,
+        mounts=mounts,
+        trust_env=False,
+        follow_redirects=False,
+        **options,
+    )
+
 
 @asynccontextmanager
 async def public_response(client, url, *, headers=None, timeout=None):

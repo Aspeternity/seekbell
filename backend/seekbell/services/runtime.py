@@ -5,6 +5,7 @@ import logging
 
 import httpx
 
+from seekbell.collectors.http import public_client
 from seekbell.collectors.rss import RssCollector
 from seekbell.db.models import Administrator
 from seekbell.db.transactions import database_call, write_session
@@ -31,10 +32,8 @@ class Runtime:
         collector_timeout=15,
         request_budget=None,
     ):
-        self.client = httpx.AsyncClient(
+        self.client = public_client(
             transport=http_transport,
-            trust_env=False,
-            follow_redirects=False,
             limits=httpx.Limits(
                 max_connections=len(BUILTIN_ADAPTERS),
                 max_keepalive_connections=len(BUILTIN_ADAPTERS),

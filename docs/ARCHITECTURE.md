@@ -313,6 +313,8 @@ Runtime.sources为按站映射，每站SourceRunner和RssCollector独立互斥�
 
 WebsiteRequestBudget由Runtime与HotlistService共用，Linux DO同站HTTP互斥及2秒间隔；事务保存next_request_at、blocked_until、failures和固定错误码。403/CF挑战300～1800秒，其他HTTP/传输异常30～1800秒，Retry-After最多一天；总超时也共享退避，关停取消不冒充失败。SourceRunner到期判断、overview和连接测试读取共享状态。显式测试被并发预算延后只留deferred证据，不引入虚假60秒失败退避。NodeSeek不应用Linux DO预算。
 
+collectors/http.public_client供Runtime与HotlistService创建客户端，通过精确HTTPS域名mount仅为linux.do建立http2=True且trust_env=False的AsyncHTTPTransport；默认池保持HTTP/1.1，注入测试transport时不创建mount以避免测试漏网，客户端关闭时共同回收各池。依赖使用httpx[http2]并锁定h2/hpack/hyperframe，不引入curl_cffi或浏览器。HTTPX保留正常协议协商回退；实际来源可用性按镜像/环境单独验收。
+
 collectors/http.public_response构造匿名请求、显式移除Cookie且不跟随跳转，关闭响应；RSS与热榜共用。固定端点/TLS/无环境代理/1MiB/总超时保持。HotlistSource声明JSON或RSS格式和每站支持项，Linux DO不使用帖子时间冒充榜单更新时间。持久快照读取校验时间/条数/字段并重新生成规范链接；600秒TTL、24小时展示上限、按键共享更新和客户端取消隔离沿用。无消费者常驻轮询，持久化失败不能伪称网络成功。
 
-验证命令：uv run --frozen pytest tests/test_linuxdo.py tests/test_linuxdo_runtime.py -q；pnpm --dir frontend test:linuxdo（独立8030合成库）。所有浏览器环境注入合成两站热榜，不访问真实论坛或发送真实消息。正式来源可访问性与用户验收另行记录。
+验证命令：uv run --frozen pytest tests/test_public_http.py tests/test_linuxdo.py tests/test_linuxdo_runtime.py tests/test_hotlists.py tests/test_runtime.py -q；pnpm --dir frontend test:linuxdo（独立8030合成库）。所有浏览器环境注入合成两站热榜，不访问真实论坛或发送真实消息。正式来源可访问性与用户验收另行记录。
