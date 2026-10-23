@@ -115,31 +115,115 @@ test('content filters preserve geometry, task notes are inset and post details a
   await page.clock.resume()
 })
 
-test('approved date selects cover all history lists and website controls stay aligned', async ({
+test('approved date ranges cover all four lists, compose with filters and cancel without applying', async ({
   page,
 }, info) => {
   await login(page)
+  for (const tab of ['posts', 'deliveries', 'manual', 'tests']) {
+    const path = tab === 'posts' ? '/content' : '/notifications/' + tab
+    const label = tab === 'posts' ? '发现日期' : '记录日期'
+    await navigate(page, path)
+    const date = page.getByRole('button', { name: label, exact: true })
+    await expect(date).toHaveText('全部日期')
+    const requests: URL[] = []
+    const capture = (request: import('@playwright/test').Request) => {
+      const url = new URL(request.url())
+      if (url.pathname === '/api/manage/history/' + tab) requests.push(url)
+    }
+    page.on('request', capture)
+    await date.click()
+    const menu = page.getByRole('dialog', { name: label + '范围', exact: true })
+    await expect(menu).toBeVisible()
+    await menu.getByRole('button', { name: '应用', exact: true }).focus()
+    await menu.getByRole('button', { name: '应用', exact: true }).press('Tab')
+    await expect(menu).toHaveCount(0)
+    await date.click()
+    await expect(menu.getByLabel('开始日期')).toBeFocused()
+    const menuBox = (await menu.boundingBox())!
+    expect(menuBox.x).toBeGreaterThanOrEqual(0)
+    expect(menuBox.x + menuBox.width).toBeLessThanOrEqual(page.viewportSize()!.width + 1)
+    await page.screenshot({ path: info.outputPath('date-popup-' + tab + '.png'), fullPage: false })
+    const before = requests.length
+    await menu.getByLabel('开始日期').fill('2026-10-18')
+    await menu.getByLabel('结束日期').fill('2026-10-19')
+    await menu.getByRole('button', { name: '取消', exact: true }).click()
+    await expect(menu).toHaveCount(0)
+    await expect(date).toHaveText('全部日期')
+    expect(requests).toHaveLength(before)
+
+    const search = page.getByLabel(tab === 'posts' ? '搜索内容' : '搜索投递记录', { exact: true })
+    await search.fill(tab === 'posts' ? '%_' : '历史')
+    await expect.poll(() => requests.some((url) => url.searchParams.has('q'))).toBe(true)
+    const status = page.getByLabel(tab === 'posts' ? '匹配结果' : '投递状态筛选', { exact: true })
+    const filter = tab === 'posts' ? 'match' : tab === 'deliveries' ? 'pending' : 'success'
+    await status.selectOption(filter)
+    await expect
+      .poll(() => requests.some((url) => url.searchParams.get('status') === filter))
+      .toBe(true)
+    if (tab === 'posts') {
+      await search.fill('')
+      await status.selectOption('all')
+      await expect(page.locator('.content-row')).toHaveCount(20)
+      await page.getByRole('button', { name: '下一页内容', exact: true }).click()
+      await expect.poll(() => requests.at(-1)?.searchParams.get('page')).toBe('2')
+    }
+    await date.click()
+    await menu.getByRole('button', { name: '应用', exact: true }).click()
+    await expect(menu.getByRole('alert')).toContainText('开始日期和结束日期')
+    await menu.getByLabel('开始日期').fill('2026-10-20')
+    await menu.getByLabel('结束日期').fill('2026-10-19')
+    await menu.getByRole('button', { name: '应用', exact: true }).click()
+    await expect(menu.getByRole('alert')).toContainText('不能晚于')
+    await menu.getByLabel('开始日期').fill('2026-10-18')
+    const response = page.waitForResponse((response) => {
+      const url = new URL(response.url())
+      return (
+        url.pathname === '/api/manage/history/' + tab &&
+        url.searchParams.get('date_from') === '2026-10-18'
+      )
+    })
+    const geometry = await search.boundingBox()
+    await menu.getByRole('button', { name: '应用', exact: true }).click()
+    const applied = await response
+    expect(applied.ok()).toBe(true)
+    const params = new URL(applied.url()).searchParams
+    expect(params.get('date_to')).toBe('2026-10-19')
+    expect(params.get('page')).toBe('1')
+    expect(params.get('status')).toBe(tab === 'posts' ? 'all' : filter)
+    expect(params.get('q')).toBe(tab === 'posts' ? null : '历史')
+    expect(params.has('discovered_on')).toBe(false)
+    await expect(date).toHaveText('2026/10/18 – 2026/10/19')
+    expect(Math.abs((await search.boundingBox())!.width - geometry!.width)).toBeLessThan(1)
+    await date.click()
+    await menu.getByLabel('开始日期').fill('2026-10-19')
+    await menu.getByRole('button', { name: '应用', exact: true }).click()
+    await expect(date).toHaveText('2026/10/19')
+    await date.click()
+    await menu.getByLabel('开始日期').fill('2020-01-01')
+    await menu.getByLabel('结束日期').fill('2020-01-02')
+    await menu.getByRole('button', { name: '应用', exact: true }).click()
+    await expect(page.locator('.content-row, .delivery-row')).toHaveCount(0)
+    await expect(page.locator('.empty-state')).toBeVisible()
+    await page.screenshot({ path: info.outputPath('date-range-' + tab + '.png'), fullPage: true })
+    await date.click()
+    await expect(menu.getByLabel('开始日期')).toHaveValue('2020-01-01')
+    await menu.getByRole('button', { name: '清除', exact: true }).click()
+    await expect(date).toHaveText('全部日期')
+    await date.click()
+    await menu.getByLabel('开始日期').fill('2020-01-01')
+    await menu.getByLabel('开始日期').press('Escape')
+    await expect(menu).toHaveCount(0)
+    await expect(date).toBeFocused()
+    await expect(date).toHaveText('全部日期')
+    await date.click()
+    await page.mouse.click(page.viewportSize()!.width - 2, 2)
+    await expect(menu).toHaveCount(0)
+    page.off('request', capture)
+  }
   await navigate(page, '/content')
-  const date = page.getByRole('combobox', { name: '发现日期', exact: true })
-  await expect(date).toBeVisible()
-  await expect(date.locator('option').first()).toHaveText('全部日期')
-  await expect(date.locator('option[value="2026-10-19"]')).toHaveCount(1)
-  await date.selectOption('2026-10-19')
-  await expect(page.locator('.content-row')).toHaveCount(20)
   expect(
     (await page.getByLabel('关联任务').locator('option').allTextContents()).join(''),
   ).not.toContain('已删除')
-  for (const tab of ['deliveries', 'manual', 'tests']) {
-    await navigate(page, '/notifications/' + tab)
-    const recordDate = page.getByRole('combobox', { name: '记录日期', exact: true })
-    await expect(recordDate).toBeVisible()
-    await expect(recordDate.locator('option').first()).toHaveText('全部日期')
-    if (tab !== 'manual') {
-      await expect(recordDate.locator('option[value="2026-10-19"]')).toHaveCount(1)
-      await recordDate.selectOption('2026-10-19')
-    }
-    await page.screenshot({ path: info.outputPath('dates-' + tab + '.png'), fullPage: true })
-  }
   await navigate(page, '/websites')
   const input = page.getByLabel('搜索已添加网站')
   const shell = page.locator('.search-input').filter({ has: input })

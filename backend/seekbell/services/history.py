@@ -70,15 +70,21 @@ def read_session(engine):
 
 
 def date_window(value: date | None, timezone: str):
+    return date_range_window(value, value, timezone)
+
+
+def date_range_window(start: date | None, end: date | None, timezone: str):
     try:
         zone = ZoneInfo(timezone)
     except (ValueError, ZoneInfoNotFoundError):
         raise ValueError("Unknown display timezone") from None
-    if value is None:
+    if start is None and end is None:
         return None
+    if start is None or end is None or start > end:
+        raise ValueError("Invalid date range")
     return (
-        datetime.combine(value, time.min, zone).astimezone(UTC).timestamp(),
-        datetime.combine(value + timedelta(days=1), time.min, zone).astimezone(UTC).timestamp(),
+        datetime.combine(start, time.min, zone).astimezone(UTC).timestamp(),
+        datetime.combine(end + timedelta(days=1), time.min, zone).astimezone(UTC).timestamp(),
     )
 
 

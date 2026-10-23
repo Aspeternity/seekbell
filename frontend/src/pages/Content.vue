@@ -15,14 +15,16 @@ import type { Options, PostRecord, PostPage, Page, Evaluation, DeliveryRecord } 
 import Pagination from '../components/Pagination.vue'
 import Feedback from '../components/Feedback.vue'
 import DateFilter from '../components/DateFilter.vue'
+import { dateRangeParams, type HistoryDateRange } from '../dateRange'
 import { useReadHeight } from '../readHeight'
+import { shouldOpenContentRow } from '../contentRow'
 const props = defineProps<{ selectedId?: string }>()
 const emit = defineEmits<{ navigate: [path: string] }>()
 const q = ref(''),
   status = ref('all'),
   task = ref(''),
   category = ref(''),
-  day = ref(''),
+  dateRange = ref<HistoryDateRange>(null),
   website = ref(''),
   page = ref(1)
 const evaluationPage = ref(1),
@@ -32,7 +34,7 @@ const options = useRemote(
   () => [],
   { cacheKey: () => 'content:options' },
 )
-watch([q, status, task, category, day, website], () => (page.value = 1), { flush: 'sync' })
+watch([q, status, task, category, dateRange, website], () => (page.value = 1), { flush: 'sync' })
 const listing = useRemote(
   () =>
     props.selectedId
@@ -42,7 +44,7 @@ const listing = useRemote(
           status: status.value,
           task_id: task.value,
           category: category.value,
-          discovered_on: day.value,
+          ...dateRangeParams(dateRange.value),
           timezone: state.settings.timezone,
           website_id: website.value,
           page: page.value,
@@ -53,7 +55,7 @@ const listing = useRemote(
     status.value,
     task.value,
     category.value,
-    day.value,
+    dateRange.value,
     website.value,
     page.value,
     state.settings.timezone,
@@ -68,7 +70,7 @@ const listing = useRemote(
             status.value,
             task.value,
             category.value,
-            day.value,
+            dateRange.value,
             website.value,
             page.value,
             state.settings.timezone,
@@ -124,6 +126,9 @@ const deliveries = useRemote(
 )
 const time = (at: number | null) =>
   at === null ? '未记录' : formatTime(new Date(at * 1000).toISOString())
+function openPost(id: string) {
+  if (!window.getSelection()?.toString()) emit('navigate', '/content/' + id)
+}
 function reloadListing() {
   options.reload()
   listing.reload()
@@ -133,7 +138,7 @@ function clear() {
   status.value = 'all'
   task.value = ''
   category.value = ''
-  day.value = ''
+  dateRange.value = null
   website.value = ''
 }
 </script>
@@ -349,7 +354,6 @@ function clear() {
           listing.data.value ? listing.data.value.summary.insufficient_data || 0 : '—'
         }}</strong>
       </div>
-      <p>时间显示：{{ state.settings.timezone }}</p>
     </div>
     <section class="panel">
       <div class="filter-toolbar">
@@ -360,7 +364,7 @@ function clear() {
             placeholder="搜索标题、摘要或作者…"
             maxlength="200"
         /></label>
-        <select v-model="status" aria-label="匹配结果">
+        <select v-model="status" class="content-result-filter" aria-label="匹配结果">
           <option value="all">全部匹配结果</option>
           <option v-for="(label, key) in postLabels" :key="key" :value="key">{{ label }}</option>
         </select>
@@ -390,7 +394,7 @@ function clear() {
             {{ item.label || '空版块' }}
           </option>
         </select>
-        <DateFilter v-model="day" scope="posts" label="发现日期" />
+        <DateFilter v-model="dateRange" label="发现日期" />
       </div>
       <p v-if="task" class="small-note content-filter-note">
         匹配结果按所选任务的历史判定筛选；详情可查看其他任务。
@@ -425,7 +429,16 @@ function clear() {
           :aria-busy="listing.loading.value"
         >
           <template v-if="listing.data.value">
-            <article v-for="post in listing.data.value.items" :key="post.id" class="content-row">
+            <article
+              v-for="post in listing.data.value.items"
+              :key="post.id"
+              class="content-row"
+              @click="
+                (event) => {
+                  if (shouldOpenContentRow(event)) emit('navigate', '/content/' + post.id)
+                }
+              "
+            >
               <div class="content-row-top">
                 <span class="result-pill" :class="resultClass(post.status)">{{
                   postLabels[post.status]
@@ -444,7 +457,7 @@ function clear() {
                   {{ time(post.published_at ?? post.first_seen_at) }}</time
                 >
               </div>
-              <button class="content-title" @click="emit('navigate', '/content/' + post.id)">
+              <button class="content-title" @click="openPost(post.id)">
                 {{ post.title }}<Icon name="arrow" :size="17" />
               </button>
               <p class="content-excerpt">
@@ -501,6 +514,17 @@ function clear() {
 }
 .filter-toolbar > select {
   width: 110px;
+}
+.filter-toolbar > .content-result-filter {
+  width: 156px;
+  min-width: 156px;
+}
+.content-row {
+  cursor: pointer;
+}
+.content-row:hover,
+.content-row:focus-within {
+  background: #fafbfc;
 }
 .original-post-link {
   margin-top: 16px;

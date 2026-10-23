@@ -4,11 +4,18 @@ from datetime import UTC, date, datetime
 import pytest
 from fastapi.testclient import TestClient
 from seekbell.config import Settings
-from seekbell.db.models import Outbox, Post, RuleHit, TaskEvaluation
+from seekbell.db.models import (
+    ManualDelivery,
+    Outbox,
+    Post,
+    RuleHit,
+    TargetTestAttempt,
+    TaskEvaluation,
+)
 from seekbell.db.runtime import create_database_engine, migrate, schema_revision
 from seekbell.db.transactions import write_session
 from seekbell.main import create_app
-from seekbell.services.history import History, date_window, post_key
+from seekbell.services.history import History, date_range_window, date_window, post_key
 from sqlalchemy import event, inspect, select, text
 from sqlalchemy.orm import Session
 
@@ -427,3 +434,93 @@ def test_posts_in_one_collection_batch_follow_source_publication_order_without_r
         ).json()["total"]
         == 0
     )
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "model", "column"),
+    [
+        ("posts", Post, "first_seen_at"),
+        ("deliveries", Outbox, "created_at"),
+        ("manual", ManualDelivery, "started_at"),
+        ("tests", TargetTestAttempt, "started_at"),
+    ],
+)
+def test_history_ranges_include_both_local_days_and_exclude_adjacent_instants(
+    history_client, endpoint, model, column
+):
+    client, app, ids = history_client
+    start, end = date_range_window(date(2026, 10, 18), date(2026, 10, 19), "Asia/Shanghai")
+    with write_session(app.state.engine) as session:
+        if model in (ManualDelivery, TargetTestAttempt):
+            event = session.get(Outbox, ids["sent"])
+            for i in range(4):
+                fields = dict(
+                    id=f"range-{endpoint}-{i}",
+                    target_id=event.target_id,
+                    target_snapshot=event.target_snapshot,
+                    started_at=start,
+                    result="success",
+                )
+                if model is ManualDelivery:
+                    fields.update(source_event_id=event.id, payload=event.payload)
+                session.add(model(**fields))
+            session.flush()
+        rows = session.scalars(select(model)).all()
+        for row in rows:
+            setattr(row, column, end + 86400)
+        for row, instant in zip(rows[:4], (start - 0.001, start, end - 0.001, end), strict=True):
+            setattr(row, column, instant)
+    url = "/api/manage/history/" + endpoint
+    params = dict(date_from="2026-10-18", date_to="2026-10-19", timezone="Asia/Shanghai")
+    response = client.get(url, params=params)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["total"] == len(data["items"]) == 2
+    assert {item[column] for item in data["items"]} == {start, end - 0.001}
+    first = client.get(url, params={**params, "page_size": 1}).json()
+    second = client.get(url, params={**params, "page_size": 1, "page": 2}).json()
+    assert first["total"] == second["total"] == 2
+    assert first["items"][0]["id"] != second["items"][0]["id"]
+    assert client.get(url, params={**params, "q": "absent-range-search"}).json()["total"] == 0
+    same_day = client.get(
+        url, params={**params, "date_from": "2026-10-19", "date_to": "2026-10-19"}
+    ).json()
+    assert same_day["total"] == 1
+    legacy = client.get(
+        url, params={"discovered_on": "2026-10-19", "timezone": "Asia/Shanghai"}
+    ).json()
+    assert legacy == same_day
+    assert (
+        client.get(
+            url, params={**params, "date_from": "2025-01-01", "date_to": "2025-01-02"}
+        ).json()["total"]
+        == 0
+    )
+    assert client.get(url).json()["total"] == len(rows)
+    if endpoint == "posts":
+        assert sum(data["summary"].values()) == first["total"]
+
+
+@pytest.mark.parametrize("endpoint", ["posts", "deliveries", "manual", "tests"])
+def test_range_validation_is_shared_by_all_history_lists(history_client, endpoint):
+    client, _, _ = history_client
+    for params in (
+        {"date_from": "2026-10-18"},
+        {"date_to": "2026-10-19"},
+        {"date_from": "2026-10-20", "date_to": "2026-10-19"},
+        {"date_from": "2026-02-30", "date_to": "2026-03-01"},
+        {"date_from": "2026-10-18", "date_to": "9999-12-31"},
+        {"date_from": "2026-10-18", "date_to": "2026-10-19", "discovered_on": "2026-10-18"},
+        {"date_from": "2026-10-18", "date_to": "2026-10-19", "timezone": "Unknown/Zone"},
+    ):
+        assert client.get("/api/manage/history/" + endpoint, params=params).status_code == 422
+
+
+def test_range_midnights_observe_dst_and_year_boundaries():
+    for first, last, hours in (
+        (date(2026, 3, 7), date(2026, 3, 9), 71),
+        (date(2026, 10, 31), date(2026, 11, 2), 73),
+        (date(2026, 12, 31), date(2027, 1, 1), 48),
+    ):
+        start, end = date_range_window(first, last, "America/Los_Angeles")
+        assert end - start == hours * 3600

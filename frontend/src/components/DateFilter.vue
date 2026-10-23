@@ -1,105 +1,241 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { historyGet, useRemote } from '../history'
-import { state } from '../store'
-import { readCacheRevision } from '../readCache'
-const props = defineProps<{ modelValue: string; scope: string; label: string }>()
-const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
-const before = ref(''),
-  dates = ref<string[]>([])
-watch(
-  () => [props.scope, state.settings.timezone, readCacheRevision.value],
-  () => {
-    before.value = ''
-    dates.value = []
-  },
-  { flush: 'sync' },
-)
-const remote = useRemote(
-  () =>
-    historyGet<{ items: string[]; next_before: string | null }>('dates', {
-      scope: props.scope,
-      timezone: state.settings.timezone,
-      before: before.value,
-    }),
-  () => [props.scope, state.settings.timezone, before.value],
-  {
-    cacheKey: () =>
-      JSON.stringify(['history:dates', props.scope, state.settings.timezone, before.value]),
-  },
-)
-watch(
-  remote.data,
-  (value) => {
-    if (value)
-      dates.value = [...new Set([...(before.value ? dates.value : []), ...value.items])]
-        .sort()
-        .reverse()
-  },
-  { immediate: true },
-)
-const choices = computed(() =>
-  props.modelValue && !dates.value.includes(props.modelValue)
-    ? [props.modelValue, ...dates.value]
-    : dates.value,
-)
-function choose(event: Event) {
-  const select = event.target as HTMLSelectElement
-  if (select.value === 'earlier') {
-    before.value = remote.data.value?.next_before || ''
-    select.value = props.modelValue
-  } else emit('update:modelValue', select.value)
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
+import { NPopover } from 'naive-ui'
+import Icon from './Icon.vue'
+import type { HistoryDateRange } from '../dateRange'
+const props = defineProps<{ modelValue: HistoryDateRange; label: string }>()
+const emit = defineEmits<{ 'update:modelValue': [value: HistoryDateRange] }>()
+const open = ref(false),
+  start = ref(''),
+  end = ref(''),
+  error = ref('')
+const trigger = ref<HTMLButtonElement>(),
+  first = ref<HTMLInputElement>(),
+  menu = ref<HTMLElement>()
+const id = useId()
+const caption = computed(() => {
+  const range = props.modelValue
+  if (!range) return '全部日期'
+  const from = range[0].replaceAll('-', '/'),
+    to = range[1].replaceAll('-', '/')
+  return from === to ? from : from + ' – ' + to
+})
+function close(focus = false) {
+  open.value = false
+  if (focus) nextTick(() => trigger.value?.focus())
 }
+async function toggle() {
+  if (open.value) return close()
+  start.value = props.modelValue?.[0] || ''
+  end.value = props.modelValue?.[1] || ''
+  error.value = ''
+  open.value = true
+  await nextTick()
+  first.value?.focus()
+}
+function apply(event: Event) {
+  if (!start.value || !end.value) {
+    error.value = '请选择开始日期和结束日期。'
+    return
+  }
+  if (!(event.currentTarget as HTMLFormElement).checkValidity()) {
+    error.value = '请输入有效的开始日期和结束日期。'
+    return
+  }
+  if (start.value > end.value) {
+    error.value = '开始日期不能晚于结束日期。'
+    return
+  }
+  emit('update:modelValue', [start.value, end.value])
+  close(true)
+}
+function clear() {
+  emit('update:modelValue', null)
+  close(true)
+}
+function keys(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    close(true)
+  } else if (
+    event.key === 'Tab' &&
+    !event.shiftKey &&
+    event.target === menu.value?.querySelector('[type="submit"]')
+  ) {
+    // Continue document tab order from the trigger after the portalled form.
+    trigger.value?.focus()
+    close()
+  }
+}
+function outsideFocus(event: FocusEvent) {
+  const target = event.target
+  if (
+    open.value &&
+    target instanceof Node &&
+    !menu.value?.contains(target) &&
+    !trigger.value?.contains(target)
+  )
+    close()
+}
+onMounted(() => document.addEventListener('focusin', outsideFocus))
+onBeforeUnmount(() => document.removeEventListener('focusin', outsideFocus))
+watch(
+  () => props.modelValue,
+  () => close(),
+)
 </script>
 <template>
   <div class="history-date-filter">
-    <select
-      :value="modelValue"
-      :aria-label="label"
-      :aria-busy="remote.loading.value"
-      @change="choose"
+    <NPopover
+      :show="open"
+      trigger="manual"
+      placement="bottom-start"
+      :show-arrow="false"
+      :animated="false"
+      class="history-date-popover"
+      raw
+      @clickoutside="close()"
     >
-      <option value="">全部日期</option>
-      <option v-for="date in choices" :key="date" :value="date">
-        {{ date.replaceAll('-', '/') }}
-      </option>
-      <option
-        v-if="remote.data.value?.next_before"
-        value="earlier"
-        :disabled="remote.loading.value"
+      <template #trigger>
+        <button
+          ref="trigger"
+          type="button"
+          class="history-date-trigger"
+          :aria-label="label"
+          :aria-describedby="id + '-value'"
+          aria-haspopup="dialog"
+          :aria-expanded="open"
+          :aria-controls="open ? id : undefined"
+          :title="label + '：' + caption"
+          @click="toggle"
+          @keydown.esc.prevent.stop="close(true)"
+        >
+          <span>{{ caption }}</span
+          ><Icon name="down" :size="14" />
+        </button>
+      </template>
+      <form
+        :id="id"
+        ref="menu"
+        role="dialog"
+        :aria-label="label + '范围'"
+        class="history-date-menu"
+        novalidate
+        @submit.prevent="apply"
+        @keydown="keys"
       >
-        加载更早日期…
-      </option>
-    </select>
-    <button
-      v-if="remote.error.value"
-      class="text-link"
-      :aria-label="'重新读取' + label"
-      :title="remote.error.value"
-      @click="remote.reload"
-    >
-      重试日期
-    </button>
+        <strong>{{ label }}</strong>
+        <label
+          >开始日期<input
+            ref="first"
+            v-model="start"
+            type="date"
+            min="0001-01-01"
+            max="9999-12-30"
+            required
+        /></label>
+        <label
+          >结束日期<input v-model="end" type="date" min="0001-01-01" max="9999-12-30" required
+        /></label>
+        <p v-if="error" role="alert" class="date-error">{{ error }}</p>
+        <div class="date-actions">
+          <button type="button" class="text-link" @click="clear">清除</button>
+          <button type="button" class="button" @click="close(true)">取消</button>
+          <button type="submit" class="button primary">应用</button>
+        </div>
+      </form>
+    </NPopover>
   </div>
 </template>
 <style scoped>
 .history-date-filter {
-  width: 110px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
+  width: 196px;
+  max-width: 100%;
 }
-select {
+.history-date-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
   width: 100%;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid #e4e8ec;
+  border-radius: 6px;
+  background: white;
+  color: #6c7886;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.history-date-trigger svg {
+  flex-shrink: 0;
+}
+.history-date-trigger:focus {
+  border-color: #cba280;
+  box-shadow: 0 0 0 3px #bf86521a;
+}
+.history-date-menu {
+  width: 254px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 8px 24px #292e3514;
+  font-size: 12px;
+  color: #6c7886;
+}
+.history-date-menu strong {
+  color: #292e35;
+}
+.history-date-menu label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+.history-date-menu input {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid #e4e8ec;
+  border-radius: 6px;
+  background: white;
+}
+.history-date-menu input:focus {
+  border-color: #cba280;
+  box-shadow: 0 0 0 3px #bf86521a;
+}
+.date-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+.date-actions .text-link {
+  margin-right: auto;
+}
+.date-error {
+  margin: 10px 0 0;
+  color: #b64040;
 }
 @media (max-width: 760px) {
   .history-date-filter {
     flex: 1;
-    min-width: 120px;
+    min-width: min(196px, 100%);
   }
-  select {
-    width: 100%;
+  .history-date-trigger {
+    font-size: 12px;
+    min-height: 39px;
   }
+  .history-date-menu input {
+    font-size: 16px;
+    min-height: 40px;
+  }
+}
+</style>
+<style>
+.history-date-popover {
+  zoom: var(--workspace-scale, 1);
 }
 </style>

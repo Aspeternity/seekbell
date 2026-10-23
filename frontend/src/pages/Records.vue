@@ -23,6 +23,7 @@ import Pagination from '../components/Pagination.vue'
 import SendDialog from '../components/SendDialog.vue'
 import Feedback from '../components/Feedback.vue'
 import DateFilter from '../components/DateFilter.vue'
+import { dateRangeParams, type HistoryDateRange } from '../dateRange'
 import { useReadHeight } from '../readHeight'
 const props = withDefaults(defineProps<{ tab?: string; recordId?: string }>(), {
   tab: 'deliveries',
@@ -31,13 +32,13 @@ const emit = defineEmits<{ navigate: [path: string] }>()
 const q = ref(''),
   status = ref('all'),
   target = ref(''),
-  day = ref(''),
+  dateRange = ref<HistoryDateRange>(null),
   uncertain = ref('all'),
   page = ref(1)
 const resendOpen = ref(false)
 const attemptPage = ref(1),
   taskPage = ref(1)
-watch([q, status, target, day, uncertain], () => (page.value = 1), { flush: 'sync' })
+watch([q, status, target, dateRange, uncertain], () => (page.value = 1), { flush: 'sync' })
 const options = useRemote(
   () => historyGet<Options>('options'),
   () => [],
@@ -52,7 +53,7 @@ const listing = useRemote<Page<DeliveryRecord> | Page<TestRecord> | Page<ManualR
             q: q.value,
             status: status.value,
             target_id: target.value,
-            discovered_on: day.value,
+            ...dateRangeParams(dateRange.value),
             timezone: state.settings.timezone,
             page: page.value,
           })
@@ -60,7 +61,7 @@ const listing = useRemote<Page<DeliveryRecord> | Page<TestRecord> | Page<ManualR
             q: q.value,
             status: status.value,
             target_id: target.value,
-            discovered_on: day.value,
+            ...dateRangeParams(dateRange.value),
             timezone: state.settings.timezone,
             page: page.value,
             uncertain: uncertain.value === 'all' ? undefined : uncertain.value === 'true',
@@ -71,9 +72,10 @@ const listing = useRemote<Page<DeliveryRecord> | Page<TestRecord> | Page<ManualR
     q.value,
     status.value,
     target.value,
-    day.value,
+    dateRange.value,
     uncertain.value,
     page.value,
+    state.settings.timezone,
   ],
   {
     cacheKey: () =>
@@ -85,7 +87,7 @@ const listing = useRemote<Page<DeliveryRecord> | Page<TestRecord> | Page<ManualR
             q.value,
             status.value,
             target.value,
-            day.value,
+            dateRange.value,
             uncertain.value,
             page.value,
             state.settings.timezone,
@@ -129,7 +131,7 @@ function clear() {
   q.value = ''
   status.value = 'all'
   target.value = ''
-  day.value = ''
+  dateRange.value = null
   uncertain.value = 'all'
 }
 </script>
@@ -472,7 +474,7 @@ function clear() {
           <option value="true">曾有结果未知</option>
           <option value="false">未标记结果未知</option>
         </select>
-        <DateFilter v-model="day" :scope="tab" label="记录日期" />
+        <DateFilter v-model="dateRange" label="记录日期" />
       </div>
       <Feedback
         :loading="listing.loading.value || options.loading.value"
