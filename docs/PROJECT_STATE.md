@@ -1,27 +1,23 @@
 # 当前状态
 
-更新时间：2026-10-23（Asia/Shanghai）。社区热榜和概览模块显隐/排序已实现，本地自动验证通过，隔离镜像/TLS检查也已通过；已更新同一8001供用户实测，用户验收待完成。
+更新时间：2026-10-23（Asia/Shanghai）。社区热榜/模块设置已实现并部署本地8001；用户实测反馈正在修正，尚未验收。
 
-## 环境、分支与授权
+## 环境与授权
 
-唯一环境SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe派发；[入口](DEVELOPMENT_ENVIRONMENT.md)。本轮按用户“新建一个分支并开发”从仅规格的7f8c15b新建codex/overview-modules-and-hotlist；祖先main为2c682de（此前修复[PR #1](https://github.com/Aspeternity/seekbell/pull/1)合并）。此前完整CI和amd64/arm64通过，见[合并记录](history/2026-10-23-本地修复合并与热榜分支.md)。
+唯一环境SeekBell-Dev:/home/dev/projects/seekbell，由原Ubuntu经wsl.exe派发，见[环境](DEVELOPMENT_ENVIRONMENT.md)。当前codex/overview-modules-and-hotlist，HEAD c509816仅为交付文档，产品e53d89e850eb01763a2750f5adcd9354f65d49b0；祖先main 2c682de与规格7f8c15b。此前修复PR #1已合并，见[记录](history/2026-10-23-本地修复合并与热榜分支.md)。
 
-用户随后明确授权最新版部署本地Docker实测，已保留数据升级同一8001；不含新功能推送/合并、公开发布、远程部署或主动真实发送。产品提交e53d89e850eb01763a2750f5adcd9354f65d49b0。无多代理，不改D盘、旧Ubuntu或全局WSL。实现已本地提交；本轮仅本地交付证据文档更新，无产品变更或其他用户改动。
+用户已授权本分支开发、本地Docker实测及本次入口/箭头修正；沿用同一8001保留数据更新。不含新功能推送/合并、公开发布、远程部署或主动真实发送。无多代理，不改D盘、旧Ubuntu、全局WSL、8000/4175。
 
-## 实现
+## 实现与本轮反馈
 
-SPEC 6.1、ARCHITECTURE及UI_DESIGN已回写。[开发记录](history/2026-10-23-概览模块与热榜开发.md)包含路径、命令和证据。0010迁移新增独立布局/选择表，两组revision分离；三模块默认显示，偏好支持显隐、鼠标/触屏拖动、键盘上下键及上下按钮、默认草稿与冲突保护。服务端保存，跨浏览器/重启保留，整库加密恢复保留非默认值；上方统计固定。
+SPEC 6.1、ARCHITECTURE及UI_DESIGN为契约。[开发记录](history/2026-10-23-概览模块与热榜开发.md)：0010保存模块布局和浏览选择，revision独立；显隐、鼠标/触屏拖动、键盘排序、默认草稿、冲突保护及跨浏览器保持；上方统计固定。热榜仅NodeSeek第三方三周期，按站能力切换/记忆，5/10条、来源时间/署名及旧快照反馈；独立600秒按需缓存/并发合并/退避，不入规则、历史或通知。Linux DO/V2EX未接入，合成多站仅验证UI。
 
-热榜独立能力注册，首接NodeSeek第三方实时/每日/每周；网站少时标签、多时选择框，单站显示名称，单周期省略切换，按站记忆。Linux DO/V2EX未接入，合成多站只验证扩展UI。默认5/展开10，来源时间/署名、失败旧快照/重试；固定规范原帖链接。后端按网站/提供方/周期600秒按需缓存与合并、错误退避，无后台轮询；隐藏停止专用刷新。热榜不进规则、内容历史、统计或通知，不用RSS最新冒充热门。提供方算法/日周窗口与长期稳定性未验证。
+本轮修正已完成且自动验证通过，待本地提交/镜像更新。已移除概览“自定义显示”入口和无效样式，全部隐藏提示改从系统设置恢复；设置显隐/排序保留。“收起”箭头朝上并同步aria-expanded。周期首次读取/缓存过期等待来源属正常，浏览选择保存不阻塞取榜；已访问周期先显示对应缓存，慢读200ms后显示反馈。未改刷新策略。本轮路径：Overview.vue、CommunityHotlist.vue、hotlist.spec.ts，及上述三契约文档、本状态和[本轮记录](history/2026-10-23-热榜入口与折叠箭头修正.md)。
 
-## 验证与证据
+## 证据与下一步
 
-SeekBell-Dev、产品e53d89e：完整后端679项通过；15组既有Chromium桌面/手机80项、新热榜16项及TLS浏览器2项通过（17组98项）。类型/生产构建、锁/wheel、Prettier/Ruff/diff通过。补验非默认布局/选择加密恢复、鼠标/触屏连续拖动、跨浏览器保存、并发/退避、迟到响应和320px。拆分统计模块后的重复反馈已修正，既有加载用例按统计区域精确定位。所有测试用临时合成库与模拟HTTP，不访问真实论坛或通知。证据/home/dev/.local/state/seekbell/acceptance/2026-10-23-overview-hotlist；镜像seekbell:hotlist-e53d89e850eb，本地ID sha256:a856571243b6de09742b693708c5c74a0c184160cd1a0350418f94debf2f770c；禁外网服务/持久化、加密恢复、模拟升级失败/切换/回退及TLS检查通过，临时容器已清理。另以正式适配器一次性读取真实实时榜，30条且作者/版块齐全；未保存真实样本，不代表长期可用性或部署验收。Safari/真机/读屏和用户验收独立待完成。
+e53d89e基线：后端679、17组浏览器98、类型/构建/格式及隔离服务/加密恢复/升级回退/TLS通过；证据acceptance/2026-10-23-overview-hotlist。另正式适配器一次读取真实实时榜30条，未存真实样本；不代表长期可用性。当前改动生产构建/类型/Prettier/diff通过，热榜桌面/手机18项及加载回归4项全通过；冷读提示、缓存快速返回与箭头方向已覆盖。证据根/home/dev/.local/state/seekbell/acceptance/2026-10-23-hotlist-ui-feedback。
 
-## 本地实例与下一步
+同一http://localhost:8001/仍运行seekbell:hotlist-e53d89e850eb，镜像ID sha256:a856571243b6de09742b693708c5c74a0c184160cd1a0350418f94debf2f770c；seekbell-local/seekbell-local-seekbell-1、原卷seekbell-local_data、0010库、healthy/read-only、仅127.0.0.1:8001。Windows两地址/资源及保活PID14716已验证，见[交付记录](history/2026-10-23-社区热榜本地Docker交付.md)。私有整卷备份local-runtime/backups/before-e53d89e850eb-20261023-181745.tar.gz；旧58bee30需配合旧库备份恢复。
 
-同一http://localhost:8001/（127.0.0.1亦可），seekbell-local/seekbell-local-seekbell-1、原卷seekbell-local_data已运行seekbell:hotlist-e53d89e850eb，镜像ID sha256:a856571243b6de09742b693708c5c74a0c184160cd1a0350418f94debf2f770c；healthy/read-only/unless-stopped，仅127.0.0.1:8001。Windows两地址首页/ready/version/静态资源通过，原保活PID14716身份/创建时间一致。运行元数据已更新。
-
-[交付记录](history/2026-10-23-社区热榜本地Docker交付.md)：停服整卷备份local-runtime/backups/before-e53d89e850eb-20261023-181745.tar.gz（0700/0600），文件SHA/SQLite及副本迁移验证通过；009→010保留原29表记录，实际更新后11类配置指纹一致。账号/配置/历史保留，未导入合成数据。旧58bee30镜像保留；010库不能直接切旧镜像，需配合备份恢复。证据/home/dev/.local/state/seekbell/acceptance/2026-10-23-hotlist-local-update。公开仍ui-restore-5，远程Stack及8000/4175未动。
-
-下一步请用户在8001实测模块显隐/排序、刷新与跨设备保持、热榜实时/每日/每周和失败反馈；按反馈修复后再处理新功能推送/合并。恢复读本状态、开发记录和相关实现；无技术阻塞。
+下一步提交修正并构建隔离验镜像；备份当前用户实测数据后更新同一8001、验证版本/配置与Windows访问并记录证据。之后交用户继续实测，推送/合并另行处理。无技术阻塞。

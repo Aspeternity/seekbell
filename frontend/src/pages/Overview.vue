@@ -301,14 +301,6 @@ async function toggle(id: string) {
       </div>
     </template>
   </ReadRegion>
-  <div class="overview-customize">
-    <button
-      class="text-link"
-      @click="emit('navigate', '/settings/preferences?section=overview-modules')"
-    >
-      <Icon name="settings" :size="15" />自定义显示
-    </button>
-  </div>
   <div class="overview-modules">
     <template v-for="module in modules" :key="module.id">
       <CommunityHotlist v-if="module.id === 'hotlist'" @navigate="emit('navigate', $event)" />
@@ -455,7 +447,7 @@ async function toggle(id: string) {
       </ReadRegion>
     </template>
   </div>
-  <p v-if="!modules.length" class="small-note">内容模块已隐藏，可通过自定义显示恢复。</p>
+  <p v-if="!modules.length" class="small-note">内容模块已隐藏，可在系统设置中恢复。</p>
   <footer class="page-footer">
     <span><Icon name="bell" :size="14" /> SeekBell · 留意你关心的</span
     ><span>管理界面 <span class="separator">·</span> v0.4</span>
@@ -469,11 +461,6 @@ async function toggle(id: string) {
 }
 .overview-modules :deep(.activity-panel) {
   margin-top: 0;
-}
-.overview-customize {
-  display: flex;
-  justify-content: flex-end;
-  margin: 18px 0 12px;
 }
 .chart-x,
 .chart-legend {

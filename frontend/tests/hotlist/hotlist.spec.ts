@@ -37,10 +37,15 @@ test.beforeEach(async ({ page }) => {
   })
   await page.goto('/')
   await expect(page.locator('.hotlist-row')).toHaveCount(5)
+  await expect(page.getByRole('button', { name: '自定义显示', exact: true })).toHaveCount(0)
 })
 async function settings(page: Page) {
-  await page.getByRole('button', { name: '自定义显示', exact: true }).click()
-  await expect(page.getByRole('heading', { name: '概览显示模块', exact: true })).toBeVisible()
+  const menu = page.getByRole('button', { name: '打开导航', exact: true })
+  if (await menu.isVisible()) await menu.click()
+  await page.getByRole('button', { name: '系统设置', exact: true }).click()
+  const heading = page.getByRole('heading', { name: '概览显示模块', exact: true })
+  await heading.scrollIntoViewIfNeeded()
+  await expect(heading).toBeVisible()
 }
 async function save(page: Page) {
   await page.getByRole('button', { name: '保存偏好设置', exact: true }).click()
@@ -93,6 +98,9 @@ test('all modules can be hidden without losing fixed metrics and default restore
   await home(page)
   await expect(page.locator('[data-overview-module]')).toHaveCount(0)
   expect(reads).toBe(0)
+  await expect(
+    page.getByText('内容模块已隐藏，可在系统设置中恢复。', { exact: true }),
+  ).toBeVisible()
   await settings(page)
   await page.getByRole('button', { name: '恢复默认布局', exact: true }).click()
   const prefs = await (await page.request.get('/api/manage/overview-preferences')).json()
@@ -115,8 +123,17 @@ test('period changes discard late responses and remember last selection', async 
   await expect(page.locator('.hotlist-row').first()).toContainText('weekly')
   release()
   await expect(page.locator('.hotlist-row').first()).toContainText('weekly')
-  await page.getByRole('button', { name: '展开更多', exact: true }).click()
+  const expand = page.getByRole('button', { name: '展开更多', exact: true })
+  await expect(expand).toHaveAttribute('aria-expanded', 'false')
+  await expect(expand.locator('svg')).toHaveCSS('transform', 'none')
+  await expand.click()
   await expect(page.locator('.hotlist-row')).toHaveCount(10)
+  const collapse = page.getByRole('button', { name: '收起', exact: true })
+  await expect(collapse).toHaveAttribute('aria-expanded', 'true')
+  await expect(collapse.locator('svg')).toHaveCSS('transform', 'matrix(-1, 0, 0, -1, 0, 0)')
+  await collapse.click()
+  await expect(page.locator('.hotlist-row')).toHaveCount(5)
+  await expect(expand.locator('svg')).toHaveCSS('transform', 'none')
   await expect
     .poll(
       async () =>
@@ -130,6 +147,46 @@ test('period changes discard late responses and remember last selection', async 
     'true',
   )
   await expect(page.locator('.hotlist-row')).toHaveCount(5)
+})
+test('first period read shows feedback and a visited period displays its own cache during refresh', async ({
+  page,
+}) => {
+  let release = () => {}
+  let started = 0
+  const held = new Promise<void>((resolve) => (release = resolve))
+  await page.route('**/api/manage/hotlists/nodeseek?period=daily', async (route) => {
+    const response = await route.fetch()
+    started++
+    await held
+    await route.fulfill({ response })
+  })
+  const periods = page.getByRole('group', { name: '热榜周期' })
+  const hotlist = page.getByRole('region', { name: '社区热榜', exact: true })
+  await periods.getByRole('button', { name: '每日', exact: true }).click()
+  await expect.poll(() => started).toBe(1)
+  await expect(hotlist.getByRole('status')).toHaveText('加载中…')
+  await expect(hotlist.locator('.read-placeholder')).toBeVisible()
+  await expect(page.locator('.hotlist-row')).toHaveCount(0)
+  release()
+  await expect(page.locator('.hotlist-row').first()).toContainText('daily')
+  await periods.getByRole('button', { name: '实时', exact: true }).click()
+  await expect(page.locator('.hotlist-row').first()).toContainText('合成hot热榜帖子')
+
+  const refresh = new Promise<void>((resolve) => (release = resolve))
+  let refreshing = false
+  await page.unroute('**/api/manage/hotlists/nodeseek?period=daily')
+  await page.route('**/api/manage/hotlists/nodeseek?period=daily', async (route) => {
+    const response = await route.fetch()
+    refreshing = true
+    await refresh
+    await route.fulfill({ response })
+  })
+  await periods.getByRole('button', { name: '每日', exact: true }).click()
+  await expect.poll(() => refreshing).toBe(true)
+  await expect(page.locator('.hotlist-row').first()).toContainText('daily')
+  await expect(page.locator('.hotlist-row')).toHaveCount(5)
+  await expect(hotlist.locator('.read-placeholder')).toHaveCount(0)
+  release()
 })
 test('site switching uses only capabilities of selected source and restores per-site period', async ({
   page,

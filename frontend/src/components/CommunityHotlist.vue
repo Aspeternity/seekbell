@@ -272,7 +272,8 @@ onBeforeUnmount(() => {
               >来源：{{ source.provider }} · {{ selectedLabel }}</a
             ><button
               v-if="snapshot && snapshot.items.length > 5"
-              class="text-link"
+              class="text-link hotlist-expand"
+              :aria-expanded="expanded"
               @click="expanded = !expanded"
             >
               {{ expanded ? '收起' : '展开更多' }}<Icon name="down" :size="14" />
@@ -383,6 +384,9 @@ onBeforeUnmount(() => {
   gap: 12px;
   flex-wrap: wrap;
   padding: 16px 22px;
+}
+.hotlist-expand[aria-expanded='true'] svg {
+  transform: rotate(180deg);
 }
 .hotlist-footer > a {
   color: #6f7885;
