@@ -1,27 +1,27 @@
 # 当前状态
 
-更新时间：2026-10-23（Asia/Shanghai）。用户后续确认只展示命中依据，本轮已实现，后端26/浏览器16项验证通过，待提交/镜像更新；8001仍运行上轮0f74ed8。
+更新时间：2026-10-23（Asia/Shanghai）。内容详情“仅命中依据”已实现、验证并更新本地8001，用户验收待继续。
 
 ## 环境与授权
 
-唯一环境SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe派发，见[环境](DEVELOPMENT_ENVIRONMENT.md)。codex/overview-modules-and-hotlist；最新产品0f74ed813726b762f7704c764feaf764e50b3394，随后仅交付文档。之前产品2a37ebc、2665aa6，功能基线e53d89e、规格7f8c15b、main 2c682de；此前PR #1已合并，见[记录](history/2026-10-23-本地修复合并与热榜分支.md)。
+唯一环境SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe派发，见[环境](DEVELOPMENT_ENVIRONMENT.md)。分支codex/overview-modules-and-hotlist，产品312d657f582bf675b6ed3309c244f1c390253ae6，随后仅交付文档。上一产品0f74ed8；main 2c682de仅包含此前PR #1修复，当前功能未推送/合并。
 
-已授权本分支开发、本地Docker实测及反馈修正；本轮明确取消其他判定入口，只展示命中任务/原因，无命中只显示简洁状态，沿用8001保留数据更新。不含新功能推送/合并、公开发布、远程部署或主动真实发送。无多代理，不改D盘、旧Ubuntu、全局WSL或8000/4175。上一产品/交付已提交，本轮未提交路径见下方，无其他用户改动。
+用户确认取消其他任务判定展示，只显示命中任务/原因，无命中显示简洁状态；已授权开发、反馈修正及保留数据更新同一8001。不含公开发布、远程部署或主动真实发送。无多代理，不改D盘、旧Ubuntu、全局WSL或8000/4175。代码/交付记录本地提交，无其他用户改动。
 
-## 实现
+## 实现与读取入口
 
-契约SPEC、ARCHITECTURE、UI_DESIGN已回写；[本轮记录](history/2026-10-23-内容详情仅展示命中依据.md)。Content仅请求新增group=matched，API在分页前严格过滤match，即使零命中也不返回失败任务。区域“命中依据”，删除其他任务的折叠/状态/加载器/样式，移除未用EvaluationPage类型；命中卡片按任务显示保存版本/原因，多页才显示分页。无命中区分no_match/insufficient_data/not_evaluated/unrecorded，加载/错误不冒充空态；旧未知记录说明与换帖隔离保持。
+[本轮记录](history/2026-10-23-内容详情仅展示命中依据.md)，契约SPEC、UI_DESIGN、ARCHITECTURE已同步，替代[上轮折叠方案](history/2026-10-23-内容任务判定分组优化.md)。
 
-后台保留全部历史判定，旧all/primary/other读接口及计数兼容，不改规则/采集/通知或数据库迁移。本轮未提交：api/history.py、services/history.py、Content.vue/history.ts、tests/test_history.py、evaluations.spec.ts及四个受标题变更影响的浏览器文件、契约/状态/本轮记录。类型/生产构建/格式/Ruff/diff通过；后端history26项、命中依据8/既有历史4/详情加载2/概览入口2共16浏览器通过；测试路由收尾问题已修正，不改产品逻辑或放宽检测。
+Content仅请求group=matched，服务端在分页前严格过滤match，零命中也不回退其他判定。标题“命中依据”；每个命中任务展示保存时名称、任务配置vN、时间和自身原因。其他任务入口/加载器/状态/样式及无用类型已删；超过单页才分页。无命中区分不命中、信息不足、未执行/基线和历史未知，加载/失败不伪装空态，换帖隔离迟到结果。历史判定保留，旧all/primary/other读接口兼容，无迁移/重算，不改采集/规则/通知。恢复读本状态、本轮记录、Content.vue和history API/服务及相关测试。
 
-原功能保持：0010保存模块布局/选择，三模块显隐/排序，上方统计固定；仅NodeSeek第三方三周期，5/10条。热榜缓存立即返回/后台更新、同站其他周期预取，无消费者循环或磁盘快照；首次/重启无缓存仍需读取。热榜不入规则/历史/通知。最近命中/热榜整行打开内容详情/原帖，版本按任务独立计数。Linux DO/V2EX未接入。前阶段细节见[热榜记录](history/2026-10-23-热榜缓存与整行点击.md)。
+先前热榜/布局见[记录](history/2026-10-23-热榜缓存与整行点击.md)：0010保存显隐/排序/选择，上方统计固定；仅NodeSeek第三方三周期、5/10条、缓存即返/后台更新/同站预取，无消费者循环或磁盘缓存，首次/重启仍可能等待。热榜不入规则/历史/通知；Linux DO/V2EX未接。最近命中/热榜整行打开详情/原帖。
 
-## 验证与本地实例
+## 验证与实例
 
-0f74ed8：后端history26项通过；桌面/手机分组8、history4、内容稳定8共20浏览器通过；最终去空汇总块后重建并补验前12项通过，不重复计数。类型/生产构建、Prettier、Ruff/diff/隐私及镜像禁外网服务/静态/健康/重启/配置持久化通过。新增test:evaluations独立8029临时实例/CI步骤；初轮共用history触发测试登录限流，已分离，正式限流不变。自动验证为合成库/模拟HTTP，无真实论坛/通知；未声称重跑完整CI或用户验收。
+312d657：history后端26项；桌面/手机命中依据8、既有历史4、详情加载2、概览入口2共16浏览器通过。类型/构建、Prettier/Ruff/diff/隐私、镜像禁外网/静态/健康/重启/配置持久化通过。初轮测试路由收尾已修正，正式逻辑/错误检测不放宽。test:evaluations独立8029避免与history登录限流冲突。自动验证均合成库/模拟HTTP，未声称全CI/真机或用户验收。
 
-同一http://localhost:8001/或127.0.0.1:8001；seekbell-local/seekbell-local-seekbell-1、原卷seekbell-local_data，运行seekbell:evaluations-0f74ed813726，镜像ID sha256:0a8abd90f8e512de314fee5c699847f47435405d5752c2557d0015534f33b705。仍0010，healthy/read-only/unless-stopped，仅本机8001。Windows两地址/版本/资源通过，保活PID14716身份/创建时间一致，运行元数据已更新。
+同一http://localhost:8001/或127.0.0.1:8001；seekbell-local/seekbell-local-seekbell-1、原卷seekbell-local_data，seekbell:match-evidence-312d657f582b，镜像ID sha256:52f6c5626a7d1dab27f69ee3d7e8d8eb4a474b5728e4a3d36a01c8a6bea94cf1。仍0010，healthy/read-only/unless-stopped，仅本机8001。Windows两地址/版本/资源通过，保活PID14716身份/创建时间一致，运行元数据已更新。
 
-已停服整卷备份before-0f74ed813726-20261023-200412.tar.gz（local-runtime/backups，0700/0600），逐文件SHA、解包副本SQLite与实际更新前后12类配置指纹通过。账号/配置/历史保留，无合成导入。旧2a37ebc同0010可回退；更旧58bee30需配旧库备份。证据/home/dev/.local/state/seekbell/acceptance/2026-10-23-evaluation-snapshots；完整SHA/命令见本轮记录。
+停服整卷备份local-runtime/backups/before-312d657f582b-20261023-221929.tar.gz（0700/0600），逐文件SHA、解包SQLite与12类配置指纹通过；账号/配置/历史保留，无合成导入。旧0f74ed8同0010可回退，更旧58bee30须配旧库备份。证据/home/dev/.local/state/seekbell/acceptance/2026-10-23-match-evidence-only；完整SHA和命令见本轮记录。
 
-下一步完成只展示命中的针对性验证/提交/隔离镜像检查，备份当前数据后更新同一8001；推送/合并另行处理。恢复读本状态、本轮记录及相关实现；无技术阻塞。
+下一步用户刷新8001实测仅命中依据及无命中状态，据反馈修正；新功能推送/合并另行处理。无技术阻塞。
