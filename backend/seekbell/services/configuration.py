@@ -24,6 +24,7 @@ from seekbell.db.transactions import write_session
 from seekbell.domain.rules import Rule
 from seekbell.notifiers.configs import public_config, validate_config
 from seekbell.notifiers.credentials import CredentialVault
+from seekbell.services.rule_values import normalized_rule
 from seekbell.services.task_websites import normalize_websites
 from seekbell.sites.registry import validate_rule_capabilities
 
@@ -210,6 +211,7 @@ class Configuration:
                 rule,
                 managed=managed,
             )
+            rule = normalized_rule(rule, selected)
             targets = self._targets(session, target_ids)
             if managed:
                 self._configured_targets(session, targets)
@@ -261,6 +263,7 @@ class Configuration:
                 rule,
                 managed=managed,
             )
+            rule = normalized_rule(rule, selected)
             targets = self._targets(session, target_ids)
             if managed:
                 self._configured_targets(session, targets)

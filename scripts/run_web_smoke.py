@@ -18,6 +18,7 @@ if __name__ == "__main__":
     group.add_argument("--operations", action="store_true")
     group.add_argument("--retention", action="store_true")
     group.add_argument("--system", action="store_true")
+    parser.add_argument("--diagnostics", action="store_true")
     parser.add_argument("--port", type=int, default=None)
     args = parser.parse_args()
     seeded = args.history or args.sending or args.operations or args.retention or args.system
@@ -54,6 +55,10 @@ if __name__ == "__main__":
                         seed_retention(engine)
                     else:
                         seed_history(engine, CredentialVault.open(Path(directory), create=True))
+                        if args.diagnostics:
+                            from tests.diagnostics_helpers import seed_diagnostics
+
+                            seed_diagnostics(engine, CredentialVault.open(Path(directory)))
                 finally:
                     engine.dispose()
         app = create_app(

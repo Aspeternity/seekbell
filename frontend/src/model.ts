@@ -53,6 +53,7 @@ export function emptyTask(): Task {
 }
 export type Truth = 'yes' | 'no' | 'unknown'
 export interface MatchResult {
+  headline?: string
   status: Truth
   reasons: string[]
 }

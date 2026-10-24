@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppSelect from '../components/AppSelect.vue'
+import HistoryTrialResults from '../components/HistoryTrialResults.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import Icon from '../components/Icon.vue'
 import Toggle from '../components/Toggle.vue'
@@ -37,9 +38,28 @@ const websiteLabel = computed(
 const supportsAuthor = computed(() =>
   draft.websiteIds.every((id) => websiteDefinition(id)?.authorFilter !== false),
 )
-const categorySuggestions = computed(() => [
-  ...new Set(draft.websiteIds.flatMap((id) => websiteDefinition(id)?.categorySuggestions || [])),
-])
+const categorySuggestions = computed(() => {
+  const options = new Map<string, { value: string; label: string }>()
+  for (const website of selectedWebsites.value) {
+    for (const option of website.categoryOptions || []) {
+      if (!options.has(option.value))
+        options.set(option.value, {
+          value: option.value,
+          label:
+            selectedWebsites.value.length > 1
+              ? websiteName(website.id) + ' · ' + option.label
+              : option.label,
+        })
+    }
+  }
+  for (const value of draft.categories) {
+    if (!options.has(value)) options.set(value, { value, label: value + '（原值）' })
+  }
+  return [...options.values()]
+})
+function categoryName(value: string) {
+  return categorySuggestions.value.find((option) => option.value === value)?.label || value
+}
 const errors = ref<string[]>([])
 const testing = ref(false),
   testError = ref('')
@@ -52,11 +72,19 @@ const historyResults = ref<
     }[]
   | null
 >(null)
-const sample = reactive({ title: '', summary: '', author: '', category: '' })
+const sample = reactive({ websiteId: '', title: '', summary: '', author: '', category: '' })
+const showHistoryDialog = ref(false)
 const historyLimit = ref(20)
 const historyMeta = ref<Awaited<ReturnType<typeof trialHistory>> | null>(null)
 const missingSummary = ref(false)
 const section = ref('basic')
+watch(
+  () => [...draft.websiteIds],
+  () => {
+    if (!draft.websiteIds.includes(sample.websiteId)) sample.websiteId = draft.websiteIds[0] || ''
+  },
+  { immediate: true },
+)
 const unrestricted = computed(
   () =>
     !draft.groups.some((g) => g.all.length || g.any.length) &&
@@ -85,6 +113,7 @@ watch(
     testResult.value = null
     historyResults.value = null
     historyMeta.value = null
+    showHistoryDialog.value = false
   },
   { deep: true },
 )
@@ -96,6 +125,7 @@ watch(
   { deep: true },
 )
 function clearHistory() {
+  showHistoryDialog.value = false
   historyResults.value = null
   historyMeta.value = null
 }
@@ -435,13 +465,13 @@ function jump(id: string) {
                 全部版块</button
               ><button
                 v-for="category in categorySuggestions"
-                :key="category"
+                :key="category.value"
                 type="button"
-                :aria-pressed="draft.categories.includes(category)"
-                :class="{ selected: draft.categories.includes(category) }"
-                @click="toggleCategory(category)"
+                :aria-pressed="draft.categories.includes(category.value)"
+                :class="{ selected: draft.categories.includes(category.value) }"
+                @click="toggleCategory(category.value)"
               >
-                {{ category }}
+                {{ category.label }}
               </button>
             </div>
             <p class="field-help">
@@ -551,7 +581,7 @@ function jump(id: string) {
           >。
         </p>
         <p v-if="draft.categories.length">
-          限定版块：<strong>{{ draft.categories.join('、') }}</strong
+          限定版块：<strong>{{ draft.categories.map(categoryName).join('、') }}</strong
           >。
         </p>
         <p v-if="draft.authorsInclude.length">
@@ -599,6 +629,19 @@ function jump(id: string) {
           </button>
         </div>
         <div v-if="testMode === 'manual'" class="sample-form">
+          <template v-if="selectedWebsites.length > 1">
+            <label class="field-label" for="sample-website">样本网站</label>
+            <AppSelect
+              id="sample-website"
+              v-model="sample.websiteId"
+              :options="
+                selectedWebsites.map((website) => ({
+                  value: website.id,
+                  label: websiteName(website.id),
+                }))
+              "
+            />
+          </template>
           <label class="field-label" for="sample-title">帖子标题</label
           ><textarea id="sample-title" v-model="sample.title" rows="3" maxlength="500" /><label
             class="field-label"
@@ -675,10 +718,12 @@ function jump(id: string) {
           <p v-for="reason in testResult.reasons" :key="reason">{{ reason }}</p>
         </div>
         <div v-if="testMode === 'history' && historyResults" class="history-results" role="status">
-          <div class="history-result-summary">
-            命中 {{ historyResults.filter((r) => r.result.status === 'yes').length }} /
-            {{ historyResults.length }} 条
-          </div>
+          <div class="history-result-summary">本次试算 {{ historyResults.length }} 条</div>
+          <p>
+            命中 {{ historyResults.filter((item) => item.result.status === 'yes').length }} · 未命中
+            {{ historyResults.filter((item) => item.result.status === 'no').length }} · 信息不足
+            {{ historyResults.filter((item) => item.result.status === 'unknown').length }}
+          </p>
           <p v-if="historyMeta">
             本地共 {{ historyMeta.available }} 条；本次 {{ historyMeta.sampleCount }} 条。
             <template v-if="historyMeta.sampleCount"
@@ -688,18 +733,14 @@ function jump(id: string) {
             >
             <template v-else>暂无本地历史样本。</template>
           </p>
-          <article v-for="(item, i) in historyResults" :key="i">
-            <div>
-              <span class="result-pill" :class="item.result.status">{{
-                statusLabel[item.result.status]
-              }}</span
-              ><strong>{{ item.sample.title }}</strong>
-              <span v-if="item.sample.websiteId" class="plain-chip">{{
-                websiteName(item.sample.websiteId)
-              }}</span>
-            </div>
-            <p>{{ item.result.reasons.join('；') }}</p>
-          </article>
+          <button
+            v-if="historyResults.length"
+            type="button"
+            class="button"
+            @click="showHistoryDialog = true"
+          >
+            查看结果
+          </button>
         </div>
         <p class="test-footnote">由服务端规则引擎试算，不发送通知、不改变历史。</p>
       </section>
@@ -723,6 +764,11 @@ function jump(id: string) {
       </div>
     </div>
   </form>
+  <HistoryTrialResults
+    v-if="showHistoryDialog && historyResults"
+    :items="historyResults"
+    @close="showHistoryDialog = false"
+  />
 </template>
 
 <style scoped>
@@ -750,12 +796,16 @@ function jump(id: string) {
   background: #fdf8f4;
   color: var(--accent);
 }
-.task-website-options label:focus-within {
-  outline: 2px solid #bf865255;
+.task-website-options label:has(input:focus-visible) {
+  outline: 1px solid #cba280;
   outline-offset: 2px;
 }
 .task-website-options input {
   accent-color: var(--accent);
+}
+.task-website-options input:focus {
+  outline: none;
+  box-shadow: none;
 }
 .task-website-options small {
   font-size: 11px;

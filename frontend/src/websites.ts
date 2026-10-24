@@ -11,9 +11,9 @@ export interface WebsiteDefinition {
   defaultInterval: number
   minimumInterval: number
   authorFilter: boolean
-  categorySuggestions: string[]
 }
 export interface InstalledWebsite {
+  categoryOptions: { value: string; label: string }[]
   id: string
   adapterId: string
   enabled: boolean
@@ -27,7 +27,6 @@ export const websiteCatalog: WebsiteDefinition[] = [
     defaultInterval: 10,
     minimumInterval: 10,
     authorFilter: true,
-    categorySuggestions: ['优惠', '技术', '测评', '交易', '日常'],
     id: 'nodeseek',
     name: 'NodeSeek',
     description: '技术交流、服务器优惠与自托管灵感',
@@ -52,7 +51,6 @@ export const websiteCatalog: WebsiteDefinition[] = [
     defaultInterval: 60,
     minimumInterval: 60,
     authorFilter: false,
-    categorySuggestions: [],
   },
 ]
 export function websiteDefinition(adapterId: string) {
@@ -62,6 +60,7 @@ export function createWebsite(adapterId: string): InstalledWebsite {
   if (!websiteDefinition(adapterId)) throw new Error('尚未支持该网站适配器')
   return {
     id: adapterId,
+    categoryOptions: [],
     adapterId,
     enabled: false,
     interval: websiteDefinition(adapterId)!.defaultInterval,

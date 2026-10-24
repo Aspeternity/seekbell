@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AppSelect from '../components/AppSelect.vue'
 import TaskEvaluationCard from '../components/TaskEvaluationCard.vue'
+import PostDiagnosis from '../components/PostDiagnosis.vue'
 import { computed, ref, watch } from 'vue'
 import Icon from '../components/Icon.vue'
 import { channelMeta } from '../store'
@@ -21,11 +22,13 @@ const q = ref(''),
   dateRange = ref<HistoryDateRange>(null),
   website = ref(''),
   page = ref(1)
+const showOther = ref(false)
 const evaluationPage = ref(1),
   deliveryPage = ref(1)
 watch(
   () => props.selectedId,
   () => {
+    showOther.value = false
     evaluationPage.value = 1
     deliveryPage.value = 1
   },
@@ -96,13 +99,16 @@ const detail = useRemote(
 )
 const evaluations = useRemote(
   () =>
-    props.selectedId
-      ? historyGet<Page<Evaluation>>('posts/' + props.selectedId + '/evaluations', {
-          page: evaluationPage.value,
-          group: 'matched',
-        })
+    props.selectedId && detail.data.value?.status === 'match'
+      ? historyGet<Page<Evaluation> & { other_total: number }>(
+          'posts/' + props.selectedId + '/evaluations',
+          {
+            page: evaluationPage.value,
+            group: 'matched',
+          },
+        )
       : Promise.resolve(undefined),
-  () => [props.selectedId, evaluationPage.value],
+  () => [props.selectedId, detail.data.value?.status, evaluationPage.value],
   {
     cacheKey: () =>
       props.selectedId
@@ -273,45 +279,62 @@ function clear() {
             </section>
           </div>
           <aside class="panel support-panel">
-            <h2><Icon name="filter" :size="18" />命中依据</h2>
-            <p v-if="detail.data.value.baseline === null" class="info-note">
-              旧版本可能未保存完整判定。只展示已留存证据，不按当前规则重算历史。
-            </p>
-            <ReadRegion
-              :loading="evaluations.loading.value"
-              :error="evaluations.error.value"
-              :has-data="!!evaluations.data.value"
-              :stale="evaluations.stale.value"
-              :min-height="160"
-              @retry="evaluations.reload"
-              ><template v-if="evaluations.data.value">
-                <TaskEvaluationCard
-                  v-for="evaluation in evaluations.data.value.items"
-                  :key="evaluation.task_id + ':' + evaluation.version"
-                  :evaluation="evaluation"
-                  @navigate="emit('navigate', $event)"
-                />
-                <p v-if="!evaluations.data.value.total" class="small-note" role="status">
-                  {{ emptyMatchMessage }}
-                </p>
-                <Pagination
-                  v-if="evaluations.data.value.total > evaluations.data.value.page_size"
-                  :page="evaluationPage"
-                  :total="evaluations.data.value.total"
-                  :page-size="evaluations.data.value.page_size"
-                  label="命中任务判定"
-                  @change="(value) => (evaluationPage = value)"
-                />
-              </template>
-            </ReadRegion>
-            <p v-if="evaluations.data.value?.total" class="small-note">
-              显示保存时的名称、版本与原因；修改或删除任务不重写已有记录。
-            </p>
+            <template v-if="detail.data.value.status === 'match' && !showOther">
+              <h2><Icon name="filter" :size="18" />命中依据</h2>
+              <p v-if="detail.data.value.baseline === null" class="info-note">
+                旧版本可能未保存完整判定。只展示已留存证据，不按当前规则重算历史。
+              </p>
+              <ReadRegion
+                :loading="evaluations.loading.value"
+                :error="evaluations.error.value"
+                :has-data="!!evaluations.data.value"
+                :stale="evaluations.stale.value"
+                :min-height="160"
+                @retry="evaluations.reload"
+                ><template v-if="evaluations.data.value">
+                  <TaskEvaluationCard
+                    v-for="evaluation in evaluations.data.value.items"
+                    :key="evaluation.task_id + ':' + evaluation.version"
+                    :evaluation="evaluation"
+                    @navigate="emit('navigate', $event)"
+                  />
+                  <p v-if="!evaluations.data.value.total" class="small-note" role="status">
+                    {{ emptyMatchMessage }}
+                  </p>
+                  <Pagination
+                    v-if="evaluations.data.value.total > evaluations.data.value.page_size"
+                    :page="evaluationPage"
+                    :total="evaluations.data.value.total"
+                    :page-size="evaluations.data.value.page_size"
+                    label="命中任务判定"
+                    @change="(value) => (evaluationPage = value)"
+                  />
+                </template>
+              </ReadRegion>
+              <p v-if="evaluations.data.value?.total" class="small-note">
+                显示保存时的名称、版本与原因；修改或删除任务不重写已有记录。
+              </p>
+              <button
+                v-if="evaluations.data.value?.other_total"
+                type="button"
+                class="text-link"
+                @click="showOther = true"
+              >
+                查看其他任务判定（{{ evaluations.data.value.other_total }}）
+              </button>
+            </template>
+            <PostDiagnosis
+              v-else
+              :key="detail.data.value.id"
+              :post="detail.data.value"
+              :preferred-task-id="task"
+              :other="showOther"
+              @back="showOther = false"
+              @navigate="emit('navigate')"
+            />
           </aside>
-        </div>
-      </template></ReadRegion
-    ></template
-  >
+        </div> </template></ReadRegion
+  ></template>
   <template v-else>
     <section class="page-heading">
       <div>

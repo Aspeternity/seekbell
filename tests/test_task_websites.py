@@ -217,7 +217,7 @@ def test_upgrade_backfills_all_historical_and_deleted_task_versions_without_chan
             versions = connection.execute(
                 text("SELECT * FROM task_versions ORDER BY task_id,version")
             ).all()
-        migrate(engine)
+        migrate(engine, "0014_task_websites")
         assert schema_revision(engine) == "0014_task_websites"
         with engine.connect() as connection:
             assert connection.execute(text("SELECT * FROM tasks ORDER BY id")).all() == tasks

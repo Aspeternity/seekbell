@@ -334,3 +334,12 @@ WebsiteRequestBudget.failed不再写人工配额；配额仅在人工请求真�
 每次创建/修改在同一BEGIN IMMEDIATE中校验全部网站的安装状态、适配器能力与目标，再把集合写入新TaskVersion；删除目标自动生成的新版本同样复制网站范围。当前任务范围只读current_version.website_ids，自动匹配与网站移除依赖通过SQLite json_each/EXISTS判断，不为多站另建采集器。保存只影响之后首次发现的新帖，已保存判定/命中和已生成通知快照保持；跨站相同帖子数字ID仍按website_id隔离。
 API以website_ids为主；兼容旧单站输入website_id，二者不能同时提供。workspace仍返回website_id为当前集合首项以兼容旧读取，正式前端及依赖使用website_ids。历史试匹配接受集合，选各站合计最近20/50/100条，按首次发现时间、网站及帖子ID稳定排序，每项返回来源；只读、不联网/补发。共有规则须适用于全部所选网站；包含Linux DO时拒绝用户名条件，草稿保留并提示清除或取消该站，不静默削弱筛选。
 TaskEditor使用可编辑复选框、至少一站，保留22px字段间距/暖橙视觉；列表、概览、关联任务与复制/启停均使用完整集合。章节导航用被动scroll/resize＋rAF同步实际位置，ResizeObserver处理表单高度变化，底部短章节补偿；卸载清理监听/observer/frame。点击仍平滑定位，减少动态效果偏好下直接定位，aria-current与高亮一致。
+
+
+## 匹配诊断与版块值修复（2026-10-24）
+
+RuleEngine继续纯函数，不认识显示名。sites/categories提供NodeSeek稳定标识/中文标签及已知旧别名精确映射，workspace为每站返回categoryOptions（内置值＋本地已见值，后者限100）；前端展示label、保存value，未知旧值显式保留。配置与历史草稿试算入口统一normalized_rule；NodeSeek单站把已知中文值转标识，多站保留其他站可能使用的原文字面值并加入NodeSeek标识，仍按共同候选值精确匹配，不把其他站名称改成NodeSeek标识。样本模拟选择对应网站，仅规范化该站已知别名；RSS/Post/SeenPost和Webhook原值保持。
+0015_category_values为已安装语义下未删除任务的受影响当前规则生成新TaskVersion，复制名称/备注/目标/网站集合，仅规范化已知categories并推进当前版本。全部旧版本、历史判定、命中、队列/快照、已见/送达账本、来源/基线与启停不变，不补发。已删除任务不修；未知值不猜映射；混站兼容集合超64则保留原配置，避免生成无效规则。DDL无变化，迁移有事务、幂等与故障回滚验证。
+PostDiagnosis复用History.decisions的TaskEvaluation/legacy RuleHit合并视图。GET posts/{key}/evaluation-options在同一BEGIN只读快照中统计、搜索保存时任务名并分页20条元信息，preferred_task_id仅选择实际有判定的项；GET evaluations/{task_id}/{version}只读该帖对应的一份不可变规则/原因/实际字段。原因摘要只解释保存的真值，正确处理OR组、排除取反与信息不足，不重新运行历史。已知版块值缺陷可对照原保存值与RSS标识。
+POST posts/{key}/current-rule-trial仅接task_id，读取当前版本与同一条本地Post快照，检查网站范围后纯试算，无采集/调度/发送或业务写入；身份/CSRF/脱敏契约沿用。历史结果与当前试算分别呈现。旧GET evaluations/all/matched/primary/other契约兼容，命中先过滤再分页。
+前端PostDiagnosis每次仅一个历史详情，搜索分页保留当前选择；query/cache identity含帖子、任务版本和查询，换帖销毁/清空，useRemote/session保护与试算generation防迟到。历史试算仅侧卡汇总，ResultDialog中状态筛选、每页10条、完整原因按需展开；页控固定在窗口底部。弹窗锁背景滚动、Escape关闭并恢复触发焦点，手机全屏。规则/样本/限额改变使旧结果失效。只读规则POST不失效监控/通知缓存。网站选项鼠标仅细边框/底色，键盘focus-visible轻量提示，保留22px间距。

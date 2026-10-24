@@ -40,6 +40,6 @@ def test_failed_core_schema_migration_rolls_back_ddl_and_revision(tmp_path):
         assert schema_revision(engine) == "0001_installation"
         assert set(inspect(engine).get_table_names()) == {"installation", "alembic_version"}
         migrate(engine)
-        assert schema_revision(engine) == "0014_task_websites"
+        assert schema_revision(engine) == "0015_category_values"
     finally:
         engine.dispose()

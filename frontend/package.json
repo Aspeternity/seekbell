@@ -32,7 +32,8 @@
     "test:first-entry": "playwright test --config playwright.first-entry.config.ts",
     "test:hotlist": "playwright test --config playwright.hotlist.config.ts",
     "test:evaluations": "playwright test --config playwright.evaluations.config.ts",
-    "test:linuxdo": "playwright test --config playwright.linuxdo.config.ts"
+    "test:linuxdo": "playwright test --config playwright.linuxdo.config.ts",
+    "test:diagnostics": "playwright test --config playwright.diagnostics.config.ts"
   },
   "dependencies": {
     "naive-ui": "2.45.3",

@@ -24,9 +24,9 @@ async function post(page: Page, status: string, index = 0) {
   const data = await (await page.request.get('/api/manage/history/posts?status=' + status)).json()
   return data.items[index].id as string
 }
-async function go(page: Page, id: string) {
+async function go(page: Page, id: string, heading = '命中依据') {
   await page.goto('/#/content/' + id)
-  await expect(page.getByRole('heading', { name: '命中依据', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible()
 }
 test('one match shows only its own evidence even with nine other decisions', async ({
   page,
@@ -48,7 +48,7 @@ test('one match shows only its own evidence even with nine other decisions', asy
   await expect(rows.first().locator('.result-pill')).toHaveText('命中')
   await expect(rows.first().locator('.evaluation-reasons')).toContainText('VPS')
   await expect(rows.first().locator('.evaluation-reasons')).not.toContainText('特别')
-  await expect(page.getByRole('button', { name: /其他任务判定/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /其他任务判定/ })).toHaveCount(1)
   await expect(page.getByText('特别标题关注', { exact: true })).toHaveCount(0)
   await expect(page.getByLabel('下一页命中任务判定', { exact: true })).toHaveCount(0)
   expect(groups).toEqual(['matched'])
@@ -58,19 +58,24 @@ test('one match shows only its own evidence even with nine other decisions', asy
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
     .toBe(true)
 })
-test('no match, insufficient data, baseline and unknown history have distinct compact states', async ({
+test('non-matches show a single saved reason while missing states stay honest', async ({
   page,
 }) => {
-  for (const [status, message] of [
-    ['no_match', '该内容未命中任何任务。'],
-    ['insufficient_data', '信息不足，暂无法确定是否命中。'],
-    ['not_evaluated', '基线帖子：首次采集时登记，未执行规则匹配或生成通知。'],
+  for (const [status, heading] of [
+    ['no_match', '未命中原因'],
+    ['insufficient_data', '判定信息不足'],
+    ['not_evaluated', '未参与匹配'],
   ]) {
-    await go(page, await post(page, status!))
+    await go(page, await post(page, status!), heading)
     await expect(page.locator('.history-evaluation')).toHaveCount(0)
-    await expect(page.getByText(message!, { exact: true })).toBeVisible()
-    await expect(page.getByRole('button', { name: /其他任务判定/ })).toHaveCount(0)
-    await expect(page.getByLabel('下一页命中任务判定', { exact: true })).toHaveCount(0)
+    if (status === 'not_evaluated') {
+      await expect(
+        page.getByText('首次采集基线：只登记帖子，未执行规则匹配或生成通知。', { exact: true }),
+      ).toBeVisible()
+    } else {
+      await expect(page.locator('.diagnosis-task')).toHaveCount(1)
+      await expect(page.locator('.diagnosis-cause')).toBeVisible()
+    }
   }
   const id = await post(page, 'no_match')
   await page.route('**/api/manage/history/posts/' + id, async (route) => {
@@ -80,9 +85,13 @@ test('no match, insufficient data, baseline and unknown history have distinct co
     data.status = 'unrecorded'
     await route.fulfill({ json: data })
   })
-  await go(page, id)
-  await expect(page.getByText('没有可确认的历史命中记录。', { exact: true })).toBeVisible()
-  await expect(page.locator('.history-evaluation')).toHaveCount(0)
+  await go(page, id, '暂无判定记录')
+  await expect(
+    page.getByText('没有保存当时的任务判定，无法还原原因；不会用当前规则替代历史结果。', {
+      exact: true,
+    }),
+  ).toBeVisible()
+  await expect(page.locator('.diagnosis-cause')).toHaveCount(0)
 })
 function decision(name: string, deleted = false): Evaluation {
   return {
@@ -130,7 +139,7 @@ test('multiple matches paginate, keep deleted snapshots and expose retry without
   await page.getByRole('button', { name: '重新加载', exact: true }).click()
   await expect(page.locator('.history-evaluation')).toHaveCount(1)
   await expect(page.locator('.history-evaluation')).toContainText('命中丙')
-  await expect(page.getByRole('button', { name: /其他任务判定/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /其他任务判定/ })).toHaveCount(1)
 })
 test('cold reads do not pretend to be no match and changing content rejects late evidence', async ({
   page,
@@ -154,11 +163,11 @@ test('cold reads do not pretend to be no match and changing content rejects late
   await expect(page.locator('.support-panel').getByRole('status')).toHaveText('加载中…')
   await expect(page.getByText('该内容未命中任何任务。', { exact: true })).toHaveCount(0)
   await page.evaluate((id) => (location.hash = '/content/' + id), next)
-  await expect(page.getByText('该内容未命中任何任务。', { exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '未命中原因', exact: true })).toBeVisible()
   release()
   await done
   await expect(page.locator('.history-evaluation')).toHaveCount(0)
-  await expect(page.getByText('该内容未命中任何任务。', { exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '未命中原因', exact: true })).toBeVisible()
   await page.unroute('**/api/manage/history/posts/' + id + '/evaluations?*')
   await page.evaluate((id) => (location.hash = '/content/' + id), id)
   await expect(page.locator('.history-evaluation')).toHaveCount(1)

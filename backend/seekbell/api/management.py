@@ -12,6 +12,7 @@ from seekbell.db.models import (
     AlertSettings,
     NotificationTarget,
     OverviewPreferences,
+    Post,
     RetentionPolicy,
     Source,
     SourceState,
@@ -30,9 +31,11 @@ from seekbell.services.display import DisplayConflict, get_display, update_displ
 from seekbell.services.request_budget import request_state
 from seekbell.services.retention import PolicyConflict, get_policy, update_policy
 from seekbell.services.rule_trial import trial_history
+from seekbell.services.rule_values import normalized_rule
 from seekbell.services.runtime import status as runtime_status
 from seekbell.services.source_probe import ProbeConflict, get_probe
 from seekbell.services.task_websites import applies_to
+from seekbell.sites.categories import NODESEEK_ALIASES, category_options
 from seekbell.sites.registry import BUILTIN_ADAPTERS, WebsiteId, validate_rule_capabilities
 
 router = APIRouter(prefix="/api/manage", dependencies=[Depends(require_admin)])
@@ -95,6 +98,7 @@ class TargetInput(Input):
 class RuleTest(Input):
     rule: Rule
     post: PostFields
+    website_id: WebsiteId | None = None
 
 
 def installed(session, website_id):
@@ -116,6 +120,16 @@ def websites(session):
             {
                 "id": website.id,
                 "adapterId": website.id,
+                "categoryOptions": category_options(
+                    website.id,
+                    session.scalars(
+                        select(Post.category)
+                        .where(Post.website_id == website.id, Post.category.is_not(None))
+                        .distinct()
+                        .order_by(Post.category)
+                        .limit(100)
+                    ),
+                ),
                 "enabled": website.enabled and source.enabled,
                 "interval": source.interval_seconds,
                 "health": "error"
@@ -339,7 +353,15 @@ def update_target(key: str, values: TargetInput, request: Request):
 
 @router.post("/rules/evaluate")
 def evaluate_rule(values: RuleTest):
-    return evaluate(values.rule, values.post)
+    rule, post = values.rule, values.post
+    if values.website_id:
+        validate_rule_capabilities(values.website_id, rule)
+        rule = normalized_rule(rule, [values.website_id])
+        if values.website_id == "nodeseek" and post.category:
+            post = post.model_copy(
+                update={"category": NODESEEK_ALIASES.get(post.category, post.category)}
+            )
+    return evaluate(rule, post)
 
 
 @router.get("/runtime")

@@ -1,3 +1,4 @@
+import { reasonText } from './ruleReasons'
 import { defaultOverviewModules } from './overviewPreferences'
 import { reactive, ref } from 'vue'
 import { clearReadCache, invalidateReadCache } from './readCache'
@@ -79,7 +80,16 @@ export async function sendRequest(
     }
     throw new Error(typeof data.detail === 'string' ? data.detail : '操作失败，请检查配置后重试。')
   }
-  if (method !== 'GET' && path !== 'auth/logout' && path !== 'manage/hotlists/selection') {
+  const readOnlyTrial =
+    path === 'manage/rules/evaluate' ||
+    path === 'manage/rules/history' ||
+    (path.startsWith('manage/history/posts/') && path.endsWith('/current-rule-trial'))
+  if (
+    method !== 'GET' &&
+    path !== 'auth/logout' &&
+    path !== 'manage/hotlists/selection' &&
+    !readOnlyTrial
+  ) {
     invalidateReadCache()
     invalidateNotificationCounts()
   }
@@ -306,7 +316,7 @@ export async function trialHistory(task: Task, limit: number) {
     toAt: data.to_at ? new Date(data.to_at * 1000).toISOString() : '',
     items: data.items.map((item: any) => ({
       sample: { ...item.sample, websiteId: item.website_id } as Sample,
-      result: matchResult(item.result),
+      result: { ...matchResult(item.result), headline: item.explanation?.headline },
     })),
   }
 }
@@ -316,17 +326,7 @@ function matchResult(data: any) {
       data.status as 'match' | 'no_match' | 'insufficient_data'
     ],
     reasons: [
-      ...data.reasons.map((reason: any) => {
-        const truth: Record<string, string> = { true: '满足', false: '不满足', unknown: '字段缺失' }
-        return (
-          [reason.group ? '条件组 ' + reason.group : '', reason.code, reason.term]
-            .filter(Boolean)
-            .join('：') +
-          '（' +
-          (truth[reason.truth] || reason.truth) +
-          '）'
-        )
-      }),
+      ...data.reasons.map(reasonText),
       ...(data.warnings?.includes('all_new_posts') ? ['未设置筛选条件，匹配全部帖子。'] : []),
     ] as string[],
   }
@@ -339,7 +339,12 @@ export async function savePreferences(settings: WorkspaceState['settings']) {
   await refresh()
 }
 export async function evaluateTask(task: Task, sample: Sample) {
-  const data = await request('manage/rules/evaluate', 'POST', { rule: rule(task), post: sample })
+  const { websiteId, ...fields } = sample
+  const data = await request('manage/rules/evaluate', 'POST', {
+    rule: rule(task),
+    post: fields,
+    website_id: websiteId || task.websiteIds[0],
+  })
   return matchResult(data)
 }
 export function formatTime(value: string) {

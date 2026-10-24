@@ -1,10 +1,12 @@
 from datetime import date
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
+from pydantic import BaseModel, ConfigDict, Field
 
 from seekbell.api.auth import require_admin
 from seekbell.services.history import History, MissingHistory, date_range_window
+from seekbell.services.post_diagnosis import PostDiagnosis
 
 router = APIRouter(prefix="/api/manage/history", dependencies=[Depends(require_admin)])
 
@@ -110,6 +112,45 @@ def evaluations(
     group: Literal["all", "matched", "primary", "other"] = "all",
 ):
     return found(reader.evaluations, key, group=group, **params)
+
+
+@router.get("/posts/{key}/evaluation-options")
+def evaluation_options(
+    key: str,
+    request: Request,
+    params: Paging,
+    group: Literal["all", "matched", "other"] = "other",
+    q: str = Query("", max_length=80),
+    preferred_task_id: str = Query("", max_length=80),
+):
+    return found(
+        PostDiagnosis(request.app.state.engine).options,
+        key,
+        group=group,
+        q=q,
+        preferred_task_id=preferred_task_id,
+        **params,
+    )
+
+
+@router.get("/posts/{key}/evaluations/{task_id}/{version}")
+def evaluation_detail(
+    key: str,
+    task_id: Annotated[str, Path(min_length=1, max_length=80)],
+    version: Annotated[int, Path(ge=1, le=2147483647)],
+    request: Request,
+):
+    return found(PostDiagnosis(request.app.state.engine).detail, key, task_id, version)
+
+
+class CurrentRuleTrial(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, hide_input_in_errors=True)
+    task_id: str = Field(min_length=1, max_length=80)
+
+
+@router.post("/posts/{key}/current-rule-trial")
+def current_rule_trial(key: str, values: CurrentRuleTrial, request: Request):
+    return found(PostDiagnosis(request.app.state.engine).trial, key, values.task_id)
 
 
 @router.get("/deliveries")
