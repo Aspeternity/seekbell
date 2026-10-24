@@ -1,23 +1,22 @@
 # 当前状态
 
-更新时间：2026-10-24（Asia/Shanghai）。任务级按站版块范围已实现并保留数据更新8001；后端789、相关浏览器54、3项离线容器检查及Windows核验通过，待用户验收。
+更新时间：2026-10-24（Asia/Shanghai）。已按用户授权将全部当前成品修复优化的36个提交，经[PR #2](https://github.com/Aspeternity/seekbell/pull/2)合入main；完整PR/push CI与amd64/arm64原生检查通过。22:25合并提交5cdf5bd68d88dac53fea6e364c8fe8b2fe392db7，实际树与受测head d94958df626133ac6b2e4301d02091e9ed420dbb一致，原实现9becf75在main祖先链。
 
 ## 环境与授权
 
-唯一SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe派发。分支codex/linuxdo-integration，最后实现9becf75730e4e4c9accb35ed6f572529aa590c60，本轮用户明确授权把全部已完成修复优化推送并合入GitHub主分支，正在准备PR及远端CI。用户批准仅任务级按站版块/列表UI，沿用本地提交及8001保留数据更新授权；不做网站级总范围，不改RSS源。授权仅推送/PR/合并及既有本机操作，不含公开镜像发布、远程部署或主动真实试发；无多代理，不改D盘/旧Ubuntu/全局WSL/8000/4175。
+唯一SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe派发；当前main已同步远端合并结果。用户明确授权推送/PR/合并及既有本机保留数据操作，不含公开镜像发布/远程部署/主动真实试发。无多代理，不改D盘/旧Ubuntu/全局WSL/8000/4175。此后仅同步本状态/合并记录的文档提交，代码基准仍为上述实现与合并SHA，不为文档自引用循环提交。
 
-## 实现与读取
+## 本轮合并与读取
 
-先读[按站版块记录](history/2026-10-24-按站版块范围.md)，再看Rule/rule_values、配置/采集/试算/诊断与TaskCategoryScopes/TaskEditor/store/model。site_categories按站保存all/specific；指定非空、最多64值，与非空旧categories互斥，键必须等于任务网站集合。纯引擎按帖来源取范围，缺站拒绝，不联网。NodeSeek别名仅在本站输入规范化，不改其他站值或原帖。
-旧共享数组保持原执行语义，前端复制到原有各站，未知旧值保留；首次保存生成新版本后使用按站结构，旧快照不动。0016_site_categories仅推进兼容标记，无DDL/数据修复，防止旧程序误读新JSON。
-网站选择下按站摘要行，默认收起，一次展开一站；搜索/计数/230px限高候选、轻选中与细键盘焦点、空集校验/取消恢复。编辑即时进入任务草稿，完成只收起，直接保存不丢开放编辑。新加站默认全部，取消/重选保留本次草稿，序列化只写最终所选站；右侧按站汇总。
+先读[合并记录](history/2026-10-24-GitHub合并.md)，按实现问题再读[按站版块](history/2026-10-24-按站版块范围.md)及相关源码。当前完整成品链含社区热榜/概览模块、Linux DO匿名HTTP2、退避/人工配额/添加顺序、多站任务、未命中诊断/分页/404/章节/轻选中及按站版块；旧试验备份不属于成品。
+按站版块只放任务，不做网站级总范围或分类RSS。site_categories为每站all/specific，指定非空，缺站拒绝；Rule纯函数，采集/试算/诊断使用同一来源。旧共享数组按原语义读取，前端复制到原有各站，首次保存新版本后改按站结构，未知旧值/历史留存。0016仅兼容标记，无DDL/数据重写。网站下摘要行/搜索/230px限高/取消恢复/空集校验；编辑即时进任务草稿，直接保存不丢开放选择，右侧按站汇总。
 
-## 证据与运行
+## 验证与证据
 
-私有acceptance/2026-10-24-site-categories：后端789（新增15）、ruff、类型/构建/格式通过；诊断18/判定8/Linux DO20/工作空间8共54浏览器通过，桌面/手机截图已看。固定镜像启动/重启/合成账本、加密备份恢复、升级失败回退3项离线检查通过。均合成，无主动真实试发。
-19:37先新备0015整卷；隔离副本全部旧表原列原值、配置、密钥凭据不变，仅schema推进0016，280组本地帖试算确认旧规则与按站投影结果一致。生产任务版本/历史/安装顺序保留，副本已删。19:38 Windows localhost/127.0.0.1的8001主页/就绪/完整SHA/0016/资源通过，同容器持续healthy/read-only/unless-stopped。长期/PVE/arm64及用户验收未完成。
+9becf75本机后端789、相关浏览器54、构建/格式及3项离线容器检查通过，私有acceptance/2026-10-24-site-categories。GitHub首轮a8b4891暴露旧历史文案断言；本机追加13套84项后同步两处测试，另覆盖版块入口Enter/Tab/Escape焦点，不改生产代码。最终d94958d的PR run40100949413、push run40100944610均success，含完整浏览器/代理/备份/回退与两架构原生候选验证；私有acceptance/2026-10-24-github-merge保存精确head、检查与合并结果。PR无未解决审阅，正常带expected_head_sha合并，未绕过限制或手动发布镜像。
+本机19:37升级16前新备15整卷，副本全表原列原值/配置/密钥凭据不变，280组旧规则与投影判定一致，真实任务版本/历史/安装顺序保留；Windows双地址核验通过。GitHub arm64原生自动检查已过，PVE/实际部署长期稳定性与用户验收仍未完成。
 
-## 回退与下一步
+## 运行与下一步
 
-8001镜像seekbell:site-categories-9becf75730e4，digest sha256:0dcbf6aee3736356cf69ffeea334bd151c22acbb9031608c186844e4bee36957；项目seekbell-local/容器seekbell-local-seekbell-1/卷seekbell-local_data。私有local-runtime/runtime.json已同步；保活PID24204/创建2026-10-24T10:28:33.7894500Z不变，25268是其子进程，未新增/清理。
-新备before-site-categories-9becf75-20261024-193727.tar.gz，完整路径/校验见记录。回退旧02d996d前先停并归档当前卷，再恢复匹配0015备份，不能让旧镜像直接读0016；更新后用户修改须保留。本轮合并范围为origin/main之后完整当前分支（包含热榜、Linux DO、退避/排序、多站任务、诊断及按站版块）；加入CI诊断套件后推送，创建PR并待检查通过合入main。远端默认分支当前2c682de，旧备份分支不属于本次成品改动。合并不触发手动GHCR发布/部署；8001仍固定9becf75不重建。PR #2（https://github.com/Aspeternity/seekbell/pull/2）已创建，head a8b489121d407cc50be9b4d2cd6909c6b6178261、35个提交，无冲突。PR run40100070383/push run40100027043均在test:history失败：旧测试仍期待改版前信息不足/基线文案。已核对新诊断保留信息不足、旧版本与未知条件，更新对应断言；另有早期approved-ui键盘断言跳过新增版块入口，已补Enter/Tab/Escape/焦点恢复检查。13套追加浏览器84项最新结果全通过、前端格式通过，生产代码不变；提交两处用例及交接后推送同PR，等新head CI再合并，不绕过检查。工作区未提交为frontend/tests/history/history.spec.ts、frontend/tests/approved-ui/collection.ts及本状态/合并记录，意图同步已批准诊断UI的语义断言与证据，无生产代码变更。最终SHA待确认。
+8001仍seekbell:site-categories-9becf75730e4，digest sha256:0dcbf6aee3736356cf69ffeea334bd151c22acbb9031608c186844e4bee36957，schema0016，原项目seekbell-local/容器seekbell-local-seekbell-1/卷seekbell-local_data。GitHub合并未重建本机或改变数据；私有local-runtime/runtime.json保留实际运行SHA。原保活PID24204及25268子进程未动。
+0015备份before-site-categories-9becf75-20261024-193727.tar.gz完整位置/校验见按站记录；回退旧02d996d前先停并归档当前卷，再恢复匹配15备份，保留更新后用户修改。下一步用户验收或新需求；新产品修改从main另开codex分支。当前无待合并产品修复，文档同步可复用已验证生产树证据。
