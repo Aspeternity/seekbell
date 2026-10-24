@@ -50,7 +50,7 @@ def test_shared_collection_baseline_failure_backoff_and_restart(core):
                 )
 
             assert (await runner().run_once()).status == "failure"
-            assert not core.one(SourceState).initialized
+            assert not core.one(SourceState, SourceState.source_id == "nodeseek-rss").initialized
             now[0] = 59
             assert (await runner().run_once()).status == "backoff"
             assert len(requests) == 1
@@ -61,7 +61,10 @@ def test_shared_collection_baseline_failure_backoff_and_restart(core):
             assert result.report.new_posts == 1 and result.report.queued == 1
 
     asyncio.run(exercise())
-    assert core.count(Outbox) == 1 and core.one(SourceState).failures == 0
+    assert (
+        core.count(Outbox) == 1
+        and core.one(SourceState, SourceState.source_id == "nodeseek-rss").failures == 0
+    )
 
 
 def test_overlapping_polls_are_skipped_and_one_shared_fetch_serves_tasks(core):
@@ -110,7 +113,7 @@ def test_all_invalid_feed_cannot_establish_baseline_and_url_changes_do_not_fetch
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             runner = SourceRunner(core.engine, RssCollector(client), clock=lambda: 100)
             assert (await runner.run_once()).status == "failure"
-            assert not core.one(SourceState).initialized
+            assert not core.one(SourceState, SourceState.source_id == "nodeseek-rss").initialized
             with Session(core.engine) as session:
                 session.get(Source, "nodeseek-rss").url = "https://synthetic.invalid/feed"
                 session.get(SourceState, "nodeseek-rss").next_attempt_at = 0

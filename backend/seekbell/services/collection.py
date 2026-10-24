@@ -18,10 +18,11 @@ from seekbell.db.models import (
     WebsiteInstallation,
 )
 from seekbell.db.transactions import database_call
-from seekbell.domain.errors import SourceFailure
+from seekbell.domain.errors import SourceDeferred, SourceFailure
 from seekbell.services.ingestion import Ingestion, IngestReport
+from seekbell.services.request_budget import MAX_RETRY_AFTER, request_state
 from seekbell.services.source_probe import probe_backoff
-from seekbell.sites.nodeseek import BUILTIN_ADAPTERS
+from seekbell.sites.registry import BUILTIN_ADAPTERS
 
 
 @dataclass(frozen=True)
@@ -75,15 +76,24 @@ class SourceRunner:
                 ),
                 "website_id": source.website_id,
                 "url": source.url,
-                "next_attempt_at": max(state.next_attempt_at, probe_backoff(probe)),
+                "next_attempt_at": max(
+                    state.next_attempt_at,
+                    probe_backoff(probe),
+                    request_state(session, source.website_id, self.clock())[0],
+                ),
                 "interval_seconds": source.interval_seconds,
             }
 
-    async def fetch_batch(self, adapter):
+    async def fetch_batch(self, adapter, *, manual=False):
         try:
             async with asyncio.timeout(self.fetch_timeout):
-                feed = await self.collector.fetch(adapter.rss_url)
+                feed = await self.collector.fetch(
+                    adapter.rss_url, **({"manual": True} if manual else {})
+                )
         except TimeoutError:
+            budget = self.collector.request_budget
+            if budget is not None and adapter.website_id == "linuxdo":
+                await database_call(budget.failed, SourceFailure("timeout"), budget.clock())
             raise SourceFailure("timeout") from None
         return await asyncio.to_thread(adapter.normalize, feed)
 
@@ -110,13 +120,19 @@ class SourceRunner:
                 if adapter is None or snapshot["url"] != adapter.rss_url:
                     raise SourceFailure("unsupported_source")
                 batch = await self.fetch_batch(adapter)
+            except SourceDeferred as exc:
+                return PollOutcome("backoff", exc.code)
             except SourceFailure as exc:
                 await database_call(
                     self.ingestion.record_failure,
                     self.source_id,
                     exc.code,
                     at=self.clock(),
-                    retry_after=exc.retry_after,
+                    retry_after=(
+                        min(MAX_RETRY_AFTER, exc.retry_after)
+                        if snapshot["website_id"] == "linuxdo" and exc.retry_after
+                        else exc.retry_after
+                    ),
                     jitter=self.jitter(),
                 )
                 return PollOutcome("failure", exc.code)

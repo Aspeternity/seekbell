@@ -59,8 +59,8 @@ test('real overview and administrator forms preserve records and rotate sessions
     info.project.name === 'mobile' ? { width: 390, height: 844 } : { width: 1440, height: 1000 },
   )
   await page.screenshot({ path: info.outputPath('overview.png'), fullPage: true })
-  await page.locator('.activity-row').first().locator('.activity-copy button').click()
-  await expect(page.getByRole('heading', { name: '为什么会得到这个结果？' })).toBeVisible()
+  await page.locator('.activity-row').first().click()
+  await expect(page.getByRole('heading', { name: '命中依据' })).toBeVisible()
   await page.goto('/#/settings/account')
   await expect(page.getByLabel('管理员用户名')).toHaveValue(credentials.username)
   await page.getByLabel('新密码 留空保留原密码').fill('Synthetic-Updated-2026')

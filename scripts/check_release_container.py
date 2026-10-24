@@ -80,7 +80,7 @@ def main():
                 migration = directory / "0010_release_fixture.py"
                 migration.write_text(
                     "from alembic import op\nrevision='0010_release_fixture'\n"
-                    "down_revision='0009_display_alerts'\n"
+                    "down_revision='0016_site_categories'\n"
                     'def upgrade():\n    op.execute("UPDATE workspace_preferences '
                     "SET name='Synthetic migration'\")\n"
                     + ("    raise RuntimeError('Synthetic migration failure')\n" if fails else "")

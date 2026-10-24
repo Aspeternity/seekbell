@@ -2,8 +2,12 @@ export interface Group {
   all: string[]
   any: string[]
 }
+export interface CategoryScope {
+  mode: 'all' | 'specific'
+  values: string[]
+}
 export interface Task {
-  websiteId: string
+  websiteIds: string[]
   id: string
   name: string
   description: string
@@ -11,7 +15,7 @@ export interface Task {
   scope: 'title' | 'summary' | 'title_summary'
   groups: Group[]
   exclude: string[]
-  categories: string[]
+  categoryScopes: Record<string, CategoryScope>
   authorsInclude: string[]
   authorsExclude: string[]
   caseSensitive: boolean
@@ -23,6 +27,7 @@ export interface Task {
   icon: string
 }
 export interface Sample {
+  websiteId?: string
   title: string
   summary: string | null
   author: string | null
@@ -31,14 +36,14 @@ export interface Sample {
 export function emptyTask(): Task {
   return {
     id: '',
-    websiteId: '',
+    websiteIds: [],
     name: '',
     description: '',
     enabled: true,
     scope: 'title',
     groups: [{ all: [], any: [] }],
     exclude: [],
-    categories: [],
+    categoryScopes: {},
     authorsInclude: [],
     authorsExclude: [],
     caseSensitive: false,
@@ -52,6 +57,7 @@ export function emptyTask(): Task {
 }
 export type Truth = 'yes' | 'no' | 'unknown'
 export interface MatchResult {
+  headline?: string
   status: Truth
   reasons: string[]
 }

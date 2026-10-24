@@ -1,17 +1,12 @@
 <script setup lang="ts">
 import AppSelect from '../components/AppSelect.vue'
+import TaskEvaluationCard from '../components/TaskEvaluationCard.vue'
+import PostDiagnosis from '../components/PostDiagnosis.vue'
 import { computed, ref, watch } from 'vue'
 import Icon from '../components/Icon.vue'
 import { channelMeta } from '../store'
 import { state, websiteName, formatTime } from '../store'
-import {
-  historyGet,
-  useRemote,
-  postLabels,
-  deliveryLabels,
-  resultClass,
-  reasonText,
-} from '../history'
+import { historyGet, useRemote, postLabels, deliveryLabels, resultClass } from '../history'
 import type { Options, PostRecord, PostPage, Page, Evaluation, DeliveryRecord } from '../history'
 import Pagination from '../components/Pagination.vue'
 import DateFilter from '../components/DateFilter.vue'
@@ -27,8 +22,18 @@ const q = ref(''),
   dateRange = ref<HistoryDateRange>(null),
   website = ref(''),
   page = ref(1)
+const showOther = ref(false)
 const evaluationPage = ref(1),
   deliveryPage = ref(1)
+watch(
+  () => props.selectedId,
+  () => {
+    showOther.value = false
+    evaluationPage.value = 1
+    deliveryPage.value = 1
+  },
+  { flush: 'sync' },
+)
 const options = useRemote(
   () => historyGet<Options>('options'),
   () => [],
@@ -94,16 +99,20 @@ const detail = useRemote(
 )
 const evaluations = useRemote(
   () =>
-    props.selectedId
-      ? historyGet<Page<Evaluation>>('posts/' + props.selectedId + '/evaluations', {
-          page: evaluationPage.value,
-        })
+    props.selectedId && detail.data.value?.status === 'match'
+      ? historyGet<Page<Evaluation> & { other_total: number }>(
+          'posts/' + props.selectedId + '/evaluations',
+          {
+            page: evaluationPage.value,
+            group: 'matched',
+          },
+        )
       : Promise.resolve(undefined),
-  () => [props.selectedId, evaluationPage.value],
+  () => [props.selectedId, detail.data.value?.status, evaluationPage.value],
   {
     cacheKey: () =>
       props.selectedId
-        ? JSON.stringify(['content:evaluations', props.selectedId, evaluationPage.value])
+        ? JSON.stringify(['content:evaluations', props.selectedId, 'matched', evaluationPage.value])
         : undefined,
   },
 )
@@ -123,6 +132,22 @@ const deliveries = useRemote(
         : undefined,
   },
 )
+const emptyMatchMessage = computed(() => {
+  const record = detail.data.value
+  if (record?.baseline === true) return '基线帖子：首次采集时登记，未执行规则匹配或生成通知。'
+  switch (record?.status) {
+    case 'no_match':
+      return '该内容未命中任何任务。'
+    case 'insufficient_data':
+      return '信息不足，暂无法确定是否命中。'
+    case 'not_evaluated':
+      return '该内容未执行规则匹配。'
+    case 'unrecorded':
+      return '没有可确认的历史命中记录。'
+    default:
+      return '暂无可展示的命中依据，请刷新后重试。'
+  }
+})
 const time = (at: number | null) =>
   at === null ? '未记录' : formatTime(new Date(at * 1000).toISOString())
 function openPost(id: string) {
@@ -161,8 +186,8 @@ function clear() {
             <h1 tabindex="-1" class="article-heading">{{ detail.data.value.title }}</h1>
             <p class="subtitle">
               {{ websiteName(detail.data.value.website_id) }} ·
-              {{ detail.data.value.author || '作者缺失' }} ·
-              {{ detail.data.value.category_label || detail.data.value.category || '版块缺失' }} ·
+              {{ detail.data.value.author || detail.data.value.author_display_name || '作者缺失' }}
+              · {{ detail.data.value.category_label || detail.data.value.category || '版块缺失' }} ·
               首次发现
               {{ time(detail.data.value.first_seen_at) }}
             </p>
@@ -254,77 +279,62 @@ function clear() {
             </section>
           </div>
           <aside class="panel support-panel">
-            <h2><Icon name="filter" :size="18" />为什么会得到这个结果？</h2>
-            <div class="match-result" :class="resultClass(detail.data.value.status)">
-              <strong>{{ postLabels[detail.data.value.status] }}</strong>
-              <template
-                v-for="evaluation in evaluations.data.value?.items || []"
-                :key="evaluation.task_id + ':' + evaluation.version"
+            <template v-if="detail.data.value.status === 'match' && !showOther">
+              <h2><Icon name="filter" :size="18" />命中依据</h2>
+              <p v-if="detail.data.value.baseline === null" class="info-note">
+                旧版本可能未保存完整判定。只展示已留存证据，不按当前规则重算历史。
+              </p>
+              <ReadRegion
+                :loading="evaluations.loading.value"
+                :error="evaluations.error.value"
+                :has-data="!!evaluations.data.value"
+                :stale="evaluations.stale.value"
+                :min-height="160"
+                @retry="evaluations.reload"
+                ><template v-if="evaluations.data.value">
+                  <TaskEvaluationCard
+                    v-for="evaluation in evaluations.data.value.items"
+                    :key="evaluation.task_id + ':' + evaluation.version"
+                    :evaluation="evaluation"
+                    @navigate="emit('navigate', $event)"
+                  />
+                  <p v-if="!evaluations.data.value.total" class="small-note" role="status">
+                    {{ emptyMatchMessage }}
+                  </p>
+                  <Pagination
+                    v-if="evaluations.data.value.total > evaluations.data.value.page_size"
+                    :page="evaluationPage"
+                    :total="evaluations.data.value.total"
+                    :page-size="evaluations.data.value.page_size"
+                    label="命中任务判定"
+                    @change="(value) => (evaluationPage = value)"
+                  />
+                </template>
+              </ReadRegion>
+              <p v-if="evaluations.data.value?.total" class="small-note">
+                显示保存时的名称、版本与原因；修改或删除任务不重写已有记录。
+              </p>
+              <button
+                v-if="evaluations.data.value?.other_total"
+                type="button"
+                class="text-link"
+                @click="showOther = true"
               >
-                <p v-for="(reason, i) in evaluation.result.reasons" :key="i">
-                  {{ reasonText(reason) }}
-                </p>
-              </template>
-            </div>
-            <h3 class="section-subtitle">命中任务快照</h3>
-            <p v-if="detail.data.value.baseline === true" class="info-note">
-              基线帖子：首次采集时登记，未执行规则匹配或生成通知。
-            </p>
-            <p v-else-if="detail.data.value.baseline === null" class="info-note">
-              旧版本可能未保存完整判定。只展示已留存证据，不按当前规则重算历史。
-            </p>
-            <p v-else-if="detail.data.value.status === 'not_evaluated'" class="info-note">
-              没有留存的任务判定。不会按当前规则补写历史。
-            </p>
-            <ReadRegion
-              :loading="evaluations.loading.value"
-              :error="evaluations.error.value"
-              :has-data="!!evaluations.data.value"
-              :stale="evaluations.stale.value"
-              :min-height="160"
-              @retry="evaluations.reload"
-              ><template v-if="evaluations.data.value">
-                <article
-                  v-for="evaluation in evaluations.data.value.items"
-                  :key="evaluation.task_id + ':' + evaluation.version"
-                  class="snapshot-task history-evaluation"
-                >
-                  <div>
-                    <Icon name="layers" :size="16" /><button
-                      v-if="!evaluation.deleted"
-                      class="text-link"
-                      @click="emit('navigate', '/task/' + evaluation.task_id)"
-                    >
-                      {{ evaluation.name }}</button
-                    ><strong v-else>{{ evaluation.name }} · 已删除</strong>
-                    <p class="small-note">
-                      版本 {{ evaluation.version }} · {{ time(evaluation.at) }}
-                    </p>
-                    <span class="result-pill" :class="resultClass(evaluation.result.status)">{{
-                      postLabels[evaluation.result.status]
-                    }}</span>
-                    <p v-if="!evaluation.result.reasons.length" class="small-note">
-                      未设置筛选条件，或旧记录未留下原因。
-                    </p>
-                  </div>
-                </article>
-                <p v-if="!evaluations.data.value.total" class="small-note">
-                  没有可展示的任务判定。
-                </p>
-                <Pagination
-                  :page="evaluationPage"
-                  :total="evaluations.data.value.total"
-                  :page-size="evaluations.data.value.page_size"
-                  label="任务判定"
-                  @change="(value) => (evaluationPage = value)"
-                /> </template
-            ></ReadRegion>
-            <p class="small-note">显示保存时的名称、版本与原因；修改或删除任务不重写已有记录。</p>
+                查看其他任务判定（{{ evaluations.data.value.other_total }}）
+              </button>
+            </template>
+            <PostDiagnosis
+              v-else
+              :key="detail.data.value.id"
+              :post="detail.data.value"
+              :preferred-task-id="task"
+              :other="showOther"
+              @back="showOther = false"
+              @navigate="(path) => emit('navigate', path)"
+            />
           </aside>
-        </div>
-      </template></ReadRegion
-    ></template
-  >
+        </div> </template></ReadRegion
+  ></template>
   <template v-else>
     <section class="page-heading">
       <div>
@@ -471,7 +481,10 @@ function clear() {
               {{ post.summary === null ? '来源未提供摘要' : post.summary || '摘要为空' }}
             </p>
             <div class="content-row-meta">
-              <span><Icon name="user" :size="13" />{{ post.author || '作者缺失' }}</span
+              <span
+                ><Icon name="user" :size="13" />{{
+                  post.author || post.author_display_name || '作者缺失'
+                }}</span
               ><span>{{ post.category_label || post.category || '版块缺失' }}</span>
               <span
                 v-for="hit in post.hits"

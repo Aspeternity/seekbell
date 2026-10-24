@@ -17,13 +17,13 @@ const current = computed(() =>
   props.sources.find((source) => source.source_id === selectedId.value),
 )
 const failures = computed(() =>
-  props.sources.filter((source) => source.enabled && source.failures > 0),
+  props.sources.filter((source) => source.enabled && (source.failures > 0 || !!source.error_code)),
 )
 const multiple = computed(() => props.sources.length > 1)
 const health = (source: Source) =>
   !source.enabled
     ? 'paused'
-    : source.failures
+    : source.failures || source.error_code
       ? 'error'
       : source.last_success_at === null
         ? 'waiting'
@@ -169,7 +169,7 @@ onBeforeUnmount(() => {
         <div>
           <h3 :title="current.name">{{ current.name }}</h3>
           <p>
-            {{ current.website_id === 'nodeseek' ? '官方 RSS' : 'RSS' }} ·
+            官方 RSS ·
             {{ multiple ? '同站任务共享采集' : '唯一采集来源' }}
           </p>
         </div>

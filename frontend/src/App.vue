@@ -45,13 +45,13 @@ if (!signedIn.value && !['/login', '/setup'].includes(path.value))
 if (!account.created) path.value = '/setup'
 if (signedIn.value && path.value === '/login') path.value = '/'
 history.replaceState(null, '', '#' + path.value)
-const parts = computed(() => path.value.split('/').filter(Boolean))
+const parts = computed(() => path.value.split('?')[0]!.split('/').filter(Boolean))
 const page = computed(() => parts.value[0] || 'overview')
 const authPage = computed(() => ['login', 'setup'].includes(page.value))
 const editId = computed(() => parts.value[1] || 'new')
 const editing = computed(() =>
   editId.value === 'new'
-    ? { ...emptyTask(), websiteId: state.websites.length === 1 ? state.websites[0]!.id : '' }
+    ? { ...emptyTask(), websiteIds: state.websites.length === 1 ? [state.websites[0]!.id] : [] }
     : state.tasks.find((t) => t.id === editId.value),
 )
 const targetEditing = computed(() =>

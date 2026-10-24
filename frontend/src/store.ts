@@ -1,3 +1,5 @@
+import { reasonText } from './ruleReasons'
+import { defaultOverviewModules } from './overviewPreferences'
 import { reactive, ref } from 'vue'
 import { clearReadCache, invalidateReadCache } from './readCache'
 import { clearNotificationCounts, invalidateNotificationCounts } from './notificationCounts'
@@ -20,6 +22,7 @@ const empty = (): WorkspaceState => ({
     retention: 30,
     alertTargets: [],
     recoveryAlerts: false,
+    overviewModules: defaultOverviewModules(),
   },
 })
 export const state = reactive<WorkspaceState>(empty())
@@ -77,7 +80,16 @@ export async function sendRequest(
     }
     throw new Error(typeof data.detail === 'string' ? data.detail : '操作失败，请检查配置后重试。')
   }
-  if (method !== 'GET' && path !== 'auth/logout') {
+  const readOnlyTrial =
+    path === 'manage/rules/evaluate' ||
+    path === 'manage/rules/history' ||
+    (path.startsWith('manage/history/posts/') && path.endsWith('/current-rule-trial'))
+  if (
+    method !== 'GET' &&
+    path !== 'auth/logout' &&
+    path !== 'manage/hotlists/selection' &&
+    !readOnlyTrial
+  ) {
     invalidateReadCache()
     invalidateNotificationCounts()
   }
@@ -131,12 +143,26 @@ export async function setSession(value: boolean) {
 export function websiteName(id: string) {
   return websiteDefinition(id)?.name || '未知网站'
 }
+export function taskWebsiteLabel(task: Task) {
+  const order = new Map(state.websites.map((website, index) => [website.id, index]))
+  return (
+    [...task.websiteIds]
+      .sort((left, right) => (order.get(left) ?? Infinity) - (order.get(right) ?? Infinity))
+      .map(websiteName)
+      .join('、') || '待选择网站'
+  )
+}
 function rule(task: Task) {
   return {
     scope: task.scope,
     groups: task.groups.map((g) => ({ all_of: g.all, any_of: g.any })),
     exclude: task.exclude,
-    categories: task.categories,
+    site_categories: Object.fromEntries(
+      task.websiteIds.map((id) => {
+        const scope = task.categoryScopes[id] || { mode: 'all', values: [] }
+        return [id, { mode: scope.mode, values: scope.mode === 'specific' ? scope.values : [] }]
+      }),
+    ),
     authors_include: task.authorsInclude,
     authors_exclude: task.authorsExclude,
     case_sensitive: task.caseSensitive,
@@ -147,7 +173,7 @@ function taskBody(task: Task) {
   return {
     name: task.name,
     description: task.description,
-    website_id: task.websiteId,
+    website_ids: task.websiteIds,
     enabled: task.enabled,
     rule: rule(task),
     target_ids: task.targets,
@@ -166,14 +192,22 @@ export async function refresh() {
   state.tasks = data.tasks.map((t: any) => ({
     ...emptyTask(),
     id: t.id,
-    websiteId: t.website_id,
+    websiteIds: t.website_ids,
     name: t.name,
     description: t.description,
     enabled: t.enabled,
     scope: t.rule.scope,
     groups: t.rule.groups.map((g: any) => ({ all: g.all_of, any: g.any_of })),
     exclude: t.rule.exclude,
-    categories: t.rule.categories,
+    categoryScopes: Object.fromEntries(
+      t.website_ids.map((id: string) => [
+        id,
+        t.rule.site_categories?.[id] || {
+          mode: t.rule.categories?.length ? 'specific' : 'all',
+          values: [...(t.rule.categories || [])],
+        },
+      ]),
+    ),
     authorsInclude: t.rule.authors_include,
     authorsExclude: t.rule.authors_exclude,
     caseSensitive: t.rule.case_sensitive,
@@ -284,7 +318,7 @@ export async function testWebsite(id: string) {
 }
 export async function trialHistory(task: Task, limit: number) {
   const data = await request('manage/rules/history', 'POST', {
-    website_id: task.websiteId,
+    website_ids: task.websiteIds,
     rule: rule(task),
     limit,
   })
@@ -294,8 +328,8 @@ export async function trialHistory(task: Task, limit: number) {
     fromAt: data.from_at ? new Date(data.from_at * 1000).toISOString() : '',
     toAt: data.to_at ? new Date(data.to_at * 1000).toISOString() : '',
     items: data.items.map((item: any) => ({
-      sample: item.sample as Sample,
-      result: matchResult(item.result),
+      sample: { ...item.sample, websiteId: item.website_id } as Sample,
+      result: { ...matchResult(item.result), headline: item.explanation?.headline },
     })),
   }
 }
@@ -305,17 +339,7 @@ function matchResult(data: any) {
       data.status as 'match' | 'no_match' | 'insufficient_data'
     ],
     reasons: [
-      ...data.reasons.map((reason: any) => {
-        const truth: Record<string, string> = { true: '满足', false: '不满足', unknown: '字段缺失' }
-        return (
-          [reason.group ? '条件组 ' + reason.group : '', reason.code, reason.term]
-            .filter(Boolean)
-            .join('：') +
-          '（' +
-          (truth[reason.truth] || reason.truth) +
-          '）'
-        )
-      }),
+      ...data.reasons.map(reasonText),
       ...(data.warnings?.includes('all_new_posts') ? ['未设置筛选条件，匹配全部帖子。'] : []),
     ] as string[],
   }
@@ -328,7 +352,12 @@ export async function savePreferences(settings: WorkspaceState['settings']) {
   await refresh()
 }
 export async function evaluateTask(task: Task, sample: Sample) {
-  const data = await request('manage/rules/evaluate', 'POST', { rule: rule(task), post: sample })
+  const { websiteId, ...fields } = sample
+  const data = await request('manage/rules/evaluate', 'POST', {
+    rule: rule(task),
+    post: fields,
+    website_id: websiteId || task.websiteIds[0],
+  })
   return matchResult(data)
 }
 export function formatTime(value: string) {

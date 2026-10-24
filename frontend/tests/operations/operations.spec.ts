@@ -96,11 +96,20 @@ test('draft history trials, confirmed source checks and dependency-safe deletion
   await page.getByRole('button', { name: '试匹配本地历史', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('合成试算暂不可用')
   await page.getByRole('button', { name: '试匹配本地历史', exact: true }).click()
-  await expect(page.locator('.history-results article')).toHaveCount(27)
+  await expect(page.locator('.history-results article')).toHaveCount(0)
   await expect(page.locator('.history-results')).toContainText('本地共 27 条；本次 27 条')
   await expect(page.locator('.history-results')).toContainText('首次发现时间')
-  await expect(page.locator('.history-results')).toContainText('missing_summary')
-  await expect(page.locator('.history-results img')).toHaveCount(0)
+  await page.getByRole('button', { name: '查看结果', exact: true }).click()
+  const results = page.getByRole('dialog', { name: '历史试匹配结果', exact: true })
+  await expect(results.locator('.trial-result-row')).toHaveCount(10)
+  await results
+    .getByRole('group', { name: '试算结果筛选' })
+    .getByRole('button', { name: /^信息不足/ })
+    .click()
+  await results.locator('details').first().getByText('查看详细原因', { exact: true }).click()
+  await expect(results).toContainText('摘要缺失')
+  await expect(results.locator('img')).toHaveCount(0)
+  await results.press('Escape')
   expect(await (await page.request.get('/api/manage/history/posts?size=100')).json()).toEqual(
     before,
   )

@@ -2,8 +2,8 @@ import time
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from seekbell.api.auth import require_admin
@@ -11,6 +11,8 @@ from seekbell.api.history import Paging
 from seekbell.db.models import (
     AlertSettings,
     NotificationTarget,
+    OverviewPreferences,
+    Post,
     RetentionPolicy,
     Source,
     SourceState,
@@ -26,10 +28,15 @@ from seekbell.domain.rules import Rule, evaluate
 from seekbell.services import alerts
 from seekbell.services.configuration import Configuration, TargetDeleteChanged, TargetInUse
 from seekbell.services.display import DisplayConflict, get_display, update_display
+from seekbell.services.request_budget import request_state
 from seekbell.services.retention import PolicyConflict, get_policy, update_policy
 from seekbell.services.rule_trial import trial_history
+from seekbell.services.rule_values import normalized_rule
 from seekbell.services.runtime import status as runtime_status
 from seekbell.services.source_probe import ProbeConflict, get_probe
+from seekbell.services.task_websites import applies_to
+from seekbell.sites.categories import NODESEEK_ALIASES, category_options
+from seekbell.sites.registry import BUILTIN_ADAPTERS, WebsiteId, validate_rule_capabilities
 
 router = APIRouter(prefix="/api/manage", dependencies=[Depends(require_admin)])
 
@@ -43,7 +50,7 @@ class Input(BaseModel):
 
 
 class WebsiteInput(Input):
-    adapter_id: Literal["nodeseek"]
+    adapter_id: WebsiteId
 
 
 class WebsiteUpdate(Input):
@@ -56,10 +63,26 @@ class WorkspaceInput(Input):
     description: str = Field(default="", max_length=40)
 
 
-class TaskInput(Input):
+class WebsiteSelection(Input):
+    website_ids: list[WebsiteId] | None = Field(default=None, min_length=1, max_length=64)
+    website_id: WebsiteId | None = None
+
+    @model_validator(mode="after")
+    def validate_selection(self):
+        if (self.website_ids is None) == (self.website_id is None):
+            raise ValueError("Select websites using website_ids or legacy website_id")
+        if self.website_ids and len(set(self.website_ids)) != len(self.website_ids):
+            raise ValueError("Duplicate websites")
+        return self
+
+    @property
+    def selected_websites(self):
+        return self.website_ids if self.website_ids is not None else [self.website_id]
+
+
+class TaskInput(WebsiteSelection):
     name: str = Field(min_length=1, max_length=80)
     description: str = Field(default="", max_length=160)
-    website_id: Literal["nodeseek"]
     enabled: bool = True
     rule: Rule
     target_ids: list[str] = Field(min_length=1, max_length=64)
@@ -75,6 +98,7 @@ class TargetInput(Input):
 class RuleTest(Input):
     rule: Rule
     post: PostFields
+    website_id: WebsiteId | None = None
 
 
 def installed(session, website_id):
@@ -85,7 +109,9 @@ def installed(session, website_id):
 def websites(session):
     result = []
     for installation in session.scalars(
-        select(WebsiteInstallation).order_by(WebsiteInstallation.website_id)
+        select(WebsiteInstallation).order_by(
+            WebsiteInstallation.position, WebsiteInstallation.website_id
+        )
     ):
         website = session.get(Website, installation.website_id)
         source = session.scalar(select(Source).where(Source.website_id == website.id))
@@ -94,10 +120,20 @@ def websites(session):
             {
                 "id": website.id,
                 "adapterId": website.id,
+                "categoryOptions": category_options(
+                    website.id,
+                    session.scalars(
+                        select(Post.category)
+                        .where(Post.website_id == website.id, Post.category.is_not(None))
+                        .distinct()
+                        .order_by(Post.category)
+                        .limit(100)
+                    ),
+                ),
                 "enabled": website.enabled and source.enabled,
                 "interval": source.interval_seconds,
                 "health": "error"
-                if state.last_error_code
+                if state.last_error_code or request_state(session, website.id, time.time())[1]
                 else "healthy"
                 if state.last_success_at
                 else "pending",
@@ -116,7 +152,8 @@ def tasks(session):
         result.append(
             {
                 "id": task.id,
-                "website_id": task.website_id,
+                "website_id": version.website_ids[0],
+                "website_ids": version.website_ids,
                 "name": version.name,
                 "description": version.description,
                 "enabled": task.enabled,
@@ -150,6 +187,7 @@ def workspace(request: Request):
                 "timezone": preferences.timezone,
                 "alertTargets": session.get(AlertSettings, 1).target_ids,
                 "recoveryAlerts": session.get(AlertSettings, 1).enabled,
+                "overviewModules": session.get(OverviewPreferences, 1).modules,
             },
         }
     result["targets"] = [config(request).get_target(key) for key in target_ids]
@@ -179,7 +217,8 @@ def add_website(values: WebsiteInput, request: Request):
         website.enabled = False
         source.enabled = False
         session.get(SourceState, source.id).needs_baseline = True
-        session.add(WebsiteInstallation(website_id=values.adapter_id))
+        position = (session.scalar(select(func.max(WebsiteInstallation.position))) or 0) + 1
+        session.add(WebsiteInstallation(website_id=values.adapter_id, position=position))
     return {"id": values.adapter_id}
 
 
@@ -187,6 +226,9 @@ def add_website(values: WebsiteInput, request: Request):
 def update_website(key: str, values: WebsiteUpdate, request: Request):
     with write_session(request.app.state.engine) as session:
         installed(session, key)
+        adapter = BUILTIN_ADAPTERS.get(key)
+        if adapter is None or values.interval < adapter.minimum_interval:
+            raise HTTPException(422, "采集间隔小于该网站支持的最小值。")
         website = session.get(Website, key)
         source = session.scalar(select(Source).where(Source.website_id == key))
         state = session.get(SourceState, source.id)
@@ -216,7 +258,13 @@ def remove_website(key: str, request: Request):
     with write_session(request.app.state.engine) as session:
         installed(session, key)
         if session.scalar(
-            select(Task.id).where(Task.website_id == key, Task.deleted_at.is_(None)).limit(1)
+            select(Task.id)
+            .join(
+                TaskVersion,
+                (TaskVersion.task_id == Task.id) & (TaskVersion.version == Task.current_version),
+            )
+            .where(applies_to(key), Task.deleted_at.is_(None))
+            .limit(1)
         ):
             raise HTTPException(409, "请先处理该网站关联的任务。")
         session.get(Website, key).enabled = False
@@ -229,13 +277,13 @@ def remove_website(key: str, request: Request):
 
 def validate_task(values, request, key=None):
     with Session(request.app.state.engine) as session:
-        installed(session, values.website_id)
+        for website_id in values.selected_websites:
+            installed(session, website_id)
+            validate_rule_capabilities(website_id, values.rule)
         if key:
             task = session.get(Task, key)
             if task is None or task.deleted_at is not None:
                 raise HTTPException(404, "任务不存在。")
-            if task.website_id != values.website_id:
-                raise HTTPException(409, "已有任务不能更换所属网站。")
         for target_id in values.target_ids:
             target = session.get(NotificationTarget, target_id)
             if (
@@ -255,7 +303,7 @@ def create_task(values: TaskInput, request: Request):
         values.rule,
         values.target_ids,
         at=time.time(),
-        website_id=values.website_id,
+        website_ids=values.selected_websites,
         enabled=values.enabled,
         description=values.description,
         managed=True,
@@ -274,6 +322,8 @@ def update_task(key: str, values: TaskInput, request: Request):
         at=time.time(),
         enabled=values.enabled,
         description=values.description,
+        website_ids=values.selected_websites,
+        managed=True,
     )
     return {"version": version}
 
@@ -303,7 +353,22 @@ def update_target(key: str, values: TargetInput, request: Request):
 
 @router.post("/rules/evaluate")
 def evaluate_rule(values: RuleTest):
-    return evaluate(values.rule, values.post)
+    rule, post = values.rule, values.post
+    if rule.site_categories is not None:
+        if values.website_id is None or any(
+            key not in BUILTIN_ADAPTERS for key in rule.site_categories
+        ):
+            raise ValueError("Select a supported sample website")
+        rule = normalized_rule(rule, list(rule.site_categories))
+    if values.website_id:
+        validate_rule_capabilities(values.website_id, rule)
+        if rule.site_categories is None:
+            rule = normalized_rule(rule, [values.website_id])
+        if values.website_id == "nodeseek" and post.category:
+            post = post.model_copy(
+                update={"category": NODESEEK_ALIASES.get(post.category, post.category)}
+            )
+    return evaluate(rule, post, website_id=values.website_id)
 
 
 @router.get("/runtime")
@@ -331,9 +396,7 @@ def delete_target(key: str, request: Request, values: TargetDeleteInput | None =
     return {"ok": True}
 
 
-class HistoryTrial(BaseModel):
-    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
-    website_id: Literal["nodeseek"]
+class HistoryTrial(WebsiteSelection):
     rule: Rule
     limit: int = Field(default=20, ge=1, le=100, strict=True)
 
@@ -341,12 +404,16 @@ class HistoryTrial(BaseModel):
 @router.post("/rules/history")
 def evaluate_history(values: HistoryTrial, request: Request):
     with Session(request.app.state.engine) as session:
-        installed(session, values.website_id)
-    return trial_history(request.app.state.engine, values.website_id, values.rule, values.limit)
+        for website_id in values.selected_websites:
+            installed(session, website_id)
+            validate_rule_capabilities(website_id, values.rule)
+    return trial_history(
+        request.app.state.engine, values.selected_websites, values.rule, values.limit
+    )
 
 
 @router.get("/websites/{key}/connection-test")
-def connection_result(key: Literal["nodeseek"], request: Request):
+def connection_result(key: WebsiteId, request: Request):
     with Session(request.app.state.engine) as session:
         installed(session, key)
     try:
@@ -360,9 +427,9 @@ class ConnectionInput(BaseModel):
 
 
 @router.post("/websites/{key}/connection-test")
-async def connection_test(key: Literal["nodeseek"], values: ConnectionInput, request: Request):
+async def connection_test(key: WebsiteId, values: ConnectionInput, request: Request):
     try:
-        return await request.app.state.runtime.check_source()
+        return await request.app.state.runtime.check_source(key)
     except ProbeConflict as error:
         headers = {"Retry-After": str(error.retry_after)} if error.retry_after else None
         raise HTTPException(

@@ -1,25 +1,23 @@
 # 当前状态
 
-更新时间：2026-10-23（Asia/Shanghai）。M0～M3完成、M4工程退出通过，M5本地补修已完成；当前准备将本地修复合并GitHub，然后独立分支开展已确认的社区热榜与概览模块设置。
+更新时间：2026-10-24（Asia/Shanghai）。任务级按站版块范围已实现并保留数据更新8001；后端789、相关浏览器54、3项离线容器检查及Windows核验通过，待用户验收。
 
-## 环境、基准与授权
+## 环境与授权
 
-唯一开发环境SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe派发；[进入说明](DEVELOPMENT_ENVIRONMENT.md)。分支codex/content-loading-and-source-time，产品58bee30ff55a7c6f0450f6a626806eba1ad49fe8；提交0af171c之后仅本状态与热榜调研文档待提交。origin/main为ee3bc8d，待合并15条本地提交，含单一前端清理及后续界面修复。
+唯一SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe派发。分支codex/linuxdo-integration，最后实现9becf75730e4e4c9accb35ed6f572529aa590c60，本轮用户明确授权把全部已完成修复优化推送并合入GitHub主分支，正在准备PR及远端CI。用户批准仅任务级按站版块/列表UI，沿用本地提交及8001保留数据更新授权；不做网站级总范围，不改RSS源。授权仅推送/PR/合并及既有本机操作，不含公开镜像发布、远程部署或主动真实试发；无多代理，不改D盘/旧Ubuntu/全局WSL/8000/4175。
 
-本轮用户明确授权把此前本地bug修复/优化上传GitHub并合并，再单独开分支做社区热榜；方案已确认。授权覆盖该修复PR及后续功能开发，不自动公开发布镜像、远程部署或真实发送。不组织多代理，不改D盘、旧Ubuntu或全局WSL。修复PR不包含热榜产品代码。
+## 实现与读取
 
-## 修复范围与适用证据
+先读[按站版块记录](history/2026-10-24-按站版块范围.md)，再看Rule/rule_values、配置/采集/试算/诊断与TaskCategoryScopes/TaskEditor/store/model。site_categories按站保存all/specific；指定非空、最多64值，与非空旧categories互斥，键必须等于任务网站集合。纯引擎按帖来源取范围，缺站拒绝，不联网。NodeSeek别名仅在本站输入规范化，不改其他站值或原帖。
+旧共享数组保持原执行语义，前端复制到原有各站，未知旧值保留；首次保存生成新版本后使用按站结构，旧快照不动。0016_site_categories仅推进兼容标记，无DDL/数据修复，防止旧程序误读新JSON。
+网站选择下按站摘要行，默认收起，一次展开一站；搜索/计数/230px限高候选、轻选中与细键盘焦点、空集校验/取消恢复。编辑即时进入任务草稿，完成只收起，直接保存不丢开放编辑。新加站默认全部，取消/重选保留本次草稿，序列化只写最终所选站；右侧按站汇总。
 
-单一正式前端替代重复原型/正式入口；统一日期范围、筛选与卡片导航；内容区分发布/首次发现时间，保留完整旧查询快照；统一下拉与200ms延迟加载反馈；通知三个记录菜单冷进入预读、就绪整体切换及失败重试；下拉宽度兼顾经典滚动条、版块/渠道完整显示。规格与架构已随实现更新。
+## 证据与运行
 
-[最终补修证据](history/2026-10-23-通知冷进入与下拉宽度补修.md)：SeekBell-Dev、产品58bee30，16组Chromium桌面/手机仿真82项通过；类型/生产构建、格式/隐私/diff、隔离镜像及TLS代理检查通过。后端变更在b009317已有669项通过，之后仅前端变更，复用适用证据。私有详细证据/home/dev/.local/state/seekbell/acceptance/2026-10-23-first-entry-width-fix。Safari/真机/读屏和用户验收仍独立待完成。GitHub当前提交的完整CI尚待运行，不用本地结果冒充远程通过。
+私有acceptance/2026-10-24-site-categories：后端789（新增15）、ruff、类型/构建/格式通过；诊断18/判定8/Linux DO20/工作空间8共54浏览器通过，桌面/手机截图已看。固定镜像启动/重启/合成账本、加密备份恢复、升级失败回退3项离线检查通过。均合成，无主动真实试发。
+19:37先新备0015整卷；隔离副本全部旧表原列原值、配置、密钥凭据不变，仅schema推进0016，280组本地帖试算确认旧规则与按站投影结果一致。生产任务版本/历史/安装顺序保留，副本已删。19:38 Windows localhost/127.0.0.1的8001主页/就绪/完整SHA/0016/资源通过，同容器持续healthy/read-only/unless-stopped。长期/PVE/arm64及用户验收未完成。
 
-## 本地实例与交付边界
+## 回退与下一步
 
-同一http://localhost:8001/，seekbell-local/seekbell-local-seekbell-1，原卷seekbell-local_data；镜像seekbell:local-58bee30ff55a，digest sha256:5886d4f1b9e1d6de5c922ca0bf9af8141099eee3f6a72e594f80daf58f364202。保留账号/配置/历史，仅localhost映射，健康核验见上节；回退镜像6ee4af9。备份local-runtime/backups/before-58bee30ff55a.tar.gz；[管理入口](history/2026-10-23-最新代码本地Docker实测启动.md)。本轮未更新实例。旧18080/18081已退役；公开仍ui-restore-5，远程Stack及8000/4175未动。
-
-## 社区热榜与下一步
-
-[调研与示意证据](history/2026-10-23-概览模块与热榜方案调研.md)。确认三模块显隐/纵向排序、服务端保存、恢复默认；上方统计固定。热榜支持网站与周期两层切换、按网站记忆；首接NodeSeek第三方实时/每日/每周，未来论坛按能力扩展，不实施Linux DO/V2EX采集。三个候选接口单次HTTP200、30/50/100条；算法与窗口语义/长期可用性未验证。RSS最新不能冒充热门。示意320/736px检查通过，聊天内嵌错误未确认恢复，截图后备；不是产品验收。
-
-下一步：提交交接文档并推送既有修复，创建PR、确认CI通过后合并；从最新main创建codex/community-hotlist，将确认方案回写权威文档。恢复读取本状态、补修记录、调研记录及相关代码。无技术阻塞；尚未创建PR或新分支。
+8001镜像seekbell:site-categories-9becf75730e4，digest sha256:0dcbf6aee3736356cf69ffeea334bd151c22acbb9031608c186844e4bee36957；项目seekbell-local/容器seekbell-local-seekbell-1/卷seekbell-local_data。私有local-runtime/runtime.json已同步；保活PID24204/创建2026-10-24T10:28:33.7894500Z不变，25268是其子进程，未新增/清理。
+新备before-site-categories-9becf75-20261024-193727.tar.gz，完整路径/校验见记录。回退旧02d996d前先停并归档当前卷，再恢复匹配0015备份，不能让旧镜像直接读0016；更新后用户修改须保留。本轮合并范围为origin/main之后完整当前分支（包含热榜、Linux DO、退避/排序、多站任务、诊断及按站版块）；加入CI诊断套件后推送，创建PR并待检查通过合入main。远端默认分支当前2c682de，旧备份分支不属于本次成品改动。合并不触发手动GHCR发布/部署；8001仍固定9becf75不重建。PR #2（https://github.com/Aspeternity/seekbell/pull/2）已创建，head a8b489121d407cc50be9b4d2cd6909c6b6178261、35个提交，无冲突。PR run40100070383/push run40100027043均在test:history失败：旧测试仍期待改版前信息不足/基线文案。已核对新诊断保留信息不足、旧版本与未知条件，更新对应断言；另有早期approved-ui键盘断言跳过新增版块入口，已补Enter/Tab/Escape/焦点恢复检查。13套追加浏览器84项最新结果全通过、前端格式通过，生产代码不变；提交两处用例及交接后推送同PR，等新head CI再合并，不绕过检查。工作区未提交为frontend/tests/history/history.spec.ts、frontend/tests/approved-ui/collection.ts及本状态/合并记录，意图同步已批准诊断UI的语义断言与证据，无生产代码变更。最终SHA待确认。

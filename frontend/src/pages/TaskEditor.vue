@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import AppSelect from '../components/AppSelect.vue'
-import { computed, nextTick, reactive, ref, watch } from 'vue'
+import HistoryTrialResults from '../components/HistoryTrialResults.vue'
+import TaskCategoryScopes from '../components/TaskCategoryScopes.vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import Icon from '../components/Icon.vue'
 import Toggle from '../components/Toggle.vue'
 import TagInput from '../components/TagInput.vue'
 import { statusLabel } from '../model'
+import { websiteDefinition } from '../websites'
 import type { MatchResult, Sample, Task } from '../model'
 import { state, websiteName, evaluateTask, trialHistory, formatTime } from '../store'
 const targets = computed(() => state.targets)
@@ -26,13 +29,35 @@ const emit = defineEmits<{
   dirty: [value: boolean]
 }>()
 const draft = reactive<Task>(JSON.parse(JSON.stringify(props.task)))
+draft.categoryScopes ||= {}
+for (const id of draft.websiteIds) draft.categoryScopes[id] ||= { mode: 'all', values: [] }
 const baseline = JSON.stringify(draft)
-const selectedWebsite = computed(() =>
-  state.websites.find((website) => website.id === draft.websiteId),
+const selectedWebsites = computed(() =>
+  state.websites.filter((website) => draft.websiteIds.includes(website.id)),
 )
-const websiteLabel = computed(() =>
-  selectedWebsite.value ? websiteName(selectedWebsite.value.id) : '待选择网站',
+const websiteLabel = computed(
+  () => selectedWebsites.value.map((website) => websiteName(website.id)).join('、') || '待选择网站',
 )
+const supportsAuthor = computed(() =>
+  draft.websiteIds.every((id) => websiteDefinition(id)?.authorFilter !== false),
+)
+function categorySummary(website: (typeof selectedWebsites.value)[number]) {
+  const scope = draft.categoryScopes[website.id]
+  if (!scope || scope.mode === 'all') return '全部版块'
+  const names = scope.values.map(
+    (value) => website.categoryOptions?.find((item) => item.value === value)?.label || value,
+  )
+  if (!names.length) return '尚未选择版块'
+  return names.slice(0, 2).join('、') + (names.length > 2 ? ' 等 ' + names.length + ' 个' : '')
+}
+function categoryErrors() {
+  return selectedWebsites.value
+    .filter((website) => {
+      const scope = draft.categoryScopes[website.id]
+      return scope?.mode === 'specific' && !scope.values.length
+    })
+    .map((website) => websiteName(website.id) + '：请至少选择一个版块，或切换到全部版块。')
+}
 const errors = ref<string[]>([])
 const testing = ref(false),
   testError = ref('')
@@ -45,16 +70,27 @@ const historyResults = ref<
     }[]
   | null
 >(null)
-const sample = reactive({ title: '', summary: '', author: '', category: '' })
+const sample = reactive({ websiteId: '', title: '', summary: '', author: '', category: '' })
+const showHistoryDialog = ref(false)
 const historyLimit = ref(20)
 const historyMeta = ref<Awaited<ReturnType<typeof trialHistory>> | null>(null)
 const missingSummary = ref(false)
 const section = ref('basic')
+watch(
+  () => [...draft.websiteIds],
+  () => {
+    for (const id of draft.websiteIds) draft.categoryScopes[id] ||= { mode: 'all', values: [] }
+    if (!draft.websiteIds.includes(sample.websiteId)) sample.websiteId = draft.websiteIds[0] || ''
+  },
+  { immediate: true },
+)
 const unrestricted = computed(
   () =>
     !draft.groups.some((g) => g.all.length || g.any.length) &&
     !draft.exclude.length &&
-    !draft.categories.length &&
+    !selectedWebsites.value.some(
+      (website) => draft.categoryScopes[website.id]?.mode === 'specific',
+    ) &&
     !draft.authorsInclude.length &&
     !draft.authorsExclude.length,
 )
@@ -78,6 +114,7 @@ watch(
     testResult.value = null
     historyResults.value = null
     historyMeta.value = null
+    showHistoryDialog.value = false
   },
   { deep: true },
 )
@@ -89,14 +126,21 @@ watch(
   { deep: true },
 )
 function clearHistory() {
+  showHistoryDialog.value = false
   historyResults.value = null
   historyMeta.value = null
 }
 function save() {
   if (props.saving) return
   errors.value = []
-  if (!state.websites.some((w) => w.id === draft.websiteId))
+  if (
+    !draft.websiteIds.length ||
+    draft.websiteIds.some((id) => !state.websites.some((w) => w.id === id))
+  )
     errors.value.push('请选择已添加的监控网站。')
+  if (!supportsAuthor.value && (draft.authorsInclude.length || draft.authorsExclude.length))
+    errors.value.push('所选网站中有 RSS 不提供可靠用户名的网站，请清除作者条件或取消选择该网站。')
+  errors.value.push(...categoryErrors())
   if (!draft.name.trim()) errors.value.push('请填写任务名称。')
   if (!draft.targets.length) errors.value.push('请至少选择一个通知目标。')
   if (draft.targets.some((id) => !state.targets.some((t) => t.id === id)))
@@ -107,15 +151,14 @@ function save() {
   }
   emit('save', JSON.parse(JSON.stringify(draft)))
 }
-function toggleCategory(category: string) {
-  draft.categories = draft.categories.includes(category)
-    ? draft.categories.filter((c) => c !== category)
-    : [...draft.categories, category]
-}
 async function runTest() {
   if (testing.value) return
-  if (!selectedWebsite.value) {
+  if (!selectedWebsites.value.length) {
     testError.value = '请选择已添加的监控网站。'
+    return
+  }
+  if (categoryErrors().length) {
+    testError.value = categoryErrors().join(' ')
     return
   }
   testing.value = true
@@ -133,7 +176,7 @@ async function runTest() {
       const result = await evaluateTask(task, {
         ...sample,
         summary: missingSummary.value ? null : sample.summary,
-        author: sample.author || null,
+        author: supportsAuthor.value ? sample.author || null : null,
         category: sample.category || null,
       })
       if (
@@ -170,9 +213,53 @@ async function runTest() {
     testing.value = false
   }
 }
+const sectionIds = ['basic', 'rules', 'delivery']
+let scrollFrame = 0
+let layoutObserver: ResizeObserver | undefined
+function syncSection() {
+  scrollFrame = 0
+  const marker = Math.min(160, window.innerHeight * 0.2)
+  let current = 'basic'
+  for (const id of sectionIds) {
+    const element = document.getElementById(id)
+    if (element && element.getBoundingClientRect().top <= marker) current = id
+  }
+  const scroller = document.scrollingElement
+  const last = document.getElementById('delivery')
+  if (
+    scroller &&
+    scroller.scrollTop > 0 &&
+    scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop <= 2 &&
+    last &&
+    last.getBoundingClientRect().top < window.innerHeight
+  )
+    current = 'delivery'
+  section.value = current
+}
+function scheduleSection() {
+  if (!scrollFrame) scrollFrame = requestAnimationFrame(syncSection)
+}
+onMounted(() => {
+  window.addEventListener('scroll', scheduleSection, { passive: true })
+  window.addEventListener('resize', scheduleSection)
+  layoutObserver = new ResizeObserver(scheduleSection)
+  for (const id of sectionIds) {
+    const element = document.getElementById(id)
+    if (element) layoutObserver.observe(element)
+  }
+  scheduleSection()
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', scheduleSection)
+  window.removeEventListener('resize', scheduleSection)
+  layoutObserver?.disconnect()
+  cancelAnimationFrame(scrollFrame)
+})
 function jump(id: string) {
-  section.value = id
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  document.getElementById(id)?.scrollIntoView({
+    behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+    block: 'start',
+  })
 }
 </script>
 <template>
@@ -204,6 +291,7 @@ function jump(id: string) {
       ]"
       :key="item.id"
       :class="{ active: section === item.id }"
+      :aria-current="section === item.id ? 'location' : undefined"
       @click="jump(item.id)"
     >
       <span>{{ String(i + 1).padStart(2, '0') }}</span
@@ -256,32 +344,33 @@ function jump(id: string) {
             placeholder="这项任务想关注什么？"
             maxlength="160"
           />
-          <div class="task-website-field">
-            <span id="task-website-label" class="field-label">监控网站</span>
-            <AppSelect
-              id="task-website"
-              class="task-website-trigger"
-              aria-labelledby="task-website-label"
-              placeholder="请选择监控网站"
-              v-model="draft.websiteId"
-              :disabled="!!draft.id"
-              :options="
-                state.websites.map((w) => ({
-                  value: w.id,
-                  label: websiteName(w.id) + (w.enabled ? '' : ' · 已暂停'),
-                }))
-              "
-            />
-          </div>
+          <fieldset class="plain-fieldset task-website-field">
+            <legend id="task-website-label" class="field-label">
+              监控网站 <span class="required">*</span>
+            </legend>
+            <div id="task-website" class="task-website-options">
+              <label
+                v-for="website in state.websites"
+                :key="website.id"
+                :class="{ selected: draft.websiteIds.includes(website.id) }"
+              >
+                <input v-model="draft.websiteIds" type="checkbox" :value="website.id" />
+                <span>{{ websiteName(website.id) }}</span>
+                <small v-if="!website.enabled">已暂停</small>
+              </label>
+            </div>
+          </fieldset>
           <p class="field-help">
-            {{
-              draft.id
-                ? '任务所属网站固定；如需更换，请创建新任务，避免混用历史记录。'
-                : '只显示已添加的网站。采集频率在网站配置中统一设置。'
-            }}
+            可选择多个网站，保存时可增减；同一套规则分别匹配各站新帖，不补发历史。
+            采集频率在网站配置中统一设置。
           </p>
-          <p v-if="selectedWebsite && !selectedWebsite.enabled" class="warning-note">
-            网站已暂停，可以保存任务；启用网站后才会采集新帖。
+          <TaskCategoryScopes
+            v-if="selectedWebsites.length"
+            v-model="draft.categoryScopes"
+            :websites="selectedWebsites"
+          />
+          <p v-if="selectedWebsites.some((website) => !website.enabled)" class="warning-note">
+            所选网站中有已暂停的网站，可以保存任务；启用对应网站后才会采集新帖。
           </p>
         </div>
       </section>
@@ -371,46 +460,37 @@ function jump(id: string) {
             placeholder="例如：求购、已出（逐个添加）"
           />
           <p class="field-help">匹配范围内出现任意排除词，即使满足条件组也不会命中。</p>
-          <fieldset class="plain-fieldset">
-            <legend class="field-label">版块范围</legend>
-            <div class="category-options">
-              <button
-                type="button"
-                :class="{ selected: !draft.categories.length }"
-                @click="draft.categories = []"
-              >
-                全部版块</button
-              ><button
-                v-for="category in ['优惠', '技术', '测评', '交易', '日常']"
-                :key="category"
-                type="button"
-                :aria-pressed="draft.categories.includes(category)"
-                :class="{ selected: draft.categories.includes(category) }"
-                @click="toggleCategory(category)"
-              >
-                {{ category }}
-              </button>
-            </div>
-            <p class="field-help">按RSS提供的版块名称精确匹配；没有可靠版块时建议不限制。</p>
-          </fieldset>
           <details class="advanced">
             <summary>
               <span><Icon name="settings" :size="16" />更多匹配设置</span
               ><span>作者 · 大小写 · 整词<Icon name="down" :size="14" /></span>
             </summary>
             <div class="advanced-content">
-              <label class="field-label">仅包含这些作者</label
-              ><TagInput
-                v-model="draft.authorsInclude"
-                label="包含作者"
-                placeholder="输入精确用户名"
-              /><label class="field-label">排除这些作者</label
-              ><TagInput
-                v-model="draft.authorsExclude"
-                label="排除作者"
-                placeholder="输入精确用户名"
-              />
-              <p class="field-help">按原帖用户名精确匹配；区分大小写，改名后不保证继续跟踪。</p>
+              <template v-if="supportsAuthor">
+                <label class="field-label">仅包含这些作者</label
+                ><TagInput
+                  v-model="draft.authorsInclude"
+                  label="包含作者"
+                  placeholder="输入精确用户名"
+                /><label class="field-label">排除这些作者</label
+                ><TagInput
+                  v-model="draft.authorsExclude"
+                  label="排除作者"
+                  placeholder="输入精确用户名"
+                />
+                <p class="field-help">按原帖用户名精确匹配；区分大小写，改名后不保证继续跟踪。</p>
+              </template>
+              <div v-else class="info-note">
+                <p>所选网站中有 RSS 仅提供作者显示名的网站，暂不支持共同使用精确用户名筛选。</p>
+                <button
+                  v-if="draft.authorsInclude.length || draft.authorsExclude.length"
+                  type="button"
+                  class="text-link"
+                  @click="((draft.authorsInclude = []), (draft.authorsExclude = []))"
+                >
+                  清除作者条件
+                </button>
+              </div>
               <div class="setting-row">
                 <div>
                   <strong>区分英文大小写</strong><small>开启后，DMIT 与 dmit 视为不同关键词</small>
@@ -473,7 +553,7 @@ function jump(id: string) {
           <h2>这条规则，会做什么？</h2>
           <span class="live-label">实时</span>
         </div>
-        <p v-if="selectedWebsite">
+        <p v-if="selectedWebsites.length">
           当 <strong>{{ websiteLabel }}</strong> 出现新帖，
         </p>
         <p v-else>请选择监控网站，再查看规则说明。</p>
@@ -482,10 +562,11 @@ function jump(id: string) {
           同时排除 <strong>{{ draft.exclude.join('、') }}</strong
           >。
         </p>
-        <p v-if="draft.categories.length">
-          限定版块：<strong>{{ draft.categories.join('、') }}</strong
-          >。
-        </p>
+        <div v-if="selectedWebsites.length" class="category-summary">
+          <p v-for="website in selectedWebsites" :key="website.id">
+            {{ websiteName(website.id) }}：<strong>{{ categorySummary(website) }}</strong>
+          </p>
+        </div>
         <p v-if="draft.authorsInclude.length">
           仅限作者：<strong>{{ draft.authorsInclude.join('、') }}</strong
           >。
@@ -531,6 +612,19 @@ function jump(id: string) {
           </button>
         </div>
         <div v-if="testMode === 'manual'" class="sample-form">
+          <template v-if="selectedWebsites.length > 1">
+            <label class="field-label" for="sample-website">样本网站</label>
+            <AppSelect
+              id="sample-website"
+              v-model="sample.websiteId"
+              :options="
+                selectedWebsites.map((website) => ({
+                  value: website.id,
+                  label: websiteName(website.id),
+                }))
+              "
+            />
+          </template>
           <label class="field-label" for="sample-title">帖子标题</label
           ><textarea id="sample-title" v-model="sample.title" rows="3" maxlength="500" /><label
             class="field-label"
@@ -550,6 +644,7 @@ function jump(id: string) {
             <label
               >作者<input
                 v-model="sample.author"
+                :disabled="!supportsAuthor"
                 class="text-input"
                 aria-label="样本作者"
                 placeholder="缺失" /></label
@@ -606,10 +701,12 @@ function jump(id: string) {
           <p v-for="reason in testResult.reasons" :key="reason">{{ reason }}</p>
         </div>
         <div v-if="testMode === 'history' && historyResults" class="history-results" role="status">
-          <div class="history-result-summary">
-            命中 {{ historyResults.filter((r) => r.result.status === 'yes').length }} /
-            {{ historyResults.length }} 条
-          </div>
+          <div class="history-result-summary">本次试算 {{ historyResults.length }} 条</div>
+          <p>
+            命中 {{ historyResults.filter((item) => item.result.status === 'yes').length }} · 未命中
+            {{ historyResults.filter((item) => item.result.status === 'no').length }} · 信息不足
+            {{ historyResults.filter((item) => item.result.status === 'unknown').length }}
+          </p>
           <p v-if="historyMeta">
             本地共 {{ historyMeta.available }} 条；本次 {{ historyMeta.sampleCount }} 条。
             <template v-if="historyMeta.sampleCount"
@@ -619,15 +716,14 @@ function jump(id: string) {
             >
             <template v-else>暂无本地历史样本。</template>
           </p>
-          <article v-for="(item, i) in historyResults" :key="i">
-            <div>
-              <span class="result-pill" :class="item.result.status">{{
-                statusLabel[item.result.status]
-              }}</span
-              ><strong>{{ item.sample.title }}</strong>
-            </div>
-            <p>{{ item.result.reasons.join('；') }}</p>
-          </article>
+          <button
+            v-if="historyResults.length"
+            type="button"
+            class="button"
+            @click="showHistoryDialog = true"
+          >
+            查看结果
+          </button>
         </div>
         <p class="test-footnote">由服务端规则引擎试算，不发送通知、不改变历史。</p>
       </section>
@@ -651,12 +747,59 @@ function jump(id: string) {
       </div>
     </div>
   </form>
+  <HistoryTrialResults
+    v-if="showHistoryDialog && historyResults"
+    :items="historyResults"
+    @close="showHistoryDialog = false"
+  />
 </template>
 
 <style scoped>
 .task-website-field {
   margin-top: 22px;
 }
+
+.task-website-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.task-website-options label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 42px;
+  padding: 10px 14px;
+  border: 1px solid #e4e8ec;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.task-website-options label.selected {
+  border-color: #dbad90;
+  background: #fdf8f4;
+  color: var(--accent);
+}
+.task-website-options label:has(input:focus-visible) {
+  outline: 1px solid #cba280;
+  outline-offset: 2px;
+}
+.task-website-options input {
+  accent-color: var(--accent);
+}
+.task-website-options input:focus {
+  outline: none;
+  box-shadow: none;
+}
+.task-website-options small {
+  font-size: 11px;
+  color: #737e8c;
+}
+@media (max-width: 760px) {
+  .task-website-options label {
+    min-height: 44px;
+  }
+}
+
 .target-empty {
   display: flex;
   flex-direction: column;

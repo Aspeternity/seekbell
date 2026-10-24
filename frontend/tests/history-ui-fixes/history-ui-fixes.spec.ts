@@ -111,7 +111,7 @@ test('content filters preserve geometry, task notes are inset and post details a
   await page.clock.runFor(1)
   await expect(page.locator('.remote-feedback')).toContainText('加载中…')
   detail.release()
-  await expect(page.getByRole('heading', { name: '为什么会得到这个结果？' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '命中依据' })).toBeVisible()
   await expect(page.locator('.remote-feedback')).toHaveCount(0)
   await page.clock.resume()
 })

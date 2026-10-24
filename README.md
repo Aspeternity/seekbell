@@ -1,6 +1,6 @@
 # SeekBell
 
-自托管的网站新帖监控与通知工具，按需添加已适配的内置网站，首版支持 NodeSeek 官方 RSS。范围与技术栈见 [SPEC](docs/SPEC.md) 和 [ARCHITECTURE](docs/ARCHITECTURE.md)。
+自托管的网站新帖监控与通知工具，按需添加已适配的内置网站，当前支持 NodeSeek 与 Linux DO 官方 RSS。范围与技术栈见 [SPEC](docs/SPEC.md) 和 [ARCHITECTURE](docs/ARCHITECTURE.md)。
 
 当前已实现 **M1核心闭环与M2四渠道通知**：RSS解析、规则、基线/身份账本、事务outbox、可恢复投递，以及Telegram Bot/Bark/SMTP/Webhook适配、加密目标配置和独立目标测试记录。M2通过模拟验证；M3已接入真实初始化/登录、网站/任务、加密通知配置、工作空间保存、内容/命中/投递历史只读查询、真实概览统计、管理员修改、显式通知测试/手动重发和服务端采集/自动投递生命周期、保留策略与分批历史清理、显示时区及系统故障/恢复告警；版本信息已接入，M3本地自动退出核对已通过；已提供M4停服加密备份/独立恢复维护命令，网页加密下载/上传生成独立副本已接入，保留原卷的切换/升级回退维护流程已实现，真实验收仍未完成。真实通知与用户验收待Web完成后统一组织，当前证据以[PROJECT_STATE](docs/PROJECT_STATE.md)为准。
 
@@ -8,7 +8,7 @@
 
 仅维护一个正式前端入口，页面、导航与样式遵循已确认的[设计规范](docs/UI_DESIGN.md)。旧独立演示版已退役，不再提供模拟账户、浏览器备份、载入示例工作台或第二套构建。源码集中在frontend/src的pages、components、styles和API服务模块，结构见[ARCHITECTURE](docs/ARCHITECTURE.md)。
 
-默认index.html保留v0.4界面，初始化创建唯一管理员，后续登录使用服务端会话。新库无已添加网站：添加内置NodeSeek→配置一个通知目标→创建任务；任务备注、规则、网站配置与工作空间名称/说明存入SQLite，刷新、重启及重新登录后保留。通知目标完整配置加密，读取不回显敏感值，保存不会发送消息。正式入口不读取演示浏览器数据。
+默认index.html保留v0.4界面，初始化创建唯一管理员，后续登录使用服务端会话。新库无已添加网站：添加内置NodeSeek或Linux DO→配置一个通知目标→创建任务；任务备注、规则、网站配置与工作空间名称/说明存入SQLite，刷新、重启及重新登录后保留。通知目标完整配置加密，读取不回显敏感值，保存不会发送消息。正式入口不读取演示浏览器数据。
 
 内容、逐任务判定、投递与独立测试历史已支持服务端筛选/分页/详情；旧版本未记录的结果不会按当前规则重算，投递成功仍保留曾未知标记。[历史接入记录](docs/history/2026-10-20-历史查询接入.md)说明API及语义。概览已使用数据库统计24小时/7天趋势、送达回执与来源状态；管理员用户名/密码可验证当前密码后修改，旧会话失效。详见[概览与账号接入](docs/history/2026-10-20-概览与管理员接入.md)。独立目标测试与手动重发已接入：确认后发送，单独留证，响应丢失重试不重复建立操作，不改自动去重。详见[通知操作接入](docs/history/2026-10-20-通知测试与手动重发.md)。生产备份已提供停服维护命令，网页已支持加密下载和上传生成独立恢复副本；后台采集/自动投递随服务运行，启用网站后按配置执行，关闭浏览器或退出登录不停止；首次只建基线，重启保留队列/退避，异常会降低就绪状态。详见[后台接入记录](docs/history/2026-10-20-后台生命周期接入.md)。目标删除会检查所有未删除任务的依赖（包括暂停任务），删除当前配置、取消等待发送，保留历史身份和快照；在途消息无法撤回。历史试匹配使用当前草稿和本地最近20/50/100条帖子，显示数量/首次发现时间及三值原因，不保存规则、不发送、不改变去重。网站面板的连接测试需明确确认，只请求固定官方RSS并解析，结果独立持久化；与采集共用来源锁和错误退避，测试采用独立防连点间隔、不改变正常采集周期，不改变正式采集状态、基线或历史。详见[管理操作接入](docs/history/2026-10-20-管理操作接入.md)。保留策略默认30天，可调1–365天，保存确认后由后台分批清理普通历史；队列/在途/未完成操作受保护，已见/送达/来源身份账本始终保留，删除的历史无法通过改回天数恢复。详见[保留与清理记录](docs/history/2026-10-20-保留策略与清理接入.md)。显示时区由首次初始化时的浏览器时区设定，修改后全局展示与日期筛选同步，后续登录不覆盖。系统告警独立选目标、默认关闭，确认启用后每次故障/恢复只尝试一次；重复故障不刷屏，全部渠道失败或未知也能在网页查看。Webhook系统事件使用schema_version 2/type system_alert，帖子消息仍为v1。详见[时区与告警记录](docs/history/2026-10-20-时区与系统告警接入.md)。系统设置的版本信息显示实际应用/完整代码/迁移版本，就绪和后台状态独立读取，故障时仍可查看可用版本并重试。完整M3操作映射、退出结论和后续边界见[退出核对](docs/history/2026-10-20-版本信息与M3退出核对.md)。完整契约及证据见[接入记录](docs/history/2026-10-20-首个真实接入闭环.md)。
 
@@ -110,6 +110,9 @@ pnpm --dir frontend test:history-ui-fixes
 pnpm --dir frontend test:content-stability
 pnpm --dir frontend test:workspace-stability
 pnpm --dir frontend test:first-entry
+pnpm --dir frontend test:hotlist
+pnpm --dir frontend test:evaluations
+pnpm --dir frontend test:linuxdo
 ~~~
 
 
@@ -145,3 +148,39 @@ uv run --frozen python -m seekbell.services.backup_demo
 远程仓库为私有的 [Aspeternity/seekbell](https://github.com/Aspeternity/seekbell)。镜像发布、SSH、真实通知目标和许可证尚未提供；相关动作按明确授权执行。原始规格文件保存在初始 Git 提交中。
 
 提交身份使用GitHub noreply地址。首次克隆后执行`git config --local core.hooksPath .githooks`启用提交/推送前邮箱检查；CI也检查全部提交身份及Git历史/索引中的非示例邮箱，失败日志不输出被拒地址。真实通知凭据只保存在运行配置，不写入Git。
+
+### 概览模块与社区热榜验证
+
+概览模块显隐/顺序在系统设置→偏好与保留保存；首接NodeSeek第三方热榜，生产无需额外服务。热榜不参与规则或通知，隐藏后不再专用刷新。
+
+    uv run --frozen pytest -q tests/test_hotlists.py tests/test_release.py tests/test_backup.py
+    pnpm --dir frontend build
+    pnpm --dir frontend test:hotlist
+
+浏览器命令启动一次性临时库和合成HTTP服务（8028），退出清理；不读取正式数据库或访问真实热榜。Linux DO与持久热榜快照使用迁移0011；切换前做完整备份，旧0010镜像回退必须恢复匹配旧库。
+
+### Linux DO与多站验证
+
+Linux DO从内置网站库添加，初始暂停；候选默认和最小采集间隔为60秒，不代表官方限频保证。仅公开主题RSS，作者显示名不能用于用户名条件。NodeSeek热榜为第三方实时/每日/每周，Linux DO为原站RSS热门/每日/每周；缺失来源更新时间时显示获取时间。热榜快照独立保存、最多展示24小时，不参与监控或通知。
+
+~~~bash
+uv run --frozen pytest tests/test_public_http.py tests/test_linuxdo.py tests/test_linuxdo_runtime.py tests/test_hotlists.py tests/test_runtime.py -q
+pnpm --dir frontend test:linuxdo
+~~~
+
+浏览器套件使用一次性8030服务和合成两站HTTP，不请求真实论坛。Linux DO三入口使用HTTPX HTTP/2（仅该域名），保留匿名请求、TLS与共享退避。2026-10-24本机四源HTTP/2匿名对照通过，HTTP/1.1仍返回403；部署环境/持续可用性需单独验收，遇挑战继续显示来源异常并退避。新站不会随升级自动安装或启用。
+
+### Linux DO退避与人工重试
+
+自动403/访问挑战等待5→10分钟，最长10分钟；无Retry-After的429最长10分钟，超时/传输/服务端错误最长5分钟。服务器指定等待独立保存，最多24小时。网站配置的“测试连接”每60秒最多一次，可提前验证自动退避中的连接；成功后安排失败采集真实重试，不更改健康计划或历史/基线，也不直接发通知。刷新页面不等于重试。0012_retry_controls只增两个时间字段，旧等待原因不明时保守保留；升级前整卷备份，回退旧0011镜像须恢复匹配备份。
+
+~~~bash
+uv run --frozen pytest tests/test_retry_controls.py tests/test_source_probe_scheduling.py tests/test_linuxdo_runtime.py -q
+pnpm --dir frontend test:linuxdo
+~~~
+
+2026-10-24多站修正：网站按添加顺序持久排列，新加项在末尾；0013_site_order从原SQLite记录顺序回填。人工60秒配额仅由真实人工测试消耗，自动失败不占用；短暂忙碌/间隔延期按短等待重试。Linux DO热榜只请求选中周期，waiting状态自动重试而不误报失败。0012→0013升级前整卷备份；旧镜像回退必须恢复匹配0012备份。
+
+2026-10-24任务多站：新建/编辑任务可复选已添加网站，共用规则与通知目标，保存形成新配置版本，无需删除重建，不补发历史。章节高亮随滚动同步。0014_task_websites只新增并回填版本的网站集合；升级前整卷备份，回退必须恢复匹配0013整卷后启旧镜像。验证：uv run --frozen pytest tests/test_task_websites.py -q；pnpm --dir frontend test:linuxdo。
+
+2026-10-24匹配诊断：未命中直接查看单任务历史原因，搜索切换/完整条件/当前规则只读试算；历史样本用汇总和10条分页弹窗，网站鼠标选择无粗框。0015_category_values通过新配置版本修复已知NodeSeek旧中文版块值，不改旧判定或补发。升级前备份0014整卷，回退必须恢复匹配旧镜像/卷。检查：uv run --frozen pytest tests/test_match_diagnostics.py -q；pnpm --dir frontend test:diagnostics。

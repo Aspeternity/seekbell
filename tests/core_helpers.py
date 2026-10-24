@@ -40,9 +40,9 @@ class Core:
         with Session(self.engine) as session:
             return session.scalar(select(func.count()).select_from(model))
 
-    def one(self, model):
+    def one(self, model, *conditions):
         with Session(self.engine) as session:
-            return session.scalars(select(model)).one()
+            return session.scalars(select(model).where(*conditions)).one()
 
     def queued(self):
         self.ingest(9001, at=10)

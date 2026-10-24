@@ -110,7 +110,10 @@ class NotificationTarget(Base):
 class Task(Base):
     __tablename__ = "tasks"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    website_id: Mapped[str] = mapped_column(ForeignKey("websites.id"), index=True)
+    # Keep the original website as legacy provenance, never as current scope.
+    origin_website_id: Mapped[str] = mapped_column(
+        "website_id", ForeignKey("websites.id"), index=True
+    )
     current_version: Mapped[int] = mapped_column(Integer)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     deleted_at: Mapped[float | None] = mapped_column(Float)
@@ -125,6 +128,7 @@ class TaskVersion(Base):
     description: Mapped[str] = mapped_column(String(160), default="", server_default="")
     rule: Mapped[dict] = mapped_column(JSON)
     target_ids: Mapped[list] = mapped_column(JSON)
+    website_ids: Mapped[list] = mapped_column(JSON, server_default="[]")
     created_at: Mapped[float] = mapped_column(Float)
 
 
@@ -150,6 +154,7 @@ class Post(Base):
     title: Mapped[str] = mapped_column(Text)
     summary: Mapped[str | None] = mapped_column(Text)
     author: Mapped[str | None] = mapped_column(String(500))
+    author_display_name: Mapped[str | None] = mapped_column(String(500))
     category: Mapped[str | None] = mapped_column(String(500))
     url: Mapped[str] = mapped_column(String(2048))
     published_at: Mapped[float | None] = mapped_column(Float)
@@ -310,6 +315,7 @@ class LoginSession(Base):
 class WebsiteInstallation(Base):
     __tablename__ = "website_installations"
     website_id: Mapped[str] = mapped_column(ForeignKey("websites.id"), primary_key=True)
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
 class WorkspacePreferences(Base):
@@ -441,3 +447,35 @@ class AlertDelivery(Base):
     error_code: Mapped[str | None] = mapped_column(String(80))
     started_at: Mapped[float | None] = mapped_column(Float)
     finished_at: Mapped[float | None] = mapped_column(Float)
+
+
+class OverviewPreferences(Base):
+    __tablename__ = "overview_preferences"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_overview_singleton"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    modules: Mapped[list] = mapped_column(JSON)
+    revision: Mapped[int] = mapped_column(Integer)
+    website_id: Mapped[str | None] = mapped_column(String(80))
+    periods: Mapped[dict] = mapped_column(JSON)
+    selection_revision: Mapped[int] = mapped_column(Integer)
+
+
+class WebsiteRequestState(Base):
+    __tablename__ = "website_request_states"
+    website_id: Mapped[str] = mapped_column(ForeignKey("websites.id"), primary_key=True)
+    next_request_at: Mapped[float] = mapped_column(Float, default=0)
+    blocked_until: Mapped[float] = mapped_column(Float, default=0)
+    retry_after_until: Mapped[float] = mapped_column(Float, default=0)
+    next_manual_at: Mapped[float] = mapped_column(Float, default=0)
+    failures: Mapped[int] = mapped_column(Integer, default=0)
+    error_code: Mapped[str | None] = mapped_column(String(80))
+
+
+class HotlistSnapshot(Base):
+    __tablename__ = "hotlist_snapshots"
+    website_id: Mapped[str] = mapped_column(ForeignKey("websites.id"), primary_key=True)
+    provider_id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    period: Mapped[str] = mapped_column(String(32), primary_key=True)
+    fetched_at: Mapped[float] = mapped_column(Float)
+    source_updated_at: Mapped[float | None] = mapped_column(Float)
+    items: Mapped[list] = mapped_column(JSON)

@@ -18,11 +18,13 @@ if __name__ == "__main__":
     group.add_argument("--operations", action="store_true")
     group.add_argument("--retention", action="store_true")
     group.add_argument("--system", action="store_true")
+    parser.add_argument("--diagnostics", action="store_true")
     parser.add_argument("--port", type=int, default=None)
     args = parser.parse_args()
     seeded = args.history or args.sending or args.operations or args.retention or args.system
     root = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(root))
+    from tests.hotlist_helpers import synthetic_hotlists
     from tests.retention_helpers import retention_runtime_factory, seed_retention
     from tests.runtime_helpers import (
         PassiveRuntime,
@@ -53,10 +55,15 @@ if __name__ == "__main__":
                         seed_retention(engine)
                     else:
                         seed_history(engine, CredentialVault.open(Path(directory), create=True))
+                        if args.diagnostics:
+                            from tests.diagnostics_helpers import seed_diagnostics
+
+                            seed_diagnostics(engine, CredentialVault.open(Path(directory)))
                 finally:
                     engine.dispose()
         app = create_app(
             Settings(data_dir=Path(directory), static_dir=static),
+            hotlist_factory=synthetic_hotlists,
             runtime_factory=(
                 system_runtime_factory
                 if args.system

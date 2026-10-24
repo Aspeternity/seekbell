@@ -31,11 +31,11 @@ from tests.core_helpers import batch
 
 def test_initial_failure_does_not_establish_baseline(core):
     core.ingestion.record_failure("nodeseek-rss", "http_503", at=1)
-    assert not core.one(SourceState).initialized
+    assert not core.one(SourceState, SourceState.source_id == "nodeseek-rss").initialized
     first = core.ingest(9001, 9002, at=10)
     assert first.baseline and first.new_posts == 2 and first.queued == 0
-    assert core.one(SourceState).failures == 0
-    assert core.one(SourceState).last_error_code is None
+    assert core.one(SourceState, SourceState.source_id == "nodeseek-rss").failures == 0
+    assert core.one(SourceState, SourceState.source_id == "nodeseek-rss").last_error_code is None
     next_poll = core.ingest(9002, 9003, at=20)
     assert (next_poll.new_posts, next_poll.hits, next_poll.queued) == (1, 1, 1)
     assert not next_poll.possible_gap
@@ -67,10 +67,10 @@ def test_window_gap_is_warning_and_does_not_invent_missing_count(core):
     core.ingest(9001)
     report = core.ingest(9010, 9011, at=110)
     assert report.possible_gap and report.new_posts == 2
-    state = core.one(SourceState)
+    state = core.one(SourceState, SourceState.source_id == "nodeseek-rss")
     assert state.possible_gap and state.window_count == 2 and state.last_gap_at == 110
     assert core.ingest(9011, 9012, at=120).possible_gap is False
-    assert core.one(SourceState).possible_gap
+    assert core.one(SourceState, SourceState.source_id == "nodeseek-rss").possible_gap
 
 
 def test_rule_versions_and_new_tasks_apply_only_to_future_posts(core):
@@ -155,7 +155,7 @@ def test_atomic_ingestion_rolls_back_identity_hits_and_intents(core):
     event.remove(core.engine, "before_cursor_execute", fail)
     assert core.count(SeenPost) == core.count(Post) == 1
     assert core.count(RuleHit) == core.count(Outbox) == 0
-    assert core.one(SourceState).last_success_at == 100
+    assert core.one(SourceState, SourceState.source_id == "nodeseek-rss").last_success_at == 100
     assert core.ingest(9002, at=120).queued == 1
 
 

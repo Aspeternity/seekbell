@@ -55,6 +55,23 @@ class ConditionGroup(BaseModel):
         return clean_values(value)
 
 
+class CategoryScope(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    mode: Literal["all", "specific"] = "all"
+    values: tuple[str, ...] = Field(default=(), max_length=64)
+
+    @field_validator("values", mode="before")
+    @classmethod
+    def normalize(cls, value):
+        return clean_values(value)
+
+    @model_validator(mode="after")
+    def validate_scope(self):
+        if (self.mode == "specific") != bool(self.values):
+            raise ValueError("Specific categories require a selection; all must have no values")
+        return self
+
+
 class Rule(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     scope: Literal["title", "summary", "title_summary"] = "title"
@@ -62,7 +79,11 @@ class Rule(BaseModel):
     exclude: tuple[str, ...] = Field(default=(), max_length=64)
     authors_include: tuple[str, ...] = Field(default=(), max_length=64)
     authors_exclude: tuple[str, ...] = Field(default=(), max_length=64)
+    # Legacy snapshots remain immutable and retain their shared semantics.
     categories: tuple[str, ...] = Field(default=(), max_length=64)
+    site_categories: dict[str, CategoryScope] | None = Field(
+        default=None, min_length=1, max_length=64
+    )
     case_sensitive: bool = False
     mode: Literal["contains", "english_word"] = "contains"
 
@@ -73,10 +94,20 @@ class Rule(BaseModel):
 
     @model_validator(mode="after")
     def remove_empty_groups(self):
+        if self.site_categories is not None and self.categories:
+            raise ValueError("Use site_categories or legacy categories, not both")
         # An empty OR group must never bypass a populated group.
         groups = tuple(group for group in self.groups if group.all_of or group.any_of)
         object.__setattr__(self, "groups", groups)
         return self
+
+    def categories_for(self, website_id: str | None) -> tuple[str, ...]:
+        if self.site_categories is None:
+            return self.categories
+        if website_id not in self.site_categories:
+            raise ValueError("Select a website with an explicit category scope")
+        scope = self.site_categories[website_id]
+        return scope.values if scope.mode == "specific" else ()
 
 
 class Reason(BaseModel):
@@ -103,8 +134,9 @@ def contains(text: str, term: str, rule: Rule) -> bool:
     return re.search(prefix + re.escape(term) + suffix, text) is not None
 
 
-def evaluate(rule: Rule, post: PostFields) -> MatchResult:
+def evaluate(rule: Rule, post: PostFields, *, website_id: str | None = None) -> MatchResult:
     """Pure three-valued evaluation: no database, network, or side effects."""
+    categories = rule.categories_for(website_id or getattr(post, "website_id", None))
     fields: list[str | None] = {
         "title": [post.title],
         "summary": [post.summary],
@@ -135,8 +167,8 @@ def evaluate(rule: Rule, post: PostFields) -> MatchResult:
         predicates.append(member(post.author, rule.authors_include, "author_include"))
     if rule.authors_exclude:
         predicates.append(negate(member(post.author, rule.authors_exclude, "author_exclude")))
-    if rule.categories:
-        predicates.append(member(post.category, rule.categories, "category"))
+    if categories:
+        predicates.append(member(post.category, categories, "category"))
     if rule.groups:
         groups = []
         for index, group in enumerate(rule.groups, start=1):
@@ -159,14 +191,10 @@ def evaluate(rule: Rule, post: PostFields) -> MatchResult:
             reasons.append(Reason(code="missing_summary", truth=Truth.UNKNOWN))
         if post.author is None and (rule.authors_include or rule.authors_exclude):
             reasons.append(Reason(code="missing_author", truth=Truth.UNKNOWN))
-        if post.category is None and rule.categories:
+        if post.category is None and categories:
             reasons.append(Reason(code="missing_category", truth=Truth.UNKNOWN))
     unrestricted = not (
-        rule.groups
-        or rule.exclude
-        or rule.authors_include
-        or rule.authors_exclude
-        or rule.categories
+        rule.groups or rule.exclude or rule.authors_include or rule.authors_exclude or categories
     )
     return MatchResult(
         status={
@@ -189,7 +217,14 @@ def explain(rule: Rule) -> str:
     if rule.mode == "english_word":
         parts.append("英文词边界使用英文字母、数字和下划线，中文按包含匹配。")
     if not any(
-        (rule.groups, rule.exclude, rule.authors_include, rule.authors_exclude, rule.categories)
+        (
+            rule.groups,
+            rule.exclude,
+            rule.authors_include,
+            rule.authors_exclude,
+            rule.categories,
+            any(scope.mode == "specific" for scope in (rule.site_categories or {}).values()),
+        )
     ):
         parts.append("将匹配全部新帖。")
     return "".join(parts)

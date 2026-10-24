@@ -13,6 +13,8 @@ class NodeSeekAdapter:
     website_id: str = "nodeseek"
     source_id: str = "nodeseek-rss"
     rss_url: str = NODESEEK_RSS_URL
+    default_interval: int = 10
+    minimum_interval: int = 10
     capabilities: frozenset[str] = frozenset({"title", "summary", "author", "category"})
 
     @staticmethod
@@ -83,6 +85,3 @@ class NodeSeekAdapter:
         if feed.entries and not posts:
             raise SourceFailure("no_valid_entries")
         return PostBatch(tuple(posts), len(feed.entries), tuple(diagnostics))
-
-
-BUILTIN_ADAPTERS = {"nodeseek": NodeSeekAdapter()}

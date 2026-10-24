@@ -11,8 +11,9 @@ const props = withDefaults(
     stale?: boolean
     minHeight?: number
     allowControls?: boolean
+    showFeedback?: boolean
   }>(),
-  { stale: false, minHeight: 220 },
+  { stale: false, minHeight: 220, showFeedback: true },
 )
 watch(
   () => !props.hasData && props.loading,
@@ -63,7 +64,7 @@ onBeforeUnmount(() => {
     :aria-busy="loading"
     :style="{ minHeight: !hasData ? Math.max(height, minHeight) + 'px' : undefined }"
   >
-    <div class="read-region-feedback">
+    <div v-if="showFeedback" class="read-region-feedback">
       <Feedback
         :loading="loading"
         :error="error"

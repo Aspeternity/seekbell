@@ -5,14 +5,17 @@ import logging
 
 import httpx
 
+from seekbell.collectors.http import public_client
 from seekbell.collectors.rss import RssCollector
 from seekbell.db.models import Administrator
 from seekbell.db.transactions import database_call, write_session
 from seekbell.services.alerts import AlertWorker, observe
 from seekbell.services.collection import SourceRunner
 from seekbell.services.delivery import DeliveryWorker
+from seekbell.services.request_budget import WebsiteRequestBudget
 from seekbell.services.retention import HistoryRetention
 from seekbell.services.source_probe import ProbeConflict, check
+from seekbell.sites.registry import BUILTIN_ADAPTERS
 
 logger = logging.getLogger(__name__)
 
@@ -27,20 +30,30 @@ class Runtime:
         tick=1,
         shutdown_grace=16,
         collector_timeout=15,
+        request_budget=None,
     ):
-        self.client = httpx.AsyncClient(
+        self.client = public_client(
             transport=http_transport,
-            trust_env=False,
-            follow_redirects=False,
-            limits=httpx.Limits(max_connections=1, max_keepalive_connections=1),
+            limits=httpx.Limits(
+                max_connections=len(BUILTIN_ADAPTERS),
+                max_keepalive_connections=len(BUILTIN_ADAPTERS),
+            ),
         )
-        self.source = SourceRunner(
-            engine,
-            RssCollector(self.client),
-            managed=True,
-            tick=tick,
-            fetch_timeout=collector_timeout,
-        )
+        self.request_budget = request_budget or WebsiteRequestBudget(engine)
+        self.sources = {
+            website_id: SourceRunner(
+                engine,
+                RssCollector(
+                    self.client, request_budget=self.request_budget, website_id=website_id
+                ),
+                source_id=adapter.source_id,
+                managed=True,
+                tick=tick,
+                fetch_timeout=collector_timeout,
+            )
+            for website_id, adapter in BUILTIN_ADAPTERS.items()
+        }
+        self.source = self.sources["nodeseek"]
         self.worker = DeliveryWorker(engine, notifiers, managed=True, tick=tick)
         self.retention = HistoryRetention(engine, tick=tick)
         self.alerts = AlertWorker(engine, notifiers, tick=tick)
@@ -121,13 +134,23 @@ class Runtime:
             if not stop.is_set():
                 self._failed(name)
 
+    async def collect(self, stop):
+        # TaskGroup joins/cancels every source when the actor exits or fails.
+        # Expected HTTP/parser failures are handled inside each SourceRunner.
+        async with asyncio.TaskGroup() as group:
+            for website_id, source in self.sources.items():
+                group.create_task(source.run(stop), name="seekbell-source-" + website_id)
+
     async def start(self):
         if self.tasks:
             raise RuntimeError("Runtime already started")
         self.tasks = {
-            name: asyncio.create_task(self._actor(name, actor.run), name="seekbell-" + name)
+            name: asyncio.create_task(
+                self._actor(name, self.collect if name == "collection" else actor.run),
+                name="seekbell-" + name,
+            )
             for name, actor in (
-                ("collection", self.source),
+                ("collection", self),
                 ("delivery", self.worker),
                 ("retention", self.retention),
                 ("alerts", self.alerts),
@@ -140,13 +163,16 @@ class Runtime:
                 if self.active:
                     await database_call(self._runtime_transition, name, False)
 
-    async def check_source(self):
+    async def check_source(self, website_id="nodeseek"):
         if not self.active:
             raise ProbeConflict("后台未运行，请先检查概览。")
+        source = self.sources.get(website_id)
+        if source is None:
+            raise ProbeConflict("该网站尚未支持。")
         task = asyncio.current_task()
         self.probes.add(task)
         try:
-            return await check(self.source)
+            return await check(source)
         finally:
             self.probes.discard(task)
 
