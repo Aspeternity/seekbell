@@ -1,24 +1,22 @@
 # 当前状态
 
-更新时间：2026-10-24（Asia/Shanghai）。匹配诊断/版块值修复已保留数据更新本机8001，774后端/62浏览器及容器检查通过；旧例当前纯试算可命中，用户验收待。
+更新时间：2026-10-24（Asia/Shanghai）。正交付诊断编辑任务404修复，两个入口桌面/手机回归通过，相关浏览器22项通过；待镜像检查和本机更新。多站版块仍共享数组，用户询问后的独立设置建议未实施。
 
 ## 环境与授权
 
-唯一SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe派发。分支codex/linuxdo-integration，最后实现61eeed217ee72846a7071210da556a86705e8d4b；后续交付文档提交，均未推送/合并。用户明确批准全部前述问题和单任务诊断，含当前配置新版本纠正版块值，沿用8001保留数据更新授权。公开发布/远程部署/主动真实发送另计；无多代理，不改D盘/旧Ubuntu/全局WSL/8000/4175。
+唯一SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe派发。分支codex/linuxdo-integration，基于d9e1caf/上一实现61eeed217ee72846a7071210da556a86705e8d4b。用户反馈404并询问版块逻辑，沿用8001修复/保留数据更新授权；本轮只修前端跳转，不擅自调整版块结构或当前配置。无推送/合并/公开发布/远程部署/主动真实发送授权；无多代理，不改D盘/旧Ubuntu/全局WSL/8000/4175。
 
 ## 读取与实现
 
-先读[匹配诊断与版块修正](history/2026-10-24-匹配诊断与版块修正.md)，追溯再读同日多站/退避记录。SPEC/ARCHITECTURE/DECISIONS/UI_DESIGN已同步；重点TaskEditor/Content、PostDiagnosis/EvaluationPicker/ResultDialog/HistoryTrialResults、ruleReasons/store；api/history/management、post_diagnosis/diagnosis/rule_values、sites/categories与0015。
-鼠标复选无粗框，键盘轻量焦点；历史样本只汇总，结果弹窗10条分页/筛选、固定底部页控，草稿变化清旧结果。未命中侧自动展示，汇总/搜索选择/一次一份历史主因，完整条件弹窗；当前规则试算独立，只读本地、不改历史/不发通知。
-0015通过新当前TaskVersion修复已知NodeSeek中文误作标识，旧版本/判定/队列/账本/基线不变、不补发。元数据标签/值分离，配置/试算边界规范已知别名；混站保留另一站字面值，未知不猜测，超64不生成无效配置。原多站/HTTP2/顺序/22px保持。
+先读[诊断编辑跳转](history/2026-10-24-诊断编辑跳转修正.md)，相关前端Content/PostDiagnosis/TaskEvaluationCard/App与diagnostics浏览器用例；后端和迁移需追溯同日匹配诊断记录。Content转发子组件navigate漏路径，导致App归一化undefined为404；现显式接收path原样转发。主卡编辑和完整条件窗口任务链接均覆盖，不更改路由兜底/任务身份/匹配/数据。
+现行版块是跨所选网站共享categories值集合，标签的站名前缀不具备隔离语义；NodeSeek内置＋本地候选，Linux DO本地RSS已见类别，非完整目录。只选trade会限制所有站；候选按值去重有未来撞值风险。建议各站独立全部/指定范围、站点身份参与类别键，关键词/目标共用，新网站默认全部，旧配置迁移保持效果；仅建议，等待用户确认结构改造。
 
-## 验证与限制
+## 验证与下一步
 
-私有acceptance/2026-10-24-match-diagnostics：backend-full.log（774，新增13）；diagnostics12/operations6/evaluations8/linuxdo20/approved-ui8/ui8共62浏览器通过。格式/类型/构建/锁/隐私/wheel通过，三项离线容器及旧镜像合成修复严格预检通过。全部合成/禁外网，101任务/100样本及历史不改/当前只读试算有证据，截图已查看。
-14:02正式只读核对0015与3个当前配置的新版本修复；旧例历史v4仍no_match，当前v5纯试算match，未写结果或补发。两站新容器自动采集成功、错误/失败0；Windows两地址/完整SHA/新资源/概览间距通过，容器稳定。未额外真实RSS/测试/主动通知，长期/PVE/arm64及用户界面验收待。
+私有acceptance/2026-10-24-diagnosis-edit-link：reproduced-browser.log在修复前桌面/手机均复现/#/404；修复后diagnostics14/evaluations8共22通过，两个入口检查同一任务ID/编辑标题/当前名称。类型/构建/格式通过。当前仅前端1行与测试/交接文档改动，具体路径见git status。
+后端/依赖/Dockerfile/compose/schema未变，复用61eeed2的774后端/备份恢复/升级回退证据；不重复全量。下一步提交、固定SHA构建与容器资源检查，新备0015整卷，副本全表/原列/配置/密钥凭据不变后更新8001，验Windows/版本。仍全合成/无额外论坛或真实通知。
 
-## 运行与回退
+## 当前运行与回退
 
-同一seekbell-local/seekbell-local-seekbell-1、原卷seekbell-local_data、127.0.0.1:8001；镜像seekbell:match-diagnostics-61eeed217ee7，ID sha256:1f7e35f2e254973cbca5954e2cc992a518eada90bd018d80985f84b0491b4b71，schema0015、healthy/read-only/unless-stopped。账号/密钥保留，local-runtime/runtime.json已更新，保活PID32480/创建2026-10-23T23:39:27.9859010Z未变。
-新备份before-diagnostics-61eeed2-20261024-140054.tar.gz；SHA/manifest/SQLite及副本证据见交付记录。除批准的tasks指针/新增版本外，全部原表原列与旧版本不变，凭据可解；正式12类配置与预期修复再次比对，只有新增时间戳跨环境规范化，临时卷清理。
-旧9fb949a/0014镜像及匹配整卷保留；回退必须恢复该整卷，禁止旧镜像读0015。下一步用户刷新8001验收，旧帖看历史原因并可试算当前规则，不清空/改写旧判定。推送/合并待授权。
+8001仍seekbell:match-diagnostics-61eeed217ee7，镜像sha256:1f7e35f2e254973cbca5954e2cc992a518eada90bd018d80985f84b0491b4b71，schema0015、healthy/read-only/unless-stopped；同一seekbell-local/seekbell-local-seekbell-1、原卷seekbell-local_data，元数据local-runtime/runtime.json。保活PID32480/创建2026-10-23T23:39:27.9859010Z不变。
+上一14:02验证3个配置新版本修复，旧例v4 no_match保留、当前v5纯试算match；两站采集无错。上轮before-diagnostics备份匹配0014；本轮更新前新备0015。当前UI回退至同后端/0015的61eeed2可保留当前卷，不回退正常采集/送达账本；若候选失败先停并归档。更早schema旧镜像仍需匹配备份。长期/PVE/arm64及用户验收未完成。

@@ -209,3 +209,22 @@ test('failed detail reads offer retry without inventing a reason', async ({ page
   await page.getByRole('button', { name: '重新加载', exact: true }).click()
   await expect(page.locator('.diagnosis-cause')).toContainText('历史版块保存值与来源标识不一致')
 })
+
+test('diagnosis edit actions retain the task path through both nested entry points', async ({
+  page,
+}) => {
+  const current = await task(page)
+  await openPost(page)
+  await page.getByRole('button', { name: '编辑任务', exact: true }).click()
+  await expect(page).toHaveURL(new RegExp('/#/task/' + current.id + '$'))
+  await expect(page.getByRole('heading', { name: '编辑监控任务', exact: true })).toBeVisible()
+  await expect(page.locator('#task-name')).toHaveValue(current.name)
+  await openPost(page)
+  await page.getByRole('button', { name: '查看完整条件', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: '完整匹配条件', exact: true })
+  await dialog.getByRole('button', { name: current.name, exact: true }).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(page).toHaveURL(new RegExp('/#/task/' + current.id + '$'))
+  await expect(page.getByRole('heading', { name: '编辑监控任务', exact: true })).toBeVisible()
+  await expect(page.locator('#task-name')).toHaveValue(current.name)
+})

@@ -330,7 +330,7 @@ function clear() {
               :preferred-task-id="task"
               :other="showOther"
               @back="showOther = false"
-              @navigate="emit('navigate')"
+              @navigate="(path) => emit('navigate', path)"
             />
           </aside>
         </div> </template></ReadRegion
