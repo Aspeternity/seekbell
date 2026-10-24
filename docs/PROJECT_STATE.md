@@ -1,23 +1,22 @@
 # 当前状态
 
-更新时间：2026-10-24（Asia/Shanghai）。本轮用户要求V2EX接入方案，已核对官方资料与少量一次性匿名实源；仅文档方案，尚未开发/迁移/部署。待用户审阅API来源、内容摘录及节点交互边界。
+更新时间：2026-10-24（Asia/Shanghai）。当前阶段为方案待审：V2EX接入未开发；本轮补充热榜刷新/429及节点目录解释，只读调研和文档，无产品/数据库/运行改动。
 
 ## 环境与授权
 
-唯一SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe派发。方案分支codex/v2ex-plan，起点main 987beda5ea38c01e9969fb2fa684c8f970edeec0；本轮只写本状态与方案文档并本地提交，不推送/合并此新方案。先前用户授权的成品36提交已通过PR #2合入main，合并SHA5cdf5bd68d88dac53fea6e364c8fe8b2fe392db7，CI精确head d94958d及两架构检查均过；详见同日合并记录。无多代理，不改D盘/旧Ubuntu/全局WSL/8000/4175；无新公开镜像发布/远程部署/真实试发授权。
+唯一SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe派发。分支codex/v2ex-plan，调研代码基准7f807de，来自main 987beda5ea38c01e9969fb2fa684c8f970edeec0。本轮仅本地文档提交，不推送/合并新方案。此前授权的36提交已通过PR #2合入main：5cdf5bd68d88dac53fea6e364c8fe8b2fe392db7，CI精确head d94958d及两架构均过，证据见同日合并记录。无多代理；不改D盘/旧Ubuntu/全局WSL/8000/4175，无新公开镜像、远程部署或真实试发授权。
 
-## 本任务读取与事实
+## 读取清单与事实
 
-先读[V2EX方案](history/2026-10-24-V2EX接入方案.md)，再看sites/registry/hotlists、collectors/rss/http、SourceRunner/request_budget及相关模型。SPEC仍只确认NodeSeek/Linux DO；本轮不把未批准建议回写为需求。
-官方订阅说明blog.v2ex.com/rss，V1说明www.v2ex.com/p/7v9TEc53，V2说明/help/api。匿名HTTP/1.1本机实测：Atom index.xml为50项，无节点字段；现解析器仅RSS2，不能直接换URL。最新API本次36项均带用户名/node元数据，按created降序，是本次Atom子集；热门10项；nodes/all目录1378项约794KB；index.json为404。条数/覆盖均是时点事实，不承诺全部节点、权限内容或不漏帖。私有acceptance/2026-10-24-v2ex-proposal只留字段/计数/响应头元数据，不留正文或用户名样本入Git，实测不等于长期可用。
-API有效额度头与旧120/新600文档不同，目录Reset可能来自过期缓存；Cache-Control可长达5天，不等于采集周期，也不能用帖子created冒充来源更新时间。
+先读[热榜分析](history/2026-10-24-热榜刷新与节点目录说明.md)和[V2EX方案](history/2026-10-24-V2EX接入方案.md)，按需读services/hotlists、request_budget、sites/hotlists及CommunityHotlist.vue/history.ts/readCache.ts。批准前不回写SPEC/ARCH为既定需求。
+当前所有热榜周期TTL都是600秒。NodeSeek读第三方JSON，Linux DO直读官方RSS且与监控/手测共享锁、2秒间隔及退避；Linux DO已经不预取其他周期。旧榜到期先显示快照并异步更新，refreshing不等于失败；前端短查本应用不等于直查论坛。未发现固定30秒前端缓存TTL。截图不能确认过去周榜429的具体触发者；当前429共享等待通常60秒起、最多10分钟，服务器更长Retry-After另行遵守。每周是统计周期，不能解释成每周只变一次。
+V2EX曾少量匿名实测：Atom50项但无节点且现解析器不支持；最新API36项均有用户名/node，热门10项，目录1378项约794KB，均为时点事实。完整证据与额度/缓存头边界在方案及私有acceptance/2026-10-24-v2ex-proposal，本轮未新请求论坛，敏感样本不入Git。
 
-## 建议（待批准）
+## 建议，待批准
 
-优先固定官方匿名V1列表＋独立节点目录＋官方热门：新帖120秒/最小60秒、热门600秒按需、目录24小时缓存及限频刷新，都是工程候选。每站共享采集/锁/限流，额度不足优先采集，服务器等待不可手测绕过。HTTPX现依赖足够，不加浏览器/Token/额外服务。
-节点按稳定node.id存值，标题/slug用于搜索；千余项用本地缓存搜索/分页50条，不全塞workspace，候选限高/跨页保留/最多64项，任务独立全部或指定，不加网站总范围。正文仅列表附带内容转纯文本截2000字符并标“接口摘录”，不补主题详情或回复；原帖/v2ex身份/首次基线/去重/诊断/四渠道沿用，旧任务不动。热门仅一个支持项，不伪造每日/每周。候选下个迁移17须保留旧数据并备份16。
-关键边界是RSS-only扩为官方只读API与内容摘录；官方API公平使用要求对个人/商业站内容填充有限制，不能凭匿名200判定授权，正式采用前须核对保存/展示用途。方案不宣称私有部署自动获许可，不做公开内容镜像。
+热榜新鲜期：NodeSeek实时10分钟、Linux DO热门15分钟、两站每日30/每周60分钟；V2EX拟热门10分钟。仅可见周期按需更新，共享快照，采集优先；区分真正刷新、限流计划与失败旧榜。允许系统设置内按站自定义并设下限，服务端等待优先，修改不回扫/补发。这些为工程建议，非官方时效保证。
+V2EX拟官方匿名V1最新列表＋热门＋节点目录，无新依赖/Token/浏览器。新帖120秒/最小60秒；目录只缓存编号/名称/slug，本地搜索分页50项，24小时按需更新，失败保留已选；稳定node.id用于任务独立范围，不加网站总范围。列表随附内容转纯文最多2000字符，标“接口摘录”，不另取详情/回复。关键待批边界是RSS-only扩固定API及摘录；官方使用要求、覆盖与额度限制见方案，不宣称匿名可访问即获使用许可。
 
 ## 运行与下一步
 
-8001仍9becf75730e4e4c9accb35ed6f572529aa590c60镜像、schema0016，原项目seekbell-local/容器seekbell-local-seekbell-1/卷seekbell-local_data；实际digest/备份在私有local-runtime/runtime.json及按站记录。本轮无产品/数据/运行改动，未重复既有789后端/54及追加84浏览器/容器验证。待批准后再更新SPEC/ARCH、实现适配器/节点缓存/预算/UI及合成CI，实施17前新备16整卷；旧15备份不能当16回退快照。PVE/长期部署及用户验收仍独立。
+8001仍9becf75730e4e4c9accb35ed6f572529aa590c60镜像/schema0016，项目seekbell-local、原容器/卷不变；digest与备份见私有local-runtime/runtime.json和按站记录。未重跑既有789后端/54及追加84浏览器/容器证据，文档不代表实现或用户验收。待用户确认分别实施热榜优化与V2EX；若做迁移17，先新备完整16卷，旧15备份不能用作16回退，先隔离副本/合成CI再按授权更新运行。
