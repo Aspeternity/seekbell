@@ -19,4 +19,4 @@
 ## 运行、回退与下一步
 
 8001镜像seekbell:diagnosis-edit-link-02d996ddb93a，digest sha256:7c7c94139967315f45dacbc28a771bd3509fdc0bfc61e067d46c909511595cdb，healthy/read-only/unless-stopped，项目seekbell-local、容器seekbell-local-seekbell-1、卷seekbell-local_data。私有local-runtime/runtime.json已更新。
-0015备份before-edit-link-02d996d-20261024-145308.tar.gz，完整路径/校验见本轮记录。同后端/schema回退61eeed2可保留当前卷，先停候选并归档；更早schema镜像需匹配整卷备份。下一步用户验收404，讨论按站版块范围；长期/PVE/arm64未验。无未提交产品代码，文档交接与实现SHA允许不同。
+0015备份before-edit-link-02d996d-20261024-145308.tar.gz，完整路径/校验见本轮记录。同后端/schema回退61eeed2可保留当前卷，先停候选并归档；更早schema镜像需匹配整卷备份。下一步用户验收404并确认按站版块细化方案：全部/指定显式切换、可搜索有界选择器、来源完整性说明、旧配置逐站复制保持效果、缺失版块沿用三值诊断。方案见本轮记录末节，尚未改产品/配置；长期/PVE/arm64未验。无未提交产品代码，文档交接与实现SHA允许不同。
