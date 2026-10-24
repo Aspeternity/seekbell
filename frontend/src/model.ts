@@ -3,7 +3,7 @@ export interface Group {
   any: string[]
 }
 export interface Task {
-  websiteId: string
+  websiteIds: string[]
   id: string
   name: string
   description: string
@@ -23,6 +23,7 @@ export interface Task {
   icon: string
 }
 export interface Sample {
+  websiteId?: string
   title: string
   summary: string | null
   author: string | null
@@ -31,7 +32,7 @@ export interface Sample {
 export function emptyTask(): Task {
   return {
     id: '',
-    websiteId: '',
+    websiteIds: [],
     name: '',
     description: '',
     enabled: true,

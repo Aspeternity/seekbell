@@ -24,7 +24,8 @@ from seekbell.db.transactions import write_session
 from seekbell.domain.rules import Rule
 from seekbell.notifiers.configs import public_config, validate_config
 from seekbell.notifiers.credentials import CredentialVault
-from seekbell.sites.registry import BUILTIN_ADAPTERS, validate_rule_capabilities
+from seekbell.services.task_websites import normalize_websites
+from seekbell.sites.registry import validate_rule_capabilities
 
 
 def identifier() -> str:
@@ -73,6 +74,24 @@ class Configuration:
         ):
             raise ValueError("Unknown notification target")
         return target_ids
+
+    @staticmethod
+    def _websites(session, website_ids, rule, *, managed=False):
+        selected = normalize_websites(website_ids)
+        for key in selected:
+            validate_rule_capabilities(key, rule)
+            if managed and session.get(WebsiteInstallation, key) is None:
+                raise ValueError("Website is not installed")
+        return selected
+
+    @staticmethod
+    def _configured_targets(session, targets):
+        if any(
+            session.get(NotificationTarget, item).kind == "mock"
+            or not session.get(NotificationTarget, item).config_ciphertext
+            for item in targets
+        ):
+            raise ValueError("Select configured notification targets")
 
     def _vault(self) -> CredentialVault:
         if self.vault is None:
@@ -175,29 +194,29 @@ class Configuration:
         target_ids,
         *,
         at: float,
-        website_id: str = "nodeseek",
+        website_id: str | None = None,
+        website_ids: list[str] | None = None,
         enabled: bool = True,
         description: str = "",
         managed: bool = False,
     ) -> str:
-        if website_id not in BUILTIN_ADAPTERS:
-            raise ValueError("Unsupported website")
-        validate_rule_capabilities(website_id, rule)
+        if website_id is not None and website_ids is not None:
+            raise ValueError("Specify website_ids or the legacy website_id, not both")
         key = identifier()
         with write_session(self.engine) as session:
-            if managed and session.get(WebsiteInstallation, website_id) is None:
-                raise ValueError("Website is not installed")
+            selected = self._websites(
+                session,
+                website_ids if website_ids is not None else [website_id or "nodeseek"],
+                rule,
+                managed=managed,
+            )
             targets = self._targets(session, target_ids)
-            if managed and any(
-                session.get(NotificationTarget, item).kind == "mock"
-                or not session.get(NotificationTarget, item).config_ciphertext
-                for item in targets
-            ):
-                raise ValueError("Select configured notification targets")
+            if managed:
+                self._configured_targets(session, targets)
             session.add(
                 Task(
                     id=key,
-                    website_id=website_id,
+                    origin_website_id=selected[0],
                     current_version=1,
                     enabled=enabled,
                     created_at=at,
@@ -212,6 +231,7 @@ class Configuration:
                     description=description,
                     rule=rule.model_dump(mode="json"),
                     target_ids=targets,
+                    website_ids=selected,
                     created_at=at,
                 )
             )
@@ -227,13 +247,23 @@ class Configuration:
         at: float,
         description: str = "",
         enabled: bool | None = None,
+        website_ids: list[str] | None = None,
+        managed: bool = False,
     ) -> int:
         with write_session(self.engine) as session:
             task = session.get(Task, key)
             if task is None or task.deleted_at is not None:
                 raise ValueError("Unknown active task")
-            validate_rule_capabilities(task.website_id, rule)
+            previous = session.get(TaskVersion, (key, task.current_version))
+            selected = self._websites(
+                session,
+                previous.website_ids if website_ids is None else website_ids,
+                rule,
+                managed=managed,
+            )
             targets = self._targets(session, target_ids)
+            if managed:
+                self._configured_targets(session, targets)
             if enabled is not None:
                 task.enabled = enabled
                 if not enabled:
@@ -248,6 +278,7 @@ class Configuration:
                     description=description,
                     rule=rule.model_dump(mode="json"),
                     target_ids=targets,
+                    website_ids=selected,
                     created_at=at,
                 )
             )
@@ -382,6 +413,7 @@ class Configuration:
                         description=version.description,
                         rule=version.rule,
                         target_ids=remaining,
+                        website_ids=list(version.website_ids),
                         created_at=at,
                     )
                 )

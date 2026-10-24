@@ -11,7 +11,7 @@ import {
   notify,
   setTaskEnabled,
   confirmAction,
-  websiteName,
+  taskWebsiteLabel,
 } from '../store'
 import type { Task } from '../model'
 const emit = defineEmits<{
@@ -120,9 +120,9 @@ function remove(task: Task) {
           <button class="text-link task-title" @click="emit('navigate', '/task/' + task.id)">
             {{ task.name }}
           </button>
-          <p>{{ task.description || websiteName(task.websiteId) + ' · 新帖监控' }}</p>
+          <p>{{ task.description || taskWebsiteLabel(task) + ' · 新帖监控' }}</p>
           <div class="chip-line">
-            <span class="plain-chip">{{ websiteName(task.websiteId) }}</span>
+            <span class="plain-chip">{{ taskWebsiteLabel(task) }}</span>
             <span class="plain-chip"
               >{{ task.groups.filter((g) => g.all.length || g.any.length).length }} 个条件组</span
             ><span class="plain-chip">{{ task.targets.length }} 个通知目标</span

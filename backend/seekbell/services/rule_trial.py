@@ -8,25 +8,29 @@ from seekbell.domain.rules import evaluate
 from seekbell.services.history import read_session
 
 
-def trial_history(engine, website_id, rule, limit=20):
+def trial_history(engine, website_ids, rule, limit=20):
+    # Preserve the internal single-site call contract while sharing one bounded sample.
+    selected = [website_ids] if isinstance(website_ids, str) else website_ids
     with read_session(engine) as session:
         available = session.scalar(
-            select(func.count()).select_from(Post).where(Post.website_id == website_id)
+            select(func.count()).select_from(Post).where(Post.website_id.in_(selected))
         )
         posts = session.scalars(
             select(Post)
-            .where(Post.website_id == website_id)
-            .order_by(Post.first_seen_at.desc(), Post.external_post_id.desc())
+            .where(Post.website_id.in_(selected))
+            .order_by(Post.first_seen_at.desc(), Post.website_id, Post.external_post_id.desc())
             .limit(limit)
         ).all()
         return {
-            "website_id": website_id,
+            "website_id": selected[0] if len(selected) == 1 else None,
+            "website_ids": selected,
             "available": available,
             "sample_count": len(posts),
             "from_at": min((post.first_seen_at for post in posts), default=None),
             "to_at": max((post.first_seen_at for post in posts), default=None),
             "items": [
                 {
+                    "website_id": post.website_id,
                     "sample": (
                         fields := PostFields(
                             title=post.title,

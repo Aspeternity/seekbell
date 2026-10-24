@@ -110,7 +110,10 @@ class NotificationTarget(Base):
 class Task(Base):
     __tablename__ = "tasks"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    website_id: Mapped[str] = mapped_column(ForeignKey("websites.id"), index=True)
+    # Keep the original website as legacy provenance, never as current scope.
+    origin_website_id: Mapped[str] = mapped_column(
+        "website_id", ForeignKey("websites.id"), index=True
+    )
     current_version: Mapped[int] = mapped_column(Integer)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     deleted_at: Mapped[float | None] = mapped_column(Float)
@@ -125,6 +128,7 @@ class TaskVersion(Base):
     description: Mapped[str] = mapped_column(String(160), default="", server_default="")
     rule: Mapped[dict] = mapped_column(JSON)
     target_ids: Mapped[list] = mapped_column(JSON)
+    website_ids: Mapped[list] = mapped_column(JSON, server_default="[]")
     created_at: Mapped[float] = mapped_column(Float)
 
 

@@ -180,3 +180,5 @@ pnpm --dir frontend test:linuxdo
 ~~~
 
 2026-10-24多站修正：网站按添加顺序持久排列，新加项在末尾；0013_site_order从原SQLite记录顺序回填。人工60秒配额仅由真实人工测试消耗，自动失败不占用；短暂忙碌/间隔延期按短等待重试。Linux DO热榜只请求选中周期，waiting状态自动重试而不误报失败。0012→0013升级前整卷备份；旧镜像回退必须恢复匹配0012备份。
+
+2026-10-24任务多站：新建/编辑任务可复选已添加网站，共用规则与通知目标，保存形成新配置版本，无需删除重建，不补发历史。章节高亮随滚动同步。0014_task_websites只新增并回填版本的网站集合；升级前整卷备份，回退必须恢复匹配0013整卷后启旧镜像。验证：uv run --frozen pytest tests/test_task_websites.py -q；pnpm --dir frontend test:linuxdo。

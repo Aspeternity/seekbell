@@ -122,7 +122,7 @@ src/websites.ts声明已实现适配器及能力，服务端WebsiteInstallation�
 
 2026-10-20首个接入沿用批准v0.4页面与样式，正式状态来自/api/manage/workspace，不迁移演示账号/浏览器备份。2026-10-23已收敛为上节单入口结构；下文保留各接入阶段的后端契约和证据，完成范围以PROJECT_STATE为准。
 
-0004_management增加单例Administrator、LoginSession、WebsiteInstallation、WorkspacePreferences；TaskVersion增加最多160字符description。SQLite迁移入口持BEGIN IMMEDIATE后识别空库/既有迁移版本：空库安装实例表为空，从既有M0/M1/M2升级保留原网站实例。适配器身份行不是用户已安装实例；移除实例仅删除安装关系、禁用来源并重建后续基线，保留历史身份。活跃任务依赖阻止移除；创建任务在同一配置写事务检查安装关系。任务所属网站固定，备注随规则版本留证。
+0004_management增加单例Administrator、LoginSession、WebsiteInstallation、WorkspacePreferences；TaskVersion增加最多160字符description。SQLite迁移入口持BEGIN IMMEDIATE后识别空库/既有迁移版本：空库安装实例表为空，从既有M0/M1/M2升级保留原网站实例。适配器身份行不是用户已安装实例；移除实例仅删除安装关系、禁用来源并重建后续基线，保留历史身份。活跃任务依赖阻止移除；创建任务在同一配置写事务检查安装关系。旧单站约束已由0014的版本化网站集合替代，备注仍随规则版本留证。
 
 初始化的管理员和会话同事务创建，管理员主键限制id=1，不使用初始化令牌。密码为独立随机盐scrypt(N=2^17,r=8,p=1)。不透明随机会话令牌仅以SHA-256摘要存入服务端，12小时过期，退出删除。Cookie为HttpOnly/SameSite=Strict，可信HTTPS请求标Secure。登录/初始化使用进程密钥签名的预会话CSRF，管理写入验证会话CSRF及Origin；不信任未配置的代理。API no-store，验证错误不包含输入，SQL日志隐藏参数。认证来源每分钟10次/全局30次，内存限速且哈希串行；重启重置限速，不是多副本方案。参考[OWASP密码存储](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)及[CSRF](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)。
 
@@ -326,3 +326,11 @@ collectors/http.public_response构造匿名请求、显式移除Cookie且不跟�
 0013_site_order为WebsiteInstallation新增position，从现存SQLite rowid插入顺序回填，后续添加在写事务中按max(position)+1追加，列表/概览/热榜元数据共用该顺序。原网站身份、配置与历史不变；移除重加置末。迁移还从真实SourceProbe(success/failure/unknown)重建next_manual_at，消除旧自动失败生成的伪人工配额，保留真实/取消测试限频，服务器retry_after_until不改。
 
 WebsiteRequestBudget.failed不再写人工配额；配额仅在人工请求真正reserve时占用。SourceProbe staged/延期只按2秒短间隔，成功/失败仍按60秒且重启保存。HotlistService将source_busy/source_cooldown返回waiting而非unavailable，不增加失败；CommunityHotlist对Linux DO关闭跨周期预取，按现有可见性/next_attempt_at调度重试，其他站预取保持。
+
+
+## 单任务多站范围（2026-10-24）
+
+用户要求已有任务可增减多个已安装网站，替代旧单站锁定。0014_task_websites只给TaskVersion增加website_ids JSON，并把全部旧版本（含已删除任务）从原tasks.website_id回填单站集合；原表原列/行、版本号、规则、队列、去重账本不改。物理tasks.website_id保留为创建来源，ORM更名origin_website_id，绝不参与当前匹配范围判断，避免重建有大量外键引用的tasks表。
+每次创建/修改在同一BEGIN IMMEDIATE中校验全部网站的安装状态、适配器能力与目标，再把集合写入新TaskVersion；删除目标自动生成的新版本同样复制网站范围。当前任务范围只读current_version.website_ids，自动匹配与网站移除依赖通过SQLite json_each/EXISTS判断，不为多站另建采集器。保存只影响之后首次发现的新帖，已保存判定/命中和已生成通知快照保持；跨站相同帖子数字ID仍按website_id隔离。
+API以website_ids为主；兼容旧单站输入website_id，二者不能同时提供。workspace仍返回website_id为当前集合首项以兼容旧读取，正式前端及依赖使用website_ids。历史试匹配接受集合，选各站合计最近20/50/100条，按首次发现时间、网站及帖子ID稳定排序，每项返回来源；只读、不联网/补发。共有规则须适用于全部所选网站；包含Linux DO时拒绝用户名条件，草稿保留并提示清除或取消该站，不静默削弱筛选。
+TaskEditor使用可编辑复选框、至少一站，保留22px字段间距/暖橙视觉；列表、概览、关联任务与复制/启停均使用完整集合。章节导航用被动scroll/resize＋rAF同步实际位置，ResizeObserver处理表单高度变化，底部短章节补偿；卸载清理监听/observer/frame。点击仍平滑定位，减少动态效果偏好下直接定位，aria-current与高亮一致。

@@ -53,7 +53,7 @@ const status = (w: InstalledWebsite) =>
           : '等待首次采集'
 const statusClass = (w: InstalledWebsite) =>
   !w.enabled || !runtime.active ? 'neutral' : w.health === 'healthy' ? 'yes' : 'unknown'
-const linked = (id: string) => state.tasks.filter((t) => t.websiteId === id)
+const linked = (id: string) => state.tasks.filter((t) => t.websiteIds.includes(id))
 const visible = computed(() =>
   state.websites.filter((w) => {
     const info = websiteDefinition(w.adapterId)

@@ -5,7 +5,7 @@ import { computed, ref } from 'vue'
 import Icon from '../components/Icon.vue'
 import Toggle from '../components/Toggle.vue'
 import { shouldOpenTaskRow } from '../taskRow'
-import { state, request, formatTime, websiteName, setTaskEnabled } from '../store'
+import { state, request, formatTime, taskWebsiteLabel, setTaskEnabled } from '../store'
 import { useRemote } from '../history'
 import type { OverviewData } from '../overview'
 import ReadRegion from '../components/ReadRegion.vue'
@@ -361,7 +361,7 @@ async function toggle(id: string) {
               ><span
                 ><strong>{{ task.name }}</strong
                 ><small>{{
-                  task.description || websiteName(task.websiteId) + ' · 新帖监控'
+                  task.description || taskWebsiteLabel(task) + ' · 新帖监控'
                 }}</small></span
               >
             </button>

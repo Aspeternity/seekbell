@@ -133,6 +133,15 @@ export async function setSession(value: boolean) {
 export function websiteName(id: string) {
   return websiteDefinition(id)?.name || '未知网站'
 }
+export function taskWebsiteLabel(task: Task) {
+  const order = new Map(state.websites.map((website, index) => [website.id, index]))
+  return (
+    [...task.websiteIds]
+      .sort((left, right) => (order.get(left) ?? Infinity) - (order.get(right) ?? Infinity))
+      .map(websiteName)
+      .join('、') || '待选择网站'
+  )
+}
 function rule(task: Task) {
   return {
     scope: task.scope,
@@ -149,7 +158,7 @@ function taskBody(task: Task) {
   return {
     name: task.name,
     description: task.description,
-    website_id: task.websiteId,
+    website_ids: task.websiteIds,
     enabled: task.enabled,
     rule: rule(task),
     target_ids: task.targets,
@@ -168,7 +177,7 @@ export async function refresh() {
   state.tasks = data.tasks.map((t: any) => ({
     ...emptyTask(),
     id: t.id,
-    websiteId: t.website_id,
+    websiteIds: t.website_ids,
     name: t.name,
     description: t.description,
     enabled: t.enabled,
@@ -286,7 +295,7 @@ export async function testWebsite(id: string) {
 }
 export async function trialHistory(task: Task, limit: number) {
   const data = await request('manage/rules/history', 'POST', {
-    website_id: task.websiteId,
+    website_ids: task.websiteIds,
     rule: rule(task),
     limit,
   })
@@ -296,7 +305,7 @@ export async function trialHistory(task: Task, limit: number) {
     fromAt: data.from_at ? new Date(data.from_at * 1000).toISOString() : '',
     toAt: data.to_at ? new Date(data.to_at * 1000).toISOString() : '',
     items: data.items.map((item: any) => ({
-      sample: item.sample as Sample,
+      sample: { ...item.sample, websiteId: item.website_id } as Sample,
       result: matchResult(item.result),
     })),
   }

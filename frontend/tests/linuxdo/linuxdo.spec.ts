@@ -1,5 +1,4 @@
 import { expect, test, type Page } from '@playwright/test'
-import { selectChoice } from '../select'
 
 let cookies: Awaited<
   ReturnType<import('@playwright/test').APIRequestContext['storageState']>
@@ -24,7 +23,7 @@ test.beforeEach(async ({ page }) => {
   page.on('pageerror', (error) => errors.get(page)!.push(error.message))
   await page.context().addCookies(cookies)
   const workspace = await (await page.request.get('/api/manage/workspace')).json()
-  for (const task of workspace.tasks.filter((task: any) => task.website_id === 'linuxdo'))
+  for (const task of workspace.tasks.filter((task: any) => task.website_ids.includes('linuxdo')))
     expect(
       (await page.request.delete('/api/manage/tasks/' + task.id, { headers: headers() })).ok(),
     ).toBeTruthy()
@@ -114,13 +113,16 @@ test('task editor enforces Linux DO capabilities and saves a task for the select
 }, info) => {
   await page.goto('/#/task/new')
   const picker = page.locator('#task-website')
-  await selectChoice(picker, 'nodeseek')
+  await picker.getByRole('checkbox', { name: 'NodeSeek', exact: false }).check()
   await page.getByText('更多匹配设置', { exact: true }).click()
   await page.getByLabel('包含作者', { exact: true }).fill('synthetic-user')
   await page.getByLabel('包含作者', { exact: true }).press('Enter')
-  await selectChoice(picker, 'linuxdo')
+  await picker.getByRole('checkbox', { name: 'NodeSeek', exact: false }).uncheck()
+  await picker.getByRole('checkbox', { name: 'LINUX DO', exact: false }).check()
   await expect(
-    page.getByText('此网站 RSS 仅提供作者显示名，暂不支持精确用户名筛选。', { exact: true }),
+    page.getByText('所选网站中有 RSS 仅提供作者显示名的网站，暂不支持共同使用精确用户名筛选。', {
+      exact: true,
+    }),
   ).toBeVisible()
   await expect(page.getByLabel('包含作者', { exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: '清除作者条件', exact: true }).click()
@@ -331,4 +333,92 @@ test('Linux DO loads only the selected period and automatically retries a short 
   await expect(hotlist.locator('.hotlist-row')).toHaveCount(5)
   await expect(hotlist.locator('.hotlist-row').first()).toContainText('LinuxDOdaily')
   expect(calls).not.toContain('weekly')
+})
+
+test('editor section highlight follows scrolling back after a chapter jump', async ({ page }) => {
+  await page.goto('/#/task/new')
+  const nav = page.getByRole('navigation', { name: '编辑页章节', exact: true })
+  const basic = nav.getByRole('button', { name: '01 基本信息', exact: true })
+  const rules = nav.getByRole('button', { name: '02 匹配规则', exact: true })
+  const delivery = nav.getByRole('button', { name: '03 通知目标', exact: true })
+  await expect(basic).toHaveAttribute('aria-current', 'location')
+  await rules.click()
+  await expect(rules).toHaveAttribute('aria-current', 'location')
+  await expect.poll(async () => (await page.locator('#rules').boundingBox())!.y).toBeLessThan(180)
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
+  await expect(basic).toHaveAttribute('aria-current', 'location')
+  await expect(rules).not.toHaveAttribute('aria-current', 'location')
+  await delivery.click()
+  await expect(delivery).toHaveAttribute('aria-current', 'location')
+  await page.evaluate(() =>
+    document.getElementById('rules')!.scrollIntoView({ behavior: 'instant' }),
+  )
+  await expect(rules).toHaveAttribute('aria-current', 'location')
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
+  await expect(basic).toHaveAttribute('aria-current', 'location')
+})
+
+test('existing task can add and remove sites in place while retaining its rule and targets', async ({
+  page,
+}, info) => {
+  const workspace = await (await page.request.get('/api/manage/workspace')).json()
+  const original = {
+    name: '多站原任务 ' + info.project.name,
+    description: '保留这套规则和通知目标',
+    website_id: 'nodeseek',
+    enabled: false,
+    rule: { groups: [{ all_of: ['VPS'], any_of: [] }], exclude: ['求购'] },
+    target_ids: [workspace.targets[0].id],
+  }
+  const response = await page.request.post('/api/manage/tasks', {
+    headers: headers(),
+    data: original,
+  })
+  expect(response.ok()).toBe(true)
+  const id = (await response.json()).id
+  const before = (await (await page.request.get('/api/manage/workspace')).json()).tasks.find(
+    (task: any) => task.id === id,
+  )
+  await page.reload()
+  await page.goto('/#/task/' + id)
+  const sites = page.locator('#task-website')
+  const node = sites.getByRole('checkbox', { name: 'NodeSeek', exact: false })
+  const linux = sites.getByRole('checkbox', { name: 'LINUX DO', exact: false })
+  await expect(node).toBeChecked()
+  await expect(linux).not.toBeChecked()
+  await expect(linux).toBeEnabled()
+  await node.uncheck()
+  await page.getByRole('button', { name: '保存任务', exact: true }).click()
+  await expect(page.locator('[data-form-errors]')).toContainText('请选择已添加的监控网站')
+  await node.check()
+  await linux.check()
+  await page.getByRole('button', { name: '保存任务', exact: true }).click()
+  await expect
+    .poll(async () => {
+      const rows = (await (await page.request.get('/api/manage/workspace')).json()).tasks
+      return rows.find((task: any) => task.id === id)?.website_ids
+    })
+    .toEqual(['nodeseek', 'linuxdo'])
+  const after = (await (await page.request.get('/api/manage/workspace')).json()).tasks.find(
+    (task: any) => task.id === id,
+  )
+  for (const key of ['id', 'name', 'description', 'rule', 'target_ids', 'enabled'])
+    expect(after[key]).toEqual(before[key])
+  expect(after.version).toBe(2)
+  await page.goto('/#/tasks')
+  const row = page.locator('.task-management-row').filter({ hasText: original.name })
+  await expect(row).toContainText('NodeSeek、LINUX DO')
+  await page.goto('/#/task/' + id)
+  await expect(node).toBeChecked()
+  await expect(linux).toBeChecked()
+  await page.screenshot({ path: info.outputPath('task-multiple-websites.png'), fullPage: true })
+  await node.uncheck()
+  await page.getByRole('button', { name: '保存任务', exact: true }).click()
+  await expect
+    .poll(async () => {
+      const rows = (await (await page.request.get('/api/manage/workspace')).json()).tasks
+      return rows.find((task: any) => task.id === id)?.website_ids
+    })
+    .toEqual(['linuxdo'])
+  await noOverflow(page)
 })

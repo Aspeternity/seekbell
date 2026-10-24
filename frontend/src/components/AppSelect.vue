@@ -275,18 +275,3 @@ onBeforeUnmount(() => observer.disconnect())
   }
 }
 </style>
-
-<style>
-.task-website-trigger {
-  width: 100%;
-  min-height: 39px;
-  padding: 0 11px;
-  font-size: 12px;
-}
-@media (max-width: 760px) {
-  .task-website-trigger {
-    min-height: 44px;
-    font-size: 16px;
-  }
-}
-</style>

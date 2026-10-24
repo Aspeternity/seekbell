@@ -27,6 +27,7 @@ from seekbell.domain.posts import Diagnostic, PostBatch, PostFields
 from seekbell.domain.rules import Rule, evaluate
 from seekbell.services.alerts import observe
 from seekbell.services.configuration import identifier, target_snapshot
+from seekbell.services.task_websites import applies_to
 from seekbell.sites.labels import website_label
 
 
@@ -113,7 +114,7 @@ class Ingestion:
                     & (TaskVersion.version == Task.current_version),
                 )
                 .where(
-                    Task.website_id == source.website_id,
+                    applies_to(source.website_id),
                     Task.enabled.is_(True),
                     Task.deleted_at.is_(None),
                 )

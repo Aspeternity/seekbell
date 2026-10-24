@@ -2,7 +2,7 @@ import time
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -32,6 +32,7 @@ from seekbell.services.retention import PolicyConflict, get_policy, update_polic
 from seekbell.services.rule_trial import trial_history
 from seekbell.services.runtime import status as runtime_status
 from seekbell.services.source_probe import ProbeConflict, get_probe
+from seekbell.services.task_websites import applies_to
 from seekbell.sites.registry import BUILTIN_ADAPTERS, WebsiteId, validate_rule_capabilities
 
 router = APIRouter(prefix="/api/manage", dependencies=[Depends(require_admin)])
@@ -59,10 +60,26 @@ class WorkspaceInput(Input):
     description: str = Field(default="", max_length=40)
 
 
-class TaskInput(Input):
+class WebsiteSelection(Input):
+    website_ids: list[WebsiteId] | None = Field(default=None, min_length=1, max_length=64)
+    website_id: WebsiteId | None = None
+
+    @model_validator(mode="after")
+    def validate_selection(self):
+        if (self.website_ids is None) == (self.website_id is None):
+            raise ValueError("Select websites using website_ids or legacy website_id")
+        if self.website_ids and len(set(self.website_ids)) != len(self.website_ids):
+            raise ValueError("Duplicate websites")
+        return self
+
+    @property
+    def selected_websites(self):
+        return self.website_ids if self.website_ids is not None else [self.website_id]
+
+
+class TaskInput(WebsiteSelection):
     name: str = Field(min_length=1, max_length=80)
     description: str = Field(default="", max_length=160)
-    website_id: WebsiteId
     enabled: bool = True
     rule: Rule
     target_ids: list[str] = Field(min_length=1, max_length=64)
@@ -121,7 +138,8 @@ def tasks(session):
         result.append(
             {
                 "id": task.id,
-                "website_id": task.website_id,
+                "website_id": version.website_ids[0],
+                "website_ids": version.website_ids,
                 "name": version.name,
                 "description": version.description,
                 "enabled": task.enabled,
@@ -226,7 +244,13 @@ def remove_website(key: str, request: Request):
     with write_session(request.app.state.engine) as session:
         installed(session, key)
         if session.scalar(
-            select(Task.id).where(Task.website_id == key, Task.deleted_at.is_(None)).limit(1)
+            select(Task.id)
+            .join(
+                TaskVersion,
+                (TaskVersion.task_id == Task.id) & (TaskVersion.version == Task.current_version),
+            )
+            .where(applies_to(key), Task.deleted_at.is_(None))
+            .limit(1)
         ):
             raise HTTPException(409, "请先处理该网站关联的任务。")
         session.get(Website, key).enabled = False
@@ -239,14 +263,13 @@ def remove_website(key: str, request: Request):
 
 def validate_task(values, request, key=None):
     with Session(request.app.state.engine) as session:
-        installed(session, values.website_id)
-        validate_rule_capabilities(values.website_id, values.rule)
+        for website_id in values.selected_websites:
+            installed(session, website_id)
+            validate_rule_capabilities(website_id, values.rule)
         if key:
             task = session.get(Task, key)
             if task is None or task.deleted_at is not None:
                 raise HTTPException(404, "任务不存在。")
-            if task.website_id != values.website_id:
-                raise HTTPException(409, "已有任务不能更换所属网站。")
         for target_id in values.target_ids:
             target = session.get(NotificationTarget, target_id)
             if (
@@ -266,7 +289,7 @@ def create_task(values: TaskInput, request: Request):
         values.rule,
         values.target_ids,
         at=time.time(),
-        website_id=values.website_id,
+        website_ids=values.selected_websites,
         enabled=values.enabled,
         description=values.description,
         managed=True,
@@ -285,6 +308,8 @@ def update_task(key: str, values: TaskInput, request: Request):
         at=time.time(),
         enabled=values.enabled,
         description=values.description,
+        website_ids=values.selected_websites,
+        managed=True,
     )
     return {"version": version}
 
@@ -342,9 +367,7 @@ def delete_target(key: str, request: Request, values: TargetDeleteInput | None =
     return {"ok": True}
 
 
-class HistoryTrial(BaseModel):
-    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
-    website_id: WebsiteId
+class HistoryTrial(WebsiteSelection):
     rule: Rule
     limit: int = Field(default=20, ge=1, le=100, strict=True)
 
@@ -352,9 +375,12 @@ class HistoryTrial(BaseModel):
 @router.post("/rules/history")
 def evaluate_history(values: HistoryTrial, request: Request):
     with Session(request.app.state.engine) as session:
-        installed(session, values.website_id)
-        validate_rule_capabilities(values.website_id, values.rule)
-    return trial_history(request.app.state.engine, values.website_id, values.rule, values.limit)
+        for website_id in values.selected_websites:
+            installed(session, website_id)
+            validate_rule_capabilities(website_id, values.rule)
+    return trial_history(
+        request.app.state.engine, values.selected_websites, values.rule, values.limit
+    )
 
 
 @router.get("/websites/{key}/connection-test")

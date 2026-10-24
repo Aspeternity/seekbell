@@ -51,7 +51,7 @@ const authPage = computed(() => ['login', 'setup'].includes(page.value))
 const editId = computed(() => parts.value[1] || 'new')
 const editing = computed(() =>
   editId.value === 'new'
-    ? { ...emptyTask(), websiteId: state.websites.length === 1 ? state.websites[0]!.id : '' }
+    ? { ...emptyTask(), websiteIds: state.websites.length === 1 ? [state.websites[0]!.id] : [] }
     : state.tasks.find((t) => t.id === editId.value),
 )
 const targetEditing = computed(() =>

@@ -277,7 +277,7 @@ def test_history_migration_failure_rolls_back_columns_and_revision(tmp_path):
         assert schema_revision(engine) == "0004_management"
         assert "baseline" not in {c["name"] for c in inspect(engine).get_columns("posts")}
         migrate(engine)
-        assert schema_revision(engine) == "0013_site_order"
+        assert schema_revision(engine) == "0014_task_websites"
     finally:
         engine.dispose()
 
@@ -535,7 +535,7 @@ def test_evaluation_groups_filter_before_pagination_and_preserve_saved_decisions
             session.add(
                 Task(
                     id=f"000-other-{index:02}",
-                    website_id="nodeseek",
+                    origin_website_id="nodeseek",
                     current_version=1,
                     enabled=False,
                     created_at=ids["base"],
@@ -548,6 +548,7 @@ def test_evaluation_groups_filter_before_pagination_and_preserve_saved_decisions
                     task_id=f"000-other-{index:02}",
                     version=1,
                     name=f"未命中快照{index:02}",
+                    website_ids=["nodeseek"],
                     rule={},
                     target_ids=[],
                     created_at=ids["base"],

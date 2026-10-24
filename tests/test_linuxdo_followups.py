@@ -192,7 +192,7 @@ def test_site_order_migration_uses_row_insertion_order_and_only_actual_manual_ev
                     ),
                     {"finished": None if status == "unknown" else 2010, "status": status},
                 )
-        migrate(engine)
+        migrate(engine, "0013_site_order")
         assert schema_revision(engine) == "0013_site_order"
         with engine.connect() as connection:
             assert connection.execute(
