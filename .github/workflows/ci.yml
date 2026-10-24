@@ -72,6 +72,7 @@ jobs:
       - run: pnpm --dir frontend test:first-entry
       - run: pnpm --dir frontend test:hotlist
       - run: pnpm --dir frontend test:evaluations
+      - run: pnpm --dir frontend test:diagnostics
       - run: pnpm --dir frontend test:linuxdo
       - run: pnpm --dir frontend test:approved-ui
       - run: pnpm --dir frontend test:sending

@@ -4,7 +4,7 @@
 
 ## 环境与授权
 
-唯一SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe派发。分支codex/linuxdo-integration，最后实现9becf75730e4e4c9accb35ed6f572529aa590c60，未推送/合并。用户批准仅任务级按站版块/列表UI，沿用本地提交及8001保留数据更新授权；不做网站级总范围，不改RSS源。无公开发布/远程部署/主动真实试发授权；无多代理，不改D盘/旧Ubuntu/全局WSL/8000/4175。
+唯一SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe派发。分支codex/linuxdo-integration，最后实现9becf75730e4e4c9accb35ed6f572529aa590c60，本轮用户明确授权把全部已完成修复优化推送并合入GitHub主分支，正在准备PR及远端CI。用户批准仅任务级按站版块/列表UI，沿用本地提交及8001保留数据更新授权；不做网站级总范围，不改RSS源。授权仅推送/PR/合并及既有本机操作，不含公开镜像发布、远程部署或主动真实试发；无多代理，不改D盘/旧Ubuntu/全局WSL/8000/4175。
 
 ## 实现与读取
 
@@ -20,4 +20,4 @@
 ## 回退与下一步
 
 8001镜像seekbell:site-categories-9becf75730e4，digest sha256:0dcbf6aee3736356cf69ffeea334bd151c22acbb9031608c186844e4bee36957；项目seekbell-local/容器seekbell-local-seekbell-1/卷seekbell-local_data。私有local-runtime/runtime.json已同步；保活PID24204/创建2026-10-24T10:28:33.7894500Z不变，25268是其子进程，未新增/清理。
-新备before-site-categories-9becf75-20261024-193727.tar.gz，完整路径/校验见记录。回退旧02d996d前先停并归档当前卷，再恢复匹配0015备份，不能让旧镜像直接读0016；更新后用户修改须保留。下一步刷新8001验收逐站设置；完成交接文档提交，允许文档HEAD与实现SHA不同，无未提交产品改动。
+新备before-site-categories-9becf75-20261024-193727.tar.gz，完整路径/校验见记录。回退旧02d996d前先停并归档当前卷，再恢复匹配0015备份，不能让旧镜像直接读0016；更新后用户修改须保留。本轮合并范围为origin/main之后完整当前分支（包含热榜、Linux DO、退避/排序、多站任务、诊断及按站版块）；加入CI诊断套件后推送，创建PR并待检查通过合入main。远端默认分支当前2c682de，旧备份分支不属于本次成品改动。合并不触发手动GHCR发布/部署；8001仍固定9becf75不重建。PR及最终合并结果待核实。
