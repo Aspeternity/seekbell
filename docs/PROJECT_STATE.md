@@ -1,22 +1,23 @@
 # 当前状态
 
-更新时间：2026-10-24（Asia/Shanghai）。已按用户授权将全部当前成品修复优化的36个提交，经[PR #2](https://github.com/Aspeternity/seekbell/pull/2)合入main；完整PR/push CI与amd64/arm64原生检查通过。22:25合并提交5cdf5bd68d88dac53fea6e364c8fe8b2fe392db7，实际树与受测head d94958df626133ac6b2e4301d02091e9ed420dbb一致，原实现9becf75在main祖先链。
+更新时间：2026-10-24（Asia/Shanghai）。本轮用户要求V2EX接入方案，已核对官方资料与少量一次性匿名实源；仅文档方案，尚未开发/迁移/部署。待用户审阅API来源、内容摘录及节点交互边界。
 
 ## 环境与授权
 
-唯一SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe派发；当前main已同步远端合并结果。用户明确授权推送/PR/合并及既有本机保留数据操作，不含公开镜像发布/远程部署/主动真实试发。无多代理，不改D盘/旧Ubuntu/全局WSL/8000/4175。此后仅同步本状态/合并记录的文档提交，代码基准仍为上述实现与合并SHA，不为文档自引用循环提交。
+唯一SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe派发。方案分支codex/v2ex-plan，起点main 987beda5ea38c01e9969fb2fa684c8f970edeec0；本轮只写本状态与方案文档并本地提交，不推送/合并此新方案。先前用户授权的成品36提交已通过PR #2合入main，合并SHA5cdf5bd68d88dac53fea6e364c8fe8b2fe392db7，CI精确head d94958d及两架构检查均过；详见同日合并记录。无多代理，不改D盘/旧Ubuntu/全局WSL/8000/4175；无新公开镜像发布/远程部署/真实试发授权。
 
-## 本轮合并与读取
+## 本任务读取与事实
 
-先读[合并记录](history/2026-10-24-GitHub合并.md)，按实现问题再读[按站版块](history/2026-10-24-按站版块范围.md)及相关源码。当前完整成品链含社区热榜/概览模块、Linux DO匿名HTTP2、退避/人工配额/添加顺序、多站任务、未命中诊断/分页/404/章节/轻选中及按站版块；旧试验备份不属于成品。
-按站版块只放任务，不做网站级总范围或分类RSS。site_categories为每站all/specific，指定非空，缺站拒绝；Rule纯函数，采集/试算/诊断使用同一来源。旧共享数组按原语义读取，前端复制到原有各站，首次保存新版本后改按站结构，未知旧值/历史留存。0016仅兼容标记，无DDL/数据重写。网站下摘要行/搜索/230px限高/取消恢复/空集校验；编辑即时进任务草稿，直接保存不丢开放选择，右侧按站汇总。
+先读[V2EX方案](history/2026-10-24-V2EX接入方案.md)，再看sites/registry/hotlists、collectors/rss/http、SourceRunner/request_budget及相关模型。SPEC仍只确认NodeSeek/Linux DO；本轮不把未批准建议回写为需求。
+官方订阅说明blog.v2ex.com/rss，V1说明www.v2ex.com/p/7v9TEc53，V2说明/help/api。匿名HTTP/1.1本机实测：Atom index.xml为50项，无节点字段；现解析器仅RSS2，不能直接换URL。最新API本次36项均带用户名/node元数据，按created降序，是本次Atom子集；热门10项；nodes/all目录1378项约794KB；index.json为404。条数/覆盖均是时点事实，不承诺全部节点、权限内容或不漏帖。私有acceptance/2026-10-24-v2ex-proposal只留字段/计数/响应头元数据，不留正文或用户名样本入Git，实测不等于长期可用。
+API有效额度头与旧120/新600文档不同，目录Reset可能来自过期缓存；Cache-Control可长达5天，不等于采集周期，也不能用帖子created冒充来源更新时间。
 
-## 验证与证据
+## 建议（待批准）
 
-9becf75本机后端789、相关浏览器54、构建/格式及3项离线容器检查通过，私有acceptance/2026-10-24-site-categories。GitHub首轮a8b4891暴露旧历史文案断言；本机追加13套84项后同步两处测试，另覆盖版块入口Enter/Tab/Escape焦点，不改生产代码。最终d94958d的PR run40100949413、push run40100944610均success，含完整浏览器/代理/备份/回退与两架构原生候选验证；私有acceptance/2026-10-24-github-merge保存精确head、检查与合并结果。PR无未解决审阅，正常带expected_head_sha合并，未绕过限制或手动发布镜像。
-本机19:37升级16前新备15整卷，副本全表原列原值/配置/密钥凭据不变，280组旧规则与投影判定一致，真实任务版本/历史/安装顺序保留；Windows双地址核验通过。GitHub arm64原生自动检查已过，PVE/实际部署长期稳定性与用户验收仍未完成。
+优先固定官方匿名V1列表＋独立节点目录＋官方热门：新帖120秒/最小60秒、热门600秒按需、目录24小时缓存及限频刷新，都是工程候选。每站共享采集/锁/限流，额度不足优先采集，服务器等待不可手测绕过。HTTPX现依赖足够，不加浏览器/Token/额外服务。
+节点按稳定node.id存值，标题/slug用于搜索；千余项用本地缓存搜索/分页50条，不全塞workspace，候选限高/跨页保留/最多64项，任务独立全部或指定，不加网站总范围。正文仅列表附带内容转纯文本截2000字符并标“接口摘录”，不补主题详情或回复；原帖/v2ex身份/首次基线/去重/诊断/四渠道沿用，旧任务不动。热门仅一个支持项，不伪造每日/每周。候选下个迁移17须保留旧数据并备份16。
+关键边界是RSS-only扩为官方只读API与内容摘录；官方API公平使用要求对个人/商业站内容填充有限制，不能凭匿名200判定授权，正式采用前须核对保存/展示用途。方案不宣称私有部署自动获许可，不做公开内容镜像。
 
 ## 运行与下一步
 
-8001仍seekbell:site-categories-9becf75730e4，digest sha256:0dcbf6aee3736356cf69ffeea334bd151c22acbb9031608c186844e4bee36957，schema0016，原项目seekbell-local/容器seekbell-local-seekbell-1/卷seekbell-local_data。GitHub合并未重建本机或改变数据；私有local-runtime/runtime.json保留实际运行SHA。原保活PID24204及25268子进程未动。
-0015备份before-site-categories-9becf75-20261024-193727.tar.gz完整位置/校验见按站记录；回退旧02d996d前先停并归档当前卷，再恢复匹配15备份，保留更新后用户修改。下一步用户验收或新需求；新产品修改从main另开codex分支。当前无待合并产品修复，文档同步可复用已验证生产树证据。
+8001仍9becf75730e4e4c9accb35ed6f572529aa590c60镜像、schema0016，原项目seekbell-local/容器seekbell-local-seekbell-1/卷seekbell-local_data；实际digest/备份在私有local-runtime/runtime.json及按站记录。本轮无产品/数据/运行改动，未重复既有789后端/54及追加84浏览器/容器验证。待批准后再更新SPEC/ARCH、实现适配器/节点缓存/预算/UI及合成CI，实施17前新备16整卷；旧15备份不能当16回退快照。PVE/长期部署及用户验收仍独立。
