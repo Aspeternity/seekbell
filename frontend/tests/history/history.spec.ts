@@ -62,7 +62,10 @@ test('stored history filters, pages, snapshots, uncertainty and read errors rema
   await expect(page.locator('.content-row')).toHaveCount(1)
   await page.locator('.content-title').click()
   await expect(page.locator('.history-evaluation')).toHaveCount(0)
-  await expect(page.getByText('信息不足，暂无法确定是否命中。', { exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '判定信息不足', exact: true })).toBeVisible()
+  await expect(page.locator('.diagnosis-task')).toContainText('当时配置 v1')
+  await expect(page.locator('.diagnosis-cause')).toContainText('关键词条件所需信息不足')
+  await expect(page.locator('.diagnosis-checks .unknown')).toContainText('信息不足')
   await expect(page.getByText('来源未提供摘要，无法据此推断完整内容。')).toBeVisible()
   await page.goto('/#/content')
   await selectChoice(page.getByLabel('关联任务', { exact: true }), { label: '当前任务名称' })
@@ -73,7 +76,8 @@ test('stored history filters, pages, snapshots, uncertainty and read errors rema
   await selectChoice(page.getByLabel('匹配结果', { exact: true }), 'not_evaluated')
   await expect(page.locator('.content-row')).toHaveCount(1)
   await page.locator('.content-title').click()
-  await expect(page.getByText('基线帖子：首次采集时登记，未执行规则匹配或生成通知。')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '未参与匹配', exact: true })).toBeVisible()
+  await expect(page.getByText('首次采集基线：只登记帖子，未执行规则匹配或生成通知。')).toBeVisible()
   await page.goto('/#/content')
   await page.route(
     /\/api\/manage\/history\/posts(?:\?|$)/,
