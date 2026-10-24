@@ -460,6 +460,8 @@ class WebsiteRequestState(Base):
     website_id: Mapped[str] = mapped_column(ForeignKey("websites.id"), primary_key=True)
     next_request_at: Mapped[float] = mapped_column(Float, default=0)
     blocked_until: Mapped[float] = mapped_column(Float, default=0)
+    retry_after_until: Mapped[float] = mapped_column(Float, default=0)
+    next_manual_at: Mapped[float] = mapped_column(Float, default=0)
     failures: Mapped[int] = mapped_column(Integer, default=0)
     error_code: Mapped[str | None] = mapped_column(String(80))
 

@@ -43,8 +43,8 @@ def test_linuxdo_upgrade_preserves_old_data_and_never_installs_or_enables(tmp_pa
                 text("UPDATE sources SET interval_seconds=31 WHERE id='nodeseek-rss'")
             )
             connection.execute(text("INSERT INTO website_installations VALUES ('nodeseek')"))
-        migrate(engine)
-        migrate(engine)
+        migrate(engine, "0011_linuxdo")
+        migrate(engine, "0011_linuxdo")
         assert schema_revision(engine) == "0011_linuxdo"
         with Session(engine) as session:
             assert session.get(Source, "nodeseek-rss").interval_seconds == 31

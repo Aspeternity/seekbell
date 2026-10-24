@@ -20,7 +20,7 @@ from seekbell.db.models import (
 from seekbell.db.transactions import database_call
 from seekbell.domain.errors import SourceDeferred, SourceFailure
 from seekbell.services.ingestion import Ingestion, IngestReport
-from seekbell.services.request_budget import request_state
+from seekbell.services.request_budget import MAX_RETRY_AFTER, request_state
 from seekbell.services.source_probe import probe_backoff
 from seekbell.sites.registry import BUILTIN_ADAPTERS
 
@@ -84,10 +84,12 @@ class SourceRunner:
                 "interval_seconds": source.interval_seconds,
             }
 
-    async def fetch_batch(self, adapter):
+    async def fetch_batch(self, adapter, *, manual=False):
         try:
             async with asyncio.timeout(self.fetch_timeout):
-                feed = await self.collector.fetch(adapter.rss_url)
+                feed = await self.collector.fetch(
+                    adapter.rss_url, **({"manual": True} if manual else {})
+                )
         except TimeoutError:
             budget = self.collector.request_budget
             if budget is not None and adapter.website_id == "linuxdo":
@@ -126,7 +128,11 @@ class SourceRunner:
                     self.source_id,
                     exc.code,
                     at=self.clock(),
-                    retry_after=exc.retry_after,
+                    retry_after=(
+                        min(MAX_RETRY_AFTER, exc.retry_after)
+                        if snapshot["website_id"] == "linuxdo" and exc.retry_after
+                        else exc.retry_after
+                    ),
                     jitter=self.jitter(),
                 )
                 return PollOutcome("failure", exc.code)

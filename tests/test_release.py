@@ -82,7 +82,7 @@ def test_known_old_schema_is_migrated_only_in_candidate(tmp_path):
     result = release.prepare(source, destination)
     assert result == {
         "source_revision": "0008_retention",
-        "database_revision": "0011_linuxdo",
+        "database_revision": "0012_retry_controls",
     }
     assert table_data(source.database_path) == before
     with closing(backup.readonly(destination / "seekbell.sqlite3")) as connection:

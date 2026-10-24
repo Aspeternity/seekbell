@@ -169,3 +169,12 @@ pnpm --dir frontend test:linuxdo
 ~~~
 
 浏览器套件使用一次性8030服务和合成两站HTTP，不请求真实论坛。Linux DO三入口使用HTTPX HTTP/2（仅该域名），保留匿名请求、TLS与共享退避。2026-10-24本机四源HTTP/2匿名对照通过，HTTP/1.1仍返回403；部署环境/持续可用性需单独验收，遇挑战继续显示来源异常并退避。新站不会随升级自动安装或启用。
+
+### Linux DO退避与人工重试
+
+自动403/访问挑战等待5→10分钟，最长10分钟；无Retry-After的429最长10分钟，超时/传输/服务端错误最长5分钟。服务器指定等待独立保存，最多24小时。网站配置的“测试连接”每60秒最多一次，可提前验证自动退避中的连接；成功后安排失败采集真实重试，不更改健康计划或历史/基线，也不直接发通知。刷新页面不等于重试。0012_retry_controls只增两个时间字段，旧等待原因不明时保守保留；升级前整卷备份，回退旧0011镜像须恢复匹配备份。
+
+~~~bash
+uv run --frozen pytest tests/test_retry_controls.py tests/test_source_probe_scheduling.py tests/test_linuxdo_runtime.py -q
+pnpm --dir frontend test:linuxdo
+~~~

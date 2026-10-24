@@ -1,4 +1,4 @@
-"""Explicit checks have their own cooldown, sharing only network exclusion and error backoff."""
+"""Explicit RSS diagnostics with persistent cooldown and protected Retry-After."""
 
 import math
 import time
@@ -6,11 +6,22 @@ import time
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from seekbell.db.models import Source, SourceProbe, SourceState, WebsiteInstallation
+from seekbell.db.models import (
+    Source,
+    SourceProbe,
+    SourceState,
+    WebsiteInstallation,
+    WebsiteRequestState,
+)
 from seekbell.db.transactions import database_call, write_session
 from seekbell.domain.delivery import SourcePolicy
 from seekbell.domain.errors import SourceDeferred, SourceFailure
-from seekbell.services.request_budget import request_state
+from seekbell.services.request_budget import (
+    MANUAL_RETRY_GAP,
+    MAX_RETRY_AFTER,
+    REQUEST_GAP,
+    request_state,
+)
 from seekbell.sites.registry import BUILTIN_ADAPTERS
 
 TEST_COOLDOWN_SECONDS = 2
@@ -35,6 +46,18 @@ def probe_view(probe):
     }
 
 
+def next_test_at(session, source, state, probe, at):
+    if source.website_id == "linuxdo":
+        own = (
+            (probe.finished_at if probe.finished_at is not None else probe.started_at)
+            + MANUAL_RETRY_GAP
+            if probe is not None
+            else 0
+        )
+        return max(own, request_state(session, "linuxdo", at, manual=True)[0])
+    return max(test_due(state, probe), request_state(session, source.website_id, at)[0])
+
+
 def get_probe(engine, website_id):
     with Session(engine) as session:
         source = session.scalar(select(Source).where(Source.website_id == website_id))
@@ -43,9 +66,8 @@ def get_probe(engine, website_id):
         probe = session.get(SourceProbe, source.id)
         result = probe_view(probe)
         if result:
-            result["next_attempt_at"] = max(
-                test_due(session.get(SourceState, source.id), probe),
-                request_state(session, website_id, time.time())[0],
+            result["next_attempt_at"] = next_test_at(
+                session, source, session.get(SourceState, source.id), probe, time.time()
             )
         return result
 
@@ -53,8 +75,6 @@ def get_probe(engine, website_id):
 def probe_due(probe):
     if probe is None:
         return 0
-    # A successful legacy probe may store the old monitor interval. Only real
-    # failures retain that saved backoff; normal tests use their own cooldown.
     return max(
         probe.next_attempt_at if probe.status == "failure" else 0,
         (probe.finished_at if probe.finished_at is not None else probe.started_at)
@@ -77,11 +97,18 @@ def reserve(engine, source_id, at):
             raise ProbeConflict("请先添加内置网站。")
         state = session.get(SourceState, source_id)
         probe = session.get(SourceProbe, source_id)
-        next_at = max(test_due(state, probe), request_state(session, source.website_id, at)[0])
+        next_at = next_test_at(session, source, state, probe, at)
         if at < next_at:
             delay = next_at - at
             reason = "连接测试操作过于频繁"
-            if (
+            if source.website_id == "linuxdo":
+                _, code = request_state(session, "linuxdo", at, manual=True)
+                reason = (
+                    "来源要求稍后再试，连接测试也需等待"
+                    if code == "server_retry_after"
+                    else "连接测试每 60 秒最多一次，且需等待同站请求间隔"
+                )
+            elif (
                 state.failures
                 and state.last_error_code
                 and state.next_attempt_at >= probe_due(probe)
@@ -93,34 +120,58 @@ def reserve(engine, source_id, at):
         if probe is None:
             probe = SourceProbe(source_id=source_id)
             session.add(probe)
+        cooldown = MANUAL_RETRY_GAP if source.website_id == "linuxdo" else TEST_COOLDOWN_SECONDS
         probe.started_at, probe.finished_at = at, None
-        probe.next_attempt_at = at + TEST_COOLDOWN_SECONDS
-        # A crash/cancelled request leaves honest evidence, never a false success.
+        probe.next_attempt_at = at + cooldown
         probe.status, probe.code, probe.item_count = "unknown", "check_not_completed", None
         return source.website_id, source.url
 
 
 def finish(engine, source_id, at, *, count=None, error=None):
     with write_session(engine) as session:
+        source = session.get(Source, source_id)
         probe = session.get(SourceProbe, source_id)
+        linuxdo = source.website_id == "linuxdo"
+        cooldown = MANUAL_RETRY_GAP if linuxdo else TEST_COOLDOWN_SECONDS
         probe.finished_at = at
-        probe.next_attempt_at = max(probe.next_attempt_at, at + TEST_COOLDOWN_SECONDS)
+        probe.next_attempt_at = max(probe.next_attempt_at, at + cooldown)
         if error:
             probe.status, probe.code, probe.item_count = "failure", error.code, None
-            probe.next_attempt_at = max(
-                probe.next_attempt_at, at + SourcePolicy().retry_delay(1, error.retry_after)
-            )
+            if linuxdo:
+                row = session.get(WebsiteRequestState, "linuxdo")
+                if error.retry_after:
+                    row.retry_after_until = max(
+                        row.retry_after_until, at + min(MAX_RETRY_AFTER, error.retry_after)
+                    )
+                probe.next_attempt_at = max(
+                    probe.next_attempt_at, request_state(session, "linuxdo", at, manual=True)[0]
+                )
+            else:
+                probe.next_attempt_at = max(
+                    probe.next_attempt_at, at + SourcePolicy().retry_delay(1, error.retry_after)
+                )
         else:
             probe.status, probe.code, probe.item_count = "success", None, count
+            state = session.get(SourceState, source_id)
+            if linuxdo and state.failures:
+                # Schedule a real collection; leave failure/baseline/history
+                # evidence untouched until that collection actually succeeds.
+                state.next_attempt_at = min(state.next_attempt_at, at + REQUEST_GAP)
         return probe_view(probe)
 
 
 def finish_deferred(engine, source_id, at, error):
     with write_session(engine) as session:
+        source = session.get(Source, source_id)
         probe = session.get(SourceProbe, source_id)
         probe.finished_at = at
         probe.next_attempt_at = error.next_attempt_at
         probe.status, probe.code, probe.item_count = "deferred", error.code, None
+        if source.website_id == "linuxdo":
+            probe.next_attempt_at = max(
+                probe.next_attempt_at,
+                next_test_at(session, source, session.get(SourceState, source_id), probe, at),
+            )
         return probe_view(probe)
 
 
@@ -135,9 +186,12 @@ async def check(runner):
             adapter = BUILTIN_ADAPTERS.get(website_id)
             if adapter is None or url != adapter.rss_url:
                 raise SourceFailure("unsupported_source")
-            batch = await runner.fetch_batch(adapter)
+            batch = (
+                await runner.fetch_batch(adapter, manual=True)
+                if website_id == "linuxdo"
+                else await runner.fetch_batch(adapter)
+            )
         except SourceDeferred as error:
-            # Reservation/probe evidence remains honest: no successful fetch.
             return await database_call(
                 finish_deferred, runner.engine, runner.source_id, runner.clock(), error
             )

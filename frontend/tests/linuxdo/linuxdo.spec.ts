@@ -234,3 +234,43 @@ test('Linux DO access errors are explicit and do not block NodeSeek', async ({ p
   await hotlist.getByRole('button', { name: 'NodeSeek', exact: true }).click()
   await expect(hotlist.locator('.hotlist-row')).toHaveCount(5)
 })
+
+test('Linux DO connection checks explain limited early retry and retain server cooldown feedback', async ({
+  page,
+}) => {
+  await page.goto('/#/websites')
+  await page.getByRole('button', { name: '配置 LINUX DO', exact: true }).click()
+  const config = page.getByRole('dialog', { name: 'LINUX DO 网站配置', exact: true })
+  await expect(config.getByText(/每 60 秒最多测试一次/)).toBeVisible()
+  let attempts = 0
+  await page.route('**/api/manage/websites/linuxdo/connection-test', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue()
+    attempts += 1
+    if (attempts > 1)
+      return route.fulfill({
+        status: 429,
+        headers: { 'Retry-After': '60' },
+        json: { detail: '连接测试每 60 秒最多一次；约 60 秒后可再次测试。' },
+      })
+    const now = Date.now() / 1000
+    return route.fulfill({
+      json: {
+        started_at: now,
+        finished_at: now,
+        next_attempt_at: now + 60,
+        status: 'success',
+        code: null,
+        item_count: 1,
+      },
+    })
+  })
+  await config.getByRole('button', { name: '测试连接', exact: true }).click()
+  await expect(page.getByText(/可提前验证连接，仍遵守站点要求的等待时间/)).toBeVisible()
+  await page.getByRole('button', { name: '确认测试连接', exact: true }).click()
+  await expect(config.getByText('RSS 连接与解析成功', { exact: true })).toBeVisible()
+  await expect(config.getByText(/下次可测试时间：/)).toBeVisible()
+  await config.getByRole('button', { name: '测试连接', exact: true }).click()
+  await page.getByRole('button', { name: '确认测试连接', exact: true }).click()
+  await expect(config.getByRole('alert')).toContainText('连接测试每 60 秒最多一次')
+  expect(attempts).toBe(2)
+})

@@ -190,7 +190,8 @@ class HotlistService:
         state["failures"] = min(6, state["failures"] + 1)
         state["error_code"] = code
         state["next_attempt_at"] = self.clock() + max(
-            min(600, 30 * 2 ** (state["failures"] - 1)), min(86400, retry_after or 0)
+            min(300 if source.website_id == "linuxdo" else 600, 30 * 2 ** (state["failures"] - 1)),
+            min(86400, retry_after or 0),
         )
         if self.request_budget is not None:
             until, _ = await database_call(self.request_budget.view, source.website_id)

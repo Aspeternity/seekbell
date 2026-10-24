@@ -200,7 +200,9 @@ function test() {
   if (!w || testing.value) return
   confirmAction(
     '测试 ' + websiteDefinition(w.adapterId)?.name + ' 官方 RSS 连接？',
-    '将请求一次官方 RSS；测试独立限频，并遵守来源错误退避。不会启用网站、改变采集周期、保存草稿间隔或创建帖子、命中及通知。',
+    w.id === 'linuxdo'
+      ? '将请求一次官方 RSS，最多每分钟一次。可提前验证连接，仍遵守站点要求的等待时间；成功后将提前安排失败采集重试。不会启用网站、保存草稿或直接创建内容与通知。'
+      : '将请求一次官方 RSS；测试独立限频，并遵守来源错误退避。不会启用网站、改变采集周期、保存草稿间隔或创建帖子、命中及通知。',
     () => runLiveTest(w.id),
     '确认测试连接',
   )
@@ -529,7 +531,11 @@ onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
               <h3>连接测试</h3>
               <span class="small-badge neutral">不采集入库</span>
             </div>
-            <p class="field-help">
+            <p v-if="selected.id === 'linuxdo'" class="field-help">
+              每 60 秒最多测试一次，可提前验证自动退避中的连接；站点要求的等待时间仍生效。
+              成功后将提前安排失败采集重试，不更改启停、采集间隔、历史或基线。
+            </p>
+            <p v-else class="field-help">
               仅检查官方 RSS 的连接与解析。测试有独立的 2
               秒防连点间隔，不改变后台采集周期、历史、基线和去重；来源错误退避仍生效。
             </p>

@@ -130,10 +130,12 @@ class RssCollector:
         self._limit = asyncio.Semaphore(1)
         self.request_budget, self.website_id = request_budget, website_id
 
-    async def fetch(self, url: str) -> ParsedFeed:
+    async def fetch(self, url: str, *, manual=False) -> ParsedFeed:
         if self.request_budget is None:
             return await self._fetch(url)
-        async with self.request_budget.request(self.website_id):
+        async with self.request_budget.request(
+            self.website_id, **({"manual": True} if manual else {})
+        ):
             return await self._fetch(url)
 
     async def _fetch(self, url: str) -> ParsedFeed:

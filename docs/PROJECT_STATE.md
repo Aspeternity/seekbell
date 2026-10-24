@@ -1,6 +1,6 @@
 # 当前状态
 
-更新时间：2026-10-24（Asia/Shanghai）。概览警示间距已修复并更新本机8001；Linux DO HTTP/2已接入，正式来源仍等待原退避到期后重试。
+更新时间：2026-10-24（Asia/Shanghai）。概览警示间距已修复并更新本机8001；Linux DO HTTP/2已接入，正式来源08:07已恢复成功；退避/受限重试优化已实现，后端739及浏览器18项通过，待容器/本地更新。
 
 ## 环境与授权
 
@@ -8,7 +8,7 @@
 
 ## 最新改动与入口
 
-先读[概览警示间距](history/2026-10-24-概览警示间距.md)，按需读同日HTTP2接入/验证及前日诊断。权威需求SPEC 6.2、界面UI_DESIGN、架构ARCHITECTURE/DECISIONS。
+先读[退避与人工重试](history/2026-10-24-退避与人工重试.md)及[概览警示间距](history/2026-10-24-概览警示间距.md)，按需读同日HTTP2接入/验证及前日诊断。权威需求SPEC 6.2、界面UI_DESIGN、架构ARCHITECTURE/DECISIONS。
 Overview.vue警示条新增页内overview-notice，margin:0 0 22px，修复全局warning-note底部0导致贴住统计卡片；不影响其他页面。无后端/依赖/迁移改动。
 public_client仅为linux.do启用HTTP/2，Runtime采集/连接测试与热榜共用，其他来源HTTP/1.1；匿名/TLS/1MiB/共享持久退避保持，无curl_cffi/浏览器/Cookie。
 
@@ -26,4 +26,4 @@ public_client仅为linux.do启用HTTP/2，Runtime采集/连接测试与热榜共
 整卷备份local-runtime/backups/before-spacing-1374da8-20261024-075103.tar.gz，SHA及逐文件/解包SQLite校验见间距记录；隔离副本全表/12类配置/凭据与正式配置比对通过。临时卷已清理；旧54bee56同schema镜像保留，可按私有流程恢复匹配整卷，更早312d657须0010备份。
 Windows保活PID32480、创建2026-10-23T23:39:27.9859010Z持续有效，未改全局配置；runtime.json已更新。
 
-下一步用户刷新8001验收间距；08:07后核对Linux DO自动重试/新帖/榜单，若仍失败再按错误码诊断。产品与交付记录本地保存；推送/合并待授权。
+用户已要求优化退避；正在实现403最长10分钟、传输错误最长5分钟、Linux DO连接测试每60秒一次的受限提前验证及独立Retry-After持久字段（0012迁移）。本轮实现与自动检查完成，新增0012两个持久时间字段；待容器及备份切换。08:07只读正式状态已成功、错误清零，证据acceptance/2026-10-24-retry-controls/source-before.json；08:07后核对Linux DO自动重试/新帖/榜单，若仍失败再按错误码诊断。产品与交付记录本地保存；推送/合并待授权。
