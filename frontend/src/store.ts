@@ -157,7 +157,12 @@ function rule(task: Task) {
     scope: task.scope,
     groups: task.groups.map((g) => ({ all_of: g.all, any_of: g.any })),
     exclude: task.exclude,
-    categories: task.categories,
+    site_categories: Object.fromEntries(
+      task.websiteIds.map((id) => {
+        const scope = task.categoryScopes[id] || { mode: 'all', values: [] }
+        return [id, { mode: scope.mode, values: scope.mode === 'specific' ? scope.values : [] }]
+      }),
+    ),
     authors_include: task.authorsInclude,
     authors_exclude: task.authorsExclude,
     case_sensitive: task.caseSensitive,
@@ -194,7 +199,15 @@ export async function refresh() {
     scope: t.rule.scope,
     groups: t.rule.groups.map((g: any) => ({ all: g.all_of, any: g.any_of })),
     exclude: t.rule.exclude,
-    categories: t.rule.categories,
+    categoryScopes: Object.fromEntries(
+      t.website_ids.map((id: string) => [
+        id,
+        t.rule.site_categories?.[id] || {
+          mode: t.rule.categories?.length ? 'specific' : 'all',
+          values: [...(t.rule.categories || [])],
+        },
+      ]),
+    ),
     authorsInclude: t.rule.authors_include,
     authorsExclude: t.rule.authors_exclude,
     caseSensitive: t.rule.case_sensitive,

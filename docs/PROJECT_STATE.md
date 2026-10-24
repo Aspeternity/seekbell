@@ -1,22 +1,22 @@
 # 当前状态
 
-更新时间：2026-10-24（Asia/Shanghai）。诊断“编辑任务”404修复已实现、通过测试并保留数据更新8001；Windows两地址核验通过，待用户验收。用户已确认仅在任务中按站设置版块，本轮UI交互示意已验证，待审阅；正式实现仍共享筛选值。
+更新时间：2026-10-24（Asia/Shanghai）。用户已批准任务级按站版块“按站列表”UI，正在开发，尚未提交产品/更新8001。后端789与相关浏览器54项通过，准备提交/固定SHA构建及容器交付验证。
 
 ## 环境与授权
 
-唯一SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe派发。分支codex/linuxdo-integration，最后实现02d996ddb93a508d04cb598d4aa16f1d0e6c1479，未推送/合并。沿用本机8001修复/保留数据更新授权；用户已确认仅任务级按站版块方向，先评审UI；本轮仅示意和规格交接，未改产品/现有配置。无公开发布/远程部署/主动真实发送授权；无多代理，不改D盘/旧Ubuntu/全局WSL/8000/4175。
+唯一SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe派发。分支codex/linuxdo-integration，已提交最后实现02d996ddb93a508d04cb598d4aa16f1d0e6c1479、文档HEAD658905b。沿用修复、本地提交及8001保留数据更新授权；本轮明确批准任务级按站版块/列表UI，不做网站级总范围，不改RSS源。无推送/合并/公开发布/远程部署/主动真实发送授权；无多代理，不改D盘/旧Ubuntu/全局WSL/8000/4175。
 
-## 实现与读取
+## 本轮实现与读取
 
-先读[本轮记录](history/2026-10-24-诊断编辑跳转修正.md)，再看Content/PostDiagnosis/TaskEvaluationCard/App及diagnostics用例。Content转发navigate时漏路径，现显式接收并传递；主卡编辑、完整条件弹窗任务链接均修复。未改变规则/历史/服务器。上轮有界诊断、分页试算、网站选中样式、0015类别值修正详见同日匹配诊断记录。
-版块是跨所选网站共享categories，空表示全部；站名前缀只为显示。NodeSeek内置＋已见候选，Linux DO仅本地RSS已见值，非完整目录。只选trade会限制所有站，按值去重也存在撞值风险。确认方向为任务内每站独立全部/指定，站点＋类别作为身份，关键词/通知目标共用，旧配置迁移保持效果；不做网站级总范围。SPEC已回写方向，UI布局待认可。
+先读[按站版块记录](history/2026-10-24-按站版块范围.md)，再读Rule、rule_values、配置/采集/试算/诊断及TaskCategoryScopes/TaskEditor/store/model。Rule.site_categories按站保存显式all/specific，指定必须非空；与非空旧categories互斥，服务校验键与任务网站完全一致。纯引擎按帖来源取范围，不联网；无站点上下文拒绝，不回退全部。旧共享数组按原语义读取，不根据不完整候选猜归属；前端投影到原有每站，首次保存新版本后采用新结构，旧快照不动。
+0016_site_categories为空操作兼容标记，防止旧程序误读新规则JSON；不改原行/当前版本。旧镜像回退须匹配0015整卷备份，不能直接读0016。
+网站下按站摘要行，默认收起，单站展开搜索多选、230px候选区、浅底勾选细边框、空集校验/取消恢复；编辑即时进入任务草稿，完成只收起，直接保存任务不丢开放编辑。右侧按站汇总，新加站默认全部，同次取消/重选保留。源码/新迁移/新测试及schema期望均未提交，具体git status；当前无用户文件冲突。
 
-## 证据
+## 证据与下一步
 
-私有acceptance/2026-10-24-diagnosis-edit-link：修复前桌面/手机均复现404；修复后diagnostics14＋evaluations8共22通过，类型/构建/格式及新镜像离线容器检查通过。后端/依赖/Dockerfile/compose/schema未改，复用61eeed2的774后端与备份/回退证据。
-更新前新备0015整卷；隔离副本全部表/原列原值、配置、密钥凭据及历史范围不变，副本已删除。生产同卷/配置不变，schema0015。18:29 Windows两地址主页/就绪/版本/资源通过。继续任务时旧保活PID32480已不存在，退出原因未知；恢复原方式为PID24204/创建2026-10-24T10:28:33.7894500Z，未重复启动或改全局设置。同容器恢复运行，配置复核一致，长期稳定性仍待观察。
+原02d996d的404/22浏览器及部署记录见同日诊断编辑记录。本轮旧相关后端80、新增15、诊断18桌面/手机均通过，类型/构建通过。测试覆盖同值跨站隔离、缺字段、事务拒绝缺站/多站、逐站规范化、采集/试算/历史诊断一致、全表原值迁移不变；浏览器含101候选限高、搜索保留、空集拒绝、取消与重选、开放编辑保存和无候选诚实提示。全后端789/ruff通过；诊断18、判定8、Linux DO20及工作空间8共54浏览器通过。已将旧JSON等同断言与早期单选网站断言更新为按站语义/复选框。结果存私有acceptance/2026-10-24-site-categories。
+下一步完成全后端及相关浏览器/备份恢复与升级回退检查、看实际截图，更新权威文档并提交；固定SHA构建镜像，新备0015整卷、隔离副本核对全表/配置/密钥凭据不变，再更新8001/Windows验证。未把示意证据当正式验收，不主动轮询论坛或真实试发。
 
-## 运行、回退与下一步
+## 当前运行与限制
 
-8001镜像seekbell:diagnosis-edit-link-02d996ddb93a，digest sha256:7c7c94139967315f45dacbc28a771bd3509fdc0bfc61e067d46c909511595cdb，healthy/read-only/unless-stopped，项目seekbell-local、容器seekbell-local-seekbell-1、卷seekbell-local_data。私有local-runtime/runtime.json已更新。
-0015备份before-edit-link-02d996d-20261024-145308.tar.gz，完整路径/校验见本轮记录。同后端/schema回退61eeed2可保留当前卷，先停候选并归档；更早schema镜像需匹配整卷备份。下一步审阅任务级UI：推荐网站下方按站摘要行，逐站展开搜索多选、空集校验、右侧按站说明；备选网站页签。仅本地示意交互与736/390/320宽度检查通过，证据acceptance/2026-10-24-task-category-ui，不能当产品验收。确认UI后实施按站模型/迁移/试算诊断与针对性测试；长期/PVE/arm64未验。无未提交产品代码，文档交接与实现SHA允许不同。
+8001仍seekbell:diagnosis-edit-link-02d996ddb93a，digest sha256:7c7c94139967315f45dacbc28a771bd3509fdc0bfc61e067d46c909511595cdb，schema0015；项目seekbell-local/容器seekbell-local-seekbell-1/卷seekbell-local_data。运行元数据私有local-runtime/runtime.json；上轮保活PID24204、创建2026-10-24T10:28:33.7894500Z，本轮待核实身份。上一0015备份before-edit-link-02d996d-20261024-145308.tar.gz，不能替代本轮更新前快照。长期/PVE/arm64及用户验收未完成。

@@ -191,7 +191,7 @@ test('initial detail reads start immediately and overview query controls remain 
   await expect(page.getByTestId('overview-matches')).toContainText('24条')
 })
 
-test('all fifteen native-select replacements and the website picker use one menu with stable scroll and values', async ({
+test('select menus retain scroll and values while task websites use independent checkboxes', async ({
   page,
 }, info) => {
   await login(page)
@@ -230,12 +230,20 @@ test('all fifteen native-select replacements and the website picker use one menu
     ['/notifications/deliveries', ['投递状态筛选', '投递目标筛选', '结果未知筛选']],
     ['/settings/preferences', ['显示时区']],
     ['/settings/display', ['显示时区']],
-    ['/task/new', ['监控网站']],
+    ['/task/new', []],
   ] as [string, string[]][]) {
     await nav(page, path)
     for (const name of names) await check(name)
     await expect(page.locator('select')).toHaveCount(0)
   }
+  const website = page
+    .locator('#task-website')
+    .getByRole('checkbox', { name: 'NodeSeek', exact: false })
+  await expect(website).toBeEnabled()
+  await website.uncheck()
+  await website.check()
+  await expect(website).toBeChecked()
+  await expect(page.locator('.task-category-scopes')).toContainText('全部版块')
   await page.getByRole('button', { name: '历史样本', exact: true }).click()
   await check('最多试算条数')
   await selectChoice(page.getByRole('combobox', { name: '最多试算条数', exact: true }), '100')
@@ -248,6 +256,6 @@ test('all fifteen native-select replacements and the website picker use one menu
   await check('连接安全')
   await page.getByRole('button', { name: 'Webhook', exact: true }).click()
   await check('成功判定')
-  expect(checked).toBe(16)
+  expect(checked).toBe(15)
   await page.screenshot({ path: info.outputPath('all-controls.png') })
 })

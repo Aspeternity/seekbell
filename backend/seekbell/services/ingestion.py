@@ -309,6 +309,7 @@ class Ingestion:
                         author=row.author,
                         category=row.category,
                     ),
+                    website_id=website_id,
                 )
                 results.append(
                     {

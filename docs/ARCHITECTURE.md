@@ -343,3 +343,12 @@ RuleEngine继续纯函数，不认识显示名。sites/categories提供NodeSeek�
 PostDiagnosis复用History.decisions的TaskEvaluation/legacy RuleHit合并视图。GET posts/{key}/evaluation-options在同一BEGIN只读快照中统计、搜索保存时任务名并分页20条元信息，preferred_task_id仅选择实际有判定的项；GET evaluations/{task_id}/{version}只读该帖对应的一份不可变规则/原因/实际字段。原因摘要只解释保存的真值，正确处理OR组、排除取反与信息不足，不重新运行历史。已知版块值缺陷可对照原保存值与RSS标识。
 POST posts/{key}/current-rule-trial仅接task_id，读取当前版本与同一条本地Post快照，检查网站范围后纯试算，无采集/调度/发送或业务写入；身份/CSRF/脱敏契约沿用。历史结果与当前试算分别呈现。旧GET evaluations/all/matched/primary/other契约兼容，命中先过滤再分页。
 前端PostDiagnosis每次仅一个历史详情，搜索分页保留当前选择；query/cache identity含帖子、任务版本和查询，换帖销毁/清空，useRemote/session保护与试算generation防迟到。历史试算仅侧卡汇总，ResultDialog中状态筛选、每页10条、完整原因按需展开；页控固定在窗口底部。弹窗锁背景滚动、Escape关闭并恢复触发焦点，手机全屏。规则/样本/限额改变使旧结果失效。只读规则POST不失效监控/通知缓存。网站选项鼠标仅细边框/底色，键盘focus-visible轻量提示，保留22px间距。
+
+
+## 任务级按站版块（2026-10-24用户批准）
+
+Rule.site_categories保存website_id→{mode:all/specific,values}，每站最多64值；all必须空、specific必须非空，与非空legacy categories互斥。保存与历史试算要求映射键精确等于任务网站集合；手动样本必须明确来源站，所有执行/诊断/试算共用纯categories_for，缺站拒绝而非放宽。已知NodeSeek别名仅在该站输入边界规范化，其他站值保持字面，不访问网络、不改原帖。
+
+旧TaskVersion.rule中的共享categories保留原执行语义；前端读取为原有各站复制范围，未知旧值保留展示，不按不完整目录猜归属。新保存生成版本并只写按站条件；旧API共享结构继续兼容，不能同时提交两种有效类别来源。0016_site_categories仅是新JSON的兼容修订标记，无DDL/配置修复/历史回填；旧表原列原值与任务版本均不变。旧镜像无法理解新结构，须匹配0015全卷备份回退，不能因无DDL而直接读取0016。
+
+版块只在任务内设置，不引入网站总范围或分类RSS多源。TaskCategoryScopes在网站选择下逐站摘要，一次展开一站，搜索/限高多选/空集校验/取消恢复；编辑直接进入任务草稿，完成只收起，外层保存不会漏掉开放编辑。取消网站保留本次草稿，序列化只包含最终所选站；新站默认全部。右侧说明按站汇总，历史诊断按该帖网站解析原快照的期望版块。所有自动验证使用合成服务。

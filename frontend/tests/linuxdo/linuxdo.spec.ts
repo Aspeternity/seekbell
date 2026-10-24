@@ -402,8 +402,15 @@ test('existing task can add and remove sites in place while retaining its rule a
   const after = (await (await page.request.get('/api/manage/workspace')).json()).tasks.find(
     (task: any) => task.id === id,
   )
-  for (const key of ['id', 'name', 'description', 'rule', 'target_ids', 'enabled'])
+  for (const key of ['id', 'name', 'description', 'target_ids', 'enabled'])
     expect(after[key]).toEqual(before[key])
+  const { site_categories: _oldScopes, ...beforeShared } = before.rule
+  const { site_categories, ...afterShared } = after.rule
+  expect(afterShared).toEqual(beforeShared)
+  expect(site_categories).toEqual({
+    nodeseek: { mode: 'all', values: [] },
+    linuxdo: { mode: 'all', values: [] },
+  })
   expect(after.version).toBe(2)
   await page.goto('/#/tasks')
   const row = page.locator('.task-management-row').filter({ hasText: original.name })

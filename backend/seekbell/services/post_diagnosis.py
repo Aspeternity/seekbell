@@ -105,10 +105,11 @@ class PostDiagnosis:
     def _detail(row, post):
         result = result_snapshot(row.result, row.status)
         try:
-            rule = Rule.model_validate(row.rule).model_dump(mode="json")
-        except (ValidationError, TypeError):
-            rule = None
-        expected = rule["categories"] if rule else []
+            parsed_rule = Rule.model_validate(row.rule)
+            expected = list(parsed_rule.categories_for(post.website_id))
+            rule = parsed_rule.model_dump(mode="json")
+        except (ValidationError, TypeError, ValueError):
+            rule, expected = None, []
         legacy = bool(
             post.website_id == "nodeseek"
             and any(
@@ -183,6 +184,7 @@ class PostDiagnosis:
                     author=post.author,
                     category=post.category,
                 ),
+                website_id=website,
             ).model_dump(mode="json")
             return {
                 **info,

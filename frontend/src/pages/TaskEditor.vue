@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AppSelect from '../components/AppSelect.vue'
 import HistoryTrialResults from '../components/HistoryTrialResults.vue'
+import TaskCategoryScopes from '../components/TaskCategoryScopes.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import Icon from '../components/Icon.vue'
 import Toggle from '../components/Toggle.vue'
@@ -28,6 +29,8 @@ const emit = defineEmits<{
   dirty: [value: boolean]
 }>()
 const draft = reactive<Task>(JSON.parse(JSON.stringify(props.task)))
+draft.categoryScopes ||= {}
+for (const id of draft.websiteIds) draft.categoryScopes[id] ||= { mode: 'all', values: [] }
 const baseline = JSON.stringify(draft)
 const selectedWebsites = computed(() =>
   state.websites.filter((website) => draft.websiteIds.includes(website.id)),
@@ -38,27 +41,22 @@ const websiteLabel = computed(
 const supportsAuthor = computed(() =>
   draft.websiteIds.every((id) => websiteDefinition(id)?.authorFilter !== false),
 )
-const categorySuggestions = computed(() => {
-  const options = new Map<string, { value: string; label: string }>()
-  for (const website of selectedWebsites.value) {
-    for (const option of website.categoryOptions || []) {
-      if (!options.has(option.value))
-        options.set(option.value, {
-          value: option.value,
-          label:
-            selectedWebsites.value.length > 1
-              ? websiteName(website.id) + ' · ' + option.label
-              : option.label,
-        })
-    }
-  }
-  for (const value of draft.categories) {
-    if (!options.has(value)) options.set(value, { value, label: value + '（原值）' })
-  }
-  return [...options.values()]
-})
-function categoryName(value: string) {
-  return categorySuggestions.value.find((option) => option.value === value)?.label || value
+function categorySummary(website: (typeof selectedWebsites.value)[number]) {
+  const scope = draft.categoryScopes[website.id]
+  if (!scope || scope.mode === 'all') return '全部版块'
+  const names = scope.values.map(
+    (value) => website.categoryOptions?.find((item) => item.value === value)?.label || value,
+  )
+  if (!names.length) return '尚未选择版块'
+  return names.slice(0, 2).join('、') + (names.length > 2 ? ' 等 ' + names.length + ' 个' : '')
+}
+function categoryErrors() {
+  return selectedWebsites.value
+    .filter((website) => {
+      const scope = draft.categoryScopes[website.id]
+      return scope?.mode === 'specific' && !scope.values.length
+    })
+    .map((website) => websiteName(website.id) + '：请至少选择一个版块，或切换到全部版块。')
 }
 const errors = ref<string[]>([])
 const testing = ref(false),
@@ -81,6 +79,7 @@ const section = ref('basic')
 watch(
   () => [...draft.websiteIds],
   () => {
+    for (const id of draft.websiteIds) draft.categoryScopes[id] ||= { mode: 'all', values: [] }
     if (!draft.websiteIds.includes(sample.websiteId)) sample.websiteId = draft.websiteIds[0] || ''
   },
   { immediate: true },
@@ -89,7 +88,9 @@ const unrestricted = computed(
   () =>
     !draft.groups.some((g) => g.all.length || g.any.length) &&
     !draft.exclude.length &&
-    !draft.categories.length &&
+    !selectedWebsites.value.some(
+      (website) => draft.categoryScopes[website.id]?.mode === 'specific',
+    ) &&
     !draft.authorsInclude.length &&
     !draft.authorsExclude.length,
 )
@@ -139,6 +140,7 @@ function save() {
     errors.value.push('请选择已添加的监控网站。')
   if (!supportsAuthor.value && (draft.authorsInclude.length || draft.authorsExclude.length))
     errors.value.push('所选网站中有 RSS 不提供可靠用户名的网站，请清除作者条件或取消选择该网站。')
+  errors.value.push(...categoryErrors())
   if (!draft.name.trim()) errors.value.push('请填写任务名称。')
   if (!draft.targets.length) errors.value.push('请至少选择一个通知目标。')
   if (draft.targets.some((id) => !state.targets.some((t) => t.id === id)))
@@ -149,15 +151,14 @@ function save() {
   }
   emit('save', JSON.parse(JSON.stringify(draft)))
 }
-function toggleCategory(category: string) {
-  draft.categories = draft.categories.includes(category)
-    ? draft.categories.filter((c) => c !== category)
-    : [...draft.categories, category]
-}
 async function runTest() {
   if (testing.value) return
   if (!selectedWebsites.value.length) {
     testError.value = '请选择已添加的监控网站。'
+    return
+  }
+  if (categoryErrors().length) {
+    testError.value = categoryErrors().join(' ')
     return
   }
   testing.value = true
@@ -363,6 +364,11 @@ function jump(id: string) {
             可选择多个网站，保存时可增减；同一套规则分别匹配各站新帖，不补发历史。
             采集频率在网站配置中统一设置。
           </p>
+          <TaskCategoryScopes
+            v-if="selectedWebsites.length"
+            v-model="draft.categoryScopes"
+            :websites="selectedWebsites"
+          />
           <p v-if="selectedWebsites.some((website) => !website.enabled)" class="warning-note">
             所选网站中有已暂停的网站，可以保存任务；启用对应网站后才会采集新帖。
           </p>
@@ -454,30 +460,6 @@ function jump(id: string) {
             placeholder="例如：求购、已出（逐个添加）"
           />
           <p class="field-help">匹配范围内出现任意排除词，即使满足条件组也不会命中。</p>
-          <fieldset class="plain-fieldset">
-            <legend class="field-label">版块范围</legend>
-            <div class="category-options">
-              <button
-                type="button"
-                :class="{ selected: !draft.categories.length }"
-                @click="draft.categories = []"
-              >
-                全部版块</button
-              ><button
-                v-for="category in categorySuggestions"
-                :key="category.value"
-                type="button"
-                :aria-pressed="draft.categories.includes(category.value)"
-                :class="{ selected: draft.categories.includes(category.value) }"
-                @click="toggleCategory(category.value)"
-              >
-                {{ category.label }}
-              </button>
-            </div>
-            <p class="field-help">
-              按各站 RSS 的版块原名精确匹配；跨站名称可能不同，不限制时覆盖全部版块。
-            </p>
-          </fieldset>
           <details class="advanced">
             <summary>
               <span><Icon name="settings" :size="16" />更多匹配设置</span
@@ -580,10 +562,11 @@ function jump(id: string) {
           同时排除 <strong>{{ draft.exclude.join('、') }}</strong
           >。
         </p>
-        <p v-if="draft.categories.length">
-          限定版块：<strong>{{ draft.categories.map(categoryName).join('、') }}</strong
-          >。
-        </p>
+        <div v-if="selectedWebsites.length" class="category-summary">
+          <p v-for="website in selectedWebsites" :key="website.id">
+            {{ websiteName(website.id) }}：<strong>{{ categorySummary(website) }}</strong>
+          </p>
+        </div>
         <p v-if="draft.authorsInclude.length">
           仅限作者：<strong>{{ draft.authorsInclude.join('、') }}</strong
           >。

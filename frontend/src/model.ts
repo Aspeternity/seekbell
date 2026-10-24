@@ -2,6 +2,10 @@ export interface Group {
   all: string[]
   any: string[]
 }
+export interface CategoryScope {
+  mode: 'all' | 'specific'
+  values: string[]
+}
 export interface Task {
   websiteIds: string[]
   id: string
@@ -11,7 +15,7 @@ export interface Task {
   scope: 'title' | 'summary' | 'title_summary'
   groups: Group[]
   exclude: string[]
-  categories: string[]
+  categoryScopes: Record<string, CategoryScope>
   authorsInclude: string[]
   authorsExclude: string[]
   caseSensitive: boolean
@@ -39,7 +43,7 @@ export function emptyTask(): Task {
     scope: 'title',
     groups: [{ all: [], any: [] }],
     exclude: [],
-    categories: [],
+    categoryScopes: {},
     authorsInclude: [],
     authorsExclude: [],
     caseSensitive: false,

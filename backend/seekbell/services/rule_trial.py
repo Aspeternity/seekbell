@@ -39,7 +39,7 @@ def trial_item(post, rule):
     fields = PostFields(
         title=post.title, summary=post.summary, author=post.author, category=post.category
     )
-    result = evaluate(rule, fields).model_dump(mode="json")
+    result = evaluate(rule, fields, website_id=post.website_id).model_dump(mode="json")
     return {
         "website_id": post.website_id,
         "sample": fields.model_dump(mode="json"),

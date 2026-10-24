@@ -354,14 +354,21 @@ def update_target(key: str, values: TargetInput, request: Request):
 @router.post("/rules/evaluate")
 def evaluate_rule(values: RuleTest):
     rule, post = values.rule, values.post
+    if rule.site_categories is not None:
+        if values.website_id is None or any(
+            key not in BUILTIN_ADAPTERS for key in rule.site_categories
+        ):
+            raise ValueError("Select a supported sample website")
+        rule = normalized_rule(rule, list(rule.site_categories))
     if values.website_id:
         validate_rule_capabilities(values.website_id, rule)
-        rule = normalized_rule(rule, [values.website_id])
+        if rule.site_categories is None:
+            rule = normalized_rule(rule, [values.website_id])
         if values.website_id == "nodeseek" and post.category:
             post = post.model_copy(
                 update={"category": NODESEEK_ALIASES.get(post.category, post.category)}
             )
-    return evaluate(rule, post)
+    return evaluate(rule, post, website_id=values.website_id)
 
 
 @router.get("/runtime")
