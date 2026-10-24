@@ -86,10 +86,6 @@ def test_manual_recovery_has_own_persistent_quota_and_schedules_real_collection(
                     clock=lambda: now[0],
                 )
 
-            now[0] = 2059
-            with pytest.raises(ProbeConflict) as error:
-                await check(runner())
-            assert error.value.retry_after == 1 and not calls
             now[0] = 2060
             assert (await check(runner()))["status"] == "success"
             after = tables(core.engine)
@@ -239,7 +235,7 @@ def test_busy_deferred_probe_keeps_truthful_evidence_and_does_not_delay_collecti
                 result = await check(runner)
             finally:
                 budget.lock.release()
-            assert result["status"] == "deferred" and result["next_attempt_at"] == 2060
+            assert result["status"] == "deferred" and result["next_attempt_at"] == 2002
             with pytest.raises(ProbeConflict):
                 await check(runner)
             with Session(core.engine) as session:
@@ -297,8 +293,8 @@ def test_retry_migration_preserves_legacy_deadline_and_old_columns(tmp_path):
                     "FROM website_request_states"
                 )
             ).all()
-        migrate(engine)
-        migrate(engine)
+        migrate(engine, "0012_retry_controls")
+        migrate(engine, "0012_retry_controls")
         assert schema_revision(engine) == "0012_retry_controls"
         with engine.connect() as connection:
             assert (

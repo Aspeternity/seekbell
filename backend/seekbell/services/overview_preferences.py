@@ -73,5 +73,11 @@ def installed_sources(engine):
     from seekbell.sites.hotlists import HOTLIST_SOURCES
 
     with Session(engine) as session:
-        installed = set(session.scalars(select(WebsiteInstallation.website_id)))
-    return [source.metadata() for key, source in HOTLIST_SOURCES.items() if key in installed]
+        installed = list(
+            session.scalars(
+                select(WebsiteInstallation.website_id).order_by(
+                    WebsiteInstallation.position, WebsiteInstallation.website_id
+                )
+            )
+        )
+    return [HOTLIST_SOURCES[key].metadata() for key in installed if key in HOTLIST_SOURCES]

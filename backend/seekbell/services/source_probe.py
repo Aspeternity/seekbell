@@ -50,7 +50,7 @@ def next_test_at(session, source, state, probe, at):
     if source.website_id == "linuxdo":
         own = (
             (probe.finished_at if probe.finished_at is not None else probe.started_at)
-            + MANUAL_RETRY_GAP
+            + (MANUAL_RETRY_GAP if probe.status in ("success", "failure") else REQUEST_GAP)
             if probe is not None
             else 0
         )
@@ -103,10 +103,19 @@ def reserve(engine, source_id, at):
             reason = "连接测试操作过于频繁"
             if source.website_id == "linuxdo":
                 _, code = request_state(session, "linuxdo", at, manual=True)
+                recent_probe = (
+                    probe is not None
+                    and probe.status in ("success", "failure")
+                    and (probe.finished_at if probe.finished_at is not None else probe.started_at)
+                    + MANUAL_RETRY_GAP
+                    > at
+                )
                 reason = (
                     "来源要求稍后再试，连接测试也需等待"
                     if code == "server_retry_after"
-                    else "连接测试每 60 秒最多一次，且需等待同站请求间隔"
+                    else "连接测试每 60 秒最多一次"
+                    if code == "manual_cooldown" or recent_probe
+                    else "正在等待同站请求间隔，请稍后重试"
                 )
             elif (
                 state.failures
@@ -120,7 +129,7 @@ def reserve(engine, source_id, at):
         if probe is None:
             probe = SourceProbe(source_id=source_id)
             session.add(probe)
-        cooldown = MANUAL_RETRY_GAP if source.website_id == "linuxdo" else TEST_COOLDOWN_SECONDS
+        cooldown = REQUEST_GAP if source.website_id == "linuxdo" else TEST_COOLDOWN_SECONDS
         probe.started_at, probe.finished_at = at, None
         probe.next_attempt_at = at + cooldown
         probe.status, probe.code, probe.item_count = "unknown", "check_not_completed", None

@@ -14,7 +14,6 @@ from seekbell.db.models import (
     Source,
     SourceState,
     Website,
-    WebsiteInstallation,
 )
 from seekbell.db.runtime import create_database_engine, migrate, schema_revision
 from seekbell.db.transactions import write_session
@@ -48,8 +47,18 @@ def test_linuxdo_upgrade_preserves_old_data_and_never_installs_or_enables(tmp_pa
         assert schema_revision(engine) == "0011_linuxdo"
         with Session(engine) as session:
             assert session.get(Source, "nodeseek-rss").interval_seconds == 31
-            assert session.get(WebsiteInstallation, "nodeseek")
-            assert not session.get(WebsiteInstallation, "linuxdo")
+            assert (
+                session.scalar(
+                    text("SELECT count(*) FROM website_installations WHERE website_id='nodeseek'")
+                )
+                == 1
+            )
+            assert (
+                session.scalar(
+                    text("SELECT count(*) FROM website_installations WHERE website_id='linuxdo'")
+                )
+                == 0
+            )
             assert not session.get(Website, "linuxdo").enabled
             source = session.get(Source, "linuxdo-rss")
             assert source.url == LinuxDoAdapter.rss_url and source.interval_seconds == 60

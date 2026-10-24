@@ -311,6 +311,7 @@ class LoginSession(Base):
 class WebsiteInstallation(Base):
     __tablename__ = "website_installations"
     website_id: Mapped[str] = mapped_column(ForeignKey("websites.id"), primary_key=True)
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
 class WorkspacePreferences(Base):

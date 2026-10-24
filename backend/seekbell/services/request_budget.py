@@ -73,7 +73,6 @@ class WebsiteRequestBudget:
                 now + retry_delay(error.code, row.failures),
                 row.retry_after_until,
             )
-            row.next_manual_at = max(row.next_manual_at, now + MANUAL_RETRY_GAP)
             row.error_code = error.code
 
     def succeeded(self):

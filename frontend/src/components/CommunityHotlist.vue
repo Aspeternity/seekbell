@@ -74,12 +74,14 @@ function schedule() {
   )
 }
 watch(snapshot, schedule)
+// Linux DO shares its budget with monitoring; only load its selected period.
 watch([source, snapshot], () => {
   const current = source.value
   if (
     !active ||
     document.hidden ||
     !current ||
+    current.website_id === 'linuxdo' ||
     !snapshot.value ||
     snapshot.value.status !== 'ready'
   )
@@ -250,6 +252,13 @@ onBeforeUnmount(() => {
             <template v-if="snapshot">
               <p v-if="snapshot.refreshing" class="small-note hotlist-updating" role="status">
                 正在后台更新，当前显示上次榜单。
+              </p>
+              <p
+                v-else-if="snapshot.status === 'waiting'"
+                class="small-note hotlist-updating"
+                role="status"
+              >
+                正在等待同站请求间隔，稍后自动重试。
               </p>
               <p v-else-if="snapshot.status !== 'ready'" class="info-note" role="status">
                 {{

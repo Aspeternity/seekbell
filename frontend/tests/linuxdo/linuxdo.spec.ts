@@ -197,8 +197,8 @@ test('late Linux DO replies cannot replace another sites current hotlist', async
   const hotlist = page.getByRole('region', { name: '社区热榜', exact: true })
   await hotlist.getByRole('button', { name: 'LINUX DO', exact: true }).click()
   await expect(hotlist.locator('.hotlist-row').first()).toContainText('LinuxDOhot')
-  await expect.poll(() => started).toBe(true)
   await hotlist.getByRole('button', { name: '每日', exact: true }).click()
+  await expect.poll(() => started).toBe(true)
   await hotlist.getByRole('button', { name: 'NodeSeek', exact: true }).click()
   release()
   await expect.poll(() => finished).toBe(true)
@@ -273,4 +273,62 @@ test('Linux DO connection checks explain limited early retry and retain server c
   await page.getByRole('button', { name: '确认测试连接', exact: true }).click()
   await expect(config.getByRole('alert')).toContainText('连接测试每 60 秒最多一次')
   expect(attempts).toBe(2)
+})
+
+test('websites retain their add order across the catalog, overview and reload', async ({
+  page,
+}) => {
+  await page.goto('/#/websites')
+  await expect(page.locator('.website-card h2')).toHaveText(['NodeSeek', 'LINUX DO'])
+  await page.reload()
+  await expect(page.locator('.website-card h2')).toHaveText(['NodeSeek', 'LINUX DO'])
+  await page.goto('/#/')
+  const hotlist = page.getByRole('region', { name: '社区热榜', exact: true })
+  await expect(hotlist.locator('.hotlist-site')).toHaveText(['NodeSeek', 'LINUX DO'])
+})
+
+test('Linux DO loads only the selected period and automatically retries a short daily wait', async ({
+  page,
+}) => {
+  const calls: string[] = []
+  page.on('request', (request) => {
+    const url = new URL(request.url())
+    if (url.pathname === '/api/manage/hotlists/linuxdo')
+      calls.push(url.searchParams.get('period') || '')
+  })
+  const hotlist = page.getByRole('region', { name: '社区热榜', exact: true })
+  await hotlist.getByRole('button', { name: 'LINUX DO', exact: true }).click()
+  await expect(hotlist.locator('.hotlist-row')).toHaveCount(5)
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+  )
+  expect(calls.length).toBeGreaterThan(0)
+  expect(calls.every((period) => period === 'hot')).toBe(true)
+  let readyAt = 0
+  await page.route('**/api/manage/hotlists/linuxdo?period=daily', async (route) => {
+    const response = await route.fetch()
+    const data = await response.json()
+    if (!readyAt) readyAt = Date.now() + 1000
+    if (Date.now() < readyAt)
+      return route.fulfill({
+        response,
+        json: {
+          ...data,
+          status: 'waiting',
+          error_code: 'source_cooldown',
+          fetched_at: null,
+          items: [],
+          next_attempt_at: readyAt / 1000,
+        },
+      })
+    return route.fulfill({ response, json: data })
+  })
+  await hotlist.getByRole('button', { name: '每日', exact: true }).click()
+  await expect(
+    hotlist.getByText('正在等待同站请求间隔，稍后自动重试。', { exact: true }),
+  ).toBeVisible()
+  await expect(hotlist.getByText('暂时无法获取榜单，请稍后重试。', { exact: true })).toHaveCount(0)
+  await expect(hotlist.locator('.hotlist-row')).toHaveCount(5)
+  await expect(hotlist.locator('.hotlist-row').first()).toContainText('LinuxDOdaily')
+  expect(calls).not.toContain('weekly')
 })

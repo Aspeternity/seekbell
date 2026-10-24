@@ -178,3 +178,5 @@ pnpm --dir frontend test:linuxdo
 uv run --frozen pytest tests/test_retry_controls.py tests/test_source_probe_scheduling.py tests/test_linuxdo_runtime.py -q
 pnpm --dir frontend test:linuxdo
 ~~~
+
+2026-10-24多站修正：网站按添加顺序持久排列，新加项在末尾；0013_site_order从原SQLite记录顺序回填。人工60秒配额仅由真实人工测试消耗，自动失败不占用；短暂忙碌/间隔延期按短等待重试。Linux DO热榜只请求选中周期，waiting状态自动重试而不误报失败。0012→0013升级前整卷备份；旧镜像回退必须恢复匹配0012备份。

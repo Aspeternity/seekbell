@@ -19,6 +19,7 @@ from seekbell.sites.registry import BUILTIN_ADAPTERS
 TTL = 600
 MAX_BYTES = 1024 * 1024
 SNAPSHOT_MAX_AGE = 86400
+WAITING_CODES = ("source_busy", "source_cooldown")
 
 
 class HotlistService:
@@ -234,7 +235,9 @@ class HotlistService:
         return {
             **source.metadata(),
             "period": period,
-            "status": "stale"
+            "status": "waiting"
+            if state["error_code"] in WAITING_CODES
+            else "stale"
             if snapshot and state["error_code"]
             else "ready"
             if snapshot

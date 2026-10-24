@@ -71,7 +71,7 @@ def overview(engine, range_name="24h", *, at=None):
             .join(WebsiteInstallation, WebsiteInstallation.website_id == Website.id)
             .join(Source, Source.website_id == Website.id)
             .join(SourceState, SourceState.source_id == Source.id)
-            .order_by(Website.id, Source.id)
+            .order_by(WebsiteInstallation.position, Website.id, Source.id)
         ):
             # Source identity index includes the integer row ID in SQLite. Read
             # the last persisted attempts without sorting all retained history.

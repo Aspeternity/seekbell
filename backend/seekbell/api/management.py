@@ -3,7 +3,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from seekbell.api.auth import require_admin
@@ -88,7 +88,9 @@ def installed(session, website_id):
 def websites(session):
     result = []
     for installation in session.scalars(
-        select(WebsiteInstallation).order_by(WebsiteInstallation.website_id)
+        select(WebsiteInstallation).order_by(
+            WebsiteInstallation.position, WebsiteInstallation.website_id
+        )
     ):
         website = session.get(Website, installation.website_id)
         source = session.scalar(select(Source).where(Source.website_id == website.id))
@@ -183,7 +185,8 @@ def add_website(values: WebsiteInput, request: Request):
         website.enabled = False
         source.enabled = False
         session.get(SourceState, source.id).needs_baseline = True
-        session.add(WebsiteInstallation(website_id=values.adapter_id))
+        position = (session.scalar(select(func.max(WebsiteInstallation.position))) or 0) + 1
+        session.add(WebsiteInstallation(website_id=values.adapter_id, position=position))
     return {"id": values.adapter_id}
 
 

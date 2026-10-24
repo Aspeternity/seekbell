@@ -320,3 +320,9 @@ collectors/http.public_client供Runtime与HotlistService创建客户端，通过
 collectors/http.public_response构造匿名请求、显式移除Cookie且不跟随跳转，关闭响应；RSS与热榜共用。固定端点/TLS/无环境代理/1MiB/总超时保持。HotlistSource声明JSON或RSS格式和每站支持项，Linux DO不使用帖子时间冒充榜单更新时间。持久快照读取校验时间/条数/字段并重新生成规范链接；600秒TTL、24小时展示上限、按键共享更新和客户端取消隔离沿用。无消费者常驻轮询，持久化失败不能伪称网络成功。
 
 验证命令：uv run --frozen pytest tests/test_public_http.py tests/test_linuxdo.py tests/test_linuxdo_runtime.py tests/test_hotlists.py tests/test_runtime.py -q；pnpm --dir frontend test:linuxdo（独立8030合成库）。所有浏览器环境注入合成两站热榜，不访问真实论坛或发送真实消息。正式来源可访问性与用户验收另行记录。
+
+## 多站验收修正（2026-10-24）
+
+0013_site_order为WebsiteInstallation新增position，从现存SQLite rowid插入顺序回填，后续添加在写事务中按max(position)+1追加，列表/概览/热榜元数据共用该顺序。原网站身份、配置与历史不变；移除重加置末。迁移还从真实SourceProbe(success/failure/unknown)重建next_manual_at，消除旧自动失败生成的伪人工配额，保留真实/取消测试限频，服务器retry_after_until不改。
+
+WebsiteRequestBudget.failed不再写人工配额；配额仅在人工请求真正reserve时占用。SourceProbe staged/延期只按2秒短间隔，成功/失败仍按60秒且重启保存。HotlistService将source_busy/source_cooldown返回waiting而非unavailable，不增加失败；CommunityHotlist对Linux DO关闭跨周期预取，按现有可见性/next_attempt_at调度重试，其他站预取保持。

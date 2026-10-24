@@ -30,7 +30,7 @@ export interface OverviewPreferences {
 }
 export interface HotlistData extends HotlistSource {
   period: string
-  status: 'ready' | 'stale' | 'unavailable'
+  status: 'ready' | 'stale' | 'unavailable' | 'waiting'
   refreshing?: boolean
   error_code: string | null
   source_updated_at: number | null
