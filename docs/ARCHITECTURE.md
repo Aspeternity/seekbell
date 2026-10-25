@@ -368,3 +368,7 @@ CommunityHotlist取消全部周期预取，根据next_attempt_at安排本应用�
 ### 热榜验收修正（2026-10-25）
 
 collectors/http.source_failure共用Cloudflare标记判定和Retry-After解释；200挑战也先拒绝而不进入XML/JSON解析，非挑战429保持http_429。HotlistService进程状态以deferred区分未发请求等待与自有失败；共享状态恢复只释放前者，不伪造成功或抹去真实失败冷却。AppSelect在原生dialog内创建无缩放的定位门户层（zoom抵消workspace比例），NPopover内容按阅读比例展示，避免视口坐标二次缩放。门户卸载清理，页内其他控件挂载语义不变。无DDL或依赖变更。
+
+## 连接测试展示生命周期（2026-10-25）
+
+SourceProbe持久最近手测与冷却，API语义保持。WebsiteConnectionTest按网站/面板实例持有previous与current：GET只进历史，POST重试先清当前；手测使在途GET版本失效，卸载后忽略迟到响应并清时钟。WebsiteConnectionResult共用诊断展示，历史为中性且按当时语义描述；未来next_attempt_at独立展示并到期消失，不改变服务端限频。本轮无DDL/依赖/采集行为变化。

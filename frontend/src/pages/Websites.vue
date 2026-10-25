@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AppSelect from '../components/AppSelect.vue'
 import WebsiteHotlistSettings from '../components/WebsiteHotlistSettings.vue'
+import WebsiteConnectionTest from '../components/WebsiteConnectionTest.vue'
 import { hotlistDraft, hotlistInput, hotlistError } from '../hotlistSettings'
 import type { HotlistDraft } from '../hotlistSettings'
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
@@ -15,11 +16,8 @@ import {
   confirmAction,
   addWebsite,
   removeWebsite,
-  getWebsiteTest,
-  testWebsite,
 } from '../store'
 import { websiteCatalog, websiteDefinition } from '../websites'
-import type { ConnectionCheck } from '../shared'
 import type { InstalledWebsite } from '../websites'
 const emit = defineEmits<{
   dirty: [value: boolean]
@@ -34,12 +32,7 @@ const panel = ref<HTMLDialogElement>(),
   selectedId = ref('')
 const draft = reactive({ interval: 10, hotlist: null as HotlistDraft | null })
 const baseline = ref(''),
-  error = ref(''),
-  testing = ref(false)
-const connection = ref<ConnectionCheck | null>(null)
-const connectionError = ref('')
-let connectionRead = 0
-const connectionTime = (value: number) => formatTime(new Date(value * 1000).toISOString())
+  error = ref('')
 const selected = computed(() => state.websites.find((w) => w.id === selectedId.value))
 const definition = computed(() => websiteDefinition(selected.value?.adapterId || ''))
 const dirty = computed(() => !!selected.value && JSON.stringify(draft) !== baseline.value)
@@ -99,9 +92,6 @@ function detail(w: InstalledWebsite) {
   draft.hotlist = hotlistDraft(w.hotlist)
   baseline.value = JSON.stringify(draft)
   error.value = ''
-  connection.value = null
-  connectionError.value = ''
-  loadTest(w.id)
   show()
 }
 function close() {
@@ -188,42 +178,6 @@ function toggle(w: InstalledWebsite, enabled: boolean) {
       apply,
       '暂停网站',
     )
-}
-async function loadTest(id: string) {
-  const read = ++connectionRead
-  try {
-    const result = await getWebsiteTest(id)
-    if (selectedId.value === id && read === connectionRead) connection.value = result
-  } catch (error) {
-    if (selectedId.value === id && read === connectionRead)
-      connectionError.value = (error as Error).message
-  }
-}
-async function runLiveTest(id: string) {
-  if (testing.value) return
-  ++connectionRead
-  testing.value = true
-  connectionError.value = ''
-  try {
-    const result = await testWebsite(id)
-    if (selectedId.value === id) connection.value = result
-  } catch (error) {
-    if (selectedId.value === id) connectionError.value = (error as Error).message
-  } finally {
-    testing.value = false
-  }
-}
-function test() {
-  const w = selected.value
-  if (!w || testing.value) return
-  confirmAction(
-    '测试 ' + websiteDefinition(w.adapterId)?.name + ' 官方 RSS 连接？',
-    w.id === 'linuxdo'
-      ? '将请求一次官方 RSS，最多每分钟一次。可提前验证连接，仍遵守站点要求的等待时间；成功后将提前安排失败采集重试。不会启用网站、保存草稿或直接创建内容与通知。'
-      : '将请求一次官方 RSS；测试独立限频，并遵守来源错误退避。不会启用网站、改变采集周期、保存草稿间隔或创建帖子、命中及通知。',
-    () => runLiveTest(w.id),
-    '确认测试连接',
-  )
 }
 function remove() {
   const w = selected.value
@@ -551,62 +505,11 @@ onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
             :config="selected.hotlist"
             :disabled="mutating"
           />
-          <section class="drawer-section">
-            <div class="drawer-section-title">
-              <h3>连接测试</h3>
-              <span class="small-badge neutral">不采集入库</span>
-            </div>
-            <p v-if="selected.id === 'linuxdo'" class="field-help">
-              每 60 秒最多测试一次，可提前验证自动退避中的连接；站点要求的等待时间仍生效。
-              成功后将提前安排失败采集重试，不更改启停、采集间隔、历史或基线。
-            </p>
-            <p v-else class="field-help">
-              仅检查官方 RSS 的连接与解析。测试有独立的 2
-              秒防连点间隔，不改变后台采集周期、历史、基线和去重；来源错误退避仍生效。
-            </p>
-            <div class="website-test-row">
-              <button class="button" :disabled="testing" @click="test">
-                <Icon name="refresh" :size="16" :class="{ spinning: testing }" />{{
-                  testing ? '测试中…' : '测试连接'
-                }}
-              </button>
-            </div>
-
-            <p v-if="connectionError" class="form-errors" role="alert">{{ connectionError }}</p>
-            <div
-              v-if="connection"
-              class="match-result"
-              :class="connection.status === 'success' ? 'yes' : 'unknown'"
-              role="status"
-            >
-              <strong>{{
-                connection.status === 'success'
-                  ? 'RSS 连接与解析成功'
-                  : connection.status === 'failure'
-                    ? '连接测试失败'
-                    : connection.status === 'deferred'
-                      ? '连接测试已延后'
-                      : '连接测试结果未知'
-              }}</strong>
-              <p v-if="connection.status === 'success'">
-                有效帖子 {{ connection.item_count }} 条，仅检查，未入库。
-              </p>
-              <p v-else-if="connection.status === 'deferred'">
-                来源正在处理其他请求或等待请求间隔，请稍后重试。
-              </p>
-              <p v-else-if="connection.code === 'access_challenge'">
-                来源要求 Cloudflare 验证，当前无法自动读取。正在退避，稍后可重试。
-              </p>
-              <p v-else-if="connection.code === 'http_403'">来源拒绝访问（403），正在退避。</p>
-              <p v-else-if="connection.code === 'http_429'">
-                来源请求受限（429），正在等待允许重试。
-              </p>
-              <p v-else>诊断代码：{{ connection.code }}</p>
-              <p>最近测试：{{ connectionTime(connection.started_at) }}</p>
-              <p>下次可测试时间：{{ connectionTime(connection.next_attempt_at) }}</p>
-            </div>
-            <p v-else class="small-note">尚无连接测试记录。</p>
-          </section>
+          <WebsiteConnectionTest
+            :key="selected.id"
+            :website-id="selected.id"
+            :name="definition.name"
+          />
           <section class="drawer-section">
             <div class="drawer-section-title">
               <h3>
