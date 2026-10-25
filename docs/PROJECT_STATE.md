@@ -1,26 +1,23 @@
 # 当前状态
 
-更新时间：2026-10-25（Asia/Shanghai）。阶段：本地验收反馈修复中；热门/每日报错与缩放下拉偏移。V2EX仅导航大类范围确认，技术/开发未批。
+更新时间：2026-10-25（Asia/Shanghai）。阶段：热榜验收代码修正已更新本机8001；下拉定位与来源等待/验证误报已修，日榜匿名访问仍遭Cloudflare验证，不能声称稳定获取已解决。V2EX仍仅导航大类范围确认。
 
 ## 环境与授权
 
-唯一SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe执行。分支codex/hotlist-settings，实现77675c8592417726a5392df71d6709d437c3d629；后续文档提交不改变镜像。用户明确要求保留数据更新本机Docker，另批准为本次HCS_E_CONNECTION_TIMEOUT故障重启整个WSL；已执行一次并恢复原Ubuntu/SeekBell-Dev，未改默认发行版/全局配置。无多代理，不在旧Ubuntu/D盘构建；无本轮GitHub推送/合并、公开发布、远程部署或主动真实试发授权。
+唯一SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe执行。分支codex/hotlist-settings，最新实现ebea3fe3ba237006e88c884df714cd688ea58588；本轮修复后沿用保留数据更新本机Docker授权，无推送/合并/公开发布、远程部署或主动真实试发。无多代理，不在旧Ubuntu/D盘构建。前轮获准整体重启WSL的单次恢复已完成，本轮未重启/改变全局配置；Dev保活PID30200、创建2026-10-25T10:18:02.5636430Z继续有效。
 
-## 当前运行与备份
+## 本机运行及备份
 
-http://localhost:8001/#/websites已运行seekbell:hotlist-settings-77675c859241，amd64 Image ID sha256:44f5a91cf2ec46173d59db0469051f277d280e1c63e88d6f7b8744a1a5d152b4，schema0017_hotlist_settings。原seekbell-local/seekbell-local-seekbell-1/seekbell-local_data及127.0.0.1:8001保持，healthy/read-only/unless-stopped。Windows保活PID30200、创建2026-10-25T10:18:02.5636430Z已验，旧PID24204失效；详见私有local-runtime/runtime.json。
-停服完整备份0016卷：local-runtime/backups/before-hotlist-settings-77675c8-20261025-184632.tar.gz，SHA256 fe4b8522875c85a3ec294442b0e933c220f47883eadfebece024d6075aa5c32f，0700/0600。回退须旧9becf75镜像＋此备份，不能用旧15快照或让旧程序读17；完整步骤见[本机更新](history/2026-10-25-热榜本机更新.md)。
+8001现为seekbell:hotlist-followups-ebea3fe3ba23，amd64 Image ID sha256:c8e7f495d5f52a0eebb3bc70befa0785d701cf41d5c61ed85c6f143801fb7bde，schema仍0017_hotlist_settings。原seekbell-local/seekbell-local-seekbell-1/seekbell-local_data、127.0.0.1:8001及安全限制保持，healthy/read-only/unless-stopped。Windows localhost/127.0.0.1首页、ready/完整SHA/资源、保活及同容器稳定检查通过；metadata在私有local-runtime/runtime.json。
+本轮17卷完整备份local-runtime/backups/before-hotlist-followups-ebea3fe-20261025-192014.tar.gz，SHA256 bc6c9b4a217ba090d0ca6ce4a81331a628dd08a6e344dc43c7effc008f89ab1b。32张原表原列原值及任务/热榜配置/密钥/凭据在副本预检与部署后指纹验证保留。无新DDL，同schema回旧77675c8镜像保留当前卷；仍先另存失败候选。之前16卷备份保留，不能用于直接回退当前17数据。
 
-## 实现与证据
+## 修复、实源与证据
 
-先读[SPEC 6.4](SPEC.md)、ARCHITECTURE末节及[开发记录](history/2026-10-25-热榜配置开发.md)；按需读hotlist_settings/hotlists、api/management、WebsiteHotlistSettings.vue、Websites.vue、CommunityHotlist.vue及测试。
-网站内采集配置之后新增热榜区，按能力显示来源/推荐/自定义/恢复。推荐NodeSeek实时10/日30/周60分钟、Linux DO热门15/日30/周60，最小5/15/30、最大一天。设置独立持久化，单改不重排采集/基线；新鲜期与退避分离，取消其他周期预取，采集优先，区分刷新/等待/429/失败和预计重试/旧榜时间。原生dialog下拉门户已修复，旧节点目录不在本次范围。
-同一实现/镜像809后端、72桌面/手机浏览器、3离线容器检查通过，本轮复用未重复全套。真实卷备份副本纯迁移验证32张原表原列原值、历史/配置/密钥/凭据保留，新增字段{}。Windows两个地址ready/版本/资源与后续容器稳定检查过；私有acceptance/2026-10-25-hotlist-local留回执。未重置账号或提取会话，无人工RSS核验/真实试发。实际UI、来源429和长期表现待用户验收。
+优先读[验收修正](history/2026-10-25-热榜验收修正.md)、SPEC 6.4/验收补充、ARCHITECTURE末节；按需读collectors/http/rss、services/hotlists、AppSelect/CommunityHotlist及测试。
+旧代码只在403识别cf-mitigated=challenge，导致429验证页被当普通限频。共享source_failure现按明确响应头识别200/403/429挑战，普通429仍限流，保留服务器等待、不读取/回显挑战HTML。Hotlist进程状态区分deferred与真正尝试，未发请求的同站等待不冒充本榜失败，来源恢复可释放纯延期，不抹掉真实失败退避。未改Cookie、HTTP/2、固定端点或增加客户端依赖。
+dialog内NPopover视口坐标被workspace zoom再次缩放；新门户层抵消祖先缩放，菜单阅读尺寸只缩放一次，卸载清理。默认/125%缩放、滚动和手机响应式距离检查过。
+819后端、76相关桌面/手机、2离线容器检查通过，类型/构建/Ruff/Prettier过。有限真实HTTP/2核验共3次GET：热门200/30项，日榜两次均429+cf-mitigated=challenge，最后19:11；其他核验因冷却/采集优先延期，未发请求。无持续实源轮询、Cookie/浏览器兜底或清退避。私有acceptance/2026-10-25-hotlist-followups留响应头/计数和完整部署证据，无帖子内容/凭据入Git。源码修复通过不等于日榜访问恢复。
 
-## 其他待办与下一步
+## 下一步
 
-本轮未合并/发布GitHub；main e23749a及此前GHCR ui-restore-6保持，Portainer/PVE验收独立。用户现在刷新8001查看各站热榜设置，后续按授权处理问题或合并发布。V2EX先读[导航大类方案](history/2026-10-25-V2EX导航大类方案.md)：8候选、6源200/2超时，updated回顶/归属/后到匹配待审，迁移号按实际head选。候选网站咨询及先前交接保留[开发前快照](history/2026-10-25-热榜开发前交接.md)。
-
-## 本轮验收修正（进行中）
-
-截图已从Windows挂载读取。2026-10-25少量匿名HTTP/2核验：hot.rss为200/30项，daily为429/text-html/cf-mitigated=challenge；这是验证页，原代码只在403识别导致误报普通限流。CF官方文档明确以该响应头识别；未换客户端/URL/清冷却，随后一次复核因站级等待未发网络。另修正同站延期被当成已请求失败；自有榜单失败仍保留真实失败。下拉已复现workspace缩放下dialog内部坐标二次缩放，改用抵消祖先缩放的dialog门户层，再按原阅读尺度展示。819项完整后端与76项相关桌面/手机检查通过，定位另加强滚动/响应式后单独重跑两项过；准备本地实现提交、镜像检查及保留数据更新。无新迁移，仍schema17。私有证据acceptance/2026-10-25-hotlist-followups；本轮代码未提交，原8001仍77675c8，用户保留数据更新授权沿用。
+用户刷新http://localhost:8001查看菜单和新提示；日榜仍需来源放行或另行评估获准的访问方案，不靠改URL/伪造成功掩盖。未确认新的采集客户端方案，保留当前固定匿名HTTPX边界。GitHub main e23749a与GHCR ui-restore-6独立未更新。V2EX先读导航大类方案，updated回顶/归属/后到匹配未决，迁移号以实际head选；旧咨询/授权恢复记录均已归档。
