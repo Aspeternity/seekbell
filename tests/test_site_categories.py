@@ -190,7 +190,7 @@ def test_schema_marker_preserves_every_existing_table_row_and_scope(tmp_path):
 
         before = snapshot()
         migrate(engine)
-        assert schema_revision(engine) == "0016_site_categories"
+        assert schema_revision(engine) == "0017_hotlist_settings"
         assert snapshot() == before
         migrate(engine)
         assert snapshot() == before

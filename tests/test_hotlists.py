@@ -114,7 +114,7 @@ def test_cache_merges_concurrent_reads_and_isolates_periods():
             assert (await service.get("nodeseek", "daily"))["items"]
             await service.get("nodeseek", "weekly")
             assert len(calls) == 2
-            now[0] += 601
+            now[0] += 1801
             cached = await service.get("nodeseek", "daily")
             assert cached["refreshing"] and cached["items"]
             await asyncio.gather(*service.pending.values())
@@ -207,7 +207,7 @@ def test_expired_snapshot_returns_without_waiting_and_merges_background_refreshe
         service = HotlistService(transport=httpx.MockTransport(handler), clock=lambda: now[0])
         try:
             first = await service.get("nodeseek", "daily")
-            now[0] += 601
+            now[0] += 1801
             responses = await asyncio.wait_for(
                 asyncio.gather(*(service.get("nodeseek", "daily") for _ in range(8))), 0.5
             )
@@ -215,11 +215,11 @@ def test_expired_snapshot_returns_without_waiting_and_merges_background_refreshe
             assert len(calls) == 2 and len(service.pending) == 1
             assert all(row["refreshing"] and row["items"] == first["items"] for row in responses)
             assert responses[0]["source_updated_at"] == 2000
-            assert responses[0]["next_attempt_at"] == 2603
+            assert responses[0]["next_attempt_at"] == 3803
             release.set()
             await asyncio.gather(*service.pending.values())
             fresh = await service.get("nodeseek", "daily")
-            assert not fresh["refreshing"] and fresh["source_updated_at"] == 2601
+            assert not fresh["refreshing"] and fresh["source_updated_at"] == 3801
             assert len(calls) == 2
         finally:
             await service.aclose()
@@ -271,7 +271,7 @@ def test_shutdown_cancels_background_refresh_before_closing_http():
 
         service = HotlistService(transport=httpx.MockTransport(handler), clock=lambda: now[0])
         await service.get("nodeseek", "daily")
-        now[0] += 601
+        now[0] += 1801
         assert (await service.get("nodeseek", "daily"))["refreshing"]
         await started.wait()
         await service.aclose()

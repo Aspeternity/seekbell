@@ -28,6 +28,8 @@ from seekbell.domain.rules import Rule, evaluate
 from seekbell.services import alerts
 from seekbell.services.configuration import Configuration, TargetDeleteChanged, TargetInUse
 from seekbell.services.display import DisplayConflict, get_display, update_display
+from seekbell.services.hotlist_settings import configuration as hotlist_configuration
+from seekbell.services.hotlist_settings import validate_settings as validate_hotlist_settings
 from seekbell.services.request_budget import request_state
 from seekbell.services.retention import PolicyConflict, get_policy, update_policy
 from seekbell.services.rule_trial import trial_history
@@ -53,9 +55,15 @@ class WebsiteInput(Input):
     adapter_id: WebsiteId
 
 
+class HotlistSettingsInput(Input):
+    mode: Literal["recommended", "custom"]
+    intervals: dict[str, int] = Field(default_factory=dict, max_length=16)
+
+
 class WebsiteUpdate(Input):
     enabled: bool
     interval: int = Field(ge=10, le=3600)
+    hotlist: HotlistSettingsInput | None = None
 
 
 class WorkspaceInput(Input):
@@ -132,6 +140,7 @@ def websites(session):
                 ),
                 "enabled": website.enabled and source.enabled,
                 "interval": source.interval_seconds,
+                "hotlist": hotlist_configuration(website.id, installation.hotlist_settings),
                 "health": "error"
                 if state.last_error_code or request_state(session, website.id, time.time())[1]
                 else "healthy"
@@ -231,6 +240,20 @@ def update_website(key: str, values: WebsiteUpdate, request: Request):
             raise HTTPException(422, "采集间隔小于该网站支持的最小值。")
         website = session.get(Website, key)
         source = session.scalar(select(Source).where(Source.website_id == key))
+        if values.hotlist is not None:
+            try:
+                settings = validate_hotlist_settings(
+                    key, values.hotlist.mode, values.hotlist.intervals
+                )
+            except ValueError as error:
+                raise HTTPException(422, str(error)) from None
+            session.get(WebsiteInstallation, key).hotlist_settings = settings
+        # A hotlist-only edit must not move the monitoring schedule or baseline.
+        if (
+            website.enabled == source.enabled == values.enabled
+            and source.interval_seconds == values.interval
+        ):
+            return {"ok": True}
         state = session.get(SourceState, source.id)
         if website.enabled and not values.enabled:
             state.needs_baseline = True

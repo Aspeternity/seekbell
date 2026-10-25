@@ -352,7 +352,7 @@ test('no supported installed source has an actionable empty state', async ({ pag
   await expect(page.getByRole('heading', { name: '监控网站', exact: true })).toBeVisible()
 })
 
-test('visible hotlist preloads other periods without changing the saved selection', async ({
+test('visible hotlist reads only its selected period without changing the saved selection', async ({
   page,
 }) => {
   const before = (await (await page.request.get('/api/manage/overview-preferences')).json())
@@ -364,12 +364,13 @@ test('visible hotlist preloads other periods without changing the saved selectio
     reads.add(new URL(route.request().url()).searchParams.get('period')!)
   })
   await page.reload()
-  await expect.poll(() => Array.from(reads).sort()).toEqual(['daily', 'realtime', 'weekly'])
+  await expect.poll(() => Array.from(reads).sort()).toEqual(['realtime'])
   const after = (await (await page.request.get('/api/manage/overview-preferences')).json())
     .selection
   expect(after).toEqual(before)
   await page.getByRole('button', { name: '每周', exact: true }).click()
   await expect(page.locator('.hotlist-row').first()).toContainText('weekly')
+  expect(Array.from(reads).sort()).toEqual(['realtime', 'weekly'])
 })
 
 test('hotlist rows open original posts from metadata and with the keyboard', async ({ page }) => {
@@ -442,4 +443,183 @@ test('background refresh keeps the displayed list and reports refresh separately
   await expect(page.locator('.hotlist-row')).toHaveCount(5)
   await expect(page.getByText('更新失败，当前显示上次榜单。', { exact: true })).toHaveCount(0)
   await expect(page.locator('.hotlist-row').first()).toHaveRole('link')
+})
+
+async function websitePanel(page: Page, site: string) {
+  await page.goto('/#/websites')
+  await page.getByRole('button', { name: '查看 ' + site + ' 配置', exact: true }).click()
+  return page.getByRole('dialog', { name: site + ' 网站配置', exact: true })
+}
+test('website hotlist intervals save independently and restore recommended settings', async ({
+  page,
+}, testInfo) => {
+  const dialog = await websitePanel(page, 'NodeSeek')
+  const section = dialog.getByRole('region', { name: '社区热榜配置', exact: true })
+  await expect(section.getByText('第三方 NodeSeek 热榜', { exact: true })).toBeVisible()
+  await expect(section.getByText('每 10 分钟更新', { exact: true })).toBeVisible()
+  await expect(section.getByText('每 30 分钟更新', { exact: true })).toBeVisible()
+  await expect(section.getByText('每 60 分钟更新', { exact: true })).toBeVisible()
+  const sourceInterval = await dialog.locator('#source-interval').inputValue()
+  await section.getByRole('combobox', { name: '热榜刷新设置' }).click()
+  await page.getByRole('option', { name: '自定义', exact: true }).click()
+  await section.getByRole('spinbutton', { name: '实时榜刷新间隔' }).fill('20')
+  await section.getByRole('spinbutton', { name: '每日榜刷新间隔' }).fill('45')
+  await section.getByRole('spinbutton', { name: '每周榜刷新间隔' }).fill('120')
+  await expect(dialog.getByText('有未保存的修改', { exact: true })).toBeVisible()
+  await dialog.getByRole('button', { name: '保存设置', exact: true }).click()
+  await expect(dialog.getByText('设置已保存', { exact: true })).toBeVisible()
+  const websites = (await (await page.request.get('/api/manage/workspace')).json()).websites
+  const saved = websites.find((row: { id: string }) => row.id === 'nodeseek')
+  expect(saved.interval).toBe(Number(sourceInterval))
+  expect(saved.hotlist.mode).toBe('custom')
+  expect(
+    saved.hotlist.periods.map((p: { interval_seconds: number }) => p.interval_seconds),
+  ).toEqual([1200, 2700, 7200])
+  await page.reload()
+  await page.getByRole('button', { name: '查看 NodeSeek 配置', exact: true }).click()
+  await expect(section.getByRole('spinbutton', { name: '实时榜刷新间隔' })).toHaveValue('20')
+  await expect(section.getByRole('spinbutton', { name: '每日榜刷新间隔' })).toHaveValue('45')
+  await expect(section.getByRole('spinbutton', { name: '每周榜刷新间隔' })).toHaveValue('120')
+  const mode = section.getByRole('combobox', { name: '热榜刷新设置' })
+  await mode.focus()
+  await page.keyboard.press('ArrowDown')
+  await expect(dialog.getByRole('listbox', { name: '热榜刷新设置' })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(mode).toHaveAttribute('aria-expanded', 'false')
+  await expect(dialog).toBeVisible()
+  await section.scrollIntoViewIfNeeded()
+  expect(await section.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true)
+  await page.screenshot({ path: testInfo.outputPath('website-hotlist-custom.png') })
+  await section.getByRole('button', { name: '恢复推荐', exact: true }).click()
+  await expect(section.getByRole('spinbutton')).toHaveCount(0)
+  await expect(section.getByText('每 10 分钟更新', { exact: true })).toBeVisible()
+  await dialog.getByRole('button', { name: '保存设置', exact: true }).click()
+  await expect(dialog.getByText('设置已保存', { exact: true })).toBeVisible()
+})
+
+test('Linux DO displays its supported periods and validates drafts before saving', async ({
+  page,
+}) => {
+  await page.goto('/#/websites')
+  if (!(await page.getByRole('button', { name: '查看 LINUX DO 配置', exact: true }).count())) {
+    await page.getByRole('button', { name: '添加网站', exact: true }).click()
+    await page.getByRole('button', { name: '添加 LINUX DO', exact: true }).click()
+    await expect(page.getByRole('dialog', { name: '添加内置网站', exact: true })).not.toBeVisible()
+  }
+  const dialog = await websitePanel(page, 'LINUX DO')
+  const section = dialog.getByRole('region', { name: '社区热榜配置', exact: true })
+  await expect(section.getByText('LINUX DO 官方 RSS', { exact: true })).toBeVisible()
+  await expect(section.getByText('热门榜', { exact: true })).toBeVisible()
+  await expect(section.getByText('实时榜', { exact: true })).toHaveCount(0)
+  await expect(section.getByText('每 15 分钟更新', { exact: true })).toBeVisible()
+  await section.getByRole('combobox', { name: '热榜刷新设置' }).click()
+  await page.getByRole('option', { name: '自定义', exact: true }).click()
+  await section.getByRole('spinbutton', { name: '每周榜刷新间隔' }).fill('5')
+  let writes = 0
+  page.on('request', (request) => {
+    if (request.method() === 'PUT' && request.url().endsWith('/api/manage/websites/linuxdo'))
+      writes++
+  })
+  await dialog.getByRole('button', { name: '保存设置', exact: true }).click()
+  await expect(dialog.getByRole('alert')).toContainText('每周榜刷新间隔应为 30–1440')
+  await expect(dialog.getByRole('alert')).toBeInViewport()
+  expect(writes).toBe(0)
+  await dialog.getByRole('button', { name: '关闭网站面板', exact: true }).click()
+  await expect(page.getByRole('button', { name: '继续编辑', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '继续编辑', exact: true }).click()
+  await expect(section.getByRole('spinbutton', { name: '每周榜刷新间隔' })).toHaveValue('5')
+  await section.getByRole('button', { name: '恢复推荐', exact: true }).click()
+  await dialog.getByRole('button', { name: '关闭网站面板', exact: true }).click()
+  await expect(dialog).not.toBeVisible()
+})
+
+test('long hotlist backoff shows timing and avoids the old ten-minute status poll', async ({
+  page,
+}) => {
+  await page.clock.install()
+  let reads = 0
+  await page.route('**/api/manage/hotlists/nodeseek?period=realtime', async (route) => {
+    const response = await route.fetch()
+    reads++
+    await route.fulfill({
+      json: {
+        ...(await response.json()),
+        refreshing: false,
+        status: 'stale',
+        error_code: 'http_429',
+        next_attempt_at: (await page.evaluate(() => Date.now())) / 1000 + 3600,
+      },
+    })
+  })
+  await page.reload()
+  const hotlist = page.getByRole('region', { name: '社区热榜', exact: true })
+  await expect(hotlist.getByRole('status')).toContainText('来源请求受限（429）')
+  await expect(hotlist.getByRole('status')).toContainText('预计')
+  await expect(hotlist.getByRole('status')).toContainText('上次成功获取')
+  await expect(hotlist.getByText('正在后台更新，当前显示上次榜单。')).toHaveCount(0)
+  await page.clock.fastForward(600100)
+  expect(reads).toBe(1)
+  await page.clock.fastForward(3000100)
+  await expect.poll(() => reads).toBe(2)
+})
+
+test('a failed status read suppresses an outdated refreshing badge and retries locally', async ({
+  page,
+}) => {
+  await page.clock.install()
+  let reads = 0
+  await page.route('**/api/manage/hotlists/nodeseek?period=realtime', async (route) => {
+    reads++
+    if (reads === 2) return route.abort('failed')
+    const response = await route.fetch()
+    await route.fulfill({
+      json: {
+        ...(await response.json()),
+        refreshing: reads === 1,
+        next_attempt_at: (await page.evaluate(() => Date.now())) / 1000 + (reads === 1 ? 2 : 600),
+      },
+    })
+  })
+  await page.reload()
+  const hotlist = page.getByRole('region', { name: '社区热榜', exact: true })
+  const updating = hotlist.getByText('正在后台更新，当前显示上次榜单。', { exact: true })
+  await expect(updating).toBeVisible()
+  await page.clock.fastForward(2200)
+  await expect(updating).toHaveCount(0)
+  await expect(hotlist.locator('.hotlist-row')).toHaveCount(5)
+  await page.clock.fastForward(15100)
+  await expect.poll(() => reads).toBe(3)
+  await expect(hotlist.locator('.hotlist-row')).toHaveCount(5)
+})
+
+test('website hotlist controls follow supplied capabilities and omit unsupported sites', async ({
+  page,
+}) => {
+  let supported = true
+  await page.route('**/api/manage/workspace', async (route) => {
+    const response = await route.fetch()
+    const data = await response.json()
+    const website = data.websites.find((row: { id: string }) => row.id === 'nodeseek')
+    website.hotlist = supported
+      ? {
+          ...website.hotlist,
+          periods: website.hotlist.periods.filter(
+            (period: { id: string }) => period.id === 'daily',
+          ),
+        }
+      : null
+    await route.fulfill({ response, json: data })
+  })
+  await page.reload()
+  const dialog = await websitePanel(page, 'NodeSeek')
+  const section = dialog.getByRole('region', { name: '社区热榜配置', exact: true })
+  await expect(section.getByText('每日榜', { exact: true })).toBeVisible()
+  await expect(section.getByText('实时榜', { exact: true })).toHaveCount(0)
+  await expect(section.getByText('每周榜', { exact: true })).toHaveCount(0)
+  await dialog.getByRole('button', { name: '关闭网站面板', exact: true }).click()
+  supported = false
+  await page.reload()
+  await page.getByRole('button', { name: '查看 NodeSeek 配置', exact: true }).click()
+  await expect(section).toHaveCount(0)
+  await expect(dialog.getByRole('heading', { name: '采集配置', exact: true })).toBeVisible()
 })

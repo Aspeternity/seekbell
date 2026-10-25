@@ -15,6 +15,7 @@ const props = withDefaults(
 )
 const emit = defineEmits<{ 'update:modelValue': [value: T]; change: [value: T] }>()
 const { open, trigger, panel, close } = usePopup()
+const popupTarget = ref<HTMLElement>()
 const id = useId(),
   active = ref(0),
   width = ref(0)
@@ -46,6 +47,9 @@ function focusOption(index: number, step = 1) {
 }
 async function show(last = false) {
   if (props.disabled || !props.options.length) return
+  // Native modal dialogs make body portals inert; keep the menu in the
+  // trigger's dialog so pointer and keyboard interaction remain available.
+  popupTarget.value = trigger.value?.closest('dialog') || undefined
   open.value = true
   await nextTick()
   const index = props.options.findIndex((item) => item.value === props.modelValue)
@@ -121,6 +125,7 @@ onBeforeUnmount(() => observer.disconnect())
 <template>
   <NPopover
     :show="open"
+    :to="popupTarget"
     trigger="manual"
     placement="bottom-start"
     :width="Math.max(width, 160)"

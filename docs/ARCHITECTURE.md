@@ -289,9 +289,9 @@ sites/hotlists.py独立声明网站、提供方、周期、固定HTTPS端点和�
 
 GET /api/manage/hotlists/{website_id}?period=...校验安装和模块可见后调用独立HotlistService；overview统计不访问热榜网络。服务随生命周期创建/关闭，使用固定端点、TLS验证、无重定向/环境代理；总等待10秒，连接3秒/I/O8秒，流式限1MiB并拒绝未协商压缩。限制条数、标识、文本和数值，跳过无效/重复项，非空无有效项作为失败；仅返回固定错误码，不回显远端正文/异常。
 
-网站＋提供方＋周期隔离缓存/在途任务/退避，600秒按需刷新；同键并发共享任务。冷读等待共享任务且客户端取消不取消其他读者；已有快照立即返回并触发一次过期后台刷新。refreshing独立于失败状态，刷新期间客户端按next_attempt_at约2秒读完成结果，结束后恢复正常冷却，不轮询来源。生命周期关闭先取消/等待在途任务再关闭HTTP。失败30～600秒退避，遵守Retry-After（上限一天）；频率为工程候选，不冒充提供方限频保证。source_updated_at与fetched_at分开，仅对可靠提供来源时间的提供方检查时间倒退；ready/stale/unavailable区分正常、失败旧快照和无数据。榜单成功快照经0011持久化、重启按需恢复，最多展示24小时，布局和浏览选择持久化。健康检查独立于热榜，无消费者周期轮询。
+网站＋提供方＋周期隔离缓存/在途任务/退避，按网站/周期配置间隔按需刷新；同键并发共享任务。冷读等待共享任务且客户端取消不取消其他读者；已有快照立即返回并触发一次过期后台刷新。refreshing独立于失败状态，刷新期间客户端按next_attempt_at约2秒读完成结果，结束后恢复配置间隔，不轮询来源。生命周期关闭先取消/等待在途任务再关闭HTTP。失败30～600秒退避，遵守Retry-After（上限一天）；频率为工程候选，不冒充提供方限频保证。source_updated_at与fetched_at分开，仅对可靠提供来源时间的提供方检查时间倒退；ready/stale/unavailable区分正常、失败旧快照和无数据。榜单成功快照经0011持久化、重启按需恢复，最多展示24小时，布局和浏览选择持久化。健康检查独立于热榜，无消费者周期轮询。
 
-概览固定统计与可排序内容区分开；同一统计请求只显示一处反馈，模块保留stale交互保护。热榜独立useRemote，身份含网站/周期，切换不串其他榜单，沿用会话/data revision和迟到响应隔离。选择串行保存，其专用写入不使监控查询缓存失效；保存冲突保留当前选择并可重试。页面隐藏/组件卸载停止刷新，手动刷新服从后端冷却。来源时间按保存时区展示。可见卡片在当前榜单就绪后预读当前网站其他支持周期，fresh缓存跳过，fetchRead合并点击与预取；预取不写选择，不预抓其他网站。HTTP仍no-store，保留服务进程/认证会话缓存，0011另加独立SQLite成功快照，不增加Service Worker。
+概览固定统计与可排序内容区分开；同一统计请求只显示一处反馈，模块保留stale交互保护。热榜独立useRemote，身份含网站/周期，切换不串其他榜单，沿用会话/data revision和迟到响应隔离。选择串行保存，其专用写入不使监控查询缓存失效；保存冲突保留当前选择并可重试。页面隐藏/组件卸载停止刷新，手动刷新服从后端冷却。来源时间按保存时区展示。可见卡片只请求当前选中的周期，不预读其他周期或网站；fetchRead合并同身份在途读取。HTTP仍no-store，保留服务进程/认证会话缓存，0011另加独立SQLite成功快照，不增加Service Worker。
 
 Preferences复用草稿、部分保存、冲突与导航保护；设置支持鼠标/触屏手柄、键盘上下键、上下按钮和默认草稿。概览不再显示设置快捷入口，模块设置从系统设置进入；设置定位参数仍支持直接链接，App只以路径部分识别页面。单站显示名称，多站标签、超过四站AppSelect，单周期不显示无效切换。
 
@@ -317,7 +317,7 @@ SourceProbe仅对Linux DO将显式manual标记经SourceRunner/RssCollector传入
 
 collectors/http.public_client供Runtime与HotlistService创建客户端，通过精确HTTPS域名mount仅为linux.do建立http2=True且trust_env=False的AsyncHTTPTransport；默认池保持HTTP/1.1，注入测试transport时不创建mount以避免测试漏网，客户端关闭时共同回收各池。依赖使用httpx[http2]并锁定h2/hpack/hyperframe，不引入curl_cffi或浏览器。HTTPX保留正常协议协商回退；实际来源可用性按镜像/环境单独验收。
 
-collectors/http.public_response构造匿名请求、显式移除Cookie且不跟随跳转，关闭响应；RSS与热榜共用。固定端点/TLS/无环境代理/1MiB/总超时保持。HotlistSource声明JSON或RSS格式和每站支持项，Linux DO不使用帖子时间冒充榜单更新时间。持久快照读取校验时间/条数/字段并重新生成规范链接；600秒TTL、24小时展示上限、按键共享更新和客户端取消隔离沿用。无消费者常驻轮询，持久化失败不能伪称网络成功。
+collectors/http.public_response构造匿名请求、显式移除Cookie且不跟随跳转，关闭响应；RSS与热榜共用。固定端点/TLS/无环境代理/1MiB/总超时保持。HotlistSource声明JSON或RSS格式和每站支持项，Linux DO不使用帖子时间冒充榜单更新时间。持久快照读取校验时间/条数/字段并重新生成规范链接；按网站/周期配置的新鲜期、24小时展示上限、按键共享更新和客户端取消隔离沿用。无消费者常驻轮询，持久化失败不能伪称网络成功。
 
 验证命令：uv run --frozen pytest tests/test_public_http.py tests/test_linuxdo.py tests/test_linuxdo_runtime.py tests/test_hotlists.py tests/test_runtime.py -q；pnpm --dir frontend test:linuxdo（独立8030合成库）。所有浏览器环境注入合成两站热榜，不访问真实论坛或发送真实消息。正式来源可访问性与用户验收另行记录。
 
@@ -352,3 +352,15 @@ Rule.site_categories保存website_id→{mode:all/specific,values}，每站最多
 旧TaskVersion.rule中的共享categories保留原执行语义；前端读取为原有各站复制范围，未知旧值保留展示，不按不完整目录猜归属。新保存生成版本并只写按站条件；旧API共享结构继续兼容，不能同时提交两种有效类别来源。0016_site_categories仅是新JSON的兼容修订标记，无DDL/配置修复/历史回填；旧表原列原值与任务版本均不变。旧镜像无法理解新结构，须匹配0015全卷备份回退，不能因无DDL而直接读取0016。
 
 版块只在任务内设置，不引入网站总范围或分类RSS多源。TaskCategoryScopes在网站选择下逐站摘要，一次展开一站，搜索/限高多选/空集校验/取消恢复；编辑直接进入任务草稿，完成只收起，外层保存不会漏掉开放编辑。取消网站保留本次草稿，序列化只包含最终所选站；新站默认全部。右侧说明按站汇总，历史诊断按该帖网站解析原快照的期望版块。所有自动验证使用合成服务。
+
+## 按网站热榜刷新设置（2026-10-25）
+
+HotlistSource声明各周期推荐秒数与最小值，WebsiteInstallation.hotlist_settings保存推荐模式{}或严格验证的自定义周期→秒映射。0017_hotlist_settings只为website_installations增加非空JSON默认{}，不改既有列值、帖子/规则/队列；升级旧行自动使用推荐，删除网站重加恢复推荐。回退使用0016匹配备份，不让旧镜像直接读新schema。
+
+workspace返回本站热榜能力、来源与有效/推荐/最小间隔；网站原PUT增加可选hotlist对象，推荐模式不接收自定义值，自定义必须恰好包含实际支持的所有周期，严格整数且为整分钟，服务端再校验各下限/一天上限。未传字段保留原配置，非法数据整笔回滚；仅热榜改动不进入采集重排逻辑。前端以能力生成WebsiteHotlistSettings，秒与分钟仅在边界转换，统一保存和草稿保护。
+
+HotlistService将成功缓存fresh_until=fetched_at+当前配置间隔，与失败/服务器next_attempt_at分离，下一尝试取更晚值。每次读取加载当前配置，复用持久快照；策略/预算查询会让出执行权，创建刷新前重新检查在途任务及最新成功时间，防止并发等待后重复请求。预算已知等待和采集优先直接返回延期，不创建假刷新任务。生产实例仅在runtime.active且Linux DO采集启用、到期时间在2秒内时让步；其他站的独立汇总来源不额外占该论坛采集预算。
+
+CommunityHotlist取消全部周期预取，根据next_attempt_at安排本应用查询（最长一天）；刷新完成短查、状态读取网络错误15秒重试、不可见停止。来源失败仍由服务端退避。AppSelect的Naive UI弹层在原生dialog中挂载到最近dialog，避免body门户在模态顶层之外变为不可交互；保留统一键盘/Escape行为。
+
+针对性验证入口：uv run --frozen pytest tests/test_hotlist_settings.py tests/test_hotlists.py tests/test_linuxdo.py tests/test_linuxdo_runtime.py -q；pnpm --dir frontend test:hotlist；pnpm --dir frontend test:linuxdo。迁移影响全体schema断言，需另跑完整后端与离线容器升级/备份/回退；全部使用临时合成数据，不读取正式卷或发送真实通知。

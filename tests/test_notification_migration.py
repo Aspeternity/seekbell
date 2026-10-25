@@ -40,7 +40,7 @@ def test_upgrade_from_m1_preserves_rows_and_migration_is_idempotent(tmp_path):
         with engine.connect() as connection:
             row = connection.execute(text("SELECT status,target_snapshot FROM outbox")).one()
             assert row.status == "pending" and row.target_snapshot == '{"kind":"mock"}'
-        assert schema_revision(engine) == "0016_site_categories"
+        assert schema_revision(engine) == "0017_hotlist_settings"
     finally:
         engine.dispose()
 
@@ -64,6 +64,6 @@ def test_failed_notification_migration_rolls_back_tables_columns_and_revision(tm
             col["name"] for col in inspect(engine).get_columns("notification_targets")
         }
         migrate(engine)
-        assert schema_revision(engine) == "0016_site_categories"
+        assert schema_revision(engine) == "0017_hotlist_settings"
     finally:
         engine.dispose()
