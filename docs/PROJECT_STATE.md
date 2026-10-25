@@ -1,21 +1,21 @@
 # 当前状态
 
-更新时间：2026-10-25（Asia/Shanghai）。阶段：网站连接测试旧记录展示修正已实现，32项相关桌面/手机检查通过，待构建并保留数据更新本机8001。
+更新时间：2026-10-25（Asia/Shanghai）。阶段：连接测试旧记录展示修正已更新本机8001；32项相关浏览器与2项离线容器检查通过，待用户体验验收。
 
 ## 环境与授权
 
-唯一SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe执行。分支codex/hotlist-settings，开始时HEAD aee47ea、工作区干净；本轮只改前端测试展示与文档。沿用修复后保留数据更新本机Docker授权；无GitHub推送/合并、公开发布、远程部署或主动真实试发。无多代理，不在旧Ubuntu/D盘构建。之前整体WSL恢复的单次授权已执行，不再沿用；保活PID30200、创建2026-10-25T10:18:02.5636430Z仍有效。
+唯一SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe执行。分支codex/hotlist-settings，最新实现a0e2b6f5104207f92a014f61ce8fc76cac8b545b；后续仅文档。沿用修复后保留数据更新本机Docker授权，无推送/合并GitHub、公开发布、远程部署或主动真实试发。无多代理，不在旧Ubuntu/D盘构建。本轮未重启WSL或改变全局配置；之前整体重启的单次恢复授权已执行。保活PID30200、创建2026-10-25T10:18:02.5636430Z未变。
 
-## 当前本机及待更新
+## 本机运行及备份
 
-8001仍为seekbell:hotlist-followups-ebea3fe3ba23，代码ebea3fe3ba237006e88c884df714cd688ea58588，Image ID sha256:c8e7f495d5f52a0eebb3bc70befa0785d701cf41d5c61ed85c6f143801fb7bde。schema 0017_hotlist_settings；seekbell-local/seekbell-local-seekbell-1/seekbell-local_data及127.0.0.1:8001，healthy/read-only/unless-stopped。私有metadata在/home/dev/.local/state/seekbell/local-runtime/runtime.json。
-最近17卷备份before-hotlist-followups-ebea3fe-20261025-192014.tar.gz，SHA256 bc6c9b4a217ba090d0ca6ce4a81331a628dd08a6e344dc43c7effc008f89ab1b；位于local-runtime/backups。新更新仍先停机整卷备份、副本预检与配置指纹验证；本轮无DDL，同schema回旧镜像保留当前卷，不拿16备份覆盖17数据。
+8001现为seekbell:connection-test-ui-a0e2b6f51042，amd64 Image ID sha256:dcb0bfee42c36a182533c658e3bf36ce01e9143c4ce31e6a1c3f4b533ecbc2dd，schema仍0017_hotlist_settings。原seekbell-local/seekbell-local-seekbell-1/seekbell-local_data、127.0.0.1:8001与安全限制保持，healthy/read-only/unless-stopped。Windows localhost/127首页、ready/完整SHA/新资源与保活检查通过，非真实登录UI验收。
+完整17卷备份local-runtime/backups/before-connection-test-ui-a0e2b6f-20261025-201736.tar.gz，SHA256 dd4298533e67820058f7f8cdf6b12357a81d03d092d7378b401be5d2076f54b0。32张原表原列原值与密钥/凭据在副本预检保持，部署后配置及任务版本指纹相同。本轮无DDL，同schema回旧ebea3fe镜像保留当前卷，先另存失败候选，不拿16备份覆盖17。私有runtime.json记录当前镜像与卷。
 
-## 当前改动与证据
+## 修复与证据
 
-先读[连接测试修正](history/2026-10-25-连接测试状态修正.md)、SPEC末尾补充及ARCHITECTURE末节；代码为WebsiteConnectionTest/WebsiteConnectionResult、Websites及linuxdo/operations浏览器测试。GET的持久上次记录折叠、明确时间与历史语义；本次手测单独展示，开始重测移除旧结果，接口失败不残留绿色成功；到期等待提示自动消失。组件关闭卸载隔离迟到GET/POST，不改服务端记录、预算/退避或自动请求论坛。工作区未提交路径即上述前端文件与本轮文档。
-构建/类型/格式过；Linux DO 26项、operations 6项桌面/手机过，含两天前记录、重开折叠、取消无POST、失败清绿、冷却到期和异步竞争。合成截图已视觉检查。后端未改，复用ebea3fe的819项证据；本轮未探测真实RSS或发送通知。
+优先读[连接测试修正](history/2026-10-25-连接测试状态修正.md)、SPEC末尾及ARCHITECTURE末节，代码为WebsiteConnectionTest/WebsiteConnectionResult、Websites及linuxdo/operations测试。旧版GET持久记录与本次POST共用状态，重测失败只加错误导致残留旧绿框。现上次记录默认折叠并标明时间/历史语义；本次手测独立展示，重测先清旧结果；未来等待到期自动隐藏。组件卸载隔离迟到GET/POST，不改服务端诊断、请求预算或自动访问论坛。
+a0e2b6f类型/构建/格式过，Linux DO 26项、operations 6项桌面/手机过，含旧记录、重开/取消、失败清绿、等待到期和异步竞争；合成桌面截图视觉检查过。2项离线镜像/备份恢复过。后端未改，复用ebea3fe的819项证据。本轮未主动实源探测/发送通知。私有完整证据/home/dev/.local/state/seekbell/acceptance/2026-10-25-connection-test-ui。
 
-## 后续与保留限制
+## 后续与限制
 
-下一步提交实现，构建镜像并完成离线检查、整卷备份/副本预检、本机8001更新与Windows验证，再记录镜像/备份证据。热榜上轮修正与实源证据见[热榜验收修正](history/2026-10-25-热榜验收修正.md)：日榜两次匿名访问429+Cloudflare验证，最后19:11，尚未恢复，勿当作本轮UI修复结果。V2EX仍仅导航大类范围确认，未开发；GitHub main e23749a与GHCR ui-restore-6独立未更新。
+用户刷新http://localhost:8001/#/websites体验。热榜前轮实源限制与修正见[热榜验收修正](history/2026-10-25-热榜验收修正.md)：日榜两次匿名访问429+Cloudflare验证，最后19:11，尚未恢复；本轮不改变该结论。V2EX仍仅导航大类范围确认，未开发；GitHub main e23749a与GHCR ui-restore-6独立未更新。
