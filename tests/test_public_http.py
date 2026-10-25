@@ -109,3 +109,69 @@ def test_public_clients_keep_mock_transport_for_linuxdo_and_http1_responses(
 
     asyncio.run(run())
     assert len(calls) == (1 if owner == "runtime" else 2)
+
+
+@pytest.mark.parametrize("owner", ["rss", "hotlist"])
+@pytest.mark.parametrize("status", [200, 403, 429])
+def test_explicit_cloudflare_challenge_is_not_mislabeled_as_status_or_bad_xml(core, owner, status):
+    from seekbell.domain.errors import SourceFailure
+    from seekbell.services.request_budget import WebsiteRequestBudget
+
+    async def run():
+        async def handler(request):
+            return httpx.Response(
+                status,
+                headers={
+                    "Content-Type": "text/html",
+                    "cf-mitigated": "challenge",
+                    "Retry-After": "120",
+                },
+                stream=Chunks(b"synthetic-private-challenge-body"),
+            )
+
+        budget = WebsiteRequestBudget(core.engine, clock=lambda: 2000)
+        if owner == "rss":
+            async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+                collector = RssCollector(client, website_id="linuxdo", request_budget=budget)
+                with pytest.raises(SourceFailure) as caught:
+                    await collector.fetch(LINUXDO_RSS_URL)
+                assert caught.value.code == "access_challenge"
+                assert caught.value.retry_after == 120
+        else:
+            service = HotlistService(
+                clock=lambda: 2000, request_budget=budget, transport=httpx.MockTransport(handler)
+            )
+            try:
+                result = await service.get("linuxdo", "daily")
+                assert result["status"] == "unavailable"
+                assert result["error_code"] == "access_challenge"
+                assert result["next_attempt_at"] == 2300
+                assert "synthetic-private" not in str(result)
+            finally:
+                await service.aclose()
+        assert budget.view("linuxdo") == (2300, "access_challenge")
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("owner", ["rss", "hotlist"])
+def test_ordinary_429_without_challenge_marker_remains_rate_limited(owner):
+    from seekbell.domain.errors import SourceFailure
+
+    async def run():
+        async def handler(request):
+            return httpx.Response(429, headers={"Retry-After": "120"})
+
+        if owner == "rss":
+            async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+                with pytest.raises(SourceFailure) as caught:
+                    await RssCollector(client).fetch(LINUXDO_RSS_URL)
+                assert caught.value.code == "http_429"
+        else:
+            service = HotlistService(clock=lambda: 2000, transport=httpx.MockTransport(handler))
+            try:
+                assert (await service.get("linuxdo", "hot"))["error_code"] == "http_429"
+            finally:
+                await service.aclose()
+
+    asyncio.run(run())

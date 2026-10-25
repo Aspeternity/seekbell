@@ -231,7 +231,7 @@ test('Linux DO access errors are explicit and do not block NodeSeek', async ({ p
   })
   const hotlist = page.getByRole('region', { name: '社区热榜', exact: true })
   await hotlist.getByRole('button', { name: 'LINUX DO', exact: true }).click()
-  await expect(hotlist.getByText(/来源拒绝自动访问（403）/)).toBeVisible()
+  await expect(hotlist.getByText(/来源要求 Cloudflare 验证/)).toBeVisible()
   await expect(hotlist.locator('.hotlist-row')).toHaveCount(0)
   await hotlist.getByRole('button', { name: 'NodeSeek', exact: true }).click()
   await expect(hotlist.locator('.hotlist-row')).toHaveCount(5)

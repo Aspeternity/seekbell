@@ -623,3 +623,72 @@ test('website hotlist controls follow supplied capabilities and omit unsupported
   await expect(section).toHaveCount(0)
   await expect(dialog.getByRole('heading', { name: '采集配置', exact: true })).toBeVisible()
 })
+
+test('website hotlist menu remains next to its trigger in a scrolled scaled dialog', async ({
+  page,
+}, info) => {
+  await page.setViewportSize({ width: 2560, height: 1400 })
+  const dialog = await websitePanel(page, 'NodeSeek')
+  const control = dialog.getByRole('combobox', { name: '热榜刷新设置' })
+  const menu = dialog.getByRole('listbox', { name: '热榜刷新设置' })
+  await control.scrollIntoViewIfNeeded()
+  await control.click()
+  await expect(menu).toBeVisible()
+  const a = (await control.boundingBox())!,
+    b = (await menu.boundingBox())!
+  await page.screenshot({ path: info.outputPath('scaled-dialog-menu.png') })
+  expect(Math.abs(a.x - b.x)).toBeLessThanOrEqual(3)
+  expect(b.y - a.y - a.height).toBeGreaterThanOrEqual(0)
+  expect(b.y - a.y - a.height).toBeLessThanOrEqual(15)
+  await page.keyboard.press('Escape')
+  await page.evaluate(() => document.documentElement.style.setProperty('--workspace-scale', '1.25'))
+  await control.click()
+  await expect(menu).toBeVisible()
+  const c = (await control.boundingBox())!,
+    d = (await menu.boundingBox())!
+  expect(Math.abs(c.x - d.x)).toBeLessThanOrEqual(3)
+  expect(d.y - c.y - c.height).toBeLessThanOrEqual(15)
+  const distance = async () => {
+    const target = (await control.boundingBox())!,
+      popup = (await menu.boundingBox())!
+    return Math.min(
+      Math.abs(popup.y - target.y - target.height),
+      Math.abs(target.y - popup.y - popup.height),
+    )
+  }
+  await dialog.locator('.website-drawer-body').evaluate((el) => el.scrollBy(0, 80))
+  await expect.poll(distance).toBeLessThanOrEqual(15)
+  await page.evaluate(() => document.documentElement.style.removeProperty('--workspace-scale'))
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect.poll(distance).toBeLessThanOrEqual(15)
+  await menu.getByRole('option', { name: '自定义', exact: true }).click()
+  await expect(dialog.getByRole('spinbutton', { name: '实时榜刷新间隔' })).toBeVisible()
+})
+
+test('origin cooldown explains that an unattempted hotlist waits while actual challenges report the right cause', async ({
+  page,
+}) => {
+  let waiting = true
+  await page.route('**/api/manage/hotlists/nodeseek?period=realtime', async (route) => {
+    const response = await route.fetch()
+    await route.fulfill({
+      json: {
+        ...(await response.json()),
+        status: waiting ? 'waiting' : 'stale',
+        error_code: 'access_challenge',
+        refreshing: false,
+        next_attempt_at: Date.now() / 1000 + 300,
+      },
+    })
+  })
+  await page.reload()
+  const hotlist = page.getByRole('region', { name: '社区热榜', exact: true })
+  await expect(hotlist.getByRole('status')).toContainText('本次榜单更新已延后')
+  await expect(hotlist.getByRole('status')).not.toContainText('更新失败')
+  await expect(hotlist.locator('.hotlist-row')).toHaveCount(5)
+  waiting = false
+  await page.reload()
+  await expect(hotlist.getByRole('status')).toContainText('来源要求 Cloudflare 验证')
+  await expect(hotlist.getByRole('status')).not.toContainText('429')
+  await expect(hotlist.getByRole('status')).not.toContainText('403')
+})

@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 import httpx
 from sqlalchemy.orm import Session
 
-from seekbell.collectors.http import public_client, public_response
+from seekbell.collectors.http import public_client, public_response, source_failure
 from seekbell.db.models import (
     HotlistSnapshot,
     Source,
@@ -18,7 +18,6 @@ from seekbell.db.models import (
 )
 from seekbell.db.transactions import database_call, write_session
 from seekbell.domain.errors import SourceDeferred, SourceFailure
-from seekbell.domain.http import retry_after_seconds
 from seekbell.services.hotlist_settings import configuration
 from seekbell.sites.hotlists import HOTLIST_SOURCES, number, text
 from seekbell.sites.registry import BUILTIN_ADAPTERS
@@ -141,19 +140,9 @@ class HotlistService:
                 self.client, source.endpoints[period], headers={"Accept": accept}
             ) as response,
         ):
-            if response.status_code != 200:
-                code = (
-                    "access_challenge"
-                    if response.status_code == 403
-                    and response.headers.get("cf-mitigated") == "challenge"
-                    else f"http_{response.status_code}"
-                )
-                raise SourceFailure(
-                    code,
-                    retry_after=retry_after_seconds(
-                        response.headers.get("retry-after"), self.clock()
-                    ),
-                )
+            failure = source_failure(response, self.clock())
+            if failure is not None:
+                raise failure
             if response.headers.get("content-encoding", "identity").lower() != "identity":
                 raise ValueError("invalid_snapshot")
             if source.format == "rss" and (
@@ -187,10 +176,12 @@ class HotlistService:
             if self.engine is not None:
                 await database_call(self._save, key, snapshot)
             self.cache[key] = snapshot
-            state.update(next_attempt_at=0, failures=0, error_code=None)
+            state.update(next_attempt_at=0, failures=0, error_code=None, deferred=False)
             return
         except SourceDeferred as error:
-            state.update(next_attempt_at=error.next_attempt_at, error_code=error.code)
+            state.update(
+                next_attempt_at=error.next_attempt_at, error_code=error.code, deferred=True
+            )
             return
         except SourceFailure as error:
             retry_after = error.retry_after
@@ -203,6 +194,7 @@ class HotlistService:
                 )
         except (httpx.HTTPError, ValueError, OverflowError):
             pass
+        state["deferred"] = False
         state["failures"] = min(6, state["failures"] + 1)
         state["error_code"] = code
         state["next_attempt_at"] = self.clock() + max(
@@ -247,7 +239,7 @@ class HotlistService:
         source = HOTLIST_SOURCES[website_id]
         key = website_id, source.provider_id, period
         state = self.states.setdefault(
-            key, {"next_attempt_at": 0, "failures": 0, "error_code": None}
+            key, {"next_attempt_at": 0, "failures": 0, "error_code": None, "deferred": False}
         )
         interval, priority = await database_call(
             self._policy, website_id, period, self.collection_active()
@@ -267,6 +259,15 @@ class HotlistService:
         fresh_until = snapshot["fetched_at"] + interval if snapshot else 0
         next_attempt = max(fresh_until, state["next_attempt_at"])
         task = self.pending.get(key)
+        if task is None and state["deferred"] and self.request_budget is not None:
+            until, code = await database_call(self.request_budget.view, website_id)
+            if until <= self.clock():
+                state.update(next_attempt_at=0, error_code=None, deferred=False)
+                next_attempt = fresh_until
+            else:
+                state.update(next_attempt_at=until, error_code=code or "source_cooldown")
+                next_attempt = max(fresh_until, until)
+            task = self.pending.get(key)
         if task is None and self.clock() >= next_attempt:
             until, code = 0, None
             if self.request_budget is not None:
@@ -281,9 +282,15 @@ class HotlistService:
             # completed a refresh. Recheck both the task and successful freshness.
             if task is None and self.clock() >= due:
                 if until > self.clock():
-                    state.update(next_attempt_at=until, error_code=code or "source_cooldown")
+                    state.update(
+                        next_attempt_at=until, error_code=code or "source_cooldown", deferred=True
+                    )
                 elif priority:
-                    state.update(next_attempt_at=self.clock() + 2, error_code="collection_priority")
+                    state.update(
+                        next_attempt_at=self.clock() + 2,
+                        error_code="collection_priority",
+                        deferred=True,
+                    )
                 else:
                     task = asyncio.create_task(self._refresh(source, period, key, state))
                     self.pending[key] = task
@@ -299,7 +306,7 @@ class HotlistService:
             **source.metadata(),
             "period": period,
             "status": "waiting"
-            if state["error_code"] in WAITING_CODES
+            if state["deferred"] or state["error_code"] in WAITING_CODES
             else "stale"
             if snapshot and state["error_code"]
             else "ready"

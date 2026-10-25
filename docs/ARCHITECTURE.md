@@ -364,3 +364,7 @@ HotlistService将成功缓存fresh_until=fetched_at+当前配置间隔，与失�
 CommunityHotlist取消全部周期预取，根据next_attempt_at安排本应用查询（最长一天）；刷新完成短查、状态读取网络错误15秒重试、不可见停止。来源失败仍由服务端退避。AppSelect的Naive UI弹层在原生dialog中挂载到最近dialog，避免body门户在模态顶层之外变为不可交互；保留统一键盘/Escape行为。
 
 针对性验证入口：uv run --frozen pytest tests/test_hotlist_settings.py tests/test_hotlists.py tests/test_linuxdo.py tests/test_linuxdo_runtime.py -q；pnpm --dir frontend test:hotlist；pnpm --dir frontend test:linuxdo。迁移影响全体schema断言，需另跑完整后端与离线容器升级/备份/回退；全部使用临时合成数据，不读取正式卷或发送真实通知。
+
+### 热榜验收修正（2026-10-25）
+
+collectors/http.source_failure共用Cloudflare标记判定和Retry-After解释；200挑战也先拒绝而不进入XML/JSON解析，非挑战429保持http_429。HotlistService进程状态以deferred区分未发请求等待与自有失败；共享状态恢复只释放前者，不伪造成功或抹去真实失败冷却。AppSelect在原生dialog内创建无缩放的定位门户层（zoom抵消workspace比例），NPopover内容按阅读比例展示，避免视口坐标二次缩放。门户卸载清理，页内其他控件挂载语义不变。无DDL或依赖变更。

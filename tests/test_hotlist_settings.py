@@ -422,3 +422,51 @@ def test_concurrent_budget_read_rechecks_a_refresh_completed_during_its_wait(cor
             await service.aclose()
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize("code", ["http_429", "access_challenge"])
+def test_shared_origin_wait_is_not_a_failed_hotlist_and_recovers_without_waiting_out_old_state(
+    core, code
+):
+    from seekbell.domain.errors import SourceFailure
+
+    async def run():
+        now, calls = [2000], []
+        budget = WebsiteRequestBudget(core.engine, clock=lambda: now[0])
+
+        async def handler(request):
+            calls.append(request)
+            return httpx.Response(
+                200,
+                headers={"Content-Type": "application/rss+xml"},
+                stream=Chunks(linuxdo_rss(9001)),
+            )
+
+        service = HotlistService(
+            engine=core.engine,
+            clock=lambda: now[0],
+            request_budget=budget,
+            transport=httpx.MockTransport(handler),
+        )
+        try:
+            original = await service.get("linuxdo", "hot")
+            now[0] = 2900
+            budget.failed(SourceFailure(code, retry_after=600), now[0])
+            waiting = await service.get("linuxdo", "hot")
+            assert waiting["status"] == "waiting" and not waiting["refreshing"]
+            assert waiting["error_code"] == code
+            assert waiting["items"] == original["items"]
+            assert waiting["next_attempt_at"] == 3500
+            assert not service.pending and len(calls) == 1
+            # A genuine successful same-origin request can release the shared
+            # wait; this period has never made a failed attempt of its own.
+            budget.succeeded()
+            current = await service.get("linuxdo", "hot")
+            assert current["refreshing"]
+            await asyncio.gather(*service.pending.values())
+            assert len(calls) == 2
+            assert (await service.get("linuxdo", "hot"))["status"] == "ready"
+        finally:
+            await service.aclose()
+
+    asyncio.run(run())

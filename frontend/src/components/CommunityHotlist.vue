@@ -247,7 +247,13 @@ onBeforeUnmount(() => {
                 <span>{{
                   snapshot.error_code === 'collection_priority'
                     ? '优先完成新帖采集，随后更新榜单。'
-                    : '正在等待同站请求间隔，稍后自动重试。'
+                    : snapshot.error_code === 'access_challenge'
+                      ? '本站请求遇到 Cloudflare 验证，本次榜单更新已延后。'
+                      : snapshot.error_code === 'http_429'
+                        ? '本站请求受限（429），本次榜单更新已延后。'
+                        : snapshot.error_code === 'http_403'
+                          ? '本站来源拒绝访问，本次榜单更新已延后。'
+                          : '正在等待同站请求间隔，稍后自动重试。'
                 }}</span>
                 <span>预计 {{ stamp(snapshot.next_attempt_at) }} 后重试。</span>
               </p>
@@ -257,8 +263,11 @@ onBeforeUnmount(() => {
                     ? '更新失败，当前显示上次榜单。'
                     : '暂时无法获取榜单，请稍后重试。'
                 }}
-                <span v-if="['access_challenge', 'http_403'].includes(snapshot.error_code || '')">
-                  来源拒绝自动访问（403），正在退避；可在网站配置中测试连接。
+                <span v-if="snapshot.error_code === 'access_challenge'">
+                  来源要求 Cloudflare 验证，暂时无法自动更新，稍后重试。
+                </span>
+                <span v-else-if="snapshot.error_code === 'http_403'">
+                  来源拒绝自动访问（403），正在退避。
                 </span>
                 <span v-else-if="snapshot.error_code === 'http_429'"
                   >来源请求受限（429），正在等待允许重试。</span
