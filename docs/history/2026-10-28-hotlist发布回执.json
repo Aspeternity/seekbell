@@ -1,0 +1,75 @@
+{
+  "workflow_url": "https://github.com/Aspeternity/seekbell/actions/runs/40717692197",
+  "workflow_conclusion": "success",
+  "pull_request": "https://github.com/Aspeternity/seekbell/pull/3",
+  "artifact_sha256": "f71cebc271524c03c79190abc88fbcb4e3d67fcce87e9097d41329c90eb25bca",
+  "release": {
+    "revision": "9c925eeb6e50f1c60ce0e3298b8d6bba5f4ac0ae",
+    "tag": "ghcr.io/aspeternity/seekbell:sha-9c925eeb6e50f1c60ce0e3298b8d6bba5f4ac0ae-40717692197-1",
+    "published": true,
+    "images": {
+      "amd64": {
+        "schema": 1,
+        "architecture": "amd64",
+        "revision": "9c925eeb6e50f1c60ce0e3298b8d6bba5f4ac0ae",
+        "source": "https://github.com/aspeternity/seekbell",
+        "image_id": "sha256:431220eef5b133b68ebdc9ff39ee33ad94570dbe0d3a439c5af7fd5d244d83aa",
+        "archive_tag": "seekbell-artifact:sha-9c925eeb6e50f1c60ce0e3298b8d6bba5f4ac0ae-amd64",
+        "config_digest": "sha256:431220eef5b133b68ebdc9ff39ee33ad94570dbe0d3a439c5af7fd5d244d83aa",
+        "archive_sha256": "d5d16c082ff5b1ea1f6960bddb0c3fa4f4dc45e6325a96c448f6cba2ddf0e04c",
+        "loaded_id": "sha256:431220eef5b133b68ebdc9ff39ee33ad94570dbe0d3a439c5af7fd5d244d83aa"
+      },
+      "arm64": {
+        "schema": 1,
+        "architecture": "arm64",
+        "revision": "9c925eeb6e50f1c60ce0e3298b8d6bba5f4ac0ae",
+        "source": "https://github.com/aspeternity/seekbell",
+        "image_id": "sha256:eff7e85767617f0b03a8f8abaebdec93394cb1ad003d4063cff1b252f066ac46",
+        "archive_tag": "seekbell-artifact:sha-9c925eeb6e50f1c60ce0e3298b8d6bba5f4ac0ae-arm64",
+        "config_digest": "sha256:eff7e85767617f0b03a8f8abaebdec93394cb1ad003d4063cff1b252f066ac46",
+        "archive_sha256": "4ad1590429e6e7ec4c7ac8b033b1e36acaf01d891250b3e7f9f38ce57ff5c408",
+        "loaded_id": "sha256:eff7e85767617f0b03a8f8abaebdec93394cb1ad003d4063cff1b252f066ac46"
+      }
+    },
+    "digest": "sha256:abb0a56e6c2b648b49348cb697207d8afd7a53b4517020b14c0a6cddfad8aeb5",
+    "reference": "ghcr.io/aspeternity/seekbell@sha256:abb0a56e6c2b648b49348cb697207d8afd7a53b4517020b14c0a6cddfad8aeb5",
+    "manifests": {
+      "amd64": "sha256:dcd18f346ee369749afe60d36af034bd4ea38da2d7baf3fdebca59ffa24e2b87",
+      "arm64": "sha256:2d99be06571471effa0d8472cfbda85e9c5d075feacaaccb8b43df475f03ec12"
+    }
+  },
+  "package": {
+    "package": "ghcr.io/aspeternity/seekbell",
+    "repository": "aspeternity/seekbell",
+    "repository_visibility": "public",
+    "visibility": "public",
+    "visibility_verified": true,
+    "private_verified": false,
+    "repository_binding": "reported"
+  },
+  "alias": {
+    "revision": "9c925eeb6e50f1c60ce0e3298b8d6bba5f4ac0ae",
+    "tag": "ghcr.io/aspeternity/seekbell:hotlist-20261028",
+    "reference": "ghcr.io/aspeternity/seekbell@sha256:abb0a56e6c2b648b49348cb697207d8afd7a53b4517020b14c0a6cddfad8aeb5",
+    "digest": "sha256:abb0a56e6c2b648b49348cb697207d8afd7a53b4517020b14c0a6cddfad8aeb5",
+    "published": true
+  },
+  "anonymous_verification": {
+    "verified_at": "2026-10-28T15:57:03.872122+00:00",
+    "environment": "SeekBell-Dev rootless Docker; empty temporary Docker config; no login",
+    "reference": "ghcr.io/aspeternity/seekbell@sha256:abb0a56e6c2b648b49348cb697207d8afd7a53b4517020b14c0a6cddfad8aeb5",
+    "tag": "ghcr.io/aspeternity/seekbell:hotlist-20261028",
+    "revision": "9c925eeb6e50f1c60ce0e3298b8d6bba5f4ac0ae",
+    "anonymous_pull": true,
+    "platform": "linux/amd64",
+    "engine_image_id": "sha256:abb0a56e6c2b648b49348cb697207d8afd7a53b4517020b14c0a6cddfad8aeb5",
+    "config_digest": "sha256:431220eef5b133b68ebdc9ff39ee33ad94570dbe0d3a439c5af7fd5d244d83aa",
+    "runtime_config_and_layers_verified": true,
+    "user": "10001:10001",
+    "manifests": {
+      "amd64": "sha256:dcd18f346ee369749afe60d36af034bd4ea38da2d7baf3fdebca59ffa24e2b87",
+      "arm64": "sha256:2d99be06571471effa0d8472cfbda85e9c5d075feacaaccb8b43df475f03ec12"
+    },
+    "index_and_tag_verified": true
+  }
+}

@@ -1,6 +1,6 @@
 # 双架构镜像候选与GHCR流程（M4第五子阶段）
 
-当前供用户实机测试的已发布镜像为ghcr.io/aspeternity/seekbell:ui-restore-6，代码987beda5ea38c01e9969fb2fa684c8f970edeec0，索引sha256:6fd13c6fc1e722b2477405851536526abb9bab6aed3ee2723b36f26897c96f6d。包含Linux DO公开RSS/热榜与HTTP2/请求预算、多站任务及按站版块、匹配诊断和相关界面修复；V2EX及新分周期热榜建议尚未实现。本轮完整CI实际789后端/154浏览器、原生amd64/arm64、发布后容器检查和本机实际匿名拉取均通过，用户Portainer验收待进行。[发布与回执](history/2026-10-25-ui-restore-6发布.md)。[8001对比模板](../deploy/compose.portainer.compare.yaml)仅镜像改为ui-restore-6，原端口/卷保持；8000模板仍保留旧版本不改。7个旧短标签digest均未变。升级含0010–0016，须完整备份原卷及密钥，回退匹配旧schema备份。
+当前已发布镜像ghcr.io/aspeternity/seekbell:hotlist-20261028，代码9c925eeb6e50f1c60ce0e3298b8d6bba5f4ac0ae，索引sha256:abb0a56e6c2b648b49348cb697207d8afd7a53b4517020b14c0a6cddfad8aeb5，支持linux/amd64与linux/arm64。含热榜独立刷新设置/0017迁移、挑战与退避处理、连接测试历史/本次结果隔离。完整CI、两架构原生演练、发布后容器检查及本机实际匿名拉取/配置层核对通过；Portainer用户实机验收待进行。[发布记录及回执](history/2026-10-28-hotlist镜像发布.md)。[8000模板](../deploy/compose.portainer.yaml)及[8001模板](../deploy/compose.portainer.compare.yaml)均已固定新digest，保留各自端口和卷键。升级前完整备份原卷与credentials.key；旧镜像回退须恢复匹配旧schema备份。
 
 本流程不部署服务。`.github/workflows/images.yml`只有`workflow_dispatch`入口；普通push/PR不登录或写GHCR；codex/开发分支的push在完整CI成功后调用同一原生双架构检查，便于合并主分支前验证。新流程默认`publish=false`，分别使用`ubuntu-24.04`和`ubuntu-24.04-arm`原生构建Linux amd64/arm64，不安装QEMU或修改本机Docker。私有仓库使用账户Actions额度，runner/额度是否可用须实际运行确认。
 

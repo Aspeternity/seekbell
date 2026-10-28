@@ -1,9 +1,9 @@
-# Candidate hotlist-20261028; migration 0017. Back up the complete data volume before upgrading.
+# Published hotlist-20261028; migration 0017. Back up the complete data volume before upgrading.
 # Portainer comparison on 8001 (for example seekbell-compare).
 # Reuse the same Stack and volume to upgrade; a new Stack starts with an empty volume.
 services:
   seekbell:
-    image: ghcr.io/aspeternity/seekbell:hotlist-20261028
+    image: ghcr.io/aspeternity/seekbell:hotlist-20261028@sha256:abb0a56e6c2b648b49348cb697207d8afd7a53b4517020b14c0a6cddfad8aeb5
     restart: unless-stopped
     init: true
     ports:

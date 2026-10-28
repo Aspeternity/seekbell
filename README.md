@@ -134,7 +134,7 @@ docker run --rm --name seekbell-dev -p 127.0.0.1:8000:8000 \
   -v seekbell-dev-data:/data seekbell:local
 ```
 
-镜像使用 UID/GID 10001，数据持久化在命名卷；绑定已有宿主目录时需预先配置正确所有权。只运行一个容器实例/一个 Uvicorn worker。Compose与停服加密备份/独立恢复CLI已提供，详见[维护说明](docs/BACKUP_RESTORE.md)。保留原卷的切换/升级回退维护流程见[发布维护](docs/RELEASES.md)，实机部署仍待后续；双架构和PVE验证尚未完成。
+镜像使用 UID/GID 10001，数据持久化在命名卷；绑定已有宿主目录时需预先配置正确所有权。只运行一个容器实例/一个 Uvicorn worker。Compose与停服加密备份/独立恢复CLI已提供，详见[维护说明](docs/BACKUP_RESTORE.md)。保留原卷的切换/升级回退维护流程见[发布维护](docs/RELEASES.md)，实机部署仍待后续；原生双架构镜像验证与回执见[镜像流程](docs/IMAGE_RELEASE.md)，PVE实机验收待用户进行。
 
 `check_container.py`只使用已构建的本地镜像，创建禁用外网的临时容器和数据卷，检查API、构建资源、非root身份、进程锁、健康检查、重启持久化和镜像内离线闭环，结束后删除本次创建的临时资源，不触碰日常数据卷。
 
