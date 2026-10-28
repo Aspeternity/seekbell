@@ -42,6 +42,7 @@ def check(
     allow_missing: bool = False,
     wait: int = 0,
     expected_visibility: str = "private",
+    expected_repository_visibility: str = "private",
 ) -> dict:
     if not re.fullmatch(r"[a-z0-9]+(?:[._-][a-z0-9]+)*/[a-z0-9]+(?:[._-][a-z0-9]+)*", repository):
         raise PackageError("Expected lowercase owner/repository")
@@ -49,14 +50,17 @@ def check(
         raise PackageError("Short-lived GitHub token and wait in 0..60 required")
     if expected_visibility not in {"private", "public"}:
         raise PackageError("Expected visibility must be private or public")
+    if expected_repository_visibility not in {"private", "public"}:
+        raise PackageError("Expected repository visibility must be private or public")
+    source_private = expected_repository_visibility == "private"
     owner, name = repository.split("/")
     repo = api(f"/repos/{repository}", token)
     if (
         not repo
         or repo.get("full_name", "").lower() != repository
-        or repo.get("private") is not True
+        or repo.get("private") is not source_private
     ):
-        raise PackageError("Expected the authorized private repository")
+        raise PackageError(f"Expected the authorized {expected_repository_visibility} repository")
     kind = {"User": "users", "Organization": "orgs"}.get(repo.get("owner", {}).get("type"))
     if kind is None:
         raise PackageError("Unknown repository owner type")
@@ -66,7 +70,11 @@ def check(
         if package is not None or time.monotonic() >= deadline:
             break
         time.sleep(min(2, max(0, deadline - time.monotonic())))
-    result = {"package": f"ghcr.io/{repository}", "repository": repository}
+    result = {
+        "package": f"ghcr.io/{repository}",
+        "repository": repository,
+        "repository_visibility": expected_repository_visibility,
+    }
     if package is None:
         if not allow_missing:
             raise PackageError("Published package metadata is not readable")
@@ -88,9 +96,9 @@ def check(
         if (
             not isinstance(linked, dict)
             or linked.get("full_name", "").lower() != repository
-            or linked.get("private") is not True
+            or linked.get("private") is not source_private
         ):
-            raise PackageError("Reported package repository does not match the private source")
+            raise PackageError("Reported package repository does not match the authorized source")
         binding = "reported"
     if package.get("name") != name or package.get("package_type") != "container":
         raise PackageError("Unexpected package identity")
@@ -107,6 +115,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repository", required=True)
     parser.add_argument("--visibility", choices=("private", "public"), default="private")
+    parser.add_argument("--repository-visibility", choices=("private", "public"), default="private")
     parser.add_argument("--allow-missing", action="store_true")
     parser.add_argument("--wait-seconds", type=int, default=0)
     args = parser.parse_args()
@@ -117,6 +126,7 @@ def main():
             allow_missing=args.allow_missing,
             wait=args.wait_seconds,
             expected_visibility=args.visibility,
+            expected_repository_visibility=args.repository_visibility,
         )
     except PackageError as error:
         raise SystemExit(str(error)) from None

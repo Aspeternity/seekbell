@@ -193,7 +193,7 @@ def test_public_package_still_rejects_a_different_reported_source(monkeypatch):
     package["visibility"] = "public"
     package["repository"]["full_name"] = "other/project"
     respond(monkeypatch, package=package)
-    with pytest.raises(package_tool.PackageError, match="private source"):
+    with pytest.raises(package_tool.PackageError, match="authorized source"):
         package_tool.check("synthetic/seekbell", "synthetic-token", expected_visibility="public")
 
 
@@ -202,4 +202,49 @@ def test_invalid_visibility_policy_is_rejected_before_network_access(monkeypatch
     calls = respond(monkeypatch)
     with pytest.raises(package_tool.PackageError, match="visibility"):
         package_tool.check("synthetic/seekbell", "synthetic-token", expected_visibility=visibility)
+    assert not calls
+
+
+@pytest.mark.parametrize("binding", ["reported", "absent", "null"])
+def test_public_repository_requires_explicit_policy(monkeypatch, binding):
+    repo = {**REPO, "private": False}
+    package = {**PACKAGE, "visibility": "public", "repository": repo}
+    if binding == "absent":
+        package.pop("repository")
+    elif binding == "null":
+        package["repository"] = None
+    respond(monkeypatch, repo=repo, package=package)
+    with pytest.raises(package_tool.PackageError, match="private repository"):
+        package_tool.check("synthetic/seekbell", "synthetic-token", expected_visibility="public")
+    result = package_tool.check(
+        "synthetic/seekbell",
+        "synthetic-token",
+        expected_visibility="public",
+        expected_repository_visibility="public",
+    )
+    assert result["repository_visibility"] == "public"
+    assert result["visibility_verified"] is True
+    assert result["private_verified"] is False
+    assert result["repository_binding"] == ("reported" if binding == "reported" else "not-reported")
+
+
+def test_public_source_policy_rejects_private_linkage(monkeypatch):
+    respond(
+        monkeypatch, repo={**REPO, "private": False}, package={**PACKAGE, "visibility": "public"}
+    )
+    with pytest.raises(package_tool.PackageError, match="authorized source"):
+        package_tool.check(
+            "synthetic/seekbell",
+            "synthetic-token",
+            expected_visibility="public",
+            expected_repository_visibility="public",
+        )
+
+
+def test_unknown_source_visibility_policy_is_rejected_before_network_access(monkeypatch):
+    calls = respond(monkeypatch)
+    with pytest.raises(package_tool.PackageError, match="repository visibility"):
+        package_tool.check(
+            "synthetic/seekbell", "synthetic-token", expected_repository_visibility="internal"
+        )
     assert not calls

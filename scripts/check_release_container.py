@@ -30,9 +30,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("image")
     parser.add_argument("--revision", required=True)
+    parser.add_argument(
+        "--source-image", help="Optional older local image for cross-version rehearsal"
+    )
     args = parser.parse_args()
     project = "seekbell-release-check-" + uuid.uuid4().hex[:12]
-    base_image = release.image(args.image)
+    base_image = release.image(args.source_image or args.image)
     tags = [project + ":good", project + ":bad", project + ":startup-bad"]
     candidates = {}
     source_volume = None
@@ -80,7 +83,7 @@ def main():
                 migration = directory / "0010_release_fixture.py"
                 migration.write_text(
                     "from alembic import op\nrevision='0010_release_fixture'\n"
-                    "down_revision='0016_site_categories'\n"
+                    "down_revision='0017_hotlist_settings'\n"
                     'def upgrade():\n    op.execute("UPDATE workspace_preferences '
                     "SET name='Synthetic migration'\")\n"
                     + ("    raise RuntimeError('Synthetic migration failure')\n" if fails else "")

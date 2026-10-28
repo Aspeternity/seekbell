@@ -11,9 +11,8 @@ import httpx
 from defusedxml import ElementTree
 from defusedxml.common import DefusedXmlException
 
-from seekbell.collectors.http import public_response
+from seekbell.collectors.http import public_response, source_failure
 from seekbell.domain.errors import SourceFailure
-from seekbell.domain.http import retry_after_seconds
 from seekbell.domain.posts import Diagnostic, ParsedFeed, SourceEntry
 
 MAX_RESPONSE_BYTES = 1024 * 1024
@@ -151,18 +150,9 @@ class RssCollector:
                         "User-Agent": "SeekBell/0.1",
                     },
                 ) as response:
-                    if response.status_code != 200:
-                        raise SourceFailure(
-                            (
-                                "access_challenge"
-                                if response.status_code == 403
-                                and response.headers.get("cf-mitigated") == "challenge"
-                                else f"http_{response.status_code}"
-                            ),
-                            retry_after=retry_after_seconds(
-                                response.headers.get("retry-after"), time.time()
-                            ),
-                        )
+                    failure = source_failure(response, time.time())
+                    if failure is not None:
+                        raise failure
                     content_type = response.headers.get("content-type", "").split(";", 1)[0]
                     if content_type.lower() not in (
                         "application/rss+xml",

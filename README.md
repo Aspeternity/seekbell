@@ -39,6 +39,12 @@ pnpm --dir frontend build
 
 Python 测试使用临时 SQLite 和进程内 HTTP 客户端，并拒绝测试进程的外网连接。所有浏览器套件直接运行同一frontend/dist正式构建；test:ui覆盖通用交互，其余按API/历史/备份/HTTPS等专项使用独立临时服务。测试夹具与合成发送器不构成额外产品版本。普通CI执行这些检查及迁移命令、镜像构建；独立手动双架构候选流程默认不发布，显式启用后可写GHCR，详见[镜像流程](docs/IMAGE_RELEASE.md)。尚无远程部署或真实发送步骤。远程 Actions 的执行结果和对应提交见 [PROJECT_STATE](docs/PROJECT_STATE.md)。
 
+## 社区热榜刷新设置
+
+在“监控网站 → 对应网站配置 → 社区热榜”选择推荐或自定义间隔；各站只显示支持的榜单，热榜设置与新帖采集独立。NodeSeek推荐实时10/每日30/每周60分钟，Linux DO热门15/每日30/每周60分钟。只在查看时按需更新，来源限流时继续显示旧榜及重试计划。升级含0017迁移，先备份原卷与凭据密钥，回退使用匹配旧schema的备份。
+
+合成检查：`uv run --frozen pytest tests/test_hotlist_settings.py tests/test_hotlists.py tests/test_linuxdo.py tests/test_linuxdo_runtime.py -q`；生产构建后运行`pnpm --dir frontend test:hotlist`和`pnpm --dir frontend test:linuxdo`。完整证据与运行版本见[项目状态](docs/PROJECT_STATE.md)。
+
 ## M1 离线闭环演示
 
 在独立开发WSL内执行：
@@ -145,7 +151,7 @@ uv run --frozen python -m seekbell.services.backup_demo
 
 每次从 [AGENTS.md](AGENTS.md) 和 [PROJECT_STATE](docs/PROJECT_STATE.md) 进入，再按当前阅读清单补读。阶段见 [ROADMAP](docs/ROADMAP.md)，验收边界见 [ACCEPTANCE](docs/ACCEPTANCE.md)，外部待办见 [DECISIONS](docs/DECISIONS.md)。首版只支持官方 RSS，不扩展全文、回帖、自定义网站或 TG 频道采集。
 
-远程仓库为私有的 [Aspeternity/seekbell](https://github.com/Aspeternity/seekbell)。镜像发布、SSH、真实通知目标和许可证尚未提供；相关动作按明确授权执行。原始规格文件保存在初始 Git 提交中。
+远程仓库为公开的 [Aspeternity/seekbell](https://github.com/Aspeternity/seekbell)。镜像发布流程见[镜像说明](docs/IMAGE_RELEASE.md)；SSH、真实通知目标和许可证按实际授权处理；相关动作按明确授权执行。原始规格文件保存在初始 Git 提交中。
 
 提交身份使用GitHub noreply地址。首次克隆后执行`git config --local core.hooksPath .githooks`启用提交/推送前邮箱检查；CI也检查全部提交身份及Git历史/索引中的非示例邮箱，失败日志不输出被拒地址。真实通知凭据只保存在运行配置，不写入Git。
 

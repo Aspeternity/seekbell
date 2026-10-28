@@ -5,7 +5,7 @@ import Icon from './Icon.vue'
 import ReadRegion from './ReadRegion.vue'
 import { request, formatTime } from '../store'
 import { useRemote } from '../history'
-import { cachedRead, fetchRead, readIsFresh, readSessionRevision } from '../readCache'
+import { readSessionRevision } from '../readCache'
 import type { HotlistData, OverviewPreferences } from '../overviewPreferences'
 const emit = defineEmits<{ navigate: [path: string] }>()
 const catalog = useRemote(
@@ -67,34 +67,16 @@ const items = computed(() => snapshot.value?.items.slice(0, expanded.value ? 10 
 function schedule() {
   clearTimeout(timer)
   const data = snapshot.value
-  if (!active || !source.value || document.hidden || !data) return
+  if (!active || !source.value || document.hidden || !data || remote.loading.value) return
   timer = setTimeout(
     () => remote.reload(),
-    Math.max(1000, Math.min(600000, data.next_attempt_at * 1000 - Date.now() + 100)),
+    remote.error.value
+      ? 15000
+      : Math.max(1000, Math.min(86400000, data.next_attempt_at * 1000 - Date.now() + 100)),
   )
 }
-watch(snapshot, schedule)
-// Linux DO shares its budget with monitoring; only load its selected period.
-watch([source, snapshot], () => {
-  const current = source.value
-  if (
-    !active ||
-    document.hidden ||
-    !current ||
-    current.website_id === 'linuxdo' ||
-    !snapshot.value ||
-    snapshot.value.status !== 'ready'
-  )
-    return
-  // Warm only this visible site's other periods, sharing any selected-period request.
-  for (const value of current.periods) {
-    if (value.id === period.value) continue
-    const key = cacheKey(current.website_id, value.id)
-    const cached = cachedRead<HotlistData>(key)
-    if (cached && readIsFresh(key) && cached.next_attempt_at * 1000 > Date.now()) continue
-    void fetchRead(key, () => read(current.website_id, value.id)).catch(() => {})
-  }
-})
+// Short status reads stay within SeekBell; the server owns upstream cadence.
+watch([snapshot, () => remote.error.value], schedule)
 function visibility() {
   if (!document.hidden && source.value) remote.reload()
   else clearTimeout(timer)
@@ -250,7 +232,11 @@ onBeforeUnmount(() => {
             @retry="remote.reload"
           >
             <template v-if="snapshot">
-              <p v-if="snapshot.refreshing" class="small-note hotlist-updating" role="status">
+              <p
+                v-if="snapshot.refreshing && !remote.error.value"
+                class="small-note hotlist-updating"
+                role="status"
+              >
                 正在后台更新，当前显示上次榜单。
               </p>
               <p
@@ -258,7 +244,18 @@ onBeforeUnmount(() => {
                 class="small-note hotlist-updating"
                 role="status"
               >
-                正在等待同站请求间隔，稍后自动重试。
+                <span>{{
+                  snapshot.error_code === 'collection_priority'
+                    ? '优先完成新帖采集，随后更新榜单。'
+                    : snapshot.error_code === 'access_challenge'
+                      ? '本站请求遇到 Cloudflare 验证，本次榜单更新已延后。'
+                      : snapshot.error_code === 'http_429'
+                        ? '本站请求受限（429），本次榜单更新已延后。'
+                        : snapshot.error_code === 'http_403'
+                          ? '本站来源拒绝访问，本次榜单更新已延后。'
+                          : '正在等待同站请求间隔，稍后自动重试。'
+                }}</span>
+                <span>预计 {{ stamp(snapshot.next_attempt_at) }} 后重试。</span>
               </p>
               <p v-else-if="snapshot.status !== 'ready'" class="info-note" role="status">
                 {{
@@ -266,11 +263,18 @@ onBeforeUnmount(() => {
                     ? '更新失败，当前显示上次榜单。'
                     : '暂时无法获取榜单，请稍后重试。'
                 }}
-                <span v-if="['access_challenge', 'http_403'].includes(snapshot.error_code || '')">
-                  来源拒绝自动访问（403），正在退避；可在网站配置中测试连接。
+                <span v-if="snapshot.error_code === 'access_challenge'">
+                  来源要求 Cloudflare 验证，暂时无法自动更新，稍后重试。
+                </span>
+                <span v-else-if="snapshot.error_code === 'http_403'">
+                  来源拒绝自动访问（403），正在退避。
                 </span>
                 <span v-else-if="snapshot.error_code === 'http_429'"
-                  >来源请求受限，正在等待允许重试。</span
+                  >来源请求受限（429），正在等待允许重试。</span
+                >
+                <span>预计 {{ stamp(snapshot.next_attempt_at) }} 后重试。</span>
+                <span v-if="snapshot.fetched_at"
+                  >上次成功获取：{{ stamp(snapshot.fetched_at) }}。</span
                 >
                 <button class="text-link" :disabled="remote.loading.value" @click="remote.reload">
                   重试

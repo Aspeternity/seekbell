@@ -271,7 +271,7 @@ def test_persisted_hotlist_is_available_after_restart_and_expired_refresh_does_n
         try:
             assert (await restored.get(website_id, period))["items"] == original["items"]
             assert len(calls) == 1
-            now[0] += 601
+            now[0] += 1801 if website_id == "nodeseek" else 901
             cached = await asyncio.wait_for(restored.get(website_id, period), 0.5)
             assert cached["refreshing"] and cached["items"] == original["items"]
             await started.wait()

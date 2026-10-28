@@ -63,7 +63,7 @@ def test_linuxdo_monitoring_failure_cools_all_hotlists_probes_and_survives_resta
         try:
             for period in ("hot", "daily", "weekly"):
                 data = await service.get("linuxdo", period)
-                assert data["status"] == "unavailable"
+                assert data["status"] == "waiting"
                 assert data["next_attempt_at"] >= 2900
             assert len(calls) == 1
             with pytest.raises(SourceDeferred):

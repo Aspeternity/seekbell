@@ -94,8 +94,15 @@ class HotlistSource:
     provider_url: str
     endpoints: dict[str, str]
     parse: Callable[[bytes, float], dict]
+    refresh_intervals: dict[str, int]
     default_period: str = "realtime"
     format: str = "json"
+
+    def recommended_interval(self, period):
+        return self.refresh_intervals[period]
+
+    def minimum_interval(self, period):
+        return {"daily": 900, "weekly": 1800}.get(period, 300)
 
     @property
     def periods(self):
@@ -126,6 +133,7 @@ HOTLIST_SOURCES = {
             for period, filename in (("realtime", "hot"), ("daily", "daily"), ("weekly", "weekly"))
         },
         parse=parse_nodeseek_snapshot,
+        refresh_intervals={"realtime": 600, "daily": 1800, "weekly": 3600},
     ),
     "linuxdo": HotlistSource(
         "linuxdo",
@@ -139,6 +147,7 @@ HOTLIST_SOURCES = {
             "weekly": "https://linux.do/top.rss?period=weekly",
         },
         parse=parse_linuxdo_snapshot,
+        refresh_intervals={"hot": 900, "daily": 1800, "weekly": 3600},
         default_period="hot",
         format="rss",
     ),

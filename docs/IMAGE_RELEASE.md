@@ -26,9 +26,9 @@
 
 开关检查失败会直接报错，不伪装成发布成功。未配置环境审核门禁；私有仓库的environment/reviewer功能受GitHub账户计划限制，不能假定存在自动人工审批。上述显式开关、手动选择和默认分支限制用于减少误操作，不能替代仓库写权限管理与实际授权；不配置/提升账户计划或权限来绕过限制。
 
-发布前preflight仅有packages读取权限；只有publish job获得`packages: write`，用短期`GITHUB_TOKEN`登录GHCR，不要求长期PAT，不向build job提供registry写权限。包名固定为`ghcr.io/<小写owner>/<小写repo>`，不接受外部registry/命名空间输入。用户已明确选择公开镜像、保留私有源码仓库：三个元数据检查均显式传`--visibility public`，写前后核对私有源仓库和既有公开包；包不可读/缺失、私有/internal/未知可见性均停止，不尝试先创建默认私有包。工作流只校验、不改变可见性，首次新包须操作者另行准备并公开。
+发布前preflight仅有packages读取权限；只有publish job获得`packages: write`，用短期`GITHUB_TOKEN`登录GHCR，不要求长期PAT，不向build job提供registry写权限。包名固定为`ghcr.io/<小写owner>/<小写repo>`，不接受外部registry/命名空间输入。用户已于2026-10-28将源码仓库公开并授权本轮发布：三个元数据检查均显式传`--visibility public --repository-visibility public`，写前后核对公开源仓库和既有公开包；包不可读/缺失、私有/internal/未知可见性均停止，不尝试先创建默认私有包。工作流只校验、不改变可见性，首次新包须操作者另行准备并公开。
 
-GitHub包repository字段可选/可空，缺失记not-reported；报告时必须匹配私有源仓库。镜像source/config/层仍独立核对已测归档。回执记录实际visibility、visibility_verified及private_verified；公开包不会记成private_verified=true。工具默认保留private模式用于历史/其他显式调用，本仓工作流固定public，不提供手动降级参数。工作流不公开源码、不创建GitHub Release、不自动更新latest/语义标签，也不自动部署。可在已授权的手动发布中显式填写可选tag（例如ui-fix-1）；仅在完整检查、双架构索引及发布后容器验证通过后，为同一固定索引添加短候选标签，并重读核对digest/两个平台，保存alias.json。空tag不添加标签，latest被拒绝；标签仍可被有写权限者改写，长期身份以digest回执为准。
+GitHub包repository字段可选/可空，缺失记not-reported；报告时必须匹配明确选择的源仓库及其可见性。镜像source/config/层仍独立核对已测归档。回执记录实际visibility、visibility_verified及private_verified；公开包不会记成private_verified=true。工具对源仓库与包分别默认private模式用于历史/其他显式调用，本仓工作流均固定public，不提供手动降级参数。工作流不公开源码、不创建GitHub Release、不自动更新latest/语义标签，也不自动部署。可在已授权的手动发布中显式填写可选tag（例如ui-fix-1）；仅在完整检查、双架构索引及发布后容器验证通过后，为同一固定索引添加短候选标签，并重读核对digest/两个平台，保存alias.json。空tag不添加标签，latest被拒绝；标签仍可被有写权限者改写，长期身份以digest回执为准。
 
 ## 发布行为与失败处理
 

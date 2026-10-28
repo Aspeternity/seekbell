@@ -93,7 +93,11 @@ def create_app(
                 app.state.hotlists = (
                     hotlist_factory()
                     if hotlist_factory
-                    else HotlistService(engine=engine, request_budget=request_budget)
+                    else HotlistService(
+                        engine=engine,
+                        request_budget=request_budget,
+                        collection_active=lambda: runtime.active,
+                    )
                 )
                 try:
                     app.state.target_testing = ConfiguredTargetTesting(engine, registry.notifiers)

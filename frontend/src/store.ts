@@ -8,6 +8,7 @@ import type { Task, Sample } from './model'
 import { emptyTask } from './model'
 import { createWebsite, websiteDefinition } from './websites'
 import type { InstalledWebsite } from './websites'
+import type { HotlistSettingsInput } from './hotlistSettings'
 import type { ConnectionCheck, WorkspaceState, Target } from './shared'
 import { channelMeta, clone, newTarget } from './shared'
 export * from './shared'
@@ -242,8 +243,13 @@ export async function saveWebsite(
   website: InstalledWebsite,
   interval: number,
   enabled = website.enabled,
+  hotlist?: HotlistSettingsInput,
 ) {
-  await request('manage/websites/' + website.id, 'PUT', { interval, enabled })
+  await request('manage/websites/' + website.id, 'PUT', {
+    interval,
+    enabled,
+    ...(hotlist ? { hotlist } : {}),
+  })
   await refresh()
   notify(
     runtime.active

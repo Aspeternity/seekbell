@@ -15,6 +15,8 @@ const props = withDefaults(
 )
 const emit = defineEmits<{ 'update:modelValue': [value: T]; change: [value: T] }>()
 const { open, trigger, panel, close } = usePopup()
+const popupTarget = ref<HTMLElement>()
+let dialogLayer: HTMLElement | undefined
 const id = useId(),
   active = ref(0),
   width = ref(0)
@@ -46,6 +48,18 @@ function focusOption(index: number, step = 1) {
 }
 async function show(last = false) {
   if (props.disabled || !props.options.length) return
+  // Native modal dialogs make body portals inert; keep the menu in the
+  // trigger's dialog so pointer and keyboard interaction remain available.
+  const dialog = trigger.value?.closest('dialog')
+  if (dialog) {
+    if (!dialogLayer || dialogLayer.parentElement !== dialog) {
+      dialogLayer?.remove()
+      dialogLayer = document.createElement('div')
+      dialogLayer.className = 'app-select-dialog-layer'
+      dialog.appendChild(dialogLayer)
+    }
+    popupTarget.value = dialogLayer
+  } else popupTarget.value = undefined
   open.value = true
   await nextTick()
   const index = props.options.findIndex((item) => item.value === props.modelValue)
@@ -116,11 +130,15 @@ onMounted(() => {
     observer.observe(trigger.value)
   }
 })
-onBeforeUnmount(() => observer.disconnect())
+onBeforeUnmount(() => {
+  observer.disconnect()
+  dialogLayer?.remove()
+})
 </script>
 <template>
   <NPopover
     :show="open"
+    :to="popupTarget"
     trigger="manual"
     placement="bottom-start"
     :width="Math.max(width, 160)"
@@ -223,6 +241,17 @@ onBeforeUnmount(() => observer.disconnect())
 }
 .app-select-popover {
   zoom: var(--workspace-scale, 1);
+}
+/* Positioning uses viewport pixels. Cancel the dialog's inherited workspace
+   zoom here, then apply the reading scale once on the popover above. */
+.app-select-dialog-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  zoom: calc(1 / var(--workspace-scale, 1));
 }
 .app-select-menu {
   position: relative;

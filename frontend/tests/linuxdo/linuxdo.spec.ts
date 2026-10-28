@@ -52,7 +52,7 @@ test.beforeEach(async ({ page }) => {
     headers: headers(),
     data: { website_id: 'linuxdo', period: 'hot', revision: prefs.selection.revision },
   })
-  expect(reset.ok()).toBeTruthy()
+  expect(reset.status(), await reset.text()).toBe(200)
   expect(
     (
       await page.request.put('/api/manage/hotlists/selection', {
@@ -75,6 +75,8 @@ test.beforeEach(async ({ page }) => {
 })
 
 test.afterEach(async ({ page }) => {
+  // Drain queued selection writes before the next test resets shared preferences.
+  await page.waitForLoadState('networkidle')
   expect(errors.get(page)).toEqual([])
 })
 
@@ -231,7 +233,7 @@ test('Linux DO access errors are explicit and do not block NodeSeek', async ({ p
   })
   const hotlist = page.getByRole('region', { name: '社区热榜', exact: true })
   await hotlist.getByRole('button', { name: 'LINUX DO', exact: true }).click()
-  await expect(hotlist.getByText(/来源拒绝自动访问（403）/)).toBeVisible()
+  await expect(hotlist.getByText(/来源要求 Cloudflare 验证/)).toBeVisible()
   await expect(hotlist.locator('.hotlist-row')).toHaveCount(0)
   await hotlist.getByRole('button', { name: 'NodeSeek', exact: true }).click()
   await expect(hotlist.locator('.hotlist-row')).toHaveCount(5)
@@ -274,6 +276,7 @@ test('Linux DO connection checks explain limited early retry and retain server c
   await config.getByRole('button', { name: '测试连接', exact: true }).click()
   await page.getByRole('button', { name: '确认测试连接', exact: true }).click()
   await expect(config.getByRole('alert')).toContainText('连接测试每 60 秒最多一次')
+  await expect(config.locator('.match-result.yes')).toHaveCount(0)
   expect(attempts).toBe(2)
 })
 
@@ -428,4 +431,195 @@ test('existing task can add and remove sites in place while retaining its rule a
     })
     .toEqual(['linuxdo'])
   await noOverflow(page)
+})
+
+test('connection history is collapsed, dated and never treated as a current check', async ({
+  page,
+}, info) => {
+  let posts = 0
+  const old = Date.now() / 1000 - 2 * 86400
+  await page.route('**/api/manage/websites/nodeseek/connection-test', (route) => {
+    if (route.request().method() === 'POST') posts += 1
+    return route.fulfill({
+      json: {
+        started_at: old,
+        finished_at: old + 1,
+        next_attempt_at: old + 3,
+        status: 'success',
+        code: null,
+        item_count: 20,
+      },
+    })
+  })
+  await page.goto('/#/websites')
+  const open = () => page.getByRole('button', { name: '配置 NodeSeek', exact: true }).click()
+  await open()
+  const panel = page.locator('.website-drawer')
+  const history = panel.locator('.connection-history')
+  await expect(history.locator('summary')).toContainText('上次测试 · 成功')
+  await expect(history).not.toHaveAttribute('open', '')
+  await expect(panel.locator('.match-result.yes')).toHaveCount(0)
+  await expect(panel.getByText('本次尚未测试', { exact: false })).toBeVisible()
+  await expect(panel.locator('.connection-cooldown')).toHaveCount(0)
+  await history.locator('summary').click()
+  await expect(history).toContainText('有效帖子 20 条')
+  await expect(history).toContainText('仅代表当时的检查结果')
+  await page.screenshot({ path: info.outputPath('connection-history.png'), fullPage: true })
+  await panel.press('Escape')
+  await open()
+  await expect(history.locator('summary')).toContainText('上次测试 · 成功')
+  await expect(history).not.toHaveAttribute('open', '')
+  await panel.getByRole('button', { name: '测试连接', exact: true }).click()
+  await page
+    .getByRole('dialog', { name: '测试 NodeSeek 官方 RSS 连接？' })
+    .getByRole('button', { name: '取消', exact: true })
+    .click()
+  expect(posts).toBe(0)
+  await expect(panel.locator('.match-result.yes')).toHaveCount(0)
+})
+
+test('new checks replace old success and HTTP errors cannot leave a green result', async ({
+  page,
+}) => {
+  await page.clock.install()
+  const now = Date.now() / 1000
+  let attempts = 0
+  let release!: () => void
+  const response = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  await page.route('**/api/manage/websites/linuxdo/connection-test', async (route) => {
+    if (route.request().method() !== 'POST')
+      return route.fulfill({
+        json: {
+          started_at: now - 86400,
+          finished_at: now - 86400,
+          next_attempt_at: now - 86340,
+          status: 'success',
+          code: null,
+          item_count: 20,
+        },
+      })
+    attempts += 1
+    if (attempts === 1)
+      return route.fulfill({
+        json: {
+          started_at: now,
+          finished_at: now,
+          next_attempt_at: now + 60,
+          status: 'success',
+          code: null,
+          item_count: 1,
+        },
+      })
+    await response
+    return route.fulfill({
+      status: 429,
+      headers: { 'Retry-After': '60' },
+      json: { detail: '连接测试每 60 秒最多一次；约 60 秒后可再次测试。' },
+    })
+  })
+  await page.goto('/#/websites')
+  await page.getByRole('button', { name: '配置 LINUX DO', exact: true }).click()
+  const panel = page.locator('.website-drawer')
+  await expect(panel.locator('.connection-history')).toBeVisible()
+  const check = async () => {
+    await panel.getByRole('button', { name: '测试连接', exact: true }).click()
+    await page.getByRole('button', { name: '确认测试连接', exact: true }).click()
+  }
+  await check()
+  await expect(panel.locator('.match-result.yes')).toContainText('有效帖子 1 条')
+  await expect(panel.locator('.connection-cooldown')).toBeVisible()
+  await check()
+  try {
+    await expect(panel.getByRole('button', { name: '测试中…', exact: true })).toBeDisabled()
+    await expect(panel.getByText('正在检查 RSS 连接与解析…', { exact: true })).toBeVisible()
+    await expect(panel.locator('.match-result')).toHaveCount(0)
+  } finally {
+    release()
+  }
+  await expect(panel.getByRole('alert')).toContainText('连接测试每 60 秒最多一次')
+  await expect(panel.locator('.match-result.yes')).toHaveCount(0)
+  await expect(panel.locator('.connection-history')).not.toHaveAttribute('open', '')
+  await page.clock.fastForward(61_000)
+  await expect(panel.locator('.connection-cooldown')).toHaveCount(0)
+  expect(attempts).toBe(2)
+})
+
+test('late history and a check completed after closing cannot overwrite a new panel', async ({
+  page,
+}) => {
+  const now = Date.now() / 1000
+  let reads = 0
+  let posts = 0
+  let releaseHistory!: () => void
+  let releasePost!: () => void
+  const historyResponse = new Promise<void>((resolve) => {
+    releaseHistory = resolve
+  })
+  const postResponse = new Promise<void>((resolve) => {
+    releasePost = resolve
+  })
+  await page.route('**/api/manage/websites/nodeseek/connection-test', async (route) => {
+    if (route.request().method() === 'GET') {
+      reads += 1
+      if (reads === 1) await historyResponse
+      return route.fulfill({
+        json: {
+          started_at: now - 86400,
+          finished_at: now - 86400,
+          next_attempt_at: now - 86398,
+          status: 'failure',
+          code: 'http_403',
+          item_count: null,
+        },
+      })
+    }
+    posts += 1
+    if (posts === 2) await postResponse
+    return route.fulfill({
+      json: {
+        started_at: now,
+        finished_at: now,
+        next_attempt_at: now + 2,
+        status: 'success',
+        code: null,
+        item_count: 1,
+      },
+    })
+  })
+  await page.goto('/#/websites')
+  const open = () => page.getByRole('button', { name: '配置 NodeSeek', exact: true }).click()
+  const panel = page.locator('.website-drawer')
+  const check = async () => {
+    await panel.getByRole('button', { name: '测试连接', exact: true }).click()
+    await page.getByRole('button', { name: '确认测试连接', exact: true }).click()
+  }
+  await open()
+  await expect.poll(() => reads).toBe(1)
+  await check()
+  await expect(panel.locator('.match-result.yes')).toBeVisible()
+  const historyArrived = page.waitForResponse(
+    (res) => res.url().endsWith('/nodeseek/connection-test') && res.request().method() === 'GET',
+  )
+  releaseHistory()
+  await historyArrived
+  await expect(panel.locator('.match-result.yes')).toBeVisible()
+  await expect(panel.locator('.connection-history')).toHaveCount(0)
+  await check()
+  await expect(panel.getByRole('button', { name: '测试中…', exact: true })).toBeDisabled()
+  await panel.press('Escape')
+  await open()
+  await expect(panel.locator('.connection-history summary')).toContainText('上次测试 · 失败')
+  const postArrived = page.waitForResponse(
+    (res) => res.url().endsWith('/nodeseek/connection-test') && res.request().method() === 'POST',
+  )
+  releasePost()
+  await postArrived
+  await expect(panel.locator('.match-result.yes')).toHaveCount(0)
+  await expect(panel.getByRole('button', { name: '测试连接', exact: true })).toBeEnabled()
+  await panel.locator('.connection-history summary').click()
+  await expect(panel.locator('.connection-history')).toContainText('当时拒绝访问（403）')
+  await expect(panel.locator('.connection-history')).not.toContainText('正在退避')
+  expect(posts).toBe(2)
 })

@@ -1,3 +1,4 @@
+import type { HotlistConfiguration } from './hotlistSettings'
 export interface WebsiteDefinition {
   id: string
   name: string
@@ -13,6 +14,7 @@ export interface WebsiteDefinition {
   authorFilter: boolean
 }
 export interface InstalledWebsite {
+  hotlist?: HotlistConfiguration | null
   categoryOptions: { value: string; label: string }[]
   id: string
   adapterId: string
