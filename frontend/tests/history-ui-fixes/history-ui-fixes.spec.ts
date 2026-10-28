@@ -267,6 +267,11 @@ test('notification counts are immediate, shared across tabs and retained during 
   await expect(deliveries).toHaveText('')
   await expect(nav).not.toContainText('—')
   await nav.getByRole('button', { name: /^投递记录/ }).click()
+  // Keep the first count request pending until the async tab transition commits.
+  await expect(nav.getByRole('button', { name: /^投递记录/ })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
   expect(started).toBe(1)
   waiting = undefined
   initial.release()
