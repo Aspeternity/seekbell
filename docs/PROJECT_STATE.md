@@ -1,25 +1,27 @@
 # 当前状态
 
-更新时间：2026-10-28（Asia/Shanghai）。阶段：hotlist-20261028已公开发布，Compose固定digest交付；Portainer实机测试由用户进行，尚未用户验收。
+更新时间：2026-10-29（Asia/Shanghai）。阶段：公开仓库治理与版本镜像流程调整中；Portainer实机验收仍待用户反馈。
 
-## 发布版本与证据
+## 工作目录与基准
 
-[PR #3](https://github.com/Aspeternity/seekbell/pull/3)已合并main，发布代码9c925eeb6e50f1c60ce0e3298b8d6bba5f4ac0ae，后续仅发布文档/Compose元数据。镜像ghcr.io/aspeternity/seekbell:hotlist-20261028，索引sha256:abb0a56e6c2b648b49348cb697207d8afd7a53b4517020b14c0a6cddfad8aeb5，linux/amd64和linux/arm64。
+唯一开发环境SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe执行。起点main 6a9f595，工作区原干净；当前分支codex/public-repository-release。应用发布代码9c925ee未改，本轮仅调整GitHub治理、CI/发布脚本、测试及文档。D盘交接副本过时，不在该处开发。
 
-[最终发布运行40717692197](https://github.com/Aspeternity/seekbell/actions/runs/40717692197)完整基线、原生双架构与发布后固定digest禁外网容器检查全过。源码public、包public，回执及两平台manifest/配置digest见[发布记录](history/2026-10-28-hotlist镜像发布.md)及[JSON回执](history/2026-10-28-hotlist发布回执.json)。本机空Docker配置实际匿名拉取amd64，核对短标签/索引/两平台/版本/UID与配置和层指纹通过。私有原始产物位于/home/dev/.local/state/seekbell/releases/hotlist-20261028。临时发布变量已删除恢复原先缺失。
+## 已生效的公开设置
 
-## 改动与限制
+仓库public。main ruleset 26056251：必须PR、baseline检查且同步main、讨论解决、禁止删除/强推；单维护者暂不要求第二人批准，无绕过名单。只允许squash，合并后删分支、允许更新分支；已设置简介与topics。开启secret scanning/推送保护、Dependabot告警/安全修复和私密漏洞报告。Actions默认只读、不允许批准PR，外部贡献者运行均需审核。配置证据将归档到2026-10-29公开仓库治理记录。
 
-热榜独立刷新设置/0017迁移、采集优先与共享退避、Cloudflare挑战处理、选择框及连接测试历史/本次结果隔离已发布。V2EX仅方案文档，未开发。历史UI和Linux DO两处测试等待竞态修正，最终main全流程通过；过程失败及排除路线见[准备归档](history/2026-10-28-镜像发布准备.md)。首次本机image ID误当配置digest的断言已纠正，平台配置/层独立核对通过。
+## 镜像与限制
 
-此前Linux DO日榜429/Cloudflare限制未证明恢复，自动检查不等于实源持续可用或真实通知验收。本轮未部署任何本机/远端实例，未主动真实试发。
+现有公开hotlist-20261028双架构索引sha256:abb0a56e6c2b648b49348cb697207d8afd7a53b4517020b14c0a6cddfad8aeb5；现有Compose继续固定它。历史SHA/run/架构标签来自候选流程，旧流程明确禁止latest；远端尚无Git版本标签或Release。新流程正在加入发布Release后校验版本/主分支归属、完整CI/原生双架构/发布后检查，再给同一索引添加版本号及受控latest。预发布不移动latest，同版本不同digest拒绝覆盖。尚未真实执行新版发布。
 
-## 环境与授权
+## 未提交与验证
 
-唯一SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe执行。本地main。用户本轮明确授权推送/PR合并/GHCR发布/Compose交付，均已执行；不产生持续发布或代实机部署授权。无多代理，不改变旧Ubuntu/D盘、全局WSL或原容器。8001本机仍记录a0e2b6f/schema0017，本轮未动；镜像/原卷/完整17备份细节见准备归档及2026-10-25连接测试状态修正/热榜本机更新，私有runtime保留。
+未提交路径：.github/workflows/ci.yml、images.yml、dependabot/PR/Issue模板、scripts/release_images.py、tests/test_release_images.py、CONTRIBUTING.md、SECURITY.md和相关发布/决策/状态文档；用途是公开治理与标准版本发布。新增71项发布脚本/版本门禁测试、Ruff及actionlint通过；新版脚本实际匿名读取现有索引一致，尚未推送或合并。许可证按用户2026-10-29回复暂不决定。
 
 ## 下一步与读取
 
-用户在原Portainer Stack更新deploy/compose.portainer.compare.yaml（8001）或compose.portainer.yaml（8000），保留名称、端口和实际数据卷；自定义配置仅替换image更稳妥。模板固定digest并通过Compose配置检查。升级前完整备份原卷及credentials.key；ui-restore-6的0016升级0017后不能直接用旧镜像读新库，回退须旧镜像配匹配schema备份。
+完成脚本安全测试与工作流静态检查，记录设置回读，再推送PR执行完整CI；合并与首个版本实际发布按本次具体授权处理。当前pyproject仍0.1.0.dev0，创建正式v0.1.0前须有明确版本提交并更新锁文件。只读本轮CI/镜像脚本、IMAGE_RELEASE及PUBLIC_REPOSITORY；部署维护查RELEASES。
 
-读取清单：本轮发布记录/JSON、IMAGE_RELEASE、RELEASES及deploy两份模板。最终提交仅发布资料，不改变镜像已验证的应用代码；用户实机结果待反馈。
+## 授权与保留事项
+
+用户本轮要求按公开GitHub标准调整设置并解决镜像命名，授权仓库设置和相关实现。无代用户实机部署、真实论坛/通知发送或旧Ubuntu清理授权，不组织多代理。历史发布、8001实例/原卷/完整备份及来源429限制见[上一状态归档](history/2026-10-28-公开配置前状态.md)及其链接；本轮不改变运行实例。

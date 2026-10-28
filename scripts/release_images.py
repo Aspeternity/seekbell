@@ -6,6 +6,9 @@ import json
 import re
 import subprocess
 import tarfile
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 ARCHITECTURES = ("amd64", "arm64")
@@ -274,6 +277,89 @@ def alias(report: dict, revision: str, repository: str, tag: str, *, execute: bo
     return result
 
 
+def version_tags(version: str, *, latest: bool = False) -> list[str]:
+    number = r"(?:0|[1-9][0-9]*)"
+    match = re.fullmatch(
+        rf"v({number}\.{number}\.{number})(-(?:alpha|beta|rc)\.[1-9][0-9]*)?", version
+    )
+    if match is None:
+        raise ReleaseError("Expected vX.Y.Z or vX.Y.Z-alpha/beta/rc.N")
+    tags = [version[1:]]
+    if latest:
+        if match[2]:
+            raise ReleaseError("A prerelease cannot update latest")
+        tags.append("latest")
+    return tags
+
+
+def public_digest(image: str, tag: str) -> str | None:
+    """Distinguish a missing public tag from a registry/authentication failure."""
+    repository = image.removeprefix("ghcr.io/")
+    if image != "ghcr.io/" + repository or not REPOSITORY.fullmatch(repository):
+        raise ReleaseError("Expected a public GHCR repository")
+    query = urllib.parse.urlencode({"service": "ghcr.io", "scope": f"repository:{repository}:pull"})
+    try:
+        with urllib.request.urlopen("https://ghcr.io/token?" + query, timeout=30) as response:
+            token = json.load(response)["token"]
+        request = urllib.request.Request(
+            f"https://ghcr.io/v2/{repository}/manifests/{tag}",
+            headers={
+                "Authorization": "Bearer " + token,
+                "Accept": ", ".join(sorted(INDEX_TYPES | MANIFEST_TYPES)),
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                digest = response.headers.get("Docker-Content-Digest", "")
+                content = response.read(1024 * 1024 + 1)
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                return None
+            raise
+        if len(content) > 1024 * 1024 or digest != "sha256:" + hashlib.sha256(content).hexdigest():
+            raise ReleaseError("Registry manifest content digest mismatch")
+        return digest
+    except ReleaseError:
+        raise
+    except (OSError, ValueError, KeyError) as exc:
+        raise ReleaseError("Cannot verify public registry tag; no version tags written") from exc
+
+
+def promote(
+    report: dict,
+    revision: str,
+    repository: str,
+    version: str,
+    *,
+    latest: bool = False,
+    execute: bool = False,
+) -> dict:
+    tags = version_tags(version, latest=latest)
+    image, _ = identity(revision, repository)
+    # Reuse all receipt and exact two-platform checks before any registry writes.
+    checked = alias(report, revision, repository, "version-check")
+    existing = public_digest(image, tags[0])
+    if existing is not None and existing != checked["digest"]:
+        raise ReleaseError("Version tag already identifies different bytes; choose a new version")
+    result = {
+        **checked,
+        "version": version,
+        "tags": [f"{image}:{tag}" for tag in tags],
+        "published": False,
+    }
+    result.pop("tag")
+    if execute:
+        for target in result["tags"]:
+            docker("buildx", "imagetools", "create", "--tag", target, report["reference"])
+            tagged = json.loads(
+                docker("buildx", "imagetools", "inspect", "--format", "{{json .Manifest}}", target)
+            )
+            if verify_index(tagged, report["manifests"]) != checked["digest"]:
+                raise ReleaseError("Version tag differs from verified registry index")
+        result["published"] = True
+    return result
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--revision", required=True)
@@ -298,6 +384,16 @@ def main() -> None:
     short.add_argument("--tag", required=True)
     short.add_argument("--execute", action="store_true")
     short.add_argument("--report", type=Path, required=True)
+    versioned = commands.add_parser(
+        "promote", help="Tag a verified release version and optional latest"
+    )
+    versioned.add_argument("--receipt", type=Path, required=True)
+    versioned.add_argument(
+        "--version", required=True, help="Git release tag vX.Y.Z[-alpha/beta/rc.N]"
+    )
+    versioned.add_argument("--latest", action="store_true")
+    versioned.add_argument("--execute", action="store_true")
+    versioned.add_argument("--report", type=Path, required=True)
     args = parser.parse_args()
     try:
         if args.command == "pack":
@@ -306,6 +402,16 @@ def main() -> None:
             )
         elif args.command == "verify":
             result = verify(args.directory, args.architecture, args.revision, args.repository)
+        elif args.command == "promote":
+            result = promote(
+                json.loads(args.receipt.read_text()),
+                args.revision,
+                args.repository,
+                args.version,
+                latest=args.latest,
+                execute=args.execute,
+            )
+            args.report.write_text(json.dumps(result, indent=2) + "\n")
         elif args.command == "alias":
             result = alias(
                 json.loads(args.receipt.read_text()),

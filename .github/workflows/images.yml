@@ -1,6 +1,8 @@
-name: Native image candidates
+name: Versioned images and manual candidates
 
 on:
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       revision:
@@ -20,7 +22,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: image-candidate-${{ github.ref }}
+  group: image-publication
   cancel-in-progress: false
 
 jobs:
@@ -32,39 +34,61 @@ jobs:
       packages: read
     outputs:
       repository: ${{ steps.identity.outputs.repository }}
+      version: ${{ steps.identity.outputs.version }}
     steps:
-      - name: Check explicit revision and publication opt-in
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check selected revision, release version and publication intent
         id: identity
         env:
           EXPECTED_REVISION: ${{ inputs.revision }}
-          PUBLISH: ${{ inputs.publish }}
+          PUBLISH: ${{ github.event_name == 'release' || inputs.publish }}
           ENABLED: ${{ vars.SEEKBELL_GHCR_ENABLED }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           SHORT_TAG: ${{ inputs.tag }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          PRERELEASE: ${{ github.event.release.prerelease }}
         shell: bash
         run: |
           python3 - <<'PY'
           import os
           import re
-          revision = os.environ['EXPECTED_REVISION']
-          assert re.fullmatch('[0-9a-f]{40}', revision), 'Use a full commit SHA'
-          assert revision == os.environ['GITHUB_SHA'], 'Selected branch has a different commit'
-          tag = os.environ['SHORT_TAG']
-          if tag:
-              assert len(tag) <= 64 and re.fullmatch(r'[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*', tag) and tag != 'latest', 'Invalid short candidate tag'
-              assert os.environ['PUBLISH'] == 'true', 'A short tag requires publication'
-          if os.environ['PUBLISH'] == 'true':
-              assert os.environ['ENABLED'] == 'true', 'GHCR publication is not enabled'
-              assert os.environ['GITHUB_REF'] == 'refs/heads/' + os.environ['DEFAULT_BRANCH'], 'Publish from the default branch only'
+          import subprocess
+          import tomllib
+          from pathlib import Path
+          from scripts.release_images import version_tags
+          version = ''
+          if os.environ['GITHUB_EVENT_NAME'] == 'release':
+              version = os.environ['RELEASE_TAG']
+              version_tags(version)
+              assert os.environ['GITHUB_REF'] == 'refs/tags/' + version
+              subprocess.run(['git', 'merge-base', '--is-ancestor', os.environ['GITHUB_SHA'],
+                              'origin/' + os.environ['DEFAULT_BRANCH']], check=True)
+              expected = re.sub(r'-(alpha|beta|rc)\.([1-9][0-9]*)',
+                                lambda m: {'alpha':'a', 'beta':'b', 'rc':'rc'}[m[1]] + m[2],
+                                version[1:])
+              actual = tomllib.loads(Path('pyproject.toml').read_text())['project']['version']
+              assert actual == expected, 'Bump pyproject.toml and uv.lock before creating the release'
+              assert ('-' in version) == (os.environ['PRERELEASE'] == 'true'), 'Release prerelease flag mismatch'
+          else:
+              revision = os.environ['EXPECTED_REVISION']
+              assert re.fullmatch('[0-9a-f]{40}', revision), 'Use a full commit SHA'
+              assert revision == os.environ['GITHUB_SHA'], 'Selected branch has a different commit'
+              tag = os.environ['SHORT_TAG']
+              if tag:
+                  assert len(tag) <= 64 and re.fullmatch(r'[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*', tag) and tag != 'latest', 'Invalid short candidate tag'
+                  assert os.environ['PUBLISH'] == 'true', 'A short tag requires publication'
+              if os.environ['PUBLISH'] == 'true':
+                  assert os.environ['ENABLED'] == 'true', 'Manual candidate publication is not enabled'
+                  assert os.environ['GITHUB_REF'] == 'refs/heads/' + os.environ['DEFAULT_BRANCH'], 'Publish from the default branch only'
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write('repository=' + os.environ['GITHUB_REPOSITORY'].lower() + '\n')
+              output.write('version=' + version + '\n')
           PY
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        if: ${{ inputs.publish }}
-        with:
-          persist-credentials: false
       - name: Check package access and public destination before building a publication candidate
-        if: ${{ inputs.publish }}
+        if: ${{ github.event_name == 'release' || inputs.publish }}
         env:
           IMAGE_REPOSITORY: ${{ steps.identity.outputs.repository }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -83,7 +107,7 @@ jobs:
       contents: read
 
   publish:
-    if: ${{ inputs.publish }}
+    if: ${{ github.event_name == 'release' || inputs.publish }}
     needs: [preflight, baseline, native]
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -141,12 +165,38 @@ jobs:
           subprocess.run(['python3', 'scripts/check_container.py', report['reference'], '--revision', os.environ['GITHUB_SHA']], check=True)
           PYCODE
       - name: Add explicit short tag after all image checks
-        if: ${{ inputs.tag != '' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.tag != '' }}
         env:
           SHORT_TAG: ${{ inputs.tag }}
         run: |
           python3 scripts/release_images.py --revision "$GITHUB_SHA" --repository "$IMAGE_REPOSITORY" \
             alias --receipt release.json --tag "$SHORT_TAG" --execute --report alias.json
+      - name: Add version and latest tags only after all image checks
+        if: ${{ github.event_name == 'release' }}
+        env:
+          RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+          from scripts.release_images import promote
+          version = os.environ['RELEASE_VERSION']
+          latest = False
+          if '-' not in version:
+              selected = json.loads(subprocess.check_output(
+                  ['gh', 'api', 'repos/' + os.environ['GITHUB_REPOSITORY'] + '/releases/latest'],
+                  text=True))
+              latest = selected['tag_name'] == version
+          report = promote(json.loads(Path('release.json').read_text()),
+                           os.environ['GITHUB_SHA'], os.environ['IMAGE_REPOSITORY'],
+                           version, latest=latest, execute=True)
+          Path('version.json').write_text(json.dumps(report, indent=2) + '\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('Version tags: ' + ', '.join(report['tags']) + '\n\n')
+          PY
       - name: Record pinned deployment reference
         run: |
           python3 - <<'PY'
@@ -166,6 +216,27 @@ jobs:
             release.json
             package.json
             alias.json
+            version.json
           if-no-files-found: error
           retention-days: 30
           overwrite: true
+
+
+  release-receipt:
+    if: ${{ github.event_name == 'release' }}
+    needs: publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: image-release-receipt
+          path: receipt
+      - name: Attach permanent image receipts to the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$RELEASE_TAG" receipt/release.json receipt/version.json receipt/package.json --clobber
