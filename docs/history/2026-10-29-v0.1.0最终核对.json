@@ -1,0 +1,38 @@
+{
+  "verified_at_utc": "2026-10-28T22:10:09.853451+00:00",
+  "release_url": "https://github.com/Aspeternity/seekbell/releases/tag/v0.1.0",
+  "version": "v0.1.0",
+  "draft": false,
+  "prerelease": false,
+  "github_latest": true,
+  "application_tag_sha": "dffce718c97f3bbe59c8cbdca72edfd7ff3c9f9e",
+  "image_digest": "sha256:9b2bb08a82a232a2074c997941a179a4e84a8b2bffc95d9931ce36914c7a65b4",
+  "registry_tags": {
+    "0.1.0": "sha256:9b2bb08a82a232a2074c997941a179a4e84a8b2bffc95d9931ce36914c7a65b4",
+    "latest": "sha256:9b2bb08a82a232a2074c997941a179a4e84a8b2bffc95d9931ce36914c7a65b4"
+  },
+  "release_asset_sha256": {
+    "release.json": "38154e38f8d9ceb3f9335b2910cd3ea7a091f94e61e47dd575e5ab070a87095d",
+    "version.json": "96c0dfcb5c23a52b5384718135706385e6041ffb8716b65283671bbacf8018bf",
+    "package.json": "7af277d401dbb9a5443786f2973b09d5bb32a306d286d3202e1cf79eb3fede23",
+    "deployment.json": "42e323b5ae3aac319c61b5e11cba3e25c7845594b9c9d39c98d30ea4c6d21e59",
+    "compose.portainer.yaml": "c3f72fa222b423f1c18686d3f37d5cd97fc1ea3a7baa5b2f6496b23130f5f470",
+    "compose.portainer.compare.yaml": "826220e44ffc8ae0257863f4e785b306a3b675804a44ef59b0cb395b72568fd0",
+    "recovery.json": "69666f75658473d916bf6b9ece2779985be02c4a45d298935dd26d17f17390a0",
+    "anonymous-verification.json": "accc5fb5273b620c0655ea327f13fbd23ba9f1c53e40017b15f08b28f0c8c240"
+  },
+  "updated_receipts_anonymous_download": "passed",
+  "original_six_assets_preserved": true,
+  "open_dependabot_alerts": 0,
+  "workflow_fix_main": "ae5eff015226d6538c167b9a746550db6ce17a88",
+  "post_merge_main_runs": [
+    {
+      "id": 40776950203,
+      "name": "Local baseline checks",
+      "event": "push",
+      "status": "in_progress",
+      "conclusion": null,
+      "html_url": "https://github.com/Aspeternity/seekbell/actions/runs/40776950203"
+    }
+  ]
+}
