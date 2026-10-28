@@ -1,0 +1,36 @@
+{
+  "checked_at": "2026-10-25T04:15:57.533416+00:00",
+  "revision": "987beda5ea38c01e9969fb2fa684c8f970edeec0",
+  "tag": "ghcr.io/aspeternity/seekbell:ui-restore-6",
+  "digest": "sha256:6fd13c6fc1e722b2477405851536526abb9bab6aed3ee2723b36f26897c96f6d",
+  "anonymous": true,
+  "platforms": {
+    "amd64": {
+      "manifest_digest": "sha256:67bec7c02dda0a1d2e7f0493637452cf08e045fc242ad7657e6e4340e0149063",
+      "config_digest": "sha256:5bbf4973667a9c746a608556d5052adc29690e28ba1672907893a29ecb30cee4",
+      "revision": "987beda5ea38c01e9969fb2fa684c8f970edeec0",
+      "user": "10001:10001"
+    },
+    "arm64": {
+      "manifest_digest": "sha256:d49987ec121763899b8018e8c0a68d30aac5a837871fe02fe042f01efa283ea2",
+      "config_digest": "sha256:994de9ace9444074592c73fef3f75c7fd278f228b3c9830aebe5cc11c45ed021",
+      "revision": "987beda5ea38c01e9969fb2fa684c8f970edeec0",
+      "user": "10001:10001"
+    }
+  },
+  "old_tags_unchanged": {
+    "rss-fix-1": "sha256:4fa567debf73686fa0486eacee2fd4e53e415178ae3084c25d86de25f2a7d463",
+    "ui-fix-1": "sha256:909818de6963aecf5ad46f14429856826a30559e45bf6b6a5f5b823566bc481b",
+    "ui-restore-1": "sha256:4421b9e64652b3d19c464c462c1446e14f9ca81afac2fccca0eaa666ce201667",
+    "ui-restore-2": "sha256:b6fc9f5ebbe16d88d93ef2b16c3a72423e06761cad30fdd0d3638fa6f9d5cab6",
+    "ui-restore-3": "sha256:328f888d8b616e45947edb512e5c7f9d1e6b27ded11ff0c33ee43021277f97e4",
+    "ui-restore-4": "sha256:09d7af1aa081594c2bb77f949f4bdcd534728618eef3bd3b667d708619a87e3a",
+    "ui-restore-5": "sha256:089289552719774057aa527bbd055e7c33370e6cc5c1811c0da4583b0675f7ff"
+  },
+  "actual_anonymous_amd64_pull": true,
+  "pull_seconds": 5.15,
+  "local_image_id": "sha256:6fd13c6fc1e722b2477405851536526abb9bab6aed3ee2723b36f26897c96f6d",
+  "local_docker_context": "SeekBell-Dev rootless explicit socket",
+  "local_service_deployed": false,
+  "arm64_runtime_evidence": "native GitHub Actions workflow"
+}

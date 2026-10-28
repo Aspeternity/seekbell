@@ -4,7 +4,7 @@
 
 ## 环境与授权
 
-唯一SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe执行。分支codex/hotlist-settings，最近产品实现a0e2b6f，发布适配待本次提交。用户本轮明确授权GitHub推送/创建PR/合并main、GHCR发布及Compose交付；Portainer实机由用户测试。本轮不部署本机或远端、不主动请求论坛或真实发送。禁止多代理，保持原Ubuntu/D盘和全局配置。
+唯一SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe执行。分支codex/hotlist-settings，最近产品实现a0e2b6f，发布适配1d7afcd。PR #3合并main时发现仅Compose标签/状态冲突，已保留新标签与本轮状态，合入main全部历史发布回执；产品代码无冲突。用户本轮明确授权GitHub推送/创建PR/合并main、GHCR发布及Compose交付；Portainer实机由用户测试。本轮不部署本机或远端、不主动请求论坛或真实发送。禁止多代理，保持原Ubuntu/D盘和全局配置。
 
 ## 已有本机版本与证据
 
@@ -14,7 +14,7 @@ a0e2b6f的类型/构建/格式、Linux DO 26项与operations 6项浏览器、2�
 
 ## 本轮发布准备
 
-仓库API确认public，远端main e23749a，无开放PR。原本地HEAD f67a6cf领先main12提交、48文件；涵盖热榜独立刷新设置/0017迁移、挑战处理与选择框、连接测试历史/本次结果分离及V2EX方案文档。其他本地分支无额外独有提交。检查前工作区干净，上轮仅状态文件未提交。
+仓库API确认public，远端main e23749a，当前PR #3。旧镜像ui-restore-6发布SHA987beda，digest 6fd13c6fc1e722b2477405851536526abb9bab6aed3ee2723b36f26897c96f6d，完整回执见history/2026-10-25-ui-restore-6发布.md。原本地HEAD f67a6cf领先main12提交、48文件；涵盖热榜独立刷新设置/0017迁移、挑战处理与选择框、连接测试历史/本次结果分离及V2EX方案文档。其他本地分支无额外独有提交。检查前工作区干净，上轮仅状态文件未提交。
 
 旧镜像元数据检查强制私有源码，会阻断现公开仓库；本轮新增明确的源仓库可见性参数，默认仍private，发布工作流显式public，保留包名/链接/包可见性检查。相关85项测试和Ruff通过（待本次提交SHA）；完整CI与原生amd64/arm64以GitHub实际结果为准。两份Portainer模板候选标签hotlist-20261028，保留8000/8001及各原卷键，发布后核对digest。发布变量当前缺失，授权范围内临时启用，结束恢复。
 
