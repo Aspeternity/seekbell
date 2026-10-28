@@ -1,27 +1,23 @@
 # 当前状态
 
-更新时间：2026-10-29（Asia/Shanghai）。阶段：公开治理及版本镜像流程PR #6已授权合并；首个标准版本尚未发布，Portainer实机验收待用户反馈。
+更新时间：2026-10-29（Asia/Shanghai）。阶段：用户已明确要求发布正式版本及镜像，正在准备v0.1.0。
 
-## 环境与代码
+## 环境与基准
 
-唯一开发环境SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe执行。main=origin/main 88374a2；其tree与已完整测试的PR HEAD 222cfb7一致，PR合成合并SHA 5867753。本轮只改治理、CI/镜像/隐私脚本、测试和文档，无应用依赖/数据库/Compose变更。
+唯一SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe执行。当前codex/release-v0-1-0，从本地交接b31e9e0创建；代码基准origin/main 88374a2。前轮PR #6完整852后端/174浏览器/原生双架构/CodeQL通过，main复跑40728299636热榜收尾竞态失败，根因及修复见本轮准备记录。前轮交接文档随本次发布PR同步，不改D盘/旧Ubuntu/全局WSL。
 
-当前分支codex/public-repository-handoff，仅保存最终交接文档，未推送，后续随相关PR同步；路径为PROJECT_STATE、PUBLIC_REPOSITORY、本轮治理记录和配置JSON。D盘交接副本过时，未改动。
+## 发布准备
 
-## 已生效设置与证据
+版本确定v0.1.0：pyproject与前端改0.1.0；安全依赖cryptography约束>=50.0.2,<51并锁50.0.2，certifi锁2026.10.18；uv锁校验/同步已通过，其余依赖保持原锁。原9条告警对应5个GHSA，Bot安全PR #4是cryptography、#5是certifi（前轮末状态编号说明有误，以此核对为准）。普通版本更新PR不纳入本次发布。
 
-main规则26056251要求PR、同步main、讨论解决、baseline与原生amd64/arm64三项成功（绑定GitHub Actions），禁止删除/强推，无绕过名单；单维护者批准人数0，仅squash、合并后删分支。v*规则26056497禁止更新/删除。已开启密钥扫描/推送保护、依赖告警/安全更新、私密漏洞报告和CodeQL；Actions只读、外部fork均需审核。配置回读及详情见本轮治理记录/JSON。
+新建scripts/check_crypto_compatibility.py，以合成库和禁网络子进程检查46.0.7与50.0.2互读加密配置/完整备份。旧依赖环境在/home/dev/.local/state/seekbell/releases/v0.1.0/compat-old，由旧锁创建；该目录0700，仅用于离线兼容验证，不是服务实例。准备材料和回执也保存在该私有目录。
 
-[PR #6](https://github.com/Aspeternity/seekbell/pull/6)运行40724613117全部通过：852 pytest、174浏览器测试、容器维护/TLS及原生双架构；CodeQL运行40724604175全过。本机发布/版本/隐私81项、Ruff、actionlint、工作流Python语法及全Git隐私通过。首次CI误判机器人固定官方服务尾注，已作精确例外，个人地址/文件约束仍保留。main自动复跑40728299636记录时仍进行中，不冒称通过；复用的是相同代码树的完整PR证据。
+## 工作区与验证
 
-## 发布与限制
-
-旧hotlist-20261028索引sha256:abb0a56e6c2b648b49348cb697207d8afd7a53b4517020b14c0a6cddfad8aeb5，新脚本实际匿名核对一致，Compose仍固定它。新流程在Release发布并完成检查后添加X.Y.Z及受控latest；预发布不移latest，同版本异digest拒绝覆盖。尚未真实执行新版发布，pyproject仍0.1.0.dev0。
-
-依赖告警9条（5个GHSA，1 critical/6 high/2 medium）：certifi修复版2026.10.18；cryptography完整修复涉及50.0.0跨大版本。安全修复PR #4/#5及后续自动版本PR均未合并。许可证按用户回复暂不决定。
+本次改动：版本/锁文件、两份deploy模板、发布workflow/脚本/测试、兼容脚本、CHANGELOG及相关发布/决策/状态文档和合成验证JSON；意图为安全修复、版本准备及可复现验证。跨库双向完整备份/凭据兼容通过，189项备份/通知/发布/隐私专项通过（1条已知测试客户端弃用警告）；新增部署附件的79项发布检查、Ruff、actionlint、源码与生成Compose配置均过。热榜两项异步回调补等待，12项重复检查及完整40项通过；未改业务行为或限流。未建Release/标签、未写GHCR。现有hotlist镜像和运行实例未动；源码Compose准备切到0.1.0，Release附件将在实际发布后追加已验证digest，端口与卷名不变。
 
 ## 下一步与授权
 
-用户本轮明确允许PR #6 squash合并，已执行；不产生后续版本发布/部署/真实发送授权。下一步先评估依赖修复，验证加密配置与备份兼容，再明确版本/锁文件及首个Release授权；main自动CI结果可先只读核对。不组织多代理，不改旧Ubuntu、全局WSL或原容器。
+兼容和针对性检查已完成，推送版本PR，按保护规则通过完整CI/原生双架构并合并；然后发布Git标签v0.1.0与正式Release，等待版本镜像流程全过，匿名核对0.1.0/latest/digest和两平台，并交付固定digest Compose。当前发布指令覆盖本次必要修复、版本提交、PR合并、Release与GHCR发布，不重复索要确认；不含实机部署、真实论坛/通知或旧环境清理。许可证继续暂不决定，不组织多代理。
 
-读取：PUBLIC_REPOSITORY、IMAGE_RELEASE、本轮治理记录及相关脚本；依赖修复时再读锁文件、vault/备份影响代码。8001实例、原卷/备份、Portainer待验收和来源429限制见history/2026-10-28-公开配置前状态.md及链接，本轮未部署。
+读取：IMAGE_RELEASE、当前发布workflow/脚本、凭据与备份代码及测试；上一状态与实例/备份/429限制见history/2026-10-29-正式发布前状态.md及其引用。
