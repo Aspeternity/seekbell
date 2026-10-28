@@ -4,6 +4,10 @@
 
 当前已实现 **M1核心闭环与M2四渠道通知**：RSS解析、规则、基线/身份账本、事务outbox、可恢复投递，以及Telegram Bot/Bark/SMTP/Webhook适配、加密目标配置和独立目标测试记录。M2通过模拟验证；M3已接入真实初始化/登录、网站/任务、加密通知配置、工作空间保存、内容/命中/投递历史只读查询、真实概览统计、管理员修改、显式通知测试/手动重发和服务端采集/自动投递生命周期、保留策略与分批历史清理、显示时区及系统故障/恢复告警；版本信息已接入，M3本地自动退出核对已通过；已提供M4停服加密备份/独立恢复维护命令，网页加密下载/上传生成独立副本已接入，保留原卷的切换/升级回退维护流程已实现，真实验收仍未完成。真实通知与用户验收待Web完成后统一组织，当前证据以[PROJECT_STATE](docs/PROJECT_STATE.md)为准。
 
+贡献、安全报告和合并规范见[CONTRIBUTING](CONTRIBUTING.md)、[SECURITY](SECURITY.md)与[GitHub配置](docs/PUBLIC_REPOSITORY.md)。
+版本镜像通过GitHub Release发布，正式版本提供版本号及受控latest，预发布不更新latest；
+目前仍为hotlist-20261028历史候选，固定部署引用与步骤见[镜像说明](docs/IMAGE_RELEASE.md)。
+
 ## 管理界面
 
 仅维护一个正式前端入口，页面、导航与样式遵循已确认的[设计规范](docs/UI_DESIGN.md)。旧独立演示版已退役，不再提供模拟账户、浏览器备份、载入示例工作台或第二套构建。源码集中在frontend/src的pages、components、styles和API服务模块，结构见[ARCHITECTURE](docs/ARCHITECTURE.md)。
@@ -37,7 +41,7 @@ pnpm --dir frontend format:check
 pnpm --dir frontend build
 ```
 
-Python 测试使用临时 SQLite 和进程内 HTTP 客户端，并拒绝测试进程的外网连接。所有浏览器套件直接运行同一frontend/dist正式构建；test:ui覆盖通用交互，其余按API/历史/备份/HTTPS等专项使用独立临时服务。测试夹具与合成发送器不构成额外产品版本。普通CI执行这些检查及迁移命令、镜像构建；独立手动双架构候选流程默认不发布，显式启用后可写GHCR，详见[镜像流程](docs/IMAGE_RELEASE.md)。尚无远程部署或真实发送步骤。远程 Actions 的执行结果和对应提交见 [PROJECT_STATE](docs/PROJECT_STATE.md)。
+Python 测试使用临时 SQLite 和进程内 HTTP 客户端，并拒绝测试进程的外网连接。所有浏览器套件直接运行同一frontend/dist正式构建；test:ui覆盖通用交互，其余按API/历史/备份/HTTPS等专项使用独立临时服务。测试夹具与合成发送器不构成额外产品版本。普通CI执行这些检查及迁移命令、镜像构建；PR追加原生双架构检查，发布Release执行版本镜像流程，手动候选默认不发布，详见[镜像流程](docs/IMAGE_RELEASE.md)。尚无远程部署或真实发送步骤。远程 Actions 的执行结果和对应提交见 [PROJECT_STATE](docs/PROJECT_STATE.md)。
 
 ## 社区热榜刷新设置
 

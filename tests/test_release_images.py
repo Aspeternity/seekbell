@@ -387,3 +387,139 @@ def test_changed_alias_index_does_not_record_success(docker, monkeypatch):
     monkeypatch.setattr(images, "docker", changed)
     with pytest.raises(images.ReleaseError, match="Short tag differs"):
         images.alias(published_receipt(), REVISION, REPOSITORY, "rss-fix-1", execute=True)
+
+
+@pytest.mark.parametrize(
+    "version,latest,expected",
+    [
+        ("v0.1.0", True, ["0.1.0", "latest"]),
+        ("v1.2.3", False, ["1.2.3"]),
+        ("v0.1.0-beta.1", False, ["0.1.0-beta.1"]),
+        ("v1.0.0-rc.2", False, ["1.0.0-rc.2"]),
+    ],
+)
+def test_version_tags(version, latest, expected):
+    assert images.version_tags(version, latest=latest) == expected
+
+
+@pytest.mark.parametrize(
+    "version", ["latest", "v01.2.3", "0.1.0", "v1.2", "v1.2.3+meta", "v1.2.3-rc.0"]
+)
+def test_invalid_release_version_is_rejected_before_registry_access(docker, version):
+    with pytest.raises(images.ReleaseError):
+        images.promote(published_receipt(), REVISION, REPOSITORY, version, execute=True)
+    assert not docker
+
+
+def test_prerelease_cannot_move_latest(docker):
+    with pytest.raises(images.ReleaseError, match="prerelease"):
+        images.promote(
+            published_receipt(), REVISION, REPOSITORY, "v0.1.0-rc.1", latest=True, execute=True
+        )
+    assert not docker
+
+
+def test_version_promotion_reuses_checked_bytes_and_moves_latest_last(docker, monkeypatch):
+    monkeypatch.setattr(images, "public_digest", lambda *args: None)
+    result = images.promote(
+        published_receipt(), REVISION, REPOSITORY, "v0.1.0", latest=True, execute=True
+    )
+    assert result["published"]
+    assert result["digest"] == INDEX_DIGEST
+    creates = [args for args in docker if args[:3] == ("buildx", "imagetools", "create")]
+    assert [args[-2] for args in creates] == [
+        f"ghcr.io/{REPOSITORY}:0.1.0",
+        f"ghcr.io/{REPOSITORY}:latest",
+    ]
+    assert all(args[-1] == published_receipt()["reference"] for args in creates)
+
+
+def test_version_promotion_rejects_overwriting_a_different_image(docker, monkeypatch):
+    monkeypatch.setattr(images, "public_digest", lambda *args: "sha256:" + "f" * 64)
+    with pytest.raises(images.ReleaseError, match="different bytes"):
+        images.promote(published_receipt(), REVISION, REPOSITORY, "v0.1.0", execute=True)
+    assert all(args[:3] == ("buildx", "imagetools", "inspect") for args in docker)
+
+
+def test_same_version_and_digest_can_be_recovered_without_overwrite(docker, monkeypatch):
+    monkeypatch.setattr(images, "public_digest", lambda *args: INDEX_DIGEST)
+    result = images.promote(published_receipt(), REVISION, REPOSITORY, "v0.1.0")
+    assert not result["published"]
+    assert all(args[:3] == ("buildx", "imagetools", "inspect") for args in docker)
+
+
+@pytest.mark.parametrize("status", [404, 403, 429])
+def test_registry_missing_tag_is_distinct_from_auth_or_rate_limit(monkeypatch, status):
+    class Token:
+        def __enter__(self):
+            return io.BytesIO(b'{"token":"synthetic"}')
+
+        def __exit__(self, *args):
+            pass
+
+    def response(request, **kwargs):
+        if isinstance(request, str):
+            return Token()
+        raise images.urllib.error.HTTPError(request.full_url, status, "synthetic", {}, None)
+
+    monkeypatch.setattr(images.urllib.request, "urlopen", response)
+    if status == 404:
+        assert images.public_digest(f"ghcr.io/{REPOSITORY}", "0.1.0") is None
+    else:
+        with pytest.raises(images.ReleaseError, match="Cannot verify"):
+            images.public_digest(f"ghcr.io/{REPOSITORY}", "0.1.0")
+
+
+def test_registry_digest_must_match_returned_content(monkeypatch):
+    class Response(io.BytesIO):
+        headers = {"Docker-Content-Digest": INDEX_DIGEST}
+
+    def response(request, **kwargs):
+        return Response(b'{"token":"synthetic"}' if isinstance(request, str) else b"changed")
+
+    monkeypatch.setattr(images.urllib.request, "urlopen", response)
+    with pytest.raises(images.ReleaseError, match="content digest mismatch"):
+        images.public_digest(f"ghcr.io/{REPOSITORY}", "0.1.0")
+
+
+@pytest.mark.parametrize(
+    "tag,package_version,prerelease,accepted",
+    [
+        ("v0.1.0", "0.1.0", "false", True),
+        ("v0.1.0-rc.1", "0.1.0rc1", "true", True),
+        ("v0.1.0-beta.2", "0.1.0b2", "true", True),
+        ("v0.1.0", "0.1.0.dev0", "false", False),
+        ("v0.1.0-rc.1", "0.1.0rc1", "false", False),
+        ("v0.1.0", "0.1.0", "true", False),
+    ],
+)
+def test_release_workflow_checks_package_version_and_prerelease_flag(
+    tmp_path, monkeypatch, tag, package_version, prerelease, accepted
+):
+    workflow = (Path(__file__).parents[1] / ".github/workflows/images.yml").read_text()
+    script = workflow.split("python3 - <<'PY'\n", 1)[1].split("          PY\n", 1)[0]
+    script = "\n".join(line[10:] for line in script.splitlines())
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "pyproject.toml").write_text('[project]\nversion = "' + package_version + '"\n')
+    output = tmp_path / "output"
+    for key, value in {
+        "GITHUB_EVENT_NAME": "release",
+        "RELEASE_TAG": tag,
+        "GITHUB_REF": "refs/tags/" + tag,
+        "GITHUB_SHA": REVISION,
+        "DEFAULT_BRANCH": "main",
+        "PRERELEASE": prerelease,
+        "GITHUB_OUTPUT": str(output),
+        "GITHUB_REPOSITORY": REPOSITORY,
+    }.items():
+        monkeypatch.setenv(key, value)
+    calls = []
+    monkeypatch.setattr(images.subprocess, "run", lambda *args, **kwargs: calls.append(args))
+    if accepted:
+        exec(compile(script, "release-preflight", "exec"), {})
+        assert "version=" + tag in output.read_text()
+        assert calls[0][0] == ["git", "merge-base", "--is-ancestor", REVISION, "origin/main"]
+    else:
+        with pytest.raises(AssertionError):
+            exec(compile(script, "release-preflight", "exec"), {})
+        assert not output.exists()

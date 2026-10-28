@@ -69,3 +69,39 @@ def test_staged_content_checked_before_commit(repo):
     run(repo, "add", ".")
     with pytest.raises(ValueError, match="tracked index file"):
         privacy.check(repo, staged=True)
+
+
+BOT = b"49699333+dependabot[bot]@users.noreply.github.com"
+BOT_TRAILER = b"Signed-off-by: dependabot[bot] <support" + bytes([64]) + b"github.com>"
+
+
+def test_accepts_only_official_bot_trailer_in_bot_commit_message(repo):
+    run(repo, "config", "user.email", BOT.decode())
+    run(
+        repo,
+        "commit",
+        "--allow-empty",
+        "-qm",
+        (b"Bump synthetic dependency\n\n" + BOT_TRAILER).decode(),
+    )
+    assert privacy.check(repo)[0] == 2
+    assert not privacy.safe_content(BOT_TRAILER)
+
+
+def test_bot_trailer_does_not_exempt_unrelated_author():
+    assert not privacy.safe_commit_message(BOT_TRAILER, b"123+synthetic@users.noreply.github.com")
+
+
+def test_bot_commit_still_rejects_personal_address_elsewhere():
+    address = b"synthetic" + bytes([64]) + b"not-a-reserved-domain.com"
+    assert not privacy.safe_commit_message(address + b"\n" + BOT_TRAILER, BOT)
+    assert not privacy.safe_commit_message(
+        b"Signed-off-by: dependabot[bot] <" + address + b">", BOT
+    )
+
+
+def test_bot_trailer_in_tracked_content_is_still_rejected(repo):
+    (repo / "sample.txt").write_bytes(BOT_TRAILER)
+    run(repo, "add", ".")
+    with pytest.raises(ValueError, match="tracked index file"):
+        privacy.check(repo, staged=True)

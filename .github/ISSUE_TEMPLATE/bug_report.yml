@@ -1,0 +1,26 @@
+name: 问题反馈
+description: 报告可复现的问题
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 问题与预期行为
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 版本、镜像标签或 digest
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境与脱敏日志
+      description: 请勿上传凭据、数据库、会话、完整备份或个人邮箱。安全漏洞请使用私密报告入口。
