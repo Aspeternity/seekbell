@@ -1,7 +1,8 @@
+# Candidate hotlist-20261028; migration 0017. Back up the complete data volume before upgrading.
 # Portainer standalone Docker Stack. Update the existing stack to retain its volume.
 services:
   seekbell:
-    image: ghcr.io/aspeternity/seekbell:ui-fix-1
+    image: ghcr.io/aspeternity/seekbell:hotlist-20261028
     restart: unless-stopped
     init: true
     ports:

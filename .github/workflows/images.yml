@@ -68,7 +68,7 @@ jobs:
         env:
           IMAGE_REPOSITORY: ${{ steps.identity.outputs.repository }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python3 scripts/check_ghcr_package.py --repository "$IMAGE_REPOSITORY" --visibility public
+        run: python3 scripts/check_ghcr_package.py --repository "$IMAGE_REPOSITORY" --visibility public --repository-visibility public
 
   baseline:
     needs: preflight
@@ -108,10 +108,10 @@ jobs:
         run: |
           python3 scripts/release_images.py --revision "$GITHUB_SHA" --repository "$IMAGE_REPOSITORY" \
             release --artifacts "$RUNNER_TEMP/images" --run "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --report plan.json
-      - name: Verify private source repository and public package before any registry write
+      - name: Verify public source repository and public package before any registry write
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python3 scripts/check_ghcr_package.py --repository "$IMAGE_REPOSITORY" --visibility public
+        run: python3 scripts/check_ghcr_package.py --repository "$IMAGE_REPOSITORY" --visibility public --repository-visibility public
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ghcr.io
@@ -124,7 +124,7 @@ jobs:
       - name: Confirm published package remains public and record reported linkage
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python3 scripts/check_ghcr_package.py --repository "$IMAGE_REPOSITORY" --visibility public --wait-seconds 30 > package.json
+        run: python3 scripts/check_ghcr_package.py --repository "$IMAGE_REPOSITORY" --visibility public --repository-visibility public --wait-seconds 30 > package.json
       - name: Pull immutable registry image and check it without external networking
         run: |
           python3 - <<'PYCODE'

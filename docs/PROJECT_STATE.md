@@ -1,21 +1,23 @@
 # 当前状态
 
-更新时间：2026-10-25（Asia/Shanghai）。阶段：连接测试旧记录展示修正已更新本机8001；32项相关浏览器与2项离线容器检查通过，待用户体验验收。
+更新时间：2026-10-28（Asia/Shanghai）。阶段：用户已授权推送、PR合并main、GitHub发布双架构Docker镜像并生成Portainer Compose，进行发布验证中。
 
 ## 环境与授权
 
-唯一SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe执行。分支codex/hotlist-settings，最新实现a0e2b6f5104207f92a014f61ce8fc76cac8b545b；后续仅文档。沿用修复后保留数据更新本机Docker授权，无推送/合并GitHub、公开发布、远程部署或主动真实试发。无多代理，不在旧Ubuntu/D盘构建。本轮未重启WSL或改变全局配置；之前整体重启的单次恢复授权已执行。保活PID30200、创建2026-10-25T10:18:02.5636430Z未变。
+唯一SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe执行。分支codex/hotlist-settings，最近产品实现a0e2b6f，发布适配待本次提交。用户本轮明确授权GitHub推送/创建PR/合并main、GHCR发布及Compose交付；Portainer实机由用户测试。本轮不部署本机或远端、不主动请求论坛或真实发送。禁止多代理，保持原Ubuntu/D盘和全局配置。
 
-## 本机运行及备份
+## 已有本机版本与证据
 
-8001现为seekbell:connection-test-ui-a0e2b6f51042，amd64 Image ID sha256:dcb0bfee42c36a182533c658e3bf36ce01e9143c4ce31e6a1c3f4b533ecbc2dd，schema仍0017_hotlist_settings。原seekbell-local/seekbell-local-seekbell-1/seekbell-local_data、127.0.0.1:8001与安全限制保持，healthy/read-only/unless-stopped。Windows localhost/127首页、ready/完整SHA/新资源与保活检查通过，非真实登录UI验收。
-完整17卷备份local-runtime/backups/before-connection-test-ui-a0e2b6f-20261025-201736.tar.gz，SHA256 dd4298533e67820058f7f8cdf6b12357a81d03d092d7378b401be5d2076f54b0。32张原表原列原值与密钥/凭据在副本预检保持，部署后配置及任务版本指纹相同。本轮无DDL，同schema回旧ebea3fe镜像保留当前卷，先另存失败候选，不拿16备份覆盖17。私有runtime.json记录当前镜像与卷。
+本机8001记录版本seekbell:connection-test-ui-a0e2b6f51042，Image ID sha256:dcb0bfee42c36a182533c658e3bf36ce01e9143c4ce31e6a1c3f4b533ecbc2dd，schema0017；本轮未重新验证其运行状态。备份local-runtime/backups/before-connection-test-ui-a0e2b6f-20261025-201736.tar.gz，SHA256 dd4298533e67820058f7f8cdf6b12357a81d03d092d7378b401be5d2076f54b0。原服务/卷与密钥保持。私有runtime.json和验收证据位于/home/dev/.local/state/seekbell。
 
-## 修复与证据
+a0e2b6f的类型/构建/格式、Linux DO 26项与operations 6项浏览器、2项离线容器/恢复通过；后端沿用ebea3fe的819项。本机保留数据更新与用户体验验收分开。连接测试根因与证据见history/2026-10-25-连接测试状态修正.md；热榜与迁移见history/2026-10-25-热榜验收修正.md、2026-10-25-热榜本机更新.md。
 
-优先读[连接测试修正](history/2026-10-25-连接测试状态修正.md)、SPEC末尾及ARCHITECTURE末节，代码为WebsiteConnectionTest/WebsiteConnectionResult、Websites及linuxdo/operations测试。旧版GET持久记录与本次POST共用状态，重测失败只加错误导致残留旧绿框。现上次记录默认折叠并标明时间/历史语义；本次手测独立展示，重测先清旧结果；未来等待到期自动隐藏。组件卸载隔离迟到GET/POST，不改服务端诊断、请求预算或自动访问论坛。
-a0e2b6f类型/构建/格式过，Linux DO 26项、operations 6项桌面/手机过，含旧记录、重开/取消、失败清绿、等待到期和异步竞争；合成桌面截图视觉检查过。2项离线镜像/备份恢复过。后端未改，复用ebea3fe的819项证据。本轮未主动实源探测/发送通知。私有完整证据/home/dev/.local/state/seekbell/acceptance/2026-10-25-connection-test-ui。
+## 本轮发布准备
 
-## 后续与限制
+仓库API确认public，远端main e23749a，无开放PR。原本地HEAD f67a6cf领先main12提交、48文件；涵盖热榜独立刷新设置/0017迁移、挑战处理与选择框、连接测试历史/本次结果分离及V2EX方案文档。其他本地分支无额外独有提交。检查前工作区干净，上轮仅状态文件未提交。
 
-用户刷新http://localhost:8001/#/websites体验。热榜前轮实源限制与修正见[热榜验收修正](history/2026-10-25-热榜验收修正.md)：日榜两次匿名访问429+Cloudflare验证，最后19:11，尚未恢复；本轮不改变该结论。V2EX仍仅导航大类范围确认，未开发；GitHub main e23749a与GHCR ui-restore-6独立未更新。
+旧镜像元数据检查强制私有源码，会阻断现公开仓库；本轮新增明确的源仓库可见性参数，默认仍private，发布工作流显式public，保留包名/链接/包可见性检查。相关85项测试和Ruff通过（待本次提交SHA）；完整CI与原生amd64/arm64以GitHub实际结果为准。两份Portainer模板候选标签hotlist-20261028，保留8000/8001及各原卷键，发布后核对digest。发布变量当前缺失，授权范围内临时启用，结束恢复。
+
+## 下一步与限制
+
+审查并提交上述改动，推送分支/创建PR，等CI及双架构通过后合并main；按合并SHA显式发布，保存回执并核对匿名拉取后交付Compose。升级先完整备份原卷和密钥；0017库不能直接用旧镜像回退，须匹配旧备份。此前Linux DO日榜429/Cloudflare限制未证明恢复，实机由用户验收。V2EX仅导航大类方案，未开发。读取清单：docs/IMAGE_RELEASE.md、docs/RELEASES.md、deploy两份模板、本轮发布脚本与测试。
