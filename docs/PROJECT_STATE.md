@@ -1,23 +1,46 @@
 # 当前状态
 
-更新时间：2026-10-29（Asia/Shanghai）。阶段：用户已明确要求发布正式版本及镜像，正在准备v0.1.0。
+更新时间：2026-10-29（Asia/Shanghai）。阶段：v0.1.0代码/镜像已发布；附件漏传正在恢复，工作流清单修复待PR验证。
 
-## 环境与基准
+## 环境与发布身份
 
-唯一SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe执行。当前codex/release-v0-1-0，从本地交接b31e9e0创建；代码基准origin/main 88374a2。前轮PR #6完整852后端/174浏览器/原生双架构/CodeQL通过，main复跑40728299636热榜收尾竞态失败，根因及修复见本轮准备记录。前轮交接文档随本次发布PR同步，不改D盘/旧Ubuntu/全局WSL。
+唯一SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe执行。
+main及v0.1.0为dffce718c97f3bbe59c8cbdca72edfd7ff3c9f9e，PR #20已授权合并。
+当前codex/fix-release-artifact-bundle，只修复CI清单/回归测试及文档，不改应用或镜像。
+Release id426978304，非草稿/非预发布且为GitHub latest；许可继续待定。
 
-## 发布准备
+## 已通过与部分失败
 
-版本确定v0.1.0：pyproject与前端改0.1.0；安全依赖cryptography约束>=50.0.2,<51并锁50.0.2，certifi锁2026.10.18；uv锁校验/同步已通过，其余依赖保持原锁。原9条告警对应5个GHSA，Bot安全PR #4是cryptography、#5是certifi（前轮末状态编号说明有误，以此核对为准）。普通版本更新PR不纳入本次发布。
+PR #20运行40732294202：860后端/174浏览器/双原生架构全过，CodeQL 40732286961全过。
+main运行40735701320全过。发布40735980970的完整baseline、原生amd64/arm64、publish成功；
+release-receipt最后上传失败，不称整轮发布工作流成功。
+索引sha256:9b2bb08a82a232a2074c997941a179a4e84a8b2bffc95d9931ce36914c7a65b4，已生成0.1.0/latest。
 
-新建scripts/check_crypto_compatibility.py，以合成库和禁网络子进程检查46.0.7与50.0.2互读加密配置/完整备份。旧依赖环境在/home/dev/.local/state/seekbell/releases/v0.1.0/compat-old，由旧锁创建；该目录0700，仅用于离线兼容验证，不是服务实例。准备材料和回执也保存在该私有目录。
+根因是artifact清单version.json与release-assets/之间为字面反斜杠n，
+原artifact12839060982只有release/package两个JSON。原publish日志含部署文件校验和。
+新增契约测试已在旧清单下准确复现缺失四文件；修复后执行针对性验证。
+恢复方案/边界见history/2026-10-29-v0.1.0附件恢复.md。
 
-## 工作区与验证
+## 安全与运行边界
 
-本次改动：版本/锁文件、两份deploy模板、发布workflow/脚本/测试、兼容脚本、CHANGELOG及相关发布/决策/状态文档和合成验证JSON；意图为安全修复、版本准备及可复现验证。跨库双向完整备份/凭据兼容通过，189项备份/通知/发布/隐私专项通过（1条已知测试客户端弃用警告）；新增部署附件的79项发布检查、Ruff、actionlint、源码与生成Compose配置均过。热榜两项异步回调补等待，12项重复检查及完整40项通过；未改业务行为或限流。未建Release/标签、未写GHCR。现有hotlist镜像和运行实例未动；源码Compose准备切到0.1.0，Release附件将在实际发布后追加已验证digest，端口与卷名不变。
+0.1.0锁cryptography50.0.2、certifi2026.10.18，原9条依赖告警已回读为0，安全PR #4/#5已关闭。
+46.0.7与50.0.2双向加密配置/整库备份兼容通过，报告在本轮加密兼容JSON；
+189项专项、79项发布检查及12重复/40完整热榜本机检查已过。
+旧main热榜收尾竞态已修，未改业务行为/限流；无新迁移，schema0017。
+
+没有部署或操作现有Portainer/8001实例，没有真实论坛请求/通知。
+旧镜像、原卷/备份及来源429限制按正式发布前状态归档保留。
+不组织多代理，不改旧Ubuntu、D盘交接副本或全局WSL。
 
 ## 下一步与授权
 
-兼容和针对性检查已完成，推送版本PR，按保护规则通过完整CI/原生双架构并合并；然后发布Git标签v0.1.0与正式Release，等待版本镜像流程全过，匿名核对0.1.0/latest/digest和两平台，并交付固定digest Compose。当前发布指令覆盖本次必要修复、版本提交、PR合并、Release与GHCR发布，不重复索要确认；不含实机部署、真实论坛/通知或旧环境清理。许可证继续暂不决定，不组织多代理。
+用户已明确授权正式版本和镜像发布及必要修复/PR合并，不重复询问。
+推送清单修复PR并通过标准检查；同时保留已验证digest，下载原artifact，
+核对真实registry后重建缺失回执/Compose，匹配原日志校验和并上传。
+最后匿名核验0.1.0/latest/双平台/实际容器版本及Release附件，再记录完整交付。
+不重建已占用0.1.0，不改写标签/历史，不将修复授权扩大成部署或真实发送。
 
-读取：IMAGE_RELEASE、当前发布workflow/脚本、凭据与备份代码及测试；上一状态与实例/备份/429限制见history/2026-10-29-正式发布前状态.md及其引用。
+未提交路径：.github/workflows/images.yml、tests/test_release_images.py、
+IMAGE_RELEASE、PROJECT_STATE及本轮恢复记录，意图为上传清单根因修复与发布留证。
+私有原始材料/检查脚本在/home/dev/.local/state/seekbell/releases/v0.1.0。
+读取仅需本轮恢复记录、IMAGE_RELEASE及相应CI/发布脚本；其余既有证据复用。
