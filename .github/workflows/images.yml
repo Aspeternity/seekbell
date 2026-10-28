@@ -229,7 +229,8 @@ jobs:
             release.json
             package.json
             alias.json
-            version.json\n            release-assets/
+            version.json
+            release-assets/
           if-no-files-found: error
           retention-days: 30
           overwrite: true

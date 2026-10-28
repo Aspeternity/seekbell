@@ -8,6 +8,12 @@ function gate() {
   const promise = new Promise<void>((resolve) => (release = resolve))
   return { promise, release }
 }
+async function pauseClock(page: Page) {
+  const pausedAt = new Date()
+  // Install before the pause target so process latency cannot put it in the past.
+  await page.clock.install({ time: new Date(pausedAt.getTime() - 60_000) })
+  await page.clock.pauseAt(pausedAt)
+}
 async function navigate(page: Page, path: string) {
   await page.evaluate((path) => (location.hash = path), path)
 }
@@ -101,8 +107,7 @@ test('content filters preserve geometry, task notes are inset and post details a
     await detail.promise
     await route.fulfill({ response })
   })
-  await page.clock.install()
-  await page.clock.pauseAt(new Date())
+  await pauseClock(page)
   await page.locator('.content-title').first().click()
   await expect.poll(() => detailStarted).toBe(true)
   await expect(page.getByText('正在读取服务端记录…', { exact: true })).toHaveCount(0)
@@ -258,8 +263,7 @@ test('notification counts are immediate, shared across tabs and retained during 
     if (fail) return route.fulfill({ status: 503, json: { detail: '合成计数刷新失败' } })
     await route.fulfill({ json: snapshot })
   })
-  await page.clock.install()
-  await page.clock.pauseAt(new Date())
+  await pauseClock(page)
   await navigate(page, '/notifications/targets')
   await expect.poll(() => started).toBe(1)
   const nav = page.getByRole('navigation', { name: '通知管理分类' })

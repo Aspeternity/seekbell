@@ -65,6 +65,14 @@ pack/verify/release/alias保持兼容，两平台归档必须来自同一次运�
 包可见性失败即停止；个人CLI缺read:packages不代表包私有，不为核对扩张个人token权限。
 发布使用短期GITHUB_TOKEN，公开包支持匿名拉取，无需docker login。
 
+### 已发布镜像的附件恢复
+
+若publish成功、最后附件上传失败，保留原索引digest及版本标签，从同次运行的原回执恢复。
+先核对实际registry版本/两平台与原release.json，再以原标签的模板重建缺失的部署附件，
+对照原publish日志中的文件SHA256。缺失version.json可按实际registry观测重建，但要明确记录来源；
+不得冒充原artifact文件或重建同版本镜像。维护者在当次发布授权内补传附件后，实际匿名下载和拉取复核。
+同时修复主分支的上传清单并通过PR检查；保留原失败运行与恢复证据，不能把失败历史描述为全绿。
+
 ## 安全升级与历史
 
 0.1.0更新cryptography至50.0.2及certifi至2026.10.18，未新增数据库迁移。

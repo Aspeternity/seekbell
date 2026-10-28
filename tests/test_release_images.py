@@ -586,3 +586,36 @@ def test_bad_second_template_prevents_all_deployment_files(deployment_templates,
             versioned_receipt(), REVISION, REPOSITORY, "v0.1.0", deployment_templates, output
         )
     assert not output.exists()
+
+
+def test_release_receipt_artifact_covers_all_release_upload_inputs(tmp_path):
+    import shlex
+
+    workflow = (Path(__file__).parents[1] / ".github/workflows/images.yml").read_text()
+    upload = next(
+        line.strip().removeprefix("run: ")
+        for line in workflow.splitlines()
+        if line.strip().startswith("run: gh release upload ")
+    )
+    required = {
+        Path(arg.removeprefix("receipt/"))
+        for arg in shlex.split(upload)
+        if arg.startswith("receipt/")
+    }
+    assert required
+    for name in required:
+        fixture = tmp_path / name
+        fixture.parent.mkdir(parents=True, exist_ok=True)
+        fixture.write_text("synthetic release asset")
+    block = workflow.split("name: image-release-receipt", 1)[1]
+    paths = block.split("path: |", 1)[1].split("if-no-files-found:", 1)[0]
+    selected = set()
+    for pattern in paths.splitlines():
+        if not pattern.strip():
+            continue
+        for match in tmp_path.glob(pattern.strip()):
+            files = match.rglob("*") if match.is_dir() else [match]
+            selected.update(file.relative_to(tmp_path) for file in files if file.is_file())
+    assert required <= selected, (
+        f"Release upload inputs missing from artifact: {required - selected}"
+    )
