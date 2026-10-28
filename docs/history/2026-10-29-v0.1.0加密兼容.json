@@ -1,0 +1,23 @@
+{
+  "mode": "offline_synthetic",
+  "old_cryptography": "46.0.7",
+  "new_cryptography": "50.0.2",
+  "old_backup_read_by_new": {
+    "cryptography": "50.0.2",
+    "source_unchanged": true,
+    "all_tables_preserved": true,
+    "original_key_and_ciphertexts_readable": true,
+    "old_session_revoked": true,
+    "restored_login": true
+  },
+  "new_backup_read_by_old": {
+    "cryptography": "46.0.7",
+    "source_unchanged": true,
+    "all_tables_preserved": true,
+    "original_key_and_ciphertexts_readable": true,
+    "old_session_revoked": true,
+    "restored_login": true
+  },
+  "pyproject_sha256": "12d38b4ea484078dc3b5a008f6f687a7fddbd742b612e984b759c6d6e224297b",
+  "uv_lock_sha256": "95936c690b742b2ee030daf38e260d98b3b4bf876f71886ed3c251c2087e1726"
+}

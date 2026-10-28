@@ -1,5 +1,7 @@
 # 保留原卷的切换与升级回退（M4第三子阶段）
 
+公开版本的镜像与固定digest Portainer文件从[GitHub Releases](https://github.com/Aspeternity/seekbell/releases)下载，先核对发布Actions成功及deployment.json。源码模板使用明确版本标签，Release附件追加不可变digest；完整流程见[IMAGE_RELEASE](IMAGE_RELEASE.md)。现有Stack升级保留名称、端口和实际数据卷，不将此下载动作当作已完成备份或部署。
+
 适用标准Compose单实例、Linux本地Unix socket Docker、同一宿主机/同一操作用户。维护工具用Python标准库和宿主机Docker CLI，不将Docker socket或发布权限交给Web。当前支持已有命名卷、UID/GID10001、只读根、单个127.0.0.1端口（或禁外网演练）；自定义挂载/静态路径/未知启动参数需另行核对，不能假定本工具保留任意自定义Compose配置。
 
 ## 数据与失败边界

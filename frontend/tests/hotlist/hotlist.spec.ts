@@ -538,6 +538,7 @@ test('long hotlist backoff shows timing and avoids the old ten-minute status pol
 }) => {
   await page.clock.install()
   let reads = 0
+  let completed = 0
   await page.route('**/api/manage/hotlists/nodeseek?period=realtime', async (route) => {
     const response = await route.fetch()
     reads++
@@ -550,6 +551,7 @@ test('long hotlist backoff shows timing and avoids the old ten-minute status pol
         next_attempt_at: (await page.evaluate(() => Date.now())) / 1000 + 3600,
       },
     })
+    completed++
   })
   await page.reload()
   const hotlist = page.getByRole('region', { name: '社区热榜', exact: true })
@@ -561,6 +563,7 @@ test('long hotlist backoff shows timing and avoids the old ten-minute status pol
   expect(reads).toBe(1)
   await page.clock.fastForward(3000100)
   await expect.poll(() => reads).toBe(2)
+  await expect.poll(() => completed).toBe(2)
 })
 
 test('a failed status read suppresses an outdated refreshing badge and retries locally', async ({
@@ -568,17 +571,19 @@ test('a failed status read suppresses an outdated refreshing badge and retries l
 }) => {
   await page.clock.install()
   let reads = 0
+  let completed = 0
   await page.route('**/api/manage/hotlists/nodeseek?period=realtime', async (route) => {
-    reads++
-    if (reads === 2) return route.abort('failed')
+    const read = ++reads
+    if (read === 2) return route.abort('failed')
     const response = await route.fetch()
     await route.fulfill({
       json: {
         ...(await response.json()),
-        refreshing: reads === 1,
-        next_attempt_at: (await page.evaluate(() => Date.now())) / 1000 + (reads === 1 ? 2 : 600),
+        refreshing: read === 1,
+        next_attempt_at: (await page.evaluate(() => Date.now())) / 1000 + (read === 1 ? 2 : 600),
       },
     })
+    completed++
   })
   await page.reload()
   const hotlist = page.getByRole('region', { name: '社区热榜', exact: true })
@@ -589,6 +594,8 @@ test('a failed status read suppresses an outdated refreshing badge and retries l
   await expect(hotlist.locator('.hotlist-row')).toHaveCount(5)
   await page.clock.fastForward(15100)
   await expect.poll(() => reads).toBe(3)
+  // The visible cached rows do not prove the final mocked response has finished.
+  await expect.poll(() => completed).toBe(2)
   await expect(hotlist.locator('.hotlist-row')).toHaveCount(5)
 })
 

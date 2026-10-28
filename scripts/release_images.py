@@ -360,6 +360,48 @@ def promote(
     return result
 
 
+def compose_assets(
+    report: dict,
+    revision: str,
+    repository: str,
+    version: str,
+    templates: Path,
+    output: Path,
+) -> dict:
+    image, _ = identity(revision, repository)
+    tag = f"{image}:{version_tags(version)[0]}"
+    digest = report.get("digest", "")
+    if (
+        report.get("published") is not True
+        or report.get("revision") != revision
+        or report.get("version") != version
+        or not DIGEST.fullmatch(digest)
+        or report.get("reference") != f"{image}@{digest}"
+        or tag not in report.get("tags", [])
+    ):
+        raise ReleaseError("Deployment assets require the matching published version receipt")
+    pinned = f"{tag}@{digest}"
+    rendered = {}
+    for name in ("compose.portainer.yaml", "compose.portainer.compare.yaml"):
+        source = (templates / name).read_text()
+        expected = f"    image: {tag}\n"
+        if source.count(expected) != 1:
+            raise ReleaseError("Deployment template does not match the selected release version")
+        rendered[name] = source.replace(expected, f"    image: {pinned}\n")
+    # Validate both inputs before publishing either deployment file.
+    output.mkdir()
+    for name, content in rendered.items():
+        (output / name).write_text(content)
+    result = {
+        "revision": revision,
+        "version": version,
+        "image": pinned,
+        "sha256": {name: checksum(output / name) for name in rendered},
+    }
+    (output / "deployment.json").write_text(json.dumps(result, indent=2) + "\n")
+    return result
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--revision", required=True)
@@ -394,6 +436,13 @@ def main() -> None:
     versioned.add_argument("--latest", action="store_true")
     versioned.add_argument("--execute", action="store_true")
     versioned.add_argument("--report", type=Path, required=True)
+    deployment = commands.add_parser(
+        "compose", help="Package digest-pinned release deployment assets"
+    )
+    deployment.add_argument("--receipt", type=Path, required=True)
+    deployment.add_argument("--version", required=True)
+    deployment.add_argument("--templates", type=Path, required=True)
+    deployment.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     try:
         if args.command == "pack":
@@ -402,6 +451,15 @@ def main() -> None:
             )
         elif args.command == "verify":
             result = verify(args.directory, args.architecture, args.revision, args.repository)
+        elif args.command == "compose":
+            result = compose_assets(
+                json.loads(args.receipt.read_text()),
+                args.revision,
+                args.repository,
+                args.version,
+                args.templates,
+                args.output,
+            )
         elif args.command == "promote":
             result = promote(
                 json.loads(args.receipt.read_text()),

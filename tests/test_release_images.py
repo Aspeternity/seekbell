@@ -523,3 +523,66 @@ def test_release_workflow_checks_package_version_and_prerelease_flag(
         with pytest.raises(AssertionError):
             exec(compile(script, "release-preflight", "exec"), {})
         assert not output.exists()
+
+
+def versioned_receipt():
+    return {
+        **published_receipt(),
+        "version": "v0.1.0",
+        "tags": [f"ghcr.io/{REPOSITORY}:0.1.0", f"ghcr.io/{REPOSITORY}:latest"],
+    }
+
+
+@pytest.fixture
+def deployment_templates(tmp_path):
+    root = tmp_path / "templates"
+    root.mkdir()
+    for name, port, volume in [
+        ("compose.portainer.yaml", 8000, "seekbell_data"),
+        ("compose.portainer.compare.yaml", 8001, "seekbell_compare_data"),
+    ]:
+        (root / name).write_text(
+            "services:\n  seekbell:\n"
+            f"    image: ghcr.io/{REPOSITORY}:0.1.0\n"
+            f'    ports: ["{port}:8000"]\n'
+            f"    volumes: [{volume}:/data]\n"
+        )
+    return root
+
+
+def test_deployment_assets_pin_verified_digest_without_changing_ports_or_volumes(
+    deployment_templates, tmp_path
+):
+    output = tmp_path / "release-assets"
+    receipt = images.compose_assets(
+        versioned_receipt(), REVISION, REPOSITORY, "v0.1.0", deployment_templates, output
+    )
+    assert receipt["image"] == f"ghcr.io/{REPOSITORY}:0.1.0@{INDEX_DIGEST}"
+    for name, expected_hash in receipt["sha256"].items():
+        source = (deployment_templates / name).read_text()
+        packaged = (output / name).read_text()
+        assert packaged == source.replace(":0.1.0\n", f":0.1.0@{INDEX_DIGEST}\n")
+        assert images.checksum(output / name) == expected_hash
+    assert json.loads((output / "deployment.json").read_text()) == receipt
+
+
+@pytest.mark.parametrize(
+    "fault", ["published", "revision", "version", "digest", "reference", "tags"]
+)
+def test_deployment_assets_reject_a_mismatching_receipt(deployment_templates, tmp_path, fault):
+    report = versioned_receipt()
+    report[fault] = [] if fault == "tags" else "wrong"
+    output = tmp_path / "release-assets"
+    with pytest.raises(images.ReleaseError):
+        images.compose_assets(report, REVISION, REPOSITORY, "v0.1.0", deployment_templates, output)
+    assert not output.exists()
+
+
+def test_bad_second_template_prevents_all_deployment_files(deployment_templates, tmp_path):
+    (deployment_templates / "compose.portainer.compare.yaml").write_text("unexpected")
+    output = tmp_path / "release-assets"
+    with pytest.raises(images.ReleaseError, match="template"):
+        images.compose_assets(
+            versioned_receipt(), REVISION, REPOSITORY, "v0.1.0", deployment_templates, output
+        )
+    assert not output.exists()

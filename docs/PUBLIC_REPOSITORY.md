@@ -12,7 +12,7 @@ main要求PR、baseline成功、分支同步main、讨论全部解决，禁止�
 v*标签禁止更新/删除，发布见[镜像流程](IMAGE_RELEASE.md)。
 
 PR执行完整baseline和原生双架构检查；main push执行baseline。
-main规则当前强制baseline，两平台检查在本次PR实际运行后核实名称，再加入必需检查。
+main规则强制baseline及native-candidates / native的amd64、arm64检查；三项都绑定GitHub Actions来源，名称已由PR #6实际运行核实。
 依赖更新同样走PR，不自动合并，不用skip ci绕过必需检查。
 第三方Actions固定完整SHA，Dependabot每周检查GitHub Actions、uv和pnpm/npm，每生态最多5条PR。
 

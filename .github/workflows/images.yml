@@ -201,6 +201,15 @@ jobs:
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
               summary.write('Version tags: ' + ', '.join(report['tags']) + '\n\n')
           PY
+      - name: Package and validate digest-pinned Portainer release assets
+        if: ${{ github.event_name == 'release' }}
+        env:
+          RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          python3 scripts/release_images.py --revision "$GITHUB_SHA" --repository "$IMAGE_REPOSITORY" \
+            compose --receipt version.json --version "$RELEASE_VERSION" --templates deploy --output release-assets
+          docker compose -f release-assets/compose.portainer.yaml config --quiet
+          docker compose -f release-assets/compose.portainer.compare.yaml config --quiet
       - name: Record pinned deployment reference
         run: |
           python3 - <<'PY'
@@ -220,7 +229,7 @@ jobs:
             release.json
             package.json
             alias.json
-            version.json
+            version.json\n            release-assets/
           if-no-files-found: error
           retention-days: 30
           overwrite: true
@@ -243,4 +252,4 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: gh release upload "$RELEASE_TAG" receipt/release.json receipt/version.json receipt/package.json --clobber
+        run: gh release upload "$RELEASE_TAG" receipt/release.json receipt/version.json receipt/package.json receipt/release-assets/deployment.json receipt/release-assets/compose.portainer.yaml receipt/release-assets/compose.portainer.compare.yaml --clobber
