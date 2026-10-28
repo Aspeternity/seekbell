@@ -1,6 +1,6 @@
 # 当前状态
 
-更新时间：2026-10-29（Asia/Shanghai）。阶段：v0.1.0代码/镜像已发布；附件漏传正在恢复，工作流清单修复待PR验证。
+更新时间：2026-10-29（Asia/Shanghai）。阶段：v0.1.0代码/镜像已发布；附件已恢复并通过真实匿名验收；PR #21首轮被旧虚拟时钟竞态拦住，Clock初始化已修并通过本机重复/完整检查，待标准CI复验。
 
 ## 环境与发布身份
 
@@ -18,7 +18,7 @@ release-receipt最后上传失败，不称整轮发布工作流成功。
 
 根因是artifact清单version.json与release-assets/之间为字面反斜杠n，
 原artifact12839060982只有release/package两个JSON。原publish日志含部署文件校验和。
-新增契约测试已在旧清单下准确复现缺失四文件；修复后执行针对性验证。
+新增契约测试已在旧清单下准确复现缺失四文件；修复后80项发布测试、Ruff、actionlint通过；PR #21已推送af2225b，CI 40771852239在history-ui-fixes因clock.pauseAt过去时间失败，CodeQL 40771848738已过。
 恢复方案/边界见history/2026-10-29-v0.1.0附件恢复.md。
 
 ## 安全与运行边界
@@ -35,12 +35,10 @@ release-receipt最后上传失败，不称整轮发布工作流成功。
 ## 下一步与授权
 
 用户已明确授权正式版本和镜像发布及必要修复/PR合并，不重复询问。
-推送清单修复PR并通过标准检查；同时保留已验证digest，下载原artifact，
-核对真实registry后重建缺失回执/Compose，匹配原日志校验和并上传。
-最后匿名核验0.1.0/latest/双平台/实际容器版本及Release附件，再记录完整交付。
+清单修复PR #21待标准检查完成并合并；原ZIP校验807a9179…一致，六个附件已恢复，另上传recovery/anonymous-verification两份核验JSON。
+真实匿名拉取/双平台配置层/容器0.1.0及附件原始校验和均通过；镜像9b2bb08a…保持不变。待PR21合并后记录完整交付。
 不重建已占用0.1.0，不改写标签/历史，不将修复授权扩大成部署或真实发送。
 
-未提交路径：.github/workflows/images.yml、tests/test_release_images.py、
-IMAGE_RELEASE、PROJECT_STATE及本轮恢复记录，意图为上传清单根因修复与发布留证。
+本次提交另修frontend/tests/history-ui-fixes/history-ui-fixes.spec.ts的两处Clock初始化：共享目标并在其前一分钟安装；6项重复/6项完整用例全过，不改199/200ms断言、业务或已发布镜像。恢复说明和PROJECT_STATE同步留证，随后推送PR21复验。
 私有原始材料/检查脚本在/home/dev/.local/state/seekbell/releases/v0.1.0。
 读取仅需本轮恢复记录、IMAGE_RELEASE及相应CI/发布脚本；其余既有证据复用。
