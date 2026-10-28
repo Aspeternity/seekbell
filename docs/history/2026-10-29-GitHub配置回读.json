@@ -118,6 +118,14 @@
           {
             "context": "baseline",
             "integration_id": 15368
+          },
+          {
+            "context": "native-candidates / native (amd64, ubuntu-24.04)",
+            "integration_id": 15368
+          },
+          {
+            "context": "native-candidates / native (arm64, ubuntu-24.04-arm)",
+            "integration_id": 15368
           }
         ]
       },
@@ -159,5 +167,21 @@
   "security_updates": {
     "enabled": true,
     "paused": false
+  },
+  "ci_evidence": {
+    "pr": 6,
+    "head": "222cfb7407a8e62f41fa9f8583a85c243ed39c9e",
+    "run": 40724613117,
+    "baseline": "success",
+    "native": "success",
+    "codeql_run": 40724604175,
+    "codeql": "success",
+    "pytest": 852,
+    "browser_tests": 174,
+    "pr_test_merge_sha": "5867753d82e7768d0ba113dd75d6d250fa412318",
+    "merged_main_sha": "88374a2db33ae862bb4cf54dc37890fbb87264c4",
+    "tested_tree_matches_main": true,
+    "post_merge_baseline_run": 40728299636,
+    "post_merge_baseline_status": "in_progress"
   }
 }
