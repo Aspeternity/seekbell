@@ -186,10 +186,14 @@ jobs:
           version = os.environ['RELEASE_VERSION']
           latest = False
           if '-' not in version:
-              selected = json.loads(subprocess.check_output(
+              response = subprocess.run(
                   ['gh', 'api', 'repos/' + os.environ['GITHUB_REPOSITORY'] + '/releases/latest'],
-                  text=True))
-              latest = selected['tag_name'] == version
+                  capture_output=True, text=True)
+              selected = json.loads(response.stdout)
+              if response.returncode:
+                  assert str(selected.get('status')) == '404', 'Cannot determine latest release'
+              else:
+                  latest = selected['tag_name'] == version
           report = promote(json.loads(Path('release.json').read_text()),
                            os.environ['GITHUB_SHA'], os.environ['IMAGE_REPOSITORY'],
                            version, latest=latest, execute=True)

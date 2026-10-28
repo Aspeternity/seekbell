@@ -42,7 +42,7 @@ gh api repos/Aspeternity/seekbell/private-vulnerability-reporting
 ```
 
 配置回读证据见[本轮记录](history/2026-10-29-公开仓库治理.md)。
-个人CLI授权范围与Actions GITHUB_TOKEN独立；
+隐私扫描只为官方Dependabot noreply作者的固定服务尾注提供例外；个人地址与源码扫描约束不变。\n个人CLI授权范围与Actions GITHUB_TOKEN独立；
 个人CLI缺read:packages时使用匿名registry核对公开拉取，不为此扩张token权限。
 
 依据：[规则](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets)、

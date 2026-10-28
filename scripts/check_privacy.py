@@ -31,6 +31,18 @@ def safe_content(data: bytes) -> bool:
     return True
 
 
+def safe_commit_message(data: bytes, author: bytes) -> bool:
+    # Dependabot's public service sign-off is metadata, not a personal address.
+    # Restrict the exception to that exact trailer and official noreply identity.
+    if author.lower() == b"49699333+dependabot[bot]@users.noreply.github.com":
+        data = re.sub(
+            rb"(?m)^Signed-off-by: dependabot\[bot\] <support\x40github\.com>\r?$",
+            b"Signed-off-by: dependabot[bot]",
+            data,
+        )
+    return safe_content(data)
+
+
 def check(repo: Path, *, staged: bool = False, identity: bool = False) -> tuple[int, int]:
     if staged or identity:
         for field in ("GIT_AUTHOR_IDENT", "GIT_COMMITTER_IDENT"):
@@ -44,8 +56,10 @@ def check(repo: Path, *, staged: bool = False, identity: bool = False) -> tuple[
         sha, author, committer = line.split(b"\t")
         if not noreply(author) or not noreply(committer):
             raise ValueError(f"Non-noreply identity in commit {sha.decode()}")
-    if not safe_content(git(repo, "log", "--all", "--format=%B")):
-        raise ValueError("Non-example, non-noreply email in commit messages")
+    messages = git(repo, "log", "--all", "--format=%ae%x00%B%x00").split(b"\0")
+    for index in range(0, len(messages) - 1, 2):
+        if not safe_commit_message(messages[index + 1], messages[index].strip()):
+            raise ValueError("Non-example, non-noreply email in commit messages")
 
     # Check reachable history and the index; deleting a file must not conceal a leak.
     objects = git(repo, "rev-list", "--objects", "--all").splitlines()

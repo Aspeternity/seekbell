@@ -1,6 +1,6 @@
 # 当前状态
 
-更新时间：2026-10-29（Asia/Shanghai）。阶段：公开设置已生效；版本镜像流程代码ec212c6已推送，待PR完整CI；Portainer实机验收仍待用户反馈。
+更新时间：2026-10-29（Asia/Shanghai）。阶段：公开设置已生效；版本镜像流程代码ec212c6已推送，PR #6完整CI复验中；Portainer实机验收仍待用户反馈。
 
 ## 工作目录与基准
 
@@ -16,12 +16,12 @@
 
 ## 未提交与验证
 
-未提交路径：.github/workflows/ci.yml、images.yml、dependabot/PR/Issue模板、scripts/release_images.py、tests/test_release_images.py、CONTRIBUTING.md、SECURITY.md和相关发布/决策/状态文档；用途是公开治理与标准版本发布。发布脚本/版本门禁71项测试、Ruff及actionlint通过；新版脚本实际匿名读取现有索引一致，已推送codex/public-repository-release，尚未合并。CodeQL首次扫描40722948045成功、代码告警0；依赖告警9条（1 critical/6 high/2 medium），涉及certifi及cryptography，未修复。许可证按用户2026-10-29回复暂不决定。
+本轮路径：.github/workflows/ci.yml、images.yml、dependabot/PR/Issue模板、scripts/release_images.py、tests/test_release_images.py、CONTRIBUTING.md、SECURITY.md和相关发布/决策/状态文档；用途是公开治理与标准版本发布。发布脚本/版本门禁/隐私81项测试、Ruff及actionlint通过；新版脚本实际匿名读取现有索引一致，已推送codex/public-repository-release，[PR #6](https://github.com/Aspeternity/seekbell/pull/6)尚未合并。CodeQL首次扫描40722948045成功、代码告警0；依赖告警9条（1 critical/6 high/2 medium），涉及certifi及cryptography，未修复。许可证按用户2026-10-29回复暂不决定。
 
 ## 下一步与读取
 
-创建PR执行完整CI并核实两架构必需检查；合并与首个版本实际发布按本次具体授权处理。首个正式版本发布前还须评估修复依赖告警：certifi锁2026.7.22，修复版2026.10.18；cryptography锁46.0.7，完整修复涉及50.0.0跨大版本。当前pyproject仍0.1.0.dev0，发布须明确版本提交及锁更新。只读本轮CI/镜像脚本、IMAGE_RELEASE及PUBLIC_REPOSITORY；部署维护查RELEASES。
+等待PR #6完整CI并核实两架构必需检查；合并与首个版本实际发布按本次具体授权处理。首个正式版本发布前还须评估修复依赖告警：certifi锁2026.7.22，修复版2026.10.18；cryptography锁46.0.7，完整修复涉及50.0.0跨大版本。当前pyproject仍0.1.0.dev0，发布须明确版本提交及锁更新。只读本轮CI/镜像脚本、IMAGE_RELEASE及PUBLIC_REPOSITORY；部署维护查RELEASES。
 
 ## 授权与保留事项
 
-用户本轮要求按公开GitHub标准调整设置并解决镜像命名，授权仓库设置和相关实现。无代用户实机部署、真实论坛/通知发送或旧Ubuntu清理授权，不组织多代理。历史发布、8001实例/原卷/完整备份及来源429限制见[上一状态归档](history/2026-10-28-公开配置前状态.md)及其链接；本轮不改变运行实例。
+用户本轮要求按公开GitHub标准调整设置并解决镜像命名，授权仓库设置和相关实现。PR首次运行40723964770因Dependabot官方服务签名尾注误报失败；仅为官方noreply作者的固定尾注加例外，个人地址/文件内容仍拒绝，本机全历史检查通过。无代用户实机部署、真实论坛/通知发送或旧Ubuntu清理授权，不组织多代理。历史发布、8001实例/原卷/完整备份及来源429限制见[上一状态归档](history/2026-10-28-公开配置前状态.md)及其链接；本轮不改变运行实例。
