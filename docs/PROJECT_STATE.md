@@ -1,6 +1,6 @@
 # 当前状态
 
-更新时间：2026-10-29（Asia/Shanghai）。阶段：公开仓库治理与版本镜像流程调整中；Portainer实机验收仍待用户反馈。
+更新时间：2026-10-29（Asia/Shanghai）。阶段：公开设置已生效；版本镜像流程代码ec212c6已推送，待PR完整CI；Portainer实机验收仍待用户反馈。
 
 ## 工作目录与基准
 
@@ -16,11 +16,11 @@
 
 ## 未提交与验证
 
-未提交路径：.github/workflows/ci.yml、images.yml、dependabot/PR/Issue模板、scripts/release_images.py、tests/test_release_images.py、CONTRIBUTING.md、SECURITY.md和相关发布/决策/状态文档；用途是公开治理与标准版本发布。新增71项发布脚本/版本门禁测试、Ruff及actionlint通过；新版脚本实际匿名读取现有索引一致，尚未推送或合并。许可证按用户2026-10-29回复暂不决定。
+未提交路径：.github/workflows/ci.yml、images.yml、dependabot/PR/Issue模板、scripts/release_images.py、tests/test_release_images.py、CONTRIBUTING.md、SECURITY.md和相关发布/决策/状态文档；用途是公开治理与标准版本发布。发布脚本/版本门禁71项测试、Ruff及actionlint通过；新版脚本实际匿名读取现有索引一致，已推送codex/public-repository-release，尚未合并。CodeQL首次扫描40722948045成功、代码告警0；依赖告警9条（1 critical/6 high/2 medium），涉及certifi及cryptography，未修复。许可证按用户2026-10-29回复暂不决定。
 
 ## 下一步与读取
 
-完成脚本安全测试与工作流静态检查，记录设置回读，再推送PR执行完整CI；合并与首个版本实际发布按本次具体授权处理。当前pyproject仍0.1.0.dev0，创建正式v0.1.0前须有明确版本提交并更新锁文件。只读本轮CI/镜像脚本、IMAGE_RELEASE及PUBLIC_REPOSITORY；部署维护查RELEASES。
+创建PR执行完整CI并核实两架构必需检查；合并与首个版本实际发布按本次具体授权处理。首个正式版本发布前还须评估修复依赖告警：certifi锁2026.7.22，修复版2026.10.18；cryptography锁46.0.7，完整修复涉及50.0.0跨大版本。当前pyproject仍0.1.0.dev0，发布须明确版本提交及锁更新。只读本轮CI/镜像脚本、IMAGE_RELEASE及PUBLIC_REPOSITORY；部署维护查RELEASES。
 
 ## 授权与保留事项
 
