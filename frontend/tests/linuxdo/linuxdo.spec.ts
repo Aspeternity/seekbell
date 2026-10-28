@@ -52,7 +52,7 @@ test.beforeEach(async ({ page }) => {
     headers: headers(),
     data: { website_id: 'linuxdo', period: 'hot', revision: prefs.selection.revision },
   })
-  expect(reset.ok()).toBeTruthy()
+  expect(reset.status(), await reset.text()).toBe(200)
   expect(
     (
       await page.request.put('/api/manage/hotlists/selection', {
@@ -75,6 +75,8 @@ test.beforeEach(async ({ page }) => {
 })
 
 test.afterEach(async ({ page }) => {
+  // Drain queued selection writes before the next test resets shared preferences.
+  await page.waitForLoadState('networkidle')
   expect(errors.get(page)).toEqual([])
 })
 
