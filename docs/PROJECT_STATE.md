@@ -1,48 +1,28 @@
 # 当前状态
 
-更新时间：2026-10-29（Asia/Shanghai）。阶段：v0.1.0正式版本、双架构镜像及8份Release附件已交付；原附件漏传已恢复，根因修复已合并；实机部署/用户验收待进行。
+更新时间：2026-10-29（Asia/Shanghai）。阶段：社区热榜无感刷新已本地实现并通过针对性验证；待审阅与用户验收，未公开推送、发布或部署。
 
 ## 环境与版本
 
-唯一SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe执行。
-应用标签v0.1.0/发布代码dffce718c97f3bbe59c8cbdca72edfd7ff3c9f9e，
-ghcr.io/aspeternity/seekbell的0.1.0与latest均为索引
-sha256:9b2bb08a82a232a2074c997941a179a4e84a8b2bffc95d9931ce36914c7a65b4，linux/amd64、linux/arm64。
-main=origin/main ae5eff0，仅后续CI/测试/说明修复，应用目录及原标签/镜像未改写。
+正式目录SeekBell-Dev:/home/dev/projects/seekbell；聊天仍在原Ubuntu，开发命令均经wsl.exe显式派发。分支codex/hotlist-silent-refresh，父基准ed1e37e52dd486bdc315c87f8d5a6ffef475b259；起始工作区干净。本轮实现、回归和状态同提交；基准相对origin/main ae5eff0只有既有交接文档/JSON差异。
 
-当前本地codex/v0-1-0-published-handoff仅保存最终状态、阶段记录及5份JSON回执，未推送；
-后续随相关PR同步，不为补交接强行合并。D盘交接副本未动。
+v0.1.0发布、双架构镜像digest、8附件及恢复回执保留在[优化前状态](history/2026-10-29-热榜优化前状态.md)和[正式发布记录](history/2026-10-29-v0.1.0正式发布.md)，本轮未改已发布标签/镜像/实例。
 
-## 证据与恢复
+## 实现与证据
 
-[Release](https://github.com/Aspeternity/seekbell/releases/tag/v0.1.0)为最新正式版。
-PR #20/40732294202完整860后端、174浏览器、原生双架构及CodeQL通过；
-main40735701320通过。发布40735980970的baseline/native/publish成功，
-最后附件job失败，原因是产物清单字面反斜杠n漏选四文件，不称该原运行全绿。
-原ZIP12839060982校验一致，release/package原字节保留；缺失版本观测回执明确标注重建，
-两份Compose与原publish日志SHA256一致，6文件已补传，另附恢复/匿名核验JSON。
+用户要求热榜减少反复“正在更新”，改为无感刷新。后端原已支持持久快照和按需更新，问题在前端重复展示正常刷新状态，以及通用读取保护可能阻断缓存榜单的只读操作。排除新增后台常驻轮询、缩短来源间隔等无必要路线。
 
-已用空Docker配置实际匿名拉取固定digest及0.1.0/latest，
-核对两平台manifest/config、原层指纹、UID10001、代码版本；
-实际容器SeekBell0.1.0/cryptography50.0.2/certifi2026.10.18，禁外网服务/重启检查通过。
-8附件散列、更新回执匿名下载及远端标签再次核对通过；细节见正式发布记录/JSON。
+CommunityHotlist已有成功快照（含空榜）时安静刷新；正常同站忙碌/间隔和采集优先等待保留旧榜，链接和展开可用，成功后直接替换。首次无数据仍有200ms加载/等待反馈，限流/来源拒绝/验证/读取失败仍提示。网站/周期身份、会话隔离、在途合并和服务端计划沿用。SPEC 6.1/6.4及ARCHITECTURE已回写；无后端、DDL、依赖改动。
 
-PR #21清单契约回归先失败后通过；另修旧浏览器Clock暂停过去时间的竞态，
-保留199/200ms断言，未改业务。最新40774483932通过861后端/174浏览器/原生两架构，
-CodeQL40774478950全过，合并ae5eff0且tree与已测a48cf111一致。
-main自动复跑40776950203记录时进行中，不冒称已过；复用的是相同tree的PR证据。
+SeekBell-Dev合成环境，本提交代码（由ed1e37e工作区构建）验证：
+- pnpm --dir frontend build：类型检查和生产构建通过。
+- pnpm --dir frontend test:hotlist：50项桌面/手机回归通过，含慢读取、静默等待、空榜、自动替换、切换隔离、限流和错误恢复。
+- pnpm --dir frontend test:linuxdo --grep 'hotlist|late Linux DO|access errors|short daily wait'：对应8项分两组通过，覆盖双站切换、迟到响应、来源异常及首次无快照等待自动恢复。
+- 修改文件Prettier、git diff --check、python3 scripts/check_privacy.py --identity通过。旧实现已复现新增静默刷新断言失败。
+- 截图frontend/test-results-hotlist/*background*/hotlist-silent-refresh.png已目视核对；全部测试临时合成库/模拟来源，无真实论坛请求或通知，不视为生产验收。后端未改，未重复全量后端测试。
 
-## 安全、运行与下一步
+## 下一步、读取与权限
 
-原9条依赖告警已回读为0，安全PR #4/#5由正式版本替代关闭，普通更新未合并。
-46.0.7与50.0.2双向整库/凭据兼容通过；无新迁移，schema0017。许可证按用户选择仍待定。
-没有部署Portainer/8001、读取实际库或主动真实发送；旧镜像/原卷/备份和来源429限制保留，
-原实例资料见正式发布前状态归档及其链接。
+下一步审阅本地提交；如需让现用实例生效，另行明确本次推送/合并/发布/部署范围，再执行相应CI与实例验收。当前无实现阻塞。授权是本地优化与必要验证，历史发布许可不自动续用于新版本；不读取实际数据库、不主动真实试发。不改原Ubuntu/全局WSL/D盘副本，不组织多代理。
 
-下一步用户在原Stack升级前完整备份原卷和credentials.key，保留Stack名、端口和实际卷，
-使用Release对应8000/8001的固定digest附件；自定义Stack只替换image更稳妥。
-真实RSS/通知和目标部署验收须独立验证。此次发布及必要PR合并已明确授权并完成，
-不产生后续持续发布、部署或真实试发授权。不改旧Ubuntu/全局WSL，不组织多代理。
-
-读取：IMAGE_RELEASE、RELEASES、本轮正式发布/恢复记录与回执；其余规格不重读。
-私有原始ZIP、旧依赖环境、验证脚本/日志在/home/dev/.local/state/seekbell/releases/v0.1.0。
+恢复只需本状态、SPEC 6.1/6.4、ARCHITECTURE热榜章节及frontend/src/components/CommunityHotlist.vue、frontend/tests/hotlist/hotlist.spec.ts；必要时补读ReadRegion/useRemote与Linux DO热榜回归。提交身份必须为GitHub noreply；先前正式版部署边界见归档。
