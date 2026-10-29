@@ -2,11 +2,6 @@ name: Check native image artifacts
 
 on:
   workflow_call:
-    inputs:
-      revision:
-        description: Commit to build (defaults to the triggering commit)
-        type: string
-        default: ""
 
 permissions:
   contents: read
@@ -25,7 +20,7 @@ jobs:
     timeout-minutes: 40
     env:
       ARCHITECTURE: ${{ matrix.architecture }}
-      REVISION: ${{ inputs.revision || github.sha }}
+      REVISION: ${{ github.sha }}
       UV_PYTHON_DOWNLOADS: never
     steps:
       - name: Resolve repository image identity
@@ -33,7 +28,6 @@ jobs:
         run: printf 'IMAGE_REPOSITORY=%s\n' "${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ env.REVISION }}
           persist-credentials: false
       - name: Build native image without registry login or publication
         run: |

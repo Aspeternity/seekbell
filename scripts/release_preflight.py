@@ -58,9 +58,15 @@ def plan(env, run=subprocess.run, root=Path(".")):
         assert ("-" in version) == (env["PRERELEASE"] == "true"), "Release prerelease flag mismatch"
         publish = True
     elif event == "workflow_run":
+        # The checkout is main's current head, never a commit named by the event. If
+        # main moved on, the newer push's own passed baseline publishes instead.
         # Only final versions publish automatically; prereleases use a manual Release.
         current = package_version(root)
-        if FINAL.fullmatch(current) and not tag_exists("v" + current, run):
+        if (
+            env["PASSED_REVISION"] == revision
+            and FINAL.fullmatch(current)
+            and not tag_exists("v" + current, run)
+        ):
             run(["git", "merge-base", "--is-ancestor", revision, branch], check=True)
             version, publish = "v" + current, True
     else:

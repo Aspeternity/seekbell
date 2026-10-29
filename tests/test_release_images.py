@@ -526,11 +526,17 @@ def test_release_workflow_checks_package_version_and_prerelease_flag(
 
 
 @pytest.mark.parametrize(
-    "package_version,tagged,publish",
-    [("0.7.0", False, True), ("0.7.0", True, False), ("0.7.0rc1", False, False)],
+    "package_version,tagged,passed,publish",
+    [
+        ("0.7.0", False, REVISION, True),
+        ("0.7.0", True, REVISION, False),
+        ("0.7.0rc1", False, REVISION, False),
+        # main moved on after this baseline passed: the newer push publishes instead
+        ("0.7.0", False, "b" * 40, False),
+    ],
 )
 def test_merged_version_bump_publishes_only_a_new_final_version(
-    tmp_path, package_version, tagged, publish
+    tmp_path, package_version, tagged, passed, publish
 ):
     (tmp_path / "pyproject.toml").write_text('[project]\nversion = "' + package_version + '"\n')
     calls = []
@@ -545,6 +551,7 @@ def test_merged_version_bump_publishes_only_a_new_final_version(
     env = {
         "GITHUB_EVENT_NAME": "workflow_run",
         "REVISION": REVISION,
+        "PASSED_REVISION": passed,
         "DEFAULT_BRANCH": "main",
         "GITHUB_REPOSITORY": REPOSITORY,
     }

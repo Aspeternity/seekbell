@@ -30,8 +30,10 @@ concurrency:
   group: image-publication
   cancel-in-progress: false
 
+# Always the commit this run checks out by default. For workflow_run that is main's
+# current head; preflight publishes only when it is the commit whose baseline passed.
 env:
-  REVISION: ${{ github.event.workflow_run.head_sha || github.sha }}
+  REVISION: ${{ github.sha }}
 
 jobs:
   preflight:
@@ -51,7 +53,6 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ env.REVISION }}
           fetch-depth: 0
           persist-credentials: false
       - name: Check selected revision, release version and publication intent
@@ -64,6 +65,7 @@ jobs:
           SHORT_TAG: ${{ inputs.tag }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
           PRERELEASE: ${{ github.event.release.prerelease }}
+          PASSED_REVISION: ${{ github.event.workflow_run.head_sha }}
         run: python3 scripts/release_preflight.py
       - name: Check package access and public destination before building a publication candidate
         if: ${{ steps.identity.outputs.publish == 'true' }}
@@ -78,8 +80,6 @@ jobs:
     needs: preflight
     if: ${{ github.event_name != 'workflow_run' || needs.preflight.outputs.publish == 'true' }}
     uses: ./.github/workflows/ci.yml
-    with:
-      revision: ${{ github.event.workflow_run.head_sha || github.sha }}
     permissions:
       contents: read
       actions: read
@@ -88,8 +88,6 @@ jobs:
     needs: preflight
     if: ${{ github.event_name != 'workflow_run' || needs.preflight.outputs.publish == 'true' }}
     uses: ./.github/workflows/native-images.yml
-    with:
-      revision: ${{ github.event.workflow_run.head_sha || github.sha }}
     permissions:
       contents: read
 
@@ -106,7 +104,6 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ env.REVISION }}
           persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
@@ -237,7 +234,6 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ env.REVISION }}
           persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:

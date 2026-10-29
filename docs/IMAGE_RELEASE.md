@@ -31,7 +31,7 @@ SHA、运行编号和架构标签保留供追溯，日常部署使用版本号�
    （不能留TODO）；`--check`通过后随PR提交。其他文档不写死当前版本号。
 2. `gh pr merge <PR> --auto --squash`：必需检查通过后自动合并（需仓库开启allow auto-merge；未开启时CI通过后手动squash合并）。
 3. 合并后main的“Local baseline checks”成功即触发“Versioned images and manual candidates”
-   （workflow_run）：preflight发现pyproject的正式版本尚无标签，就构建双架构镜像、发布并加版本/latest标签，
+   （workflow_run）：只检出main当前head（不检出事件给出的SHA，避免以特权上下文执行未经信任的代码），且必须等于刚通过基线的提交，否则交给更新的那次推送；preflight发现pyproject的正式版本尚无标签，就构建双架构镜像、发布并加版本/latest标签，
    再以CHANGELOG该版本条目创建Release（标签指向合并提交）、上传固定digest附件并匿名核对。
    用一次后台`gh run watch <run-id> --exit-status`等待该运行即可，失败时只看失败job日志。
 
