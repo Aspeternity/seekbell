@@ -14,6 +14,19 @@ from seekbell.domain.errors import SourceDeferred, SourceFailure
 REQUEST_GAP = 2
 MANUAL_RETRY_GAP = 60
 MAX_RETRY_AFTER = 86400
+SITE_FAILURES = (
+    "access_challenge",
+    "http_403",
+    "http_429",
+    "timeout",
+    "transport_error",
+    "http_500",
+    "http_502",
+    "http_503",
+    "http_504",
+)
+# Signals that the origin limits this address as a whole, whichever path was read.
+ORIGIN_FAILURES = ("access_challenge", "http_429")
 
 
 def retry_delay(code, failures):
@@ -83,7 +96,12 @@ class WebsiteRequestBudget:
             # Successful manual checks still keep their own persisted cooldown.
 
     @asynccontextmanager
-    async def request(self, website_id, *, manual=False):
+    async def request(self, website_id, *, manual=False, auxiliary=False):
+        """Serialize one site request; auxiliary reads share only origin-wide limits.
+
+        An auxiliary read (a hotlist) neither clears the site's backoff on success nor
+        extends it for path-local failures such as one feed's 403/5xx or a timeout.
+        """
         if website_id != "linuxdo":
             yield
             return
@@ -102,21 +120,14 @@ class WebsiteRequestBudget:
                         if isinstance(error, (TimeoutError, httpx.TimeoutException))
                         else "transport_error"
                     )
-                if error.code in (
-                    "access_challenge",
-                    "http_403",
-                    "http_429",
-                    "timeout",
-                    "transport_error",
-                    "http_500",
-                    "http_502",
-                    "http_503",
-                    "http_504",
+                if error.code in SITE_FAILURES and (
+                    not auxiliary or error.code in ORIGIN_FAILURES or error.retry_after
                 ):
                     await database_call(self.failed, error, self.clock())
                 raise
             else:
-                await database_call(self.succeeded)
+                if not auxiliary:
+                    await database_call(self.succeeded)
 
     def view(self, website_id):
         with Session(self.engine) as session:

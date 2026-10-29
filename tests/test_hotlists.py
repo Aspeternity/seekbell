@@ -215,7 +215,8 @@ def test_expired_snapshot_returns_without_waiting_and_merges_background_refreshe
             assert len(calls) == 2 and len(service.pending) == 1
             assert all(row["refreshing"] and row["items"] == first["items"] for row in responses)
             assert responses[0]["source_updated_at"] == 2000
-            assert responses[0]["next_attempt_at"] == 3803
+            # Refreshing lists report their due time; clients learn completion by long poll.
+            assert responses[0]["next_attempt_at"] == 3800
             release.set()
             await asyncio.gather(*service.pending.values())
             fresh = await service.get("nodeseek", "daily")
@@ -278,5 +279,144 @@ def test_shutdown_cancels_background_refresh_before_closing_http():
         assert cancelled.is_set() and not service.pending and service.client.is_closed
         with pytest.raises(RuntimeError, match="closed"):
             await service.get("nodeseek", "daily")
+
+    asyncio.run(scenario())
+
+
+NODESEEK = [("nodeseek", ["daily", "realtime", "weekly"])]
+
+
+def test_warming_refreshes_every_visible_list_and_stops_after_the_grace_period():
+    async def scenario():
+        now = [2000]
+        calls = []
+
+        async def handler(request):
+            calls.append(request.url.path)
+            return httpx.Response(200, stream=Chunks(json.dumps(snapshot(now=now[0])).encode()))
+
+        service = HotlistService(transport=httpx.MockTransport(handler), clock=lambda: now[0])
+        service.catalog = lambda: NODESEEK
+        try:
+            assert await service.warm_once() is None and not calls
+            service.viewed_at = now[0]
+            assert await service.warm_once() == 2600
+            assert sorted(calls) == ["/daily.json", "/hot.json", "/weekly.json"]
+            now[0] = 2600
+            assert await service.warm_once() == 2900
+            assert calls[3:] == ["/hot.json"]
+            # Fifteen minutes after the last viewer, nothing is requested any more.
+            now[0] = 2901
+            assert await service.warm_once() is None
+            assert len(calls) == 4
+            service.viewed_at, service.catalog = now[0], list
+            assert await service.warm_once() is None and len(calls) == 4
+        finally:
+            await service.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_board_returns_all_lists_and_long_polls_until_a_change():
+    async def scenario():
+        now = [2000]
+        release = asyncio.Event()
+
+        async def handler(request):
+            if now[0] > 2000:
+                await release.wait()
+            return httpx.Response(200, stream=Chunks(json.dumps(snapshot(now=now[0])).encode()))
+
+        service = HotlistService(transport=httpx.MockTransport(handler), clock=lambda: now[0])
+        service.catalog = lambda: NODESEEK
+        try:
+            first = await service.board()
+            assert [row["period"] for row in first["lists"]] == ["daily", "realtime", "weekly"]
+            selected = first["lists"][0]
+            assert selected["refreshing"] or selected["status"] == "ready"
+            ready = first
+            while not all(row["status"] == "ready" for row in ready["lists"]):
+                ready = await asyncio.wait_for(service.board(ready["tag"]), 1)
+            service.wait_seconds = 0.05
+            assert (await service.board(ready["tag"]))["tag"] == ready["tag"]
+            service.wait_seconds = 5
+            assert (await service.board(ready["tag"], stop=lambda: True))["tag"] == ready["tag"]
+            now[0] += 601
+            waiting = asyncio.create_task(service.board(ready["tag"]))
+            await asyncio.sleep(0.05)
+            assert not waiting.done()
+            service.nudge.set()  # The warm loop's timer reaches the realtime due time.
+            started = await asyncio.wait_for(waiting, 1)
+            realtime = next(row for row in started["lists"] if row["period"] == "realtime")
+            assert realtime["refreshing"] and realtime["items"]
+            waiting = asyncio.create_task(service.board(started["tag"]))
+            await asyncio.sleep(0.05)
+            assert not waiting.done()
+            release.set()
+            done = await asyncio.wait_for(waiting, 1)
+            realtime = next(row for row in done["lists"] if row["period"] == "realtime")
+            assert not realtime["refreshing"] and realtime["fetched_at"] == 2601
+        finally:
+            await service.aclose()
+        assert service.warmer.done()
+
+    asyncio.run(scenario())
+
+
+def test_board_api_follows_visibility_and_selection_order(tmp_path):
+    app = create_app(
+        Settings(data_dir=tmp_path),
+        runtime_factory=PassiveRuntime,
+        hotlist_factory=synthetic_hotlists,
+    )
+    with TestClient(app) as client:
+        authenticate(client)
+        assert client.get("/api/manage/hotlists").json()["lists"] == []
+        client.post("/api/manage/websites", json={"adapter_id": "nodeseek"})
+        client.post("/api/manage/websites", json={"adapter_id": "linuxdo"})
+        revision = client.get("/api/manage/overview-preferences").json()["selection"]["revision"]
+        client.put(
+            "/api/manage/hotlists/selection",
+            json={"website_id": "linuxdo", "period": "weekly", "revision": revision},
+        )
+        board = client.get("/api/manage/hotlists").json()
+        assert [(row["website_id"], row["period"]) for row in board["lists"]] == [
+            ("linuxdo", "weekly"),
+            ("linuxdo", "hot"),
+            ("linuxdo", "daily"),
+            ("nodeseek", "realtime"),
+            ("nodeseek", "daily"),
+            ("nodeseek", "weekly"),
+        ]
+        assert client.get("/api/manage/hotlists?after=" + "x" * 65).status_code == 422
+        prefs = client.get("/api/manage/overview-preferences").json()
+        modules = [{**row, "visible": row["id"] != "hotlist"} for row in prefs["modules"]]
+        client.put(
+            "/api/manage/overview-preferences",
+            json={"modules": modules, "revision": prefs["revision"]},
+        )
+        assert client.get("/api/manage/hotlists").status_code == 409
+
+
+def test_restore_wake_releases_waiting_board_reads():
+    async def scenario():
+        service = synthetic_hotlists()
+        service.catalog = lambda: NODESEEK
+        restoring = [False]
+        try:
+            board = await service.board()
+            while not all(row["status"] == "ready" for row in board["lists"]):
+                board = await asyncio.wait_for(service.board(board["tag"]), 1)
+            tag = board["tag"]
+            waiting = asyncio.create_task(service.board(tag, stop=lambda: restoring[0]))
+            await asyncio.sleep(0.05)
+            service.wake()
+            await asyncio.sleep(0.05)
+            assert not waiting.done()
+            restoring[0] = True
+            service.wake()
+            assert (await asyncio.wait_for(waiting, 0.5))["lists"]
+        finally:
+            await service.aclose()
 
     asyncio.run(scenario())

@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import AppSelect from './AppSelect.vue'
 import Icon from './Icon.vue'
 import ReadRegion from './ReadRegion.vue'
 import { request, formatTime } from '../store'
 import { useRemote } from '../history'
-import { readSessionRevision } from '../readCache'
-import type { HotlistData, OverviewPreferences } from '../overviewPreferences'
+import { cachedRead, readCacheRevision, readSessionRevision, rememberRead } from '../readCache'
+import type { HotlistBoard, OverviewPreferences } from '../overviewPreferences'
 const emit = defineEmits<{ navigate: [path: string] }>()
 const catalog = useRemote(
   () => request<OverviewPreferences>('manage/overview-preferences'),
@@ -25,7 +25,6 @@ let selectionRevision = 1,
   active = true,
   saving = false
 let desired: { website_id: string; period: string } | undefined
-let timer: ReturnType<typeof setTimeout> | undefined
 watch(catalog.data, (value) => {
   if (!value) return
   selectionRevision = value.selection.revision
@@ -43,23 +42,73 @@ watch(catalog.data, (value) => {
       ''
   }
 })
-const cacheKey = (website: string, value: string) => 'hotlist:' + website + ':' + value
-const read = (website: string, value: string) =>
-  request<HotlistData>(
-    'manage/hotlists/' + encodeURIComponent(website) + '?period=' + encodeURIComponent(value),
-  )
-const remote = useRemote(
-  () => (source.value ? read(site.value, period.value) : Promise.resolve(null)),
-  () => [site.value, period.value],
-  { cacheKey: () => (source.value ? cacheKey(site.value, period.value) : undefined) },
+// Every visible list arrives in one board, kept warm by the server while viewed, so
+// switching site or period is local. A long poll answers as soon as any list changes.
+const boardKey = 'hotlist-board'
+const board = shallowRef(cachedRead<HotlistBoard>(boardKey))
+const failure = ref('')
+let generation = 0,
+  following = false
+let controller: AbortController | undefined
+let timer: ReturnType<typeof setTimeout> | undefined
+function stop() {
+  generation++
+  following = false
+  controller?.abort()
+  clearTimeout(timer)
+}
+async function follow() {
+  stop()
+  if (!active || document.hidden || !catalog.data.value?.sources.length) return
+  const current = generation,
+    session = readSessionRevision.value
+  const signal = (controller = new AbortController()).signal
+  let after: string | undefined
+  following = true
+  while (current === generation) {
+    try {
+      const value = await request<HotlistBoard>(
+        'manage/hotlists' + (after ? '?after=' + encodeURIComponent(after) : ''),
+        'GET',
+        undefined,
+        signal,
+      )
+      if (current !== generation) return
+      if (session !== readSessionRevision.value) return stop()
+      board.value = value
+      failure.value = ''
+      rememberRead(boardKey, value, readCacheRevision.value)
+      after = value.tag
+    } catch (e) {
+      if (current !== generation) return
+      following = false
+      failure.value = e instanceof Error ? e.message : '加载失败，请重试。'
+      timer = setTimeout(follow, 15000)
+      return
+    }
+  }
+}
+// A changed catalog (sites added/removed, module shown) restarts with a fresh view.
+watch(catalog.data, follow)
+function visibility() {
+  if (document.hidden) stop()
+  else if (!following) void follow()
+}
+document.addEventListener('visibilitychange', visibility)
+const snapshot = computed(
+  () =>
+    board.value?.lists.find(
+      (row) => row.website_id === site.value && row.period === period.value,
+    ) || null,
 )
-const snapshot = computed(() =>
-  remote.data.value?.website_id === site.value && remote.data.value?.period === period.value
-    ? remote.data.value
-    : null,
-)
-// An empty successful list is also a snapshot; routine reads must stay silent.
+// An empty successful list is also a snapshot; routine refreshes must stay silent.
 const hasSnapshot = computed(() => snapshot.value?.fetched_at != null)
+// A list that was never fetched and has no failure yet is still loading.
+const firstRead = computed(
+  () =>
+    !hasSnapshot.value &&
+    (!snapshot.value || (!snapshot.value.error_code && snapshot.value.status !== 'waiting')),
+)
 const showWaiting = computed(
   () =>
     snapshot.value?.status === 'waiting' &&
@@ -74,24 +123,6 @@ const selectedLabel = computed(
   () => source.value?.periods.find((row) => row.id === period.value)?.label || '',
 )
 const items = computed(() => snapshot.value?.items.slice(0, expanded.value ? 10 : 5) || [])
-function schedule() {
-  clearTimeout(timer)
-  const data = snapshot.value
-  if (!active || !source.value || document.hidden || !data || remote.loading.value) return
-  timer = setTimeout(
-    () => remote.reload(),
-    remote.error.value
-      ? 15000
-      : Math.max(1000, Math.min(86400000, data.next_attempt_at * 1000 - Date.now() + 100)),
-  )
-}
-// Short status reads stay within SeekBell; the server owns upstream cadence.
-watch([snapshot, () => remote.error.value], schedule)
-function visibility() {
-  if (!document.hidden && source.value) remote.reload()
-  else clearTimeout(timer)
-}
-document.addEventListener('visibilitychange', visibility)
 async function persistChoice() {
   if (saving || !active) return
   saving = true
@@ -146,7 +177,7 @@ function selectPeriod(value: string) {
 onBeforeUnmount(() => {
   active = false
   desired = undefined
-  clearTimeout(timer)
+  stop()
   document.removeEventListener('visibilitychange', visibility)
 })
 </script>
@@ -234,11 +265,11 @@ onBeforeUnmount(() => {
             >
           </div>
           <ReadRegion
-            :loading="remote.loading.value && !hasSnapshot"
-            :error="remote.error.value"
-            :has-data="!!snapshot"
+            :loading="firstRead && !failure"
+            :error="failure"
+            :has-data="!!snapshot && !firstRead"
             :min-height="210"
-            @retry="remote.reload"
+            @retry="follow"
           >
             <template v-if="snapshot">
               <p v-if="showWaiting" class="small-note hotlist-updating" role="status">
@@ -278,9 +309,7 @@ onBeforeUnmount(() => {
                 <span v-if="snapshot.fetched_at"
                   >上次成功获取：{{ stamp(snapshot.fetched_at) }}。</span
                 >
-                <button class="text-link" :disabled="remote.loading.value" @click="remote.reload">
-                  重试
-                </button>
+                <button class="text-link" @click="follow">重试</button>
               </p>
               <ol v-if="items.length" class="hotlist-list">
                 <li v-for="item in items" :key="item.id">
