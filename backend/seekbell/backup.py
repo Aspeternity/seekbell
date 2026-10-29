@@ -43,7 +43,7 @@ from seekbell.db.runtime import (
     migration_config,
 )
 from seekbell.notifiers.credentials import CredentialVault
-from seekbell.services.authentication import verify_password
+from seekbell.services.authentication import password_hash
 
 MAGIC = b"SEEKBELL-BACKUP\x01"
 HEADER_SIZE = len(MAGIC) + 16 + 12
@@ -344,9 +344,9 @@ def pause_activity(database):
         connection.commit()
 
 
-def restore_backup(
-    settings, archive, destination, *, password, username, admin_password, pause=False
-):
+def restore_backup(settings, archive, destination, *, password, administrator=None, pause=False):
+    """`administrator` is (username, password_hash) to sign in with afterwards; None keeps
+    the backup's own. The archive passphrase alone authorizes reading every secret in it."""
     destination = new_path(destination)
     if destination == settings.data_dir.resolve():
         raise BackupError("恢复必须使用独立的新数据目录。")
@@ -359,11 +359,7 @@ def restore_backup(
         restored.mkdir(mode=0o700)
         decrypt_file(archive, payload, password)
         manifest = unpack_payload(payload, restored)
-        actual_name, encoded = validate_database(restored / "seekbell.sqlite3", allow_older=True)
-        if not hmac.compare_digest(username.encode(), actual_name.encode()) or not verify_password(
-            admin_password, encoded
-        ):
-            raise BackupError("备份中的管理员验证失败。")
+        validate_database(restored / "seekbell.sqlite3", allow_older=True)
         if manifest["database_revision"] != expected_revision():
             # An older backup is upgraded here, inside the private staging copy.
             engine = create_database_engine(Settings(data_dir=restored))
@@ -380,6 +376,11 @@ def restore_backup(
         with closing(sqlite3.connect(restored / "seekbell.sqlite3")) as connection:
             connection.execute("PRAGMA trusted_schema=OFF")
             connection.execute("DELETE FROM login_sessions")
+            if administrator is not None:
+                connection.execute(
+                    "UPDATE administrators SET username=?, password_hash=? WHERE id=1",
+                    administrator,
+                )
             connection.commit()
             connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
             connection.execute("PRAGMA journal_mode=DELETE")
@@ -397,14 +398,14 @@ def main():
     sub = parser.add_subparsers(dest="action", required=True)
     create = sub.add_parser("create", help="先停服；加密数据库和原密钥，不覆盖文件")
     create.add_argument("--output", type=Path, required=True)
-    restore = sub.add_parser("restore", help="验证口令/备份管理员，只恢复到不存在的新目录")
+    restore = sub.add_parser("restore", help="验证备份口令，只恢复到不存在的新目录")
     restore.add_argument("--archive", type=Path, required=True)
     restore.add_argument("--destination", type=Path, required=True)
     args = parser.parse_args()
     try:
         if not sys.stdin.isatty() or not sys.stderr.isatty():
             raise BackupError("请在交互终端运行；口令不接受命令行参数、环境变量或管道输入。")
-        password = getpass.getpass("备份加密口令（12–1024字符）: ")
+        password = getpass.getpass("备份口令（12–1024字符）: ")
         settings = Settings()
         if args.action == "create":
             if password != getpass.getpass("再次输入备份口令: "):
@@ -412,15 +413,23 @@ def main():
             create_backup(settings, args.output, password=password)
             print("加密备份完成（包含数据库与原密钥）。请安全保管备份及独立口令。")
         else:
-            username = input("备份中的管理员用户名: ")
-            admin_password = getpass.getpass("备份中的管理员密码: ")
+            administrator = None
+            username = input("恢复后的管理员用户名（直接回车沿用备份中的管理员）: ")
+            if username:
+                if not re.fullmatch(r"[A-Za-z0-9_-]{3,32}", username):
+                    raise BackupError("用户名应为 3–32 位字母、数字、下划线或短横线。")
+                admin_password = getpass.getpass("管理员密码（8–128字符）: ")
+                if not 8 <= len(admin_password) <= 128:
+                    raise BackupError("管理员密码应为 8–128 个字符。")
+                if admin_password != getpass.getpass("再次输入管理员密码: "):
+                    raise BackupError("两次管理员密码不一致。")
+                administrator = (username, password_hash(admin_password))
             restore_backup(
                 settings,
                 args.archive,
                 args.destination,
                 password=password,
-                username=username,
-                admin_password=admin_password,
+                administrator=administrator,
             )
             print(
                 "独立恢复完成，旧会话已清除。启动前请停止原实例；"

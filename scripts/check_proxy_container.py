@@ -76,8 +76,6 @@ def main():
         metadata = {
             "current_password": credentials["password"],
             "password": "Synthetic-TLS-Backup-2026",
-            "username": credentials["username"],
-            "admin_password": credentials["password"],
         }
         body = json.dumps(metadata).encode() + b"\n" + archive
         with opener.open(

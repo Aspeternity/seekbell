@@ -149,7 +149,7 @@ uv run --frozen python -m seekbell.backup --help
 uv run --frozen python -m seekbell.services.backup_demo
 ~~~
 
-实际备份使用create --output、恢复使用restore --archive/--destination，口令在交互终端输入；禁止覆盖原目录。含原凭据密钥的整库备份加密，恢复需重新验证备份管理员并撤销旧会话，保留队列/去重。使用前按[备份恢复说明](docs/BACKUP_RESTORE.md)停止服务、准备私有目录并选匹配镜像；Compose与禁外网演练命令均在该文档。普通演示备份不能恢复生产数据。
+实际备份使用create --output、恢复使用restore --archive/--destination，口令在交互终端输入；禁止覆盖原目录。含原凭据密钥的整库备份加密，恢复只需备份口令，可沿用备份中的管理员或设置新管理员，并撤销旧会话，保留队列/去重。使用前按[备份恢复说明](docs/BACKUP_RESTORE.md)停止服务、准备私有目录并选匹配镜像；Compose与禁外网演练命令均在该文档。普通演示备份不能恢复生产数据。
 
 ## 开发与交接
 

@@ -109,8 +109,6 @@ def exercise(root):
         archive,
         restored,
         password=PASSWORD,
-        username="backup_admin",
-        admin_password=ADMIN_PASSWORD,
     )
     assert table_data(settings.database_path) == before
     after = table_data(restored / "seekbell.sqlite3")

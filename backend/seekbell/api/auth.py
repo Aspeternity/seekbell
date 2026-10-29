@@ -108,14 +108,14 @@ def status(request: Request, response: Response):
     }
 
 
-def session_response(request, response, credentials, tokens):
+def session_response(request, response, username, tokens):
     token, csrf = tokens
     set_cookie(request, response, COOKIE, token, auth.SESSION_SECONDS)
     response.delete_cookie(PREAUTH, path="/")
     return {
         "initialized": True,
         "authenticated": True,
-        "username": credentials.username,
+        "username": username,
         "csrf": csrf,
     }
 
@@ -132,7 +132,7 @@ def setup(credentials: SetupCredentials, request: Request, response: Response):
             )
         except ValueError:
             raise HTTPException(409, "管理员已创建，请登录。") from None
-    return session_response(request, response, credentials, tokens)
+    return session_response(request, response, credentials.username, tokens)
 
 
 @router.post("/login", dependencies=[Depends(preauth)])
@@ -146,7 +146,7 @@ def login(credentials: Credentials, request: Request, response: Response):
         )
     if tokens is None:
         raise HTTPException(401, "用户名或密码不正确。")
-    return session_response(request, response, credentials, tokens)
+    return session_response(request, response, credentials.username, tokens)
 
 
 @router.post("/logout", dependencies=[Depends(require_admin)])
@@ -184,7 +184,7 @@ def administrator(values: AdministratorUpdate, request: Request, response: Respo
             raise HTTPException(401, "会话已过期，请重新登录。") from None
         except auth.IncorrectPassword:
             raise HTTPException(400, "当前密码不正确。") from None
-    return session_response(request, response, values, tokens)
+    return session_response(request, response, values.username, tokens)
 
 
 @router.get("/sessions", dependencies=[Depends(require_admin)])

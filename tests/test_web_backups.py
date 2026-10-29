@@ -35,8 +35,7 @@ def values(**overrides):
 
 
 def upload(archive, **overrides):
-    metadata = values(username="backup_admin", admin_password=ADMIN_PASSWORD, **overrides)
-    return json.dumps(metadata).encode() + b"\n" + archive
+    return json.dumps(values(**overrides)).encode() + b"\n" + archive
 
 
 def download(client):
@@ -127,8 +126,7 @@ def test_backup_requires_session_csrf_same_origin_and_current_password(web, path
     elif path == "discard":
         result = discard(client, data["current_password"])
     else:
-        metadata = {**data, "username": "backup_admin", "admin_password": ADMIN_PASSWORD}
-        result = restore(client, json.dumps(metadata).encode() + b"\ninvalid")
+        result = restore(client, json.dumps(data).encode() + b"\ninvalid")
     assert (
         result.status_code == {"anonymous": 401, "csrf": 403, "origin": 403, "password": 400}[kind]
     )
@@ -137,7 +135,7 @@ def test_backup_requires_session_csrf_same_origin_and_current_password(web, path
     assert_clean(settings)
 
 
-@pytest.mark.parametrize("kind", ["corrupt", "password", "admin_password", "username"])
+@pytest.mark.parametrize("kind", ["corrupt", "password"])
 def test_failed_upload_authentication_preserves_live_database_and_cleans_staging(web, kind):
     client, settings, _ = web
     archive = download(client).content
@@ -146,8 +144,7 @@ def test_failed_upload_authentication_preserves_live_database_and_cleans_staging
         archive = archive[:-1] + bytes([archive[-1] ^ 1])
         body = upload(archive)
     else:
-        metadata = values(username="backup_admin", admin_password=ADMIN_PASSWORD)
-        metadata[kind] = "Incorrect-Synthetic-Value"
+        metadata = values(password="Incorrect-Synthetic-Value")
         body = json.dumps(metadata).encode() + b"\n" + archive
     result = restore(client, body)
     assert result.status_code == 422
@@ -168,9 +165,7 @@ def test_upload_bounds_framing_and_unknown_fields(web, monkeypatch):
     assert restore(client, b"invalid\nbytes").status_code == 422
     assert client.post("/api/manage/backups/restore", json={}).status_code == 415
     monkeypatch.setattr(backups, "MAX_METADATA", 8192)
-    metadata = values(
-        username="backup_admin", admin_password=ADMIN_PASSWORD, destination="../source"
-    )
+    metadata = values(destination="../source")
     assert restore(client, json.dumps(metadata).encode() + b"\nbytes").status_code == 422
     assert_clean(settings)
 
@@ -219,8 +214,6 @@ def test_active_background_runtime_continues_during_consistent_web_snapshot(tmp_
             archive,
             destination,
             password=PASSWORD,
-            username="backup_admin",
-            admin_password=ADMIN_PASSWORD,
         )
         assert backup.validate_database(destination / "seekbell.sqlite3")
         assert_clean(settings)
@@ -363,8 +356,7 @@ def test_discard_refuses_a_candidate_held_by_another_instance(web):
 
 
 def apply_body(archive, **overrides):
-    metadata = {**values(username="backup_admin", admin_password=ADMIN_PASSWORD), **overrides}
-    return json.dumps(metadata).encode() + b"\n" + archive
+    return json.dumps(values(**overrides)).encode() + b"\n" + archive
 
 
 def apply(client, body):
@@ -386,6 +378,22 @@ def login(client, username="backup_admin", password=ADMIN_PASSWORD):
     )
 
 
+def rename_administrator(client):
+    result = client.put(
+        "/api/auth/administrator",
+        json={
+            "username": "current_admin",
+            "current_password": ADMIN_PASSWORD,
+            "new_password": CURRENT_PASSWORD,
+        },
+    )
+    assert result.status_code == 200, result.text
+    client.headers["x-csrf-token"] = result.json()["csrf"]
+
+
+CURRENT_PASSWORD = "Synthetic-Current-Administrator"
+
+
 def test_apply_replaces_the_live_workspace_in_place_and_keeps_the_previous(web):
     client, settings, app = web
     archive = download(client).content
@@ -394,8 +402,10 @@ def test_apply_replaces_the_live_workspace_in_place_and_keeps_the_previous(web):
         connection.execute("UPDATE workspace_preferences SET name='恢复前修改'")
         connection.execute("DELETE FROM tasks")
         connection.commit()
+    # The backup's own administrator is not needed: the current one is kept.
+    rename_administrator(client)
     runtime = app.state.runtime
-    result = apply(client, apply_body(archive, pause=False))
+    result = apply(client, apply_body(archive, current_password=CURRENT_PASSWORD, pause=False))
     assert result.status_code == 200, result.text
     assert result.json()["restored"] and not result.json()["paused"]
     previous = settings.data_dir / result.json()["previous"]
@@ -406,13 +416,15 @@ def test_apply_replaces_the_live_workspace_in_place_and_keeps_the_previous(web):
     after = table_data(settings.database_path)
     for name in ("tasks", "notification_targets", "websites", "posts", "workspace_preferences"):
         assert after[name] == before[name]
-    assert after["login_sessions"] == []
-    # The old session belonged to the replaced workspace.
-    assert client.get("/api/manage/backups").status_code == 401
-    assert login(client).status_code == 200
+    # Old sessions belonged to the replaced workspace; the caller gets one new session.
+    assert len(after["login_sessions"]) == 1
+    assert result.json()["authenticated"] and result.json()["username"] == "current_admin"
+    client.headers["x-csrf-token"] = result.json()["csrf"]
     records = client.get("/api/manage/backups").json()["records"]
     assert (records[0]["kind"], records[0]["result"]) == ("restore", "restored")
     assert not app.state.restoring and app.state.in_flight == 0
+    assert login(client).status_code == 401
+    assert login(client, "current_admin", CURRENT_PASSWORD).status_code == 200
     assert_clean(settings)
 
 
@@ -429,7 +441,7 @@ def test_apply_pauses_collection_and_targets_by_default(web):
         )
 
 
-@pytest.mark.parametrize("field", ["password", "admin_password", "current_password"])
+@pytest.mark.parametrize("field", ["password", "current_password"])
 def test_failed_apply_keeps_the_live_workspace_running(web, field):
     client, settings, app = web
     archive = download(client).content
@@ -490,22 +502,25 @@ def test_fresh_installation_can_restore_instead_of_creating_an_administrator(web
     with TestClient(create_app(fresh)) as other:
         status = other.get("/api/auth/status").json()
         assert not status["initialized"]
-        body = json.dumps(
-            {
-                "password": PASSWORD,
-                "username": "backup_admin",
-                "admin_password": ADMIN_PASSWORD,
-                "pause": True,
-            }
-        ).encode()
+        metadata = {"password": PASSWORD, "username": "fresh_admin", "pause": True}
+        short = json.dumps({**metadata, "admin_password": "short"}).encode()
+        result = other.post(
+            "/api/auth/setup/restore",
+            content=short + b"\n" + archive,
+            headers={"content-type": "application/octet-stream", "x-csrf-token": status["csrf"]},
+        )
+        assert result.status_code == 422
+        body = json.dumps({**metadata, "admin_password": CURRENT_PASSWORD}).encode()
         result = other.post(
             "/api/auth/setup/restore",
             content=body + b"\n" + archive,
             headers={"content-type": "application/octet-stream", "x-csrf-token": status["csrf"]},
         )
         assert result.status_code == 200, result.text
-        assert other.get("/api/auth/status").json()["initialized"]
-        assert login(other).status_code == 200
+        # Restoring signs in the newly chosen administrator directly.
+        assert other.get("/api/auth/status").json()["username"] == "fresh_admin"
+        assert login(other).status_code == 401
+        assert login(other, "fresh_admin", CURRENT_PASSWORD).status_code == 200
         with closing(sqlite3.connect(fresh.database_path)) as connection:
             name = connection.execute("SELECT name FROM workspace_preferences").fetchone()
         assert name == ("合成恢复空间",)
@@ -520,3 +535,30 @@ def test_fresh_installation_can_restore_instead_of_creating_an_administrator(web
         )
         assert again.status_code == 409
     assert not list(fresh.data_dir.glob(".seekbell-*"))
+
+
+def age_session(settings, seconds):
+    with closing(sqlite3.connect(settings.database_path)) as connection:
+        connection.execute("UPDATE login_sessions SET expires_at=expires_at-?", (seconds,))
+        connection.commit()
+
+
+def test_password_may_be_omitted_shortly_after_it_was_entered(web):
+    client, settings, _ = web
+    without = {"password": PASSWORD}
+    # Signing in just now counts as entering the password.
+    assert client.get("/api/manage/backups").json()["confirm_seconds"] > 800
+    assert client.post("/api/manage/backups/download", json=without).status_code == 200
+    age_session(settings, 16 * 60)
+    assert client.get("/api/manage/backups").json()["confirm_seconds"] == 0
+    for result in (
+        client.post("/api/manage/backups/download", json=without),
+        client.request("DELETE", "/api/manage/backups/candidate", json={}),
+        apply(client, json.dumps(without).encode() + b"\ninvalid"),
+    ):
+        assert result.status_code == 403
+        assert "当前管理员密码" in result.json()["detail"]
+    assert download(client).status_code == 200
+    assert client.get("/api/manage/backups").json()["confirm_seconds"] > 800
+    assert client.post("/api/manage/backups/download", json=without).status_code == 200
+    assert_clean(settings)

@@ -13,6 +13,7 @@ from seekbell import backup
 from seekbell.config import Settings
 from seekbell.db.runtime import instance_lock
 from seekbell.notifiers.credentials import CredentialError
+from seekbell.services.authentication import password_hash, verify_password
 from seekbell.services.backup_demo import (
     ADMIN_PASSWORD,
     PASSWORD,
@@ -20,6 +21,8 @@ from seekbell.services.backup_demo import (
     prepare,
     table_data,
 )
+
+NEW_PASSWORD = "Synthetic-New-Administrator"
 
 
 @pytest.fixture
@@ -42,8 +45,7 @@ def restore(source, archive, destination, **values):
         archive,
         destination,
         password=values.get("password", PASSWORD),
-        username=values.get("username", "backup_admin"),
-        admin_password=values.get("admin_password", ADMIN_PASSWORD),
+        administrator=values.get("administrator"),
     )
 
 
@@ -78,24 +80,24 @@ def test_consistent_snapshot_includes_committed_wal_and_has_private_permissions(
     assert (source.data_dir / "credentials.key").read_bytes() not in path.read_bytes()
 
 
-@pytest.mark.parametrize(
-    "field,value",
-    [
-        ("password", "Incorrect-backup-password"),
-        ("username", "wrong_admin"),
-        ("admin_password", "Incorrect-Administrator-2026"),
-    ],
-)
-def test_failed_authentication_never_publishes_or_changes_source(
-    source, archive, tmp_path, field, value
-):
+def test_failed_authentication_never_publishes_or_changes_source(source, archive, tmp_path):
     before = table_data(source.database_path)
     destination = tmp_path / "restored"
     with pytest.raises(backup.BackupError):
-        restore(source, archive, destination, **{field: value})
+        restore(source, archive, destination, password="Incorrect-backup-password")
     assert not destination.exists()
     assert table_data(source.database_path) == before
     assert not list(tmp_path.glob(".seekbell-*"))
+
+
+def test_restore_can_replace_the_backup_administrator(source, archive, tmp_path):
+    destination = tmp_path / "restored"
+    encoded = password_hash(NEW_PASSWORD)
+    restore(source, archive, destination, administrator=("new_admin", encoded))
+    assert backup.validate_database(destination / "seekbell.sqlite3") == ("new_admin", encoded)
+    with pytest.raises(backup.BackupError):
+        restore(source, archive, tmp_path / "invalid", administrator=("x", encoded))
+    assert not (tmp_path / "invalid").exists()
 
 
 @pytest.mark.parametrize("damage", ["tag", "header", "truncated", "append"])
@@ -326,7 +328,8 @@ def test_interactive_cli_roundtrip_does_not_echo_passwords(source, tmp_path):
                     except OSError:
                         break
             assert process.wait(timeout=10) == 0
-            assert PASSWORD.encode() not in output and ADMIN_PASSWORD.encode() not in output
+            for secret in (PASSWORD, ADMIN_PASSWORD, NEW_PASSWORD):
+                assert secret.encode() not in output
         finally:
             if process.poll() is None:
                 process.kill()
@@ -337,19 +340,27 @@ def test_interactive_cli_roundtrip_does_not_echo_passwords(source, tmp_path):
     command(
         ["create", "--output", str(archive)],
         [
-            ("备份加密口令", PASSWORD),
+            ("备份口令（", PASSWORD),
             ("再次输入备份口令", PASSWORD),
         ],
     )
     command(
         ["restore", "--archive", str(archive), "--destination", str(destination)],
         [
-            ("备份加密口令", PASSWORD),
-            ("备份中的管理员用户名", "backup_admin"),
-            ("备份中的管理员密码", ADMIN_PASSWORD),
+            ("备份口令（", PASSWORD),
+            ("恢复后的管理员用户名", "new_admin"),
+            ("管理员密码（", NEW_PASSWORD),
+            ("再次输入管理员密码", NEW_PASSWORD),
         ],
     )
-    assert backup.validate_database(destination / "seekbell.sqlite3")
+    username, encoded = backup.validate_database(destination / "seekbell.sqlite3")
+    assert username == "new_admin" and verify_password(NEW_PASSWORD, encoded)
+    kept = tmp_path / "kept"
+    command(
+        ["restore", "--archive", str(archive), "--destination", str(kept)],
+        [("备份口令（", PASSWORD), ("恢复后的管理员用户名", "")],
+    )
+    assert backup.validate_database(kept / "seekbell.sqlite3")[0] == "backup_admin"
 
 
 def test_custom_overview_layout_and_selection_survive_encrypted_restore(source, tmp_path):
@@ -423,8 +434,6 @@ def test_pause_disables_collection_and_targets_in_the_restored_copy(source, arch
         archive,
         destination,
         password=PASSWORD,
-        username="backup_admin",
-        admin_password=ADMIN_PASSWORD,
         pause=True,
     )
     with closing(sqlite3.connect(destination / "seekbell.sqlite3")) as connection:
