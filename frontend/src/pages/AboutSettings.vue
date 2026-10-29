@@ -74,7 +74,7 @@ function refresh() {
 }
 </script>
 <template>
-  <div class="side-stack">
+  <div class="settings-about-grid">
     <section class="panel about-card" aria-label="版本信息">
       <span class="brand-icon"><Icon name="bell" :size="26" /></span>
       <h2 id="version-title">SeekBell<span class="brand-period">.</span></h2>

@@ -121,7 +121,7 @@ function save() {
 onMounted(load)
 </script>
 <template>
-  <div class="side-stack">
+  <div class="settings-columns">
     <section class="panel settings-card">
       <div class="panel-heading">
         <div>
@@ -166,32 +166,45 @@ onMounted(load)
             <span role="status">{{
               saved ? '保留策略已保存' : dirty ? '有未保存的修改' : '使用已保存的策略'
             }}</span>
-            <button class="button" type="button" :disabled="busy || !dirty" @click="discard">
-              放弃修改
-            </button>
-            <button class="button primary" type="submit" :disabled="busy || !dirty">
-              {{ busy ? '处理中…' : '保存保留策略' }}
-            </button>
-          </div>
-          <div class="subtle-divider" />
-          <h3>后台清理状态</h3>
-          <p>
-            {{ runtime.active ? '后台运行中，自动分批清理' : '后台未运行，自动清理等待服务恢复' }}
-          </p>
-          <p>最近一批：{{ time(policy.last_run_at) }}</p>
-          <p>下次检查：{{ policy.next_run_at ? time(policy.next_run_at) : '等待后台处理' }}</p>
-          <dl v-if="policy.last_run_at" class="detail-grid" aria-label="最近一批清理数量">
-            <div v-for="(label, key) in labels" :key="key">
-              <dt>{{ label }}</dt>
-              <dd>{{ policy.last_counts[key] || 0 }}</dd>
+            <div class="inline-actions">
+              <button class="button" type="button" :disabled="busy || !dirty" @click="discard">
+                放弃修改
+              </button>
+              <button class="button primary" type="submit" :disabled="busy || !dirty">
+                {{ busy ? '处理中…' : '保存保留策略' }}
+              </button>
             </div>
-          </dl>
-          <button class="button" type="button" :disabled="busy" @click="refresh">
-            重新读取策略与状态
-          </button>
+          </div>
         </form>
       </ReadRegion>
     </section>
-    <StorageSummary />
+    <div class="side-stack">
+      <StorageSummary />
+      <section class="panel settings-card">
+        <div class="panel-heading"><h2>后台清理状态</h2></div>
+        <ReadRegion :loading="busy && !policy" error="" :has-data="!!policy" :min-height="180">
+          <div v-if="policy" class="form-content form-stack">
+            <p>
+              {{ runtime.active ? '后台运行中，自动分批清理' : '后台未运行，自动清理等待服务恢复' }}
+            </p>
+            <p>最近一批：{{ time(policy.last_run_at) }}</p>
+            <p>下次检查：{{ policy.next_run_at ? time(policy.next_run_at) : '等待后台处理' }}</p>
+            <dl
+              v-if="policy.last_run_at"
+              class="detail-grid retention-counts"
+              aria-label="最近一批清理数量"
+            >
+              <div v-for="(label, key) in labels" :key="key">
+                <dt>{{ label }}</dt>
+                <dd>{{ policy.last_counts[key] || 0 }}</dd>
+              </div>
+            </dl>
+            <button class="button" type="button" :disabled="busy" @click="refresh">
+              重新读取策略与状态
+            </button>
+          </div>
+        </ReadRegion>
+      </section>
+    </div>
   </div>
 </template>

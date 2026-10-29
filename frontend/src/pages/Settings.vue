@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AboutSettings from './AboutSettings.vue'
 import Preferences from './Preferences.vue'
 import BackupSettings from './BackupSettings.vue'
 import OverviewSettings from './OverviewSettings.vue'
 import SessionSettings from './SessionSettings.vue'
-import AppSelect from '../components/AppSelect.vue'
 import FormFeedback from '../components/FormFeedback.vue'
 import AlertsSettings from './AlertsSettings.vue'
 import RetentionSettings from './RetentionSettings.vue'
@@ -22,6 +21,20 @@ const categories = [
   { value: 'about', label: '关于与诊断' },
 ]
 const selectedTab = computed(() => props.tab || 'preferences')
+const tabs = ref<HTMLElement>()
+function revealCategory() {
+  const nav = tabs.value
+  const current = nav?.querySelector<HTMLElement>('[aria-current="page"]')
+  if (nav && current)
+    nav.scrollTo({ left: current.offsetLeft - (nav.clientWidth - current.offsetWidth) / 2 })
+}
+watch(selectedTab, () => nextTick(revealCategory), { flush: 'post' })
+let tabResize: ResizeObserver | undefined
+onMounted(() => {
+  tabResize = new ResizeObserver(revealCategory)
+  if (tabs.value) tabResize.observe(tabs.value)
+})
+onBeforeUnmount(() => tabResize?.disconnect())
 function selectCategory(value: string) {
   emit('navigate', '/settings/' + value)
 }
@@ -120,7 +133,7 @@ function logout() {
     <span class="small-badge neutral">单管理员</span>
   </section>
   <div class="settings-shell">
-    <nav class="settings-categories" aria-label="设置分类">
+    <nav ref="tabs" class="page-tabs settings-categories" aria-label="设置分类">
       <button
         v-for="item in categories"
         :key="item.value"
@@ -132,17 +145,9 @@ function logout() {
         {{ item.label }}
       </button>
     </nav>
-    <div class="settings-mobile-category">
-      <AppSelect
-        :model-value="selectedTab"
-        :options="categories"
-        aria-label="设置分类"
-        @update:model-value="selectCategory"
-      />
-    </div>
     <div class="settings-content">
       <Preferences v-if="props.tab === 'preferences'" @dirty="auxiliaryDirty = $event" />
-      <div v-else-if="props.tab === 'account'" class="side-stack">
+      <div v-else-if="props.tab === 'account'" class="settings-columns">
         <section class="panel settings-card">
           <div class="panel-heading">
             <h2>管理员资料</h2>
@@ -153,53 +158,65 @@ function logout() {
             <p class="small-note">
               修改需验证当前密码。保存后其他浏览器的旧会话失效，当前浏览器继续登录。
             </p>
-            <label for="admin-username">管理员用户名</label>
-            <input
-              id="admin-username"
-              v-model="username"
-              class="text-input"
-              autocomplete="username"
-              pattern="[A-Za-z0-9_-]{3,32}"
-              minlength="3"
-              maxlength="32"
-              required
-              :disabled="busy"
-            />
-            <p class="small-note">3–32 位字母、数字、下划线或短横线。</p>
-            <label for="current-password">当前密码</label>
-            <input
-              id="current-password"
-              v-model="currentPassword"
-              class="text-input"
-              type="password"
-              autocomplete="current-password"
-              maxlength="128"
-              required
-              :disabled="busy"
-            />
-            <label for="new-password">新密码 <span class="optional">留空保留原密码</span></label>
-            <input
-              id="new-password"
-              v-model="newPassword"
-              class="text-input"
-              type="password"
-              autocomplete="new-password"
-              minlength="8"
-              maxlength="128"
-              :disabled="busy"
-            />
-            <label for="confirm-new-password">确认新密码</label>
-            <input
-              id="confirm-new-password"
-              v-model="confirmPassword"
-              class="text-input"
-              type="password"
-              autocomplete="new-password"
-              minlength="8"
-              maxlength="128"
-              :required="!!newPassword"
-              :disabled="busy"
-            />
+            <div class="general-fields-grid account-fields">
+              <div class="form-stack">
+                <label for="admin-username">管理员用户名</label>
+                <input
+                  id="admin-username"
+                  v-model="username"
+                  class="text-input"
+                  autocomplete="username"
+                  pattern="[A-Za-z0-9_-]{3,32}"
+                  minlength="3"
+                  maxlength="32"
+                  required
+                  :disabled="busy"
+                />
+                <p class="small-note">3–32 位字母、数字、下划线或短横线。</p>
+              </div>
+              <div class="form-stack">
+                <label for="current-password">当前密码</label>
+                <input
+                  id="current-password"
+                  v-model="currentPassword"
+                  class="text-input"
+                  type="password"
+                  autocomplete="current-password"
+                  maxlength="128"
+                  required
+                  :disabled="busy"
+                />
+              </div>
+              <div class="form-stack">
+                <label for="new-password"
+                  >新密码 <span class="optional">留空保留原密码</span></label
+                >
+                <input
+                  id="new-password"
+                  v-model="newPassword"
+                  class="text-input"
+                  type="password"
+                  autocomplete="new-password"
+                  minlength="8"
+                  maxlength="128"
+                  :disabled="busy"
+                />
+              </div>
+              <div class="form-stack">
+                <label for="confirm-new-password">确认新密码</label>
+                <input
+                  id="confirm-new-password"
+                  v-model="confirmPassword"
+                  class="text-input"
+                  type="password"
+                  autocomplete="new-password"
+                  minlength="8"
+                  maxlength="128"
+                  :required="!!newPassword"
+                  :disabled="busy"
+                />
+              </div>
+            </div>
             <p v-if="saved" class="info-note" role="status">管理员资料已保存，旧会话已失效。</p>
             <div class="inline-form-footer">
               <button class="text-link" type="button" :disabled="busy" @click="logout">

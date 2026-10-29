@@ -97,7 +97,13 @@ onMounted(async () => {
     <FormFeedback :error="error" @retry="reload" />
     <ReadRegion :loading="busy && !saved" error="" :has-data="!!saved" :min-height="300">
       <form v-if="saved" class="form-content form-stack" @submit.prevent="save">
-        <OverviewModuleSettings v-model="draft" :disabled="busy" />
+        <div class="settings-section">
+          <div class="settings-section-heading">
+            <h3>概览内容</h3>
+            <p>保留你常看的信息，按习惯调整顺序。顶部统计与采集状态始终显示。</p>
+          </div>
+          <OverviewModuleSettings v-model="draft" :disabled="busy" />
+        </div>
         <div class="inline-form-footer settings-savebar">
           <span role="status">{{
             done ? '概览布局已保存' : dirty ? '有未保存的修改' : '使用已保存的布局'

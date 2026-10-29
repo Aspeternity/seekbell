@@ -58,8 +58,16 @@ onMounted(load)
     <FormFeedback :error="error" @retry="load" />
     <ReadRegion :loading="busy && !data" error="" :has-data="!!data" :min-height="130">
       <div v-if="data" class="form-content form-stack">
-        <p>当前会话到期：{{ formatTime(new Date(data.expires_at * 1000).toISOString()) }}</p>
-        <p>其他有效会话：{{ data.other_sessions }}</p>
+        <dl class="session-summary">
+          <div>
+            <dt>当前会话到期</dt>
+            <dd>{{ formatTime(new Date(data.expires_at * 1000).toISOString()) }}</dd>
+          </div>
+          <div>
+            <dt>其他有效会话</dt>
+            <dd>{{ data.other_sessions }}</dd>
+          </div>
+        </dl>
         <p class="small-note">会话有效期为12小时。修改管理员资料也会使其他会话失效。</p>
         <p v-if="done" class="info-note" role="status">{{ done }}</p>
         <button class="button" :disabled="busy || !data.other_sessions" @click="revoke">

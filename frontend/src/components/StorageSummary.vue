@@ -34,7 +34,7 @@ const size = (bytes: number) =>
       @retry="data.reload"
     >
       <div v-if="data.data.value" class="form-content form-stack">
-        <dl class="detail-grid">
+        <dl class="detail-grid storage-metrics">
           <div>
             <dt>数据库</dt>
             <dd>{{ size(data.data.value.database_bytes) }}</dd>

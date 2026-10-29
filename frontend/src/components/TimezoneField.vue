@@ -81,7 +81,9 @@ const preview = computed(() =>
         />
       </div>
     </div>
-    <p class="small-note">当前时刻预览：{{ preview }}</p>
+    <p class="timezone-preview">
+      <span class="small-note">当前时刻预览</span><strong>{{ preview }}</strong>
+    </p>
     <p class="small-note">
       网页、日期筛选及之后发送的 Telegram、Bark、邮件通知按所选时区显示。数据和 Webhook 时间保持
       UTC；时区不改变采集频率或历史保留时长。

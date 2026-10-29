@@ -131,57 +131,76 @@ onMounted(async () => {
     <ReadRegion :loading="busy && !saved" error="" :has-data="!!saved" :min-height="360">
       <form v-if="saved" class="form-content form-stack" novalidate @submit.prevent="save">
         <fieldset class="plain-fieldset form-stack" :disabled="busy">
-          <h3>工作空间</h3>
-          <div class="general-fields-grid">
-            <div class="form-stack">
-              <label for="workspace-name">工作空间名称</label>
-              <input
-                id="workspace-name"
-                v-model="name"
-                class="text-input"
-                maxlength="24"
-                :aria-invalid="invalidName"
-                aria-describedby="workspace-name-help"
-              />
-              <p id="workspace-name-help" class="small-note">
-                {{
-                  invalidName
-                    ? '请输入1–24个字符的名称。'
-                    : '名称与说明显示在导航顶部，不改变登录账号。'
-                }}
-              </p>
+          <section class="settings-section" aria-labelledby="workspace-section-title">
+            <div class="settings-section-heading">
+              <h3 id="workspace-section-title">工作空间</h3>
+              <p>给你的消息工作空间一个熟悉的名字。</p>
             </div>
             <div class="form-stack">
-              <label for="workspace-description"
-                >工作空间说明 <span class="optional">选填</span></label
-              >
-              <input
-                id="workspace-description"
-                v-model="description"
-                class="text-input"
-                maxlength="40"
-              />
+              <div class="general-fields-grid">
+                <div class="form-stack">
+                  <label for="workspace-name">工作空间名称</label>
+                  <input
+                    id="workspace-name"
+                    v-model="name"
+                    class="text-input"
+                    maxlength="24"
+                    :aria-invalid="invalidName"
+                    aria-describedby="workspace-name-help"
+                  />
+                  <p id="workspace-name-help" class="small-note">
+                    {{
+                      invalidName
+                        ? '请输入1–24个字符的名称。'
+                        : '名称与说明显示在导航顶部，不改变登录账号。'
+                    }}
+                  </p>
+                </div>
+                <div class="form-stack">
+                  <label for="workspace-description"
+                    >工作空间说明 <span class="optional">选填</span></label
+                  >
+                  <input
+                    id="workspace-description"
+                    v-model="description"
+                    class="text-input"
+                    maxlength="40"
+                  />
+                </div>
+              </div>
+              <div class="workspace-preview-row">
+                <span class="small-note">导航外观预览</span>
+                <div class="workspace-preview" aria-label="工作空间外观预览">
+                  <span class="workspace-icon">{{
+                    name.trim() === '个人工作空间'
+                      ? 'S'
+                      : Array.from(name.trim())[0]?.toUpperCase() || 'S'
+                  }}</span
+                  ><span class="workspace-copy"
+                    ><strong>{{ name.trim() || '工作空间名称' }}</strong
+                    ><small>{{ description }}</small></span
+                  >
+                </div>
+              </div>
             </div>
-          </div>
-          <div class="workspace-preview" aria-label="工作空间外观预览">
-            <span class="workspace-icon">{{
-              name.trim() === '个人工作空间'
-                ? 'S'
-                : Array.from(name.trim())[0]?.toUpperCase() || 'S'
-            }}</span
-            ><span class="workspace-copy"
-              ><strong>{{ name.trim() || '工作空间名称' }}</strong
-              ><small>{{ description }}</small></span
-            >
-          </div>
-          <div class="subtle-divider" />
-          <h3>时间显示</h3>
-          <TimezoneField v-model="timezone" :available="saved.available" :disabled="busy" />
+          </section>
+          <section class="settings-section" aria-labelledby="time-section-title">
+            <div class="settings-section-heading">
+              <h3 id="time-section-title">时间显示</h3>
+              <p>按你习惯的时区阅读动态与通知。</p>
+            </div>
+            <TimezoneField v-model="timezone" :available="saved.available" :disabled="busy" />
+          </section>
         </fieldset>
         <div class="inline-form-footer settings-savebar">
-          <span role="status">{{
-            done ? '通用设置已保存' : dirty ? '有未保存的修改' : '使用已保存的设置'
-          }}</span>
+          <div class="settings-save-meta">
+            <span role="status">{{
+              done ? '通用设置已保存' : dirty ? '有未保存的修改' : '使用已保存的设置'
+            }}</span>
+            <button class="text-link" type="button" :disabled="busy" @click="reload">
+              重新读取通用设置
+            </button>
+          </div>
           <div class="inline-actions">
             <button class="button" type="button" :disabled="busy || !dirty" @click="discard">
               放弃修改
@@ -191,9 +210,6 @@ onMounted(async () => {
             </button>
           </div>
         </div>
-        <button class="text-link" type="button" :disabled="busy" @click="reload">
-          重新读取通用设置
-        </button>
       </form>
     </ReadRegion>
   </section>

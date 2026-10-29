@@ -191,7 +191,7 @@ function open(id: string) {
 onMounted(load)
 </script>
 <template>
-  <div class="form-stack">
+  <div class="settings-columns settings-alerts-grid">
     <section class="panel settings-card">
       <div class="panel-heading">
         <div>
@@ -243,12 +243,14 @@ onMounted(load)
             <span role="status">{{
               saved ? '系统告警设置已保存' : dirty ? '有未保存的修改' : '使用已保存的告警设置'
             }}</span>
-            <button class="button" type="button" :disabled="busy || !dirty" @click="discard">
-              放弃修改
-            </button>
-            <button class="button primary" :disabled="busy || !dirty">
-              {{ busy ? '保存中…' : '保存告警设置' }}
-            </button>
+            <div class="inline-actions">
+              <button class="button" type="button" :disabled="busy || !dirty" @click="discard">
+                放弃修改
+              </button>
+              <button class="button primary" :disabled="busy || !dirty">
+                {{ busy ? '保存中…' : '保存告警设置' }}
+              </button>
+            </div>
           </div>
           <button class="button" type="button" :disabled="busy" @click="reload">
             重新读取告警设置
@@ -256,115 +258,119 @@ onMounted(load)
         </form>
       </ReadRegion>
     </section>
-    <section class="panel settings-card">
-      <div class="panel-heading">
-        <h2>当前故障</h2>
-        <button class="button" @click="refresh">刷新系统事件</button>
-      </div>
-      <div class="form-content">
-        <ReadRegion
-          :loading="faults.loading.value"
-          :error="faults.error.value"
-          :has-data="!!faults.data.value"
-          :stale="faults.stale.value"
-          :min-height="160"
-          @retry="faults.reload"
-          ><template v-if="faults.data.value">
-            <p v-if="!faults.data.value.total">当前没有已记录的故障。</p>
-            <article
-              v-for="fault in faults.data.value.items"
-              :key="fault.component"
-              class="history-evaluation"
-            >
-              <strong>{{ fault.label }}</strong>
-              <p>{{ fault.code }} · {{ stamp(fault.since) }}</p>
-            </article>
-            <Pagination
-              label="当前故障"
-              :page="statePage"
-              :page-size="20"
-              :total="faults.data.value.total"
-              @change="statePage = $event"
-            /> </template
-        ></ReadRegion>
-      </div>
-    </section>
-    <section class="panel settings-card">
-      <div class="panel-heading">
-        <h2>系统事件与告警记录</h2>
-        <button class="button" :aria-expanded="showRecords" @click="showRecords = !showRecords">
-          {{ showRecords ? '收起告警记录' : '查看系统告警记录' }}
-        </button>
-      </div>
-      <div v-if="showRecords" class="form-content">
-        <ReadRegion
-          :loading="events.loading.value"
-          :error="events.error.value"
-          :has-data="!!events.data.value"
-          :stale="events.stale.value"
-          :min-height="160"
-          @retry="events.reload"
-          ><template v-if="events.data.value">
-            <p v-if="!events.data.value.total">尚无系统状态变化记录。</p>
-            <article
-              v-for="event in events.data.value.items"
-              :key="event.id"
-              class="history-evaluation system-event"
-            >
-              <strong>{{ event.phase === 'fault' ? '故障' : '恢复' }} · {{ event.label }}</strong>
-              <p>
-                {{ stamp(event.at) }} <span v-if="event.code"> · {{ event.code }}</span>
-              </p>
-              <p v-if="!Object.keys(event.deliveries).length">
-                事件发生时未启用告警或未选择目标，未生成通知。
-              </p>
-              <p v-for="(count, result) in event.deliveries" :key="result">
-                {{ labels[result] || result }}：{{ count }}
-              </p>
-              <button class="button" @click="open(event.id)">
-                {{ selected === event.id ? '收起投递结果' : '查看各目标结果' }}
-              </button>
-              <template v-if="selected === event.id">
-                <ReadRegion
-                  :loading="details.loading.value"
-                  :error="details.error.value"
-                  :has-data="!!details.data.value"
-                  :stale="details.stale.value"
-                  :min-height="160"
-                  @retry="details.reload"
-                  ><template v-if="details.data.value">
-                    <p v-if="!details.data.value.total">没有对应的告警投递。</p>
-                    <article
-                      v-for="item in details.data.value.items"
-                      :key="item.id"
-                      class="alert-delivery"
-                    >
-                      <strong>{{ item.target_name }} · {{ kindLabels[item.kind] }}</strong>
-                      <p>
-                        {{ labels[item.result] || item.result }}
-                        <span v-if="item.error_code"> · {{ item.error_code }}</span>
-                      </p>
-                      <p>开始 {{ stamp(item.started_at) }} · 完成 {{ stamp(item.finished_at) }}</p>
-                    </article>
-                    <Pagination
-                      label="告警投递"
-                      :page="detailPage"
-                      :page-size="20"
-                      :total="details.data.value.total"
-                      @change="detailPage = $event"
-                    /> </template
-                ></ReadRegion>
-              </template>
-            </article>
-            <Pagination
-              label="系统事件"
-              :page="eventPage"
-              :page-size="20"
-              :total="events.data.value.total"
-              @change="eventPage = $event"
-            /> </template
-        ></ReadRegion>
-      </div>
-    </section>
+    <div class="side-stack">
+      <section class="panel settings-card">
+        <div class="panel-heading">
+          <h2>当前故障</h2>
+          <button class="button" @click="refresh">刷新系统事件</button>
+        </div>
+        <div class="form-content">
+          <ReadRegion
+            :loading="faults.loading.value"
+            :error="faults.error.value"
+            :has-data="!!faults.data.value"
+            :stale="faults.stale.value"
+            :min-height="160"
+            @retry="faults.reload"
+            ><template v-if="faults.data.value">
+              <p v-if="!faults.data.value.total">当前没有已记录的故障。</p>
+              <article
+                v-for="fault in faults.data.value.items"
+                :key="fault.component"
+                class="history-evaluation"
+              >
+                <strong>{{ fault.label }}</strong>
+                <p>{{ fault.code }} · {{ stamp(fault.since) }}</p>
+              </article>
+              <Pagination
+                label="当前故障"
+                :page="statePage"
+                :page-size="20"
+                :total="faults.data.value.total"
+                @change="statePage = $event"
+              /> </template
+          ></ReadRegion>
+        </div>
+      </section>
+      <section class="panel settings-card">
+        <div class="panel-heading">
+          <h2>系统事件与告警记录</h2>
+          <button class="button" :aria-expanded="showRecords" @click="showRecords = !showRecords">
+            {{ showRecords ? '收起告警记录' : '查看系统告警记录' }}
+          </button>
+        </div>
+        <div v-if="showRecords" class="form-content">
+          <ReadRegion
+            :loading="events.loading.value"
+            :error="events.error.value"
+            :has-data="!!events.data.value"
+            :stale="events.stale.value"
+            :min-height="160"
+            @retry="events.reload"
+            ><template v-if="events.data.value">
+              <p v-if="!events.data.value.total">尚无系统状态变化记录。</p>
+              <article
+                v-for="event in events.data.value.items"
+                :key="event.id"
+                class="history-evaluation system-event"
+              >
+                <strong>{{ event.phase === 'fault' ? '故障' : '恢复' }} · {{ event.label }}</strong>
+                <p>
+                  {{ stamp(event.at) }} <span v-if="event.code"> · {{ event.code }}</span>
+                </p>
+                <p v-if="!Object.keys(event.deliveries).length">
+                  事件发生时未启用告警或未选择目标，未生成通知。
+                </p>
+                <p v-for="(count, result) in event.deliveries" :key="result">
+                  {{ labels[result] || result }}：{{ count }}
+                </p>
+                <button class="button" @click="open(event.id)">
+                  {{ selected === event.id ? '收起投递结果' : '查看各目标结果' }}
+                </button>
+                <template v-if="selected === event.id">
+                  <ReadRegion
+                    :loading="details.loading.value"
+                    :error="details.error.value"
+                    :has-data="!!details.data.value"
+                    :stale="details.stale.value"
+                    :min-height="160"
+                    @retry="details.reload"
+                    ><template v-if="details.data.value">
+                      <p v-if="!details.data.value.total">没有对应的告警投递。</p>
+                      <article
+                        v-for="item in details.data.value.items"
+                        :key="item.id"
+                        class="alert-delivery"
+                      >
+                        <strong>{{ item.target_name }} · {{ kindLabels[item.kind] }}</strong>
+                        <p>
+                          {{ labels[item.result] || item.result }}
+                          <span v-if="item.error_code"> · {{ item.error_code }}</span>
+                        </p>
+                        <p>
+                          开始 {{ stamp(item.started_at) }} · 完成 {{ stamp(item.finished_at) }}
+                        </p>
+                      </article>
+                      <Pagination
+                        label="告警投递"
+                        :page="detailPage"
+                        :page-size="20"
+                        :total="details.data.value.total"
+                        @change="detailPage = $event"
+                      /> </template
+                  ></ReadRegion>
+                </template>
+              </article>
+              <Pagination
+                label="系统事件"
+                :page="eventPage"
+                :page-size="20"
+                :total="events.data.value.total"
+                @change="eventPage = $event"
+              /> </template
+          ></ReadRegion>
+        </div>
+      </section>
+    </div>
   </div>
 </template>

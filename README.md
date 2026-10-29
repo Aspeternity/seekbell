@@ -5,7 +5,7 @@
 当前已实现 **M1核心闭环与M2四渠道通知**：RSS解析、规则、基线/身份账本、事务outbox、可恢复投递，以及Telegram Bot/Bark/SMTP/Webhook适配、加密目标配置和独立目标测试记录。M2通过模拟验证；M3已接入真实初始化/登录、网站/任务、加密通知配置、工作空间保存、内容/命中/投递历史只读查询、真实概览统计、管理员修改、显式通知测试/手动重发和服务端采集/自动投递生命周期、保留策略与分批历史清理、显示时区及系统故障/恢复告警；版本信息已接入，M3本地自动退出核对已通过；已提供M4停服加密备份/独立恢复维护命令，网页加密下载/上传生成独立副本已接入，保留原卷的切换/升级回退维护流程已实现，真实验收仍未完成。真实通知与用户验收待Web完成后统一组织，当前证据以[PROJECT_STATE](docs/PROJECT_STATE.md)为准。
 
 贡献、安全报告和合并规范见[CONTRIBUTING](CONTRIBUTING.md)、[SECURITY](SECURITY.md)与[GitHub配置](docs/PUBLIC_REPOSITORY.md)。
-版本镜像通过[GitHub Releases](https://github.com/Aspeternity/seekbell/releases)发布；0.1.0提供版本号及latest，预发布不更新latest。
+版本镜像通过[GitHub Releases](https://github.com/Aspeternity/seekbell/releases)发布；0.2.0提供版本号及latest，预发布不更新latest。
 正式升级推荐Release附件中固定digest的Portainer Compose，保留原Stack、端口和实际数据卷；步骤见[镜像说明](docs/IMAGE_RELEASE.md)，变更见[CHANGELOG](CHANGELOG.md)。
 
 ## 管理界面
