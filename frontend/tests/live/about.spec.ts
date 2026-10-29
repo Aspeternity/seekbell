@@ -34,7 +34,7 @@ test('version and readiness remain independent, retry safely and perform no conf
   await expect(page.getByTestId('build-revision')).toHaveText(original.build_revision)
   await expect(page.getByTestId('database-revision')).toHaveText(original.database_revision)
   await expect(page.getByText('本地开发构建，未固定代码提交版本。')).toBeVisible()
-  await expect(page.getByText('服务已就绪', { exact: true })).toBeVisible()
+  await expect(page.getByText('已就绪', { exact: true })).toBeVisible()
   await page.reload()
   await expect(page.getByTestId('app-version')).toHaveText(original.version)
   const category = page.getByRole('combobox', { name: '设置分类', exact: true })
@@ -50,7 +50,7 @@ test('version and readiness remain independent, retry safely and perform no conf
   if (info.project.name === 'desktop') {
     await page.getByRole('button', { name: '使用说明', exact: true }).click()
     await expect(page.getByRole('dialog')).toContainText('关闭浏览器不影响后台监控')
-    await expect(page.getByRole('dialog')).toContainText('备份恢复先生成独立副本')
+    await expect(page.getByRole('dialog')).toContainText('备份可在系统设置中直接恢复')
     await page.getByRole('button', { name: '知道了', exact: true }).click()
   }
 
@@ -66,11 +66,11 @@ test('version and readiness remain independent, retry safely and perform no conf
     }),
   )
   await page.getByRole('button', { name: '刷新运行信息', exact: true }).click()
-  await expect(page.getByRole('alert')).toContainText('服务未就绪')
+  await expect(page.getByRole('alert')).toContainText('未就绪')
   await expect(page.getByText('异常停止', { exact: true })).toBeVisible()
   await expect(page.getByText('delivery_stopped', { exact: true })).toBeVisible()
   await expect(page.getByTestId('build-revision')).toHaveText(original.build_revision)
-  await expect(page.getByText('服务已就绪', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('已就绪', { exact: true })).toHaveCount(0)
   await page.screenshot({ path: info.outputPath('about-unready.png'), fullPage: true })
 
   await page.route('**/api/version', (route) => route.fulfill({ status: 503, json: {} }))
@@ -101,7 +101,7 @@ test('version and readiness remain independent, retry safely and perform no conf
   await expect(status.getByRole('alert').filter({ hasText: '无法读取就绪状态' })).toContainText(
     '上次结果',
   )
-  await expect(page.getByText('服务已就绪', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('已就绪', { exact: true })).toHaveCount(0)
   await expect(page.getByTestId('build-revision')).toHaveText(fixed)
   for (const width of [320, 390, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 })
@@ -112,7 +112,7 @@ test('version and readiness remain independent, retry safely and perform no conf
   await page.unroute('**/api/manage/runtime')
   await page.unroute('**/api/version')
   await page.getByRole('button', { name: '刷新运行信息', exact: true }).click()
-  await expect(page.getByText('服务已就绪', { exact: true })).toBeVisible()
+  await expect(page.getByText('已就绪', { exact: true })).toBeVisible()
   await expect(page.getByTestId('build-revision')).toHaveText(original.build_revision)
   await page.setViewportSize(
     info.project.name === 'mobile' ? { width: 390, height: 844 } : { width: 1440, height: 1000 },
@@ -123,8 +123,12 @@ test('version and readiness remain independent, retry safely and perform no conf
 
   await page.goto('/#/settings/backup')
   await expect(page.getByRole('button', { name: '生成并下载加密备份' })).toBeVisible()
-  await page.getByRole('button', { name: '恢复验证', exact: true }).click()
-  await expect(page.getByRole('button', { name: '验证并生成独立恢复副本' })).toBeDisabled()
+  await page.getByRole('button', { name: '恢复备份', exact: true }).click()
+  await expect(
+    page
+      .getByRole('form', { name: '从文件恢复', exact: true })
+      .getByRole('button', { name: '恢复备份', exact: true }),
+  ).toBeDisabled()
   await page.goto('/#/settings/unknown')
   await expect(page.getByRole('heading', { name: '这条线索暂时不在这里' })).toBeVisible()
   await page.goto('/#/settings/about')

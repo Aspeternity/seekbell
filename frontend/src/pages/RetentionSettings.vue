@@ -4,7 +4,6 @@ import RetentionPreview from '../components/RetentionPreview.vue'
 import FormFeedback from '../components/FormFeedback.vue'
 import ReadRegion from '../components/ReadRegion.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import Icon from '../components/Icon.vue'
 import { confirmAction, formatTime, request, runtime, state } from '../store'
 interface Policy {
   days: number
@@ -136,9 +135,7 @@ function save() {
   if (days.value < policy.value.days)
     confirmAction(
       '保存历史保留策略？',
-      '缩短为' +
-        values.days +
-        '天后，后台将分批清理过期普通历史。已清理的数据无法恢复；未完成投递及其依赖、独立去重账本保留。',
+      '缩短为' + values.days + '天后，超过期限的历史将被清理，已清理的数据无法恢复。',
       () => persist(values),
       '确认保存策略',
     )
@@ -152,9 +149,8 @@ onMounted(load)
       <div class="panel-heading">
         <div>
           <h2>历史保留策略</h2>
-          <p>按保存的天数，分批清理普通历史</p>
+          <p>超过期限的历史记录由后台自动清理</p>
         </div>
-        <Icon name="clock" :size="19" />
       </div>
       <FormFeedback :error="error" @retry="refresh" />
       <ReadRegion :loading="busy && !policy" error="" :has-data="!!policy" :min-height="400">
@@ -162,7 +158,6 @@ onMounted(load)
           <section class="settings-section" aria-labelledby="retention-days-title">
             <div class="settings-section-heading">
               <h3 id="retention-days-title">保留期限</h3>
-              <p>超过期限的普通历史由后台分批清理。</p>
             </div>
             <div class="form-stack">
               <label for="retention-days">普通历史保留天数</label>
@@ -179,31 +174,23 @@ onMounted(load)
                   :disabled="busy"
                 /><span>天</span>
               </div>
-              <p class="small-note">默认 30 天，可设置为 1–365 天，按 UTC 的连续 24 小时计算。</p>
+              <p class="small-note">1–365 天，默认 30 天。</p>
             </div>
           </section>
           <section class="settings-section" aria-labelledby="retention-scope-title">
             <div class="settings-section-heading">
               <h3 id="retention-scope-title">清理范围</h3>
-              <p>保存前可预览本次天数的清理影响。</p>
             </div>
             <div class="form-stack">
-              <div class="info-note">
-                <Icon name="shield" :size="18" />
-                <p>独立去重记录始终保留，旧帖子再次出现在 RSS 中也不会重新自动发送。</p>
-              </div>
               <p class="settings-body-text">
-                超过期限的帖子、判定、命中、已完成投递及尝试、已完成测试/手动重发、采集记录和已完成的系统事件告警会自动清理。
+                帖子、判定、命中、已完成的投递与测试、采集记录和系统事件。去重记录始终保留，旧帖不会被重复推送。
               </p>
               <details class="settings-details">
                 <summary>哪些记录暂不清理</summary>
                 <p class="small-note">
-                  待发送、重试、在途、未完成操作及其依赖暂不清理。投递从进入终态或最近结果留证起计算保留期。旧版本升级时已有终态投递会额外保留完整周期。
+                  待发送、重试中和未完成的操作及其依赖。投递从完成时开始计算保留期。
                 </p>
               </details>
-              <p class="warning-note">
-                清理不可撤销；延长保留天数不会恢复已经删除的历史。清理记录后磁盘文件不一定立即缩小。
-              </p>
               <RetentionPreview :days="days" />
             </div>
           </section>
@@ -225,10 +212,7 @@ onMounted(load)
     </section>
     <section class="panel settings-card">
       <div class="panel-heading">
-        <div>
-          <h2>存储与清理状态</h2>
-          <p>数据库占用与后台自动清理进度</p>
-        </div>
+        <h2>存储与清理状态</h2>
         <button class="button" type="button" :disabled="busy" @click="refreshStatus">
           刷新状态
         </button>
@@ -237,14 +221,13 @@ onMounted(load)
         <section class="settings-section" aria-labelledby="storage-title">
           <div class="settings-section-heading">
             <h3 id="storage-title">存储占用</h3>
-            <p>服务端数据目录的当前占用。</p>
           </div>
           <StorageSummary ref="storage" />
         </section>
         <section class="settings-section" aria-labelledby="cleanup-title">
           <div class="settings-section-heading">
             <h3 id="cleanup-title">后台清理</h3>
-            <p>约每小时检查一次，积压时连续分批执行。</p>
+            <p>约每小时检查一次</p>
           </div>
           <ReadRegion :loading="busy && !policy" error="" :has-data="!!policy" :min-height="120">
             <div v-if="policy" class="form-stack">

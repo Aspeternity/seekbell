@@ -299,7 +299,7 @@ test('failed refresh keeps same-source snapshot and 320px layout fits', async ({
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
     .toBeTruthy()
   await page
-    .locator('.overview-module-settings')
+    .locator('#overview-modules')
     .screenshot({ path: info.outputPath('module-settings-320.png') })
 })
 
@@ -329,7 +329,7 @@ test('pointer handle can reorder with mouse and touch', async ({ page }, info) =
   }
   await expect(page.locator('[data-module]').first()).toHaveAttribute('data-module', 'hotlist')
   await page
-    .locator('.overview-module-settings')
+    .locator('#overview-modules')
     .screenshot({ path: info.outputPath('module-settings-full.png') })
 })
 

@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { confirmAction, request, state } from '../store'
 import { clone } from '../shared'
-import type { OverviewPreferences } from '../overviewPreferences'
+import { defaultOverviewModules, type OverviewPreferences } from '../overviewPreferences'
 import OverviewModuleSettings from '../components/OverviewModuleSettings.vue'
 import FormFeedback from '../components/FormFeedback.vue'
 import ReadRegion from '../components/ReadRegion.vue'
@@ -87,23 +87,29 @@ onMounted(async () => {
 })
 </script>
 <template>
-  <section class="panel settings-card">
+  <section
+    id="overview-modules"
+    class="panel settings-card"
+    aria-labelledby="overview-modules-title"
+  >
     <div class="panel-heading">
       <div>
-        <h2>概览设置</h2>
-        <p>选择概览内容及显示顺序</p>
+        <h2 id="overview-modules-title">概览显示模块</h2>
+        <p>拖动或用箭头调整顺序，顶部统计始终显示</p>
       </div>
+      <button
+        type="button"
+        class="text-link"
+        :disabled="busy || !saved"
+        @click="draft = defaultOverviewModules()"
+      >
+        恢复默认布局
+      </button>
     </div>
     <FormFeedback :error="error" @retry="reload" />
-    <ReadRegion :loading="busy && !saved" error="" :has-data="!!saved" :min-height="300">
+    <ReadRegion :loading="busy && !saved" error="" :has-data="!!saved" :min-height="240">
       <form v-if="saved" class="form-content form-stack" @submit.prevent="save">
-        <div class="settings-section">
-          <div class="settings-section-heading">
-            <h3>概览内容</h3>
-            <p>保留你常看的信息，按习惯调整顺序。顶部统计与采集状态始终显示。</p>
-          </div>
-          <OverviewModuleSettings v-model="draft" :disabled="busy" />
-        </div>
+        <OverviewModuleSettings v-model="draft" :disabled="busy" />
         <div class="inline-form-footer settings-savebar">
           <span role="status">{{
             done ? '概览布局已保存' : dirty ? '有未保存的修改' : '没有未保存的修改'

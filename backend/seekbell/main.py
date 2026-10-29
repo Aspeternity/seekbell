@@ -1,6 +1,6 @@
 import asyncio
 import secrets
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -13,6 +13,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from seekbell.api.auth import router as auth_router
 from seekbell.api.backups import router as backups_router
+from seekbell.api.backups import setup_router as backup_setup_router
 from seekbell.api.history import router as history_router
 from seekbell.api.hotlists import router as hotlists_router
 from seekbell.api.management import router as management_router
@@ -67,59 +68,75 @@ def create_app(
 ) -> FastAPI:
     settings = settings or Settings()
 
+    async def open_workspace(app: FastAPI):
+        """Build every database-bound service; a backup restore closes and reopens them."""
+        stack = AsyncExitStack()
+        try:
+            engine = create_database_engine(settings)
+            stack.callback(engine.dispose)
+            # Migration/credential validation must complete before actors can start.
+            await run_in_threadpool(migrate, engine)
+            app.state.engine = engine
+            key_path = settings.data_dir.resolve() / "credentials.key"
+            with Session(engine) as session:
+                encrypted = stored_credentials(session)
+            if not key_path.exists() and not encrypted:
+                app.state.vault = CredentialVault.open(settings.data_dir.resolve(), create=True)
+            else:
+                app.state.vault = CredentialVault.open(settings.data_dir.resolve())
+            # Validate current credentials, or retained snapshots after deletion.
+            for key, kind, ciphertext in encrypted:
+                app.state.vault.unseal(key, kind, ciphertext)
+            registry = NotifierRegistry(app.state.vault)
+            stack.push_async_callback(registry.aclose)
+            runtime = (runtime_factory or Runtime)(engine, registry.notifiers)
+            request_budget = getattr(runtime, "request_budget", None) or WebsiteRequestBudget(
+                engine
+            )
+            app.state.hotlists = (
+                hotlist_factory()
+                if hotlist_factory
+                else HotlistService(
+                    engine=engine,
+                    request_budget=request_budget,
+                    collection_active=lambda: runtime.active,
+                )
+            )
+            stack.push_async_callback(app.state.hotlists.aclose)
+            app.state.target_testing = ConfiguredTargetTesting(engine, registry.notifiers)
+            app.state.manual_sending = ManualSending(engine, registry.notifiers)
+            app.state.sending_gate = asyncio.Semaphore(2)
+            app.state.runtime = runtime
+            stack.push_async_callback(runtime.aclose)
+            await runtime.start()
+        except BaseException:
+            await stack.aclose()
+            raise
+        app.state.workspace = stack
+
+    async def close_workspace(app: FastAPI):
+        stack, app.state.workspace = app.state.workspace, None
+        if stack is not None:
+            await stack.aclose()
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         with instance_lock(settings.data_dir.resolve()):
-            engine = create_database_engine(settings)
+            app.state.backup_gate = asyncio.Lock()
+            await open_workspace(app)
             try:
-                # Migration/credential validation must complete before actors can start.
-                await run_in_threadpool(migrate, engine)
-                app.state.engine = engine
-                key_path = settings.data_dir.resolve() / "credentials.key"
-                with Session(engine) as session:
-                    encrypted = stored_credentials(session)
-                if not key_path.exists() and not encrypted:
-                    app.state.vault = CredentialVault.open(settings.data_dir.resolve(), create=True)
-                else:
-                    app.state.vault = CredentialVault.open(settings.data_dir.resolve())
-                # Validate current credentials, or retained snapshots after deletion.
-                for key, kind, ciphertext in encrypted:
-                    app.state.vault.unseal(key, kind, ciphertext)
-                registry = NotifierRegistry(app.state.vault)
-                runtime = (runtime_factory or Runtime)(engine, registry.notifiers)
-                request_budget = getattr(runtime, "request_budget", None) or WebsiteRequestBudget(
-                    engine
-                )
-                app.state.hotlists = (
-                    hotlist_factory()
-                    if hotlist_factory
-                    else HotlistService(
-                        engine=engine,
-                        request_budget=request_budget,
-                        collection_active=lambda: runtime.active,
-                    )
-                )
-                try:
-                    app.state.target_testing = ConfiguredTargetTesting(engine, registry.notifiers)
-                    app.state.manual_sending = ManualSending(engine, registry.notifiers)
-                    app.state.sending_gate = asyncio.Semaphore(2)
-                    app.state.backup_gate = asyncio.Lock()
-                    app.state.runtime = runtime
-                    try:
-                        await runtime.start()
-                        yield
-                    finally:
-                        await runtime.aclose()
-                finally:
-                    await app.state.hotlists.aclose()
-                    await registry.aclose()
+                yield
             finally:
-                engine.dispose()
+                await close_workspace(app)
 
     app = FastAPI(title="SeekBell", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.state.settings = settings
     app.state.csrf_key = secrets.token_bytes(32)
     app.state.login_limiter = LoginLimiter()
+    app.state.open_workspace = open_workspace
+    app.state.close_workspace = close_workspace
+    app.state.restoring = False
+    app.state.in_flight = 0
 
     @app.exception_handler(RequestValidationError)
     async def invalid_input(request: Request, error: RequestValidationError):
@@ -134,6 +151,23 @@ def create_app(
             else "配置无效，请检查字段及关联目标。"
         )
         return JSONResponse({"detail": detail}, status_code=422)
+
+    @app.middleware("http")
+    async def restore_pause(request: Request, call_next):
+        # While a restore swaps the data files no request may touch the old services.
+        if request.url.path.startswith(("/api/", "/health/")):
+            if app.state.restoring:
+                return JSONResponse(
+                    {"detail": "正在恢复备份，请稍候刷新。"},
+                    status_code=503,
+                    headers={"Retry-After": "5", "Cache-Control": "no-store"},
+                )
+            app.state.in_flight += 1
+            try:
+                return await call_next(request)
+            finally:
+                app.state.in_flight -= 1
+        return await call_next(request)
 
     @app.middleware("http")
     async def private_responses(request: Request, call_next):
@@ -157,6 +191,7 @@ def create_app(
     app.include_router(management_router)
     app.include_router(hotlists_router)
     app.include_router(backups_router)
+    app.include_router(backup_setup_router)
     app.include_router(history_router)
     app.include_router(overview_router)
     app.include_router(sending_router)

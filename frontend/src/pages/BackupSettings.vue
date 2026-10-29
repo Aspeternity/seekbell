@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { formatTime, request, sendRequest } from '../store'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { formatTime, notify, request, sendRequest } from '../store'
 import FormFeedback from '../components/FormFeedback.vue'
 import ReadRegion from '../components/ReadRegion.vue'
+import Icon from '../components/Icon.vue'
+import BackupRestoreForm from '../components/BackupRestoreForm.vue'
 interface BackupRecord {
   id: string
   kind: string
@@ -27,10 +29,10 @@ const status = ref<BackupStatus>(),
   readError = ref(''),
   message = ref('')
 const downloadFields = reactive({ current: '', password: '', confirmation: '' })
-const restoreFields = reactive({ current: '', password: '', username: '', adminPassword: '' })
-const file = ref<File>(),
-  input = ref<HTMLInputElement>(),
-  acknowledged = ref(false)
+const discarding = ref(false),
+  discardPassword = ref(''),
+  restoreDirty = ref(false),
+  restoring = ref(false)
 let active = true
 onBeforeUnmount(() => {
   active = false
@@ -38,17 +40,30 @@ onBeforeUnmount(() => {
 const dirty = computed(
   () =>
     !!busy.value ||
+    restoring.value ||
     Object.values(downloadFields).some(Boolean) ||
-    Object.values(restoreFields).some(Boolean) ||
-    !!file.value,
+    restoreDirty.value ||
+    !!discardPassword.value,
 )
 watch(dirty, (value) => emit('dirty', value), { immediate: true })
 const size = (bytes: number | null) =>
   bytes == null ? '—' : (bytes / 1024 / 1024).toFixed(2) + ' MiB'
 const labels: Record<string, string> = {
-  generated: '已生成，交给浏览器下载',
-  verified: '已验证并生成恢复副本',
-  failed: '操作失败',
+  generated: '已生成',
+  verified: '已生成副本',
+  failed: '失败',
+  deleted: '已删除',
+  restored: '已恢复',
+}
+const kinds: Record<string, string> = {
+  export: '导出备份',
+  restore: '恢复备份',
+  discard: '删除副本',
+}
+function select(value: string) {
+  action.value = value
+  error.value = ''
+  message.value = ''
 }
 async function load() {
   loading.value = true
@@ -62,11 +77,8 @@ async function load() {
     loading.value = false
   }
 }
-function selectFile(event: Event) {
-  file.value = (event.target as HTMLInputElement).files?.[0]
-}
 async function download() {
-  if (busy.value || !status.value) return
+  if (busy.value) return
   error.value = ''
   message.value = ''
   if (downloadFields.password !== downloadFields.confirmation) {
@@ -95,59 +107,47 @@ async function download() {
       'Z.sbbackup'
     link.click()
     setTimeout(() => URL.revokeObjectURL(url), 60000)
-    message.value = '加密备份已生成并交给浏览器下载，请确认文件已保存，并单独保管备份口令。'
+    Object.assign(downloadFields, { password: '', confirmation: '' })
+    message.value = '备份已交给浏览器下载，请确认文件已保存。'
   } catch (e) {
     if (active) error.value = (e as Error).message
   } finally {
-    Object.assign(downloadFields, { current: '', password: '', confirmation: '' })
+    downloadFields.current = ''
     busy.value = ''
     if (active) await load()
   }
 }
-async function restore() {
-  if (
-    busy.value ||
-    !file.value ||
-    !status.value ||
-    status.value.candidate_available ||
-    !acknowledged.value
+async function restored(result: { paused: boolean }) {
+  restoreDirty.value = false
+  restoring.value = false
+  notify(
+    result.paused
+      ? '备份已恢复，采集和通知已暂停。请用备份中的管理员登录。'
+      : '备份已恢复，请用备份中的管理员登录。',
   )
-    return
+  // Let the cleared draft reach the settings shell before leaving.
+  await nextTick()
+  location.hash = '/login'
+}
+async function discard() {
+  if (busy.value || !status.value?.candidate_available) return
   error.value = ''
   message.value = ''
-  if (file.value.size > status.value.max_archive_bytes) {
-    error.value = '备份超过支持上限。'
-    return
-  }
-  busy.value = 'restore'
+  busy.value = 'discard'
   try {
-    const metadata = JSON.stringify({
-      current_password: restoreFields.current,
-      password: restoreFields.password,
-      username: restoreFields.username,
-      admin_password: restoreFields.adminPassword,
+    await request('manage/backups/candidate', 'DELETE', {
+      current_password: discardPassword.value,
     })
-    await sendRequest(
-      'manage/backups/restore',
-      'POST',
-      new Blob([metadata + String.fromCharCode(10), file.value], {
-        type: 'application/octet-stream',
-      }),
-    )
     if (active) {
-      status.value.candidate_available = true
-      message.value = '独立恢复副本已生成，当前工作空间继续运行；副本尚未启用。'
-      file.value = undefined
-      if (input.value) input.value.value = ''
-      acknowledged.value = false
-      restoreFields.username = ''
+      status.value.candidate_available = false
+      discarding.value = false
+      message.value = '恢复副本已删除。'
+      action.value = 'restore'
     }
   } catch (e) {
     if (active) error.value = (e as Error).message
   } finally {
-    restoreFields.current = ''
-    restoreFields.password = ''
-    restoreFields.adminPassword = ''
+    discardPassword.value = ''
     busy.value = ''
     if (active) await load()
   }
@@ -156,253 +156,185 @@ onMounted(load)
 </script>
 <template>
   <div class="settings-stack">
-    <section class="panel settings-card">
+    <section class="panel settings-card" aria-labelledby="backup-title">
       <div class="panel-heading">
         <div>
-          <h2>备份与恢复</h2>
-          <p>加密备份与独立恢复副本</p>
+          <h2 id="backup-title">备份与恢复</h2>
+          <p>加密备份全部配置、规则与历史</p>
         </div>
-        <button class="button" :disabled="loading || !!busy" @click="load">刷新备份状态</button>
+        <nav class="segmented compact backup-switch" aria-label="备份操作">
+          <button
+            type="button"
+            :class="{ active: action === 'export' }"
+            :aria-pressed="action === 'export'"
+            :disabled="!!busy || restoring"
+            @click="select('export')"
+          >
+            备份下载
+          </button>
+          <button
+            type="button"
+            :class="{ active: action === 'restore' }"
+            :aria-pressed="action === 'restore'"
+            :disabled="!!busy || restoring"
+            @click="select('restore')"
+          >
+            恢复备份
+          </button>
+        </nav>
       </div>
-      <div class="form-content form-stack">
-        <p>
-          备份包含管理员、规则、历史、去重账本、队列和原凭据密钥。下载使用一致性快照，后台继续运行；快照之后的修改和回执不在备份中。
+      <FormFeedback :error="error || readError" @retry="load" />
+      <form
+        v-show="action === 'export'"
+        class="form-content form-stack"
+        aria-label="导出备份"
+        @submit.prevent="download"
+      >
+        <div class="settings-fields-grid three">
+          <div class="form-stack">
+            <label for="backup-current">当前管理员密码</label>
+            <input
+              id="backup-current"
+              v-model="downloadFields.current"
+              class="text-input"
+              type="password"
+              autocomplete="current-password"
+              maxlength="128"
+              required
+              :disabled="!!busy"
+            />
+          </div>
+          <div class="form-stack">
+            <label for="backup-password">备份加密口令</label>
+            <input
+              id="backup-password"
+              v-model="downloadFields.password"
+              class="text-input"
+              type="password"
+              autocomplete="off"
+              minlength="12"
+              maxlength="1024"
+              required
+              :disabled="!!busy"
+            />
+            <p class="small-note">至少 12 个字符，丢失后无法解密</p>
+          </div>
+          <div class="form-stack">
+            <label for="backup-confirm">确认下载口令</label>
+            <input
+              id="backup-confirm"
+              v-model="downloadFields.confirmation"
+              class="text-input"
+              type="password"
+              autocomplete="off"
+              minlength="12"
+              maxlength="1024"
+              required
+              :disabled="!!busy"
+            />
+          </div>
+        </div>
+        <div class="backup-actions">
+          <button class="button primary" :disabled="!!busy">
+            <Icon name="download" :size="15" />{{
+              busy === 'export' ? '正在生成加密备份…' : '生成并下载加密备份'
+            }}
+          </button>
+          <p v-if="message && action === 'export'" class="backup-done" role="status">
+            <Icon name="check" :size="15" />{{ message }}
+          </p>
+        </div>
+      </form>
+      <div v-show="action === 'restore'" class="form-content form-stack">
+        <p class="settings-body-text">
+          用备份替换当前的任务、网站、通知目标和历史，服务不中断。较旧版本的备份会自动升级。
         </p>
-        <p class="warning-note">
-          请单独保管备份口令，丢失后无法解密。浏览器下载大文件会占用相应内存，数据库最大2
-          GiB，大库可使用维护命令。
+        <p v-if="message && action === 'restore'" class="backup-done" role="status">
+          <Icon name="check" :size="15" />{{ message }}
         </p>
-        <a
-          class="text-link"
-          href="https://github.com/Aspeternity/seekbell/blob/main/docs/BACKUP_RESTORE.md"
-          target="_blank"
-          rel="noopener noreferrer"
-          >查看备份恢复维护说明</a
-        >
+        <div v-if="status?.candidate_available" class="info-note backup-candidate">
+          <div class="backup-candidate-row">
+            <p role="status">
+              服务器上保留着一份之前“恢复验证”生成的独立恢复副本，不需要可以删除。
+            </p>
+            <button
+              v-if="!discarding"
+              type="button"
+              class="button danger-outline"
+              :disabled="!!busy"
+              @click="discarding = true"
+            >
+              <Icon name="trash" :size="14" />删除恢复副本
+            </button>
+          </div>
+          <form
+            v-if="discarding"
+            class="backup-discard"
+            aria-label="删除恢复副本"
+            @submit.prevent="discard"
+          >
+            <label for="discard-current">当前管理员密码</label>
+            <input
+              id="discard-current"
+              v-model="discardPassword"
+              class="text-input"
+              type="password"
+              autocomplete="current-password"
+              maxlength="128"
+              required
+              :disabled="!!busy"
+            />
+            <button class="button danger-outline" :disabled="!!busy || !discardPassword">
+              {{ busy === 'discard' ? '正在删除…' : '确认删除' }}
+            </button>
+            <button
+              type="button"
+              class="button"
+              :disabled="!!busy"
+              @click="((discarding = false), (discardPassword = ''))"
+            >
+              取消
+            </button>
+            <p class="small-note">删除后无法恢复，当前数据不受影响。</p>
+          </form>
+        </div>
+        <BackupRestoreForm
+          :max-bytes="status?.max_archive_bytes"
+          @busy="restoring = $event"
+          @dirty="restoreDirty = $event"
+          @done="restored"
+          @failed="load"
+        />
       </div>
     </section>
-    <div class="settings-backup-editor form-stack">
-      <div
-        v-if="error || readError || message || busy || status?.candidate_available"
-        class="settings-backup-feedback"
-      >
-        <FormFeedback :error="error || readError" @retry="load" />
-        <p v-if="status?.candidate_available" class="info-note" role="status">
-          已有独立恢复副本，尚未启用。请按维护说明处理后再上传，网页不能覆盖此副本。
-        </p>
-        <p v-if="message" class="info-note" role="status">{{ message }}</p>
-        <p v-if="busy" role="status">
-          {{ busy === 'export' ? '正在生成加密备份…' : '正在上传并验证备份…' }} 请保持页面打开。
-        </p>
-      </div>
-      <nav class="segmented compact" aria-label="备份操作">
-        <button
-          type="button"
-          :class="{ active: action === 'export' }"
-          :aria-pressed="action === 'export'"
-          @click="action = 'export'"
-        >
-          备份下载
-        </button>
-        <button
-          type="button"
-          :class="{ active: action === 'restore' }"
-          :aria-pressed="action === 'restore'"
-          @click="action = 'restore'"
-        >
-          恢复验证
-        </button>
-      </nav>
-      <section v-show="action === 'export'" class="panel settings-card">
-        <div class="panel-heading"><h2>导出备份</h2></div>
-        <form class="form-content form-stack" @submit.prevent="download">
-          <div class="settings-fields-grid three">
-            <div class="form-stack">
-              <label for="backup-current">当前管理员密码</label>
-              <input
-                id="backup-current"
-                v-model="downloadFields.current"
-                class="text-input"
-                type="password"
-                autocomplete="current-password"
-                maxlength="128"
-                required
-                :disabled="!!busy"
-              />
-            </div>
-            <div class="form-stack">
-              <label for="backup-password">备份加密口令</label>
-              <input
-                id="backup-password"
-                v-model="downloadFields.password"
-                class="text-input"
-                type="password"
-                autocomplete="off"
-                minlength="12"
-                maxlength="1024"
-                required
-                :disabled="!!busy"
-              />
-              <p class="small-note">为本次下载设置独立口令，12–1024字符。</p>
-            </div>
-            <div class="form-stack">
-              <label for="backup-confirm">确认下载口令</label>
-              <input
-                id="backup-confirm"
-                v-model="downloadFields.confirmation"
-                class="text-input"
-                type="password"
-                autocomplete="off"
-                minlength="12"
-                maxlength="1024"
-                required
-                :disabled="!!busy"
-              />
-            </div>
-          </div>
-          <button class="button primary" :disabled="!!busy || !status">生成并下载加密备份</button>
-        </form>
-      </section>
-      <section v-show="action === 'restore'" class="panel settings-card">
-        <div class="panel-heading">
-          <div>
-            <h2>从文件恢复</h2>
-            <p>选择文件 → 验证 → 生成独立副本</p>
-          </div>
-        </div>
-        <div class="form-content form-stack">
-          <p>仅支持相同数据库版本。恢复不会覆盖当前数据，也不会启动副本中的采集或发送。</p>
-          <p class="warning-note">
-            启用副本前必须停止原实例。副本保留原启停配置和待发送队列，可能重复发送；正式切换需按维护说明在宿主机执行。
-          </p>
-          <form v-if="!status?.candidate_available" class="form-stack" @submit.prevent="restore">
-            <div class="settings-fields-grid">
-              <div class="form-stack">
-                <label for="restore-file">加密备份文件</label>
-                <input
-                  id="restore-file"
-                  ref="input"
-                  class="text-input"
-                  type="file"
-                  accept=".sbbackup"
-                  required
-                  :disabled="!!busy || !status"
-                  @change="selectFile"
-                />
-                <p v-if="file" class="small-note">{{ file.name }} · {{ size(file.size) }}</p>
-              </div>
-              <div class="form-stack">
-                <label for="restore-current">当前管理员密码（恢复验证）</label>
-                <input
-                  id="restore-current"
-                  v-model="restoreFields.current"
-                  class="text-input"
-                  type="password"
-                  autocomplete="current-password"
-                  maxlength="128"
-                  required
-                  :disabled="!!busy"
-                />
-              </div>
-              <div class="form-stack">
-                <label for="restore-archive-password">所选备份的加密口令</label>
-                <input
-                  id="restore-archive-password"
-                  v-model="restoreFields.password"
-                  class="text-input"
-                  type="password"
-                  autocomplete="off"
-                  minlength="12"
-                  maxlength="1024"
-                  required
-                  :disabled="!!busy"
-                />
-              </div>
-              <div class="form-stack">
-                <label for="restore-username">备份中的管理员用户名</label>
-                <input
-                  id="restore-username"
-                  v-model="restoreFields.username"
-                  class="text-input"
-                  autocomplete="off"
-                  pattern="[A-Za-z0-9_-]{3,32}"
-                  required
-                  :disabled="!!busy"
-                />
-              </div>
-              <div class="form-stack">
-                <label for="restore-password">备份中的管理员密码</label>
-                <input
-                  id="restore-password"
-                  v-model="restoreFields.adminPassword"
-                  class="text-input"
-                  type="password"
-                  autocomplete="off"
-                  maxlength="128"
-                  required
-                  :disabled="!!busy"
-                />
-              </div>
-            </div>
-            <label class="checkbox-row"
-              ><input
-                v-model="acknowledged"
-                type="checkbox"
-                required
-                :disabled="!!busy"
-              />我已了解：只生成独立副本，尚未切换当前工作空间。</label
-            >
-            <button class="button primary" :disabled="!!busy || !status || !file || !acknowledged">
-              验证并生成独立恢复副本
-            </button>
-          </form>
-          <a
-            class="text-link"
-            href="https://github.com/Aspeternity/seekbell/blob/main/docs/BACKUP_RESTORE.md"
-            target="_blank"
-            rel="noopener noreferrer"
-            >查看副本启用与处理步骤</a
-          >
-        </div>
-      </section>
-    </div>
-    <section class="panel settings-card">
-      <div class="panel-heading"><h2>备份与验证记录</h2></div>
+    <section class="panel settings-card" aria-labelledby="backup-records-title">
+      <div class="panel-heading"><h2 id="backup-records-title">备份与恢复记录</h2></div>
       <ReadRegion
         :loading="loading"
         :error="readError"
         :has-data="!!status"
-        :min-height="160"
+        :min-height="120"
         @retry="load"
       >
         <div v-if="status" class="form-content form-stack">
-          <p class="small-note">
-            保留最近50次操作。已交给浏览器下载不代表文件已保存。副本验证记录不代表已经启用。
-          </p>
-          <p v-if="!status.records.length">尚无备份或验证记录。</p>
-          <article
-            v-for="row in status.records.slice(0, recordsExpanded ? 50 : 5)"
-            :key="row.id"
-            class="history-evaluation"
-          >
-            <strong
-              >{{ row.kind === 'export' ? '导出备份' : '恢复验证' }} ·
-              {{ labels[row.result] }}</strong
-            >
-            <p>
-              {{ formatTime(new Date(row.at * 1000).toISOString()) }} ·
-              {{ size(row.archive_bytes) }}
-            </p>
-            <p class="small-note">
-              应用 {{ row.application_version }} · 数据库 {{ row.database_revision }}
-            </p>
-          </article>
+          <p v-if="!status.records.length" class="small-note">暂无记录</p>
+          <ul v-else class="backup-records">
+            <li v-for="row in status.records.slice(0, recordsExpanded ? 50 : 5)" :key="row.id">
+              <span class="backup-kind">{{ kinds[row.kind] }}</span>
+              <span class="backup-result" :class="row.result">{{ labels[row.result] }}</span>
+              <span>{{ formatTime(new Date(row.at * 1000).toISOString()) }}</span>
+              <span>{{ size(row.archive_bytes) }}</span>
+              <span class="backup-version" :title="'数据库 ' + row.database_revision"
+                >v{{ row.application_version }}</span
+              >
+            </li>
+          </ul>
           <button
             v-if="status.records.length > 5"
             class="text-link"
             @click="recordsExpanded = !recordsExpanded"
           >
-            {{ recordsExpanded ? '收起记录' : '展开更多记录' }}
+            {{ recordsExpanded ? '收起' : '查看更多（共 ' + status.records.length + ' 条）' }}
           </button>
         </div>
       </ReadRegion>
