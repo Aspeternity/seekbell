@@ -355,6 +355,9 @@ def swap_back(data_dir, previous):
 async def quiesce(app):
     """Refuse new requests and wait for others; only the restore request stays in flight."""
     app.state.restoring = True
+    # Waiting hotlist reads return at once instead of holding the restore back.
+    if getattr(app.state, "hotlists", None) is not None:
+        app.state.hotlists.wake()
     loop = asyncio.get_running_loop()
     deadline = loop.time() + QUIESCE_SECONDS
     while app.state.in_flight > 1:

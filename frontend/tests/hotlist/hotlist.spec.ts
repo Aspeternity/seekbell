@@ -51,6 +51,30 @@ async function home(page: Page) {
   await page.evaluate(() => (location.hash = '/'))
   await expect(page.getByTestId('overview-matches')).toBeVisible()
 }
+type BoardList = Record<string, any>
+const isBoard = (url: URL) => url.pathname === '/api/manage/hotlists'
+const list = (lists: BoardList[], period: string, website = 'nodeseek') =>
+  lists.find((row) => row.website_id === website && row.period === period)!
+// Edits every board reply. The first `immediate` replies are read without the long-poll
+// tag so they answer at once; later ones keep waiting on the server like the real page.
+async function routeBoard(
+  page: Page,
+  edit: (lists: BoardList[], read: number) => unknown = () => {},
+  immediate = 1,
+) {
+  let reads = 0
+  await page.route(isBoard, async (route) => {
+    const read = ++reads
+    const url = new URL(route.request().url())
+    if (read <= immediate) url.searchParams.delete('after')
+    const response = await route.fetch({ url: url.toString() }).catch(() => undefined)
+    if (!response) return
+    const data = await response.json()
+    await edit(data.lists, read)
+    await route.fulfill({ json: data }).catch(() => {})
+  })
+  return () => reads
+}
 test('layout order visibility persist after reload and are shared with another browser', async ({
   page,
   browser,
@@ -87,7 +111,7 @@ test('all modules can be hidden without losing fixed metrics and default restore
     await page.getByRole('switch', { name: '显示' + name, exact: true }).click()
   await save(page)
   let reads = 0
-  await page.route('**/api/manage/hotlists/nodeseek?*', async (route) => {
+  await page.route(isBoard, async (route) => {
     reads++
     await route.continue()
   })
@@ -105,20 +129,19 @@ test('all modules can be hidden without losing fixed metrics and default restore
   await home(page)
   await expect(page.locator('.hotlist-row')).toHaveCount(5)
 })
-test('period changes discard late responses and remember last selection', async ({ page }) => {
-  let release = () => {}
-  const held = new Promise<void>((resolve) => (release = resolve))
-  await page.route('**/api/manage/hotlists/nodeseek?period=daily', async (route) => {
-    const response = await route.fetch()
-    await held
-    await route.fulfill({ response })
+test('period switching is local and remembers the last selection', async ({ page }) => {
+  const fresh: string[] = []
+  page.on('request', (request) => {
+    const url = new URL(request.url())
+    if (isBoard(url) && !url.searchParams.has('after')) fresh.push(url.search)
   })
   const periods = page.getByRole('group', { name: '热榜周期' })
   await periods.getByRole('button', { name: '每日', exact: true }).click()
+  await expect(page.locator('.hotlist-row').first()).toContainText('daily')
   await periods.getByRole('button', { name: '每周', exact: true }).click()
   await expect(page.locator('.hotlist-row').first()).toContainText('weekly')
-  release()
-  await expect(page.locator('.hotlist-row').first()).toContainText('weekly')
+  // Every list is already in the board: switching asks the server for nothing new.
+  expect(fresh).toEqual([])
   const expand = page.getByRole('button', { name: '展开更多', exact: true })
   await expect(expand).toHaveAttribute('aria-expanded', 'false')
   await expect(expand.locator('svg')).toHaveCSS('transform', 'none')
@@ -144,53 +167,44 @@ test('period changes discard late responses and remember last selection', async 
   )
   await expect(page.locator('.hotlist-row')).toHaveCount(5)
 })
-test('first period read shows feedback and a visited period displays its own cache during refresh', async ({
+test('a list on its first read shows feedback while refreshing lists stay silent', async ({
   page,
 }) => {
   await page.clock.install()
   let release = () => {}
-  let started = 0
   const held = new Promise<void>((resolve) => (release = resolve))
-  await page.route('**/api/manage/hotlists/nodeseek?period=daily', async (route) => {
-    const response = await route.fetch()
-    started++
-    await held
-    await route.fulfill({ response })
-  })
+  await routeBoard(
+    page,
+    async (lists, read) => {
+      if (read === 1) {
+        Object.assign(list(lists, 'daily'), {
+          status: 'unavailable',
+          refreshing: true,
+          error_code: null,
+          fetched_at: null,
+          source_updated_at: null,
+          items: [],
+        })
+        list(lists, 'realtime').refreshing = true
+      } else if (read === 2) await held
+    },
+    2,
+  )
   await page.reload()
-  await expect(page.locator('.hotlist-row')).toHaveCount(5)
-  const periods = page.getByRole('group', { name: '热榜周期' })
   const hotlist = page.getByRole('region', { name: '社区热榜', exact: true })
+  await expect(hotlist.locator('.hotlist-row')).toHaveCount(5)
+  await page.clock.runFor(250)
+  await expect(hotlist.getByRole('status')).toHaveCount(0)
+  await expect(hotlist.locator('.read-placeholder, [inert]')).toHaveCount(0)
+  const periods = page.getByRole('group', { name: '热榜周期' })
   await periods.getByRole('button', { name: '每日', exact: true }).click()
-  await expect.poll(() => started).toBe(1)
+  await page.clock.runFor(250)
   await expect(hotlist.getByRole('status')).toHaveText('加载中…')
   await expect(hotlist.locator('.read-placeholder')).toBeVisible()
   await expect(page.locator('.hotlist-row')).toHaveCount(0)
   release()
   await expect(page.locator('.hotlist-row').first()).toContainText('daily')
-  await periods.getByRole('button', { name: '实时', exact: true }).click()
-  await expect(page.locator('.hotlist-row').first()).toContainText('合成hot热榜帖子')
-
-  const refresh = new Promise<void>((resolve) => (release = resolve))
-  let refreshing = false
-  await page.unroute('**/api/manage/hotlists/nodeseek?period=daily')
-  await page.route('**/api/manage/hotlists/nodeseek?period=daily', async (route) => {
-    const response = await route.fetch()
-    refreshing = true
-    await refresh
-    await route.fulfill({ response })
-  })
-  await periods.getByRole('button', { name: '每日', exact: true }).click()
-  await expect.poll(() => refreshing).toBe(true)
-  await expect(page.locator('.hotlist-row').first()).toContainText('daily')
-  await expect(page.locator('.hotlist-row')).toHaveCount(5)
-  await page.clock.runFor(250)
-  await expect(hotlist.locator('.read-placeholder')).toHaveCount(0)
   await expect(hotlist.getByRole('status')).toHaveCount(0)
-  await expect(hotlist.locator('[inert]')).toHaveCount(0)
-  await hotlist.getByRole('button', { name: '展开更多', exact: true }).click()
-  await expect(hotlist.locator('.hotlist-row')).toHaveCount(10)
-  release()
 })
 test('site switching uses only capabilities of selected source and restores per-site period', async ({
   page,
@@ -211,31 +225,30 @@ test('site switching uses only capabilities of selected source and restores per-
   await page.route('**/api/manage/hotlists/selection', (route) =>
     route.fulfill({ json: { revision: 5 } }),
   )
-  await page.route('**/api/manage/hotlists/fixture?period=daily', (route) =>
-    route.fulfill({
-      json: {
-        website_id: 'fixture',
-        period: 'daily',
-        status: 'ready',
-        error_code: null,
-        source_updated_at: 1792400000,
-        fetched_at: 1792400000,
-        next_attempt_at: Date.now() / 1000 + 600,
-        items: [
-          {
-            id: 'fixture-1',
-            rank: 1,
-            title: '合成论坛自己的榜单',
-            url: 'https://www.nodeseek.com/post-8800-1',
-            author: null,
-            category: null,
-            comments: null,
-            views: null,
-          },
-        ],
-      },
-    }),
-  )
+  await routeBoard(page, (lists) => {
+    lists.push({
+      ...lists[0],
+      website_id: 'fixture',
+      period: 'daily',
+      status: 'ready',
+      refreshing: false,
+      error_code: null,
+      source_updated_at: 1792400000,
+      fetched_at: 1792400000,
+      items: [
+        {
+          id: 'fixture-1',
+          rank: 1,
+          title: '合成论坛自己的榜单',
+          url: 'https://www.nodeseek.com/post-8800-1',
+          author: null,
+          category: null,
+          comments: null,
+          views: null,
+        },
+      ],
+    })
+  })
   await page.reload()
   await page
     .getByRole('group', { name: '热榜周期' })
@@ -276,13 +289,9 @@ test('layout conflict preserves draft and keyboard ordering is accessible', asyn
 })
 test('failed refresh keeps same-source snapshot and 320px layout fits', async ({ page }, info) => {
   await page.locator('.hotlist-panel').screenshot({ path: info.outputPath('hotlist-ready.png') })
-  await page.route('**/api/manage/hotlists/nodeseek?period=realtime', async (route) => {
-    const response = await route.fetch()
-    const data = await response.json()
-    data.status = 'stale'
-    data.error_code = 'source_unavailable'
-    await route.fulfill({ json: data })
-  })
+  await routeBoard(page, (lists) =>
+    Object.assign(list(lists, 'realtime'), { status: 'stale', error_code: 'source_unavailable' }),
+  )
   await page.reload()
   await expect(
     page.getByRole('status').filter({ hasText: '更新失败，当前显示上次榜单。' }),
@@ -341,7 +350,7 @@ test('no supported installed source has an actionable empty state', async ({ pag
     await route.fulfill({ json: data })
   })
   let reads = 0
-  await page.route('**/api/manage/hotlists/nodeseek?*', async (route) => {
+  await page.route(isBoard, async (route) => {
     reads++
     await route.continue()
   })
@@ -354,25 +363,39 @@ test('no supported installed source has an actionable empty state', async ({ pag
   await expect(page.getByRole('heading', { name: '监控网站', exact: true })).toBeVisible()
 })
 
-test('visible hotlist reads only its selected period without changing the saved selection', async ({
+test('one board read keeps every period warm without changing the saved selection', async ({
   page,
 }) => {
   const before = (await (await page.request.get('/api/manage/overview-preferences')).json())
     .selection
-  const reads = new Set<string>()
-  await page.route('**/api/manage/hotlists/nodeseek?*', async (route) => {
-    const response = await route.fetch()
-    await route.fulfill({ response })
-    reads.add(new URL(route.request().url()).searchParams.get('period')!)
+  const fresh: string[] = []
+  page.on('request', (request) => {
+    const url = new URL(request.url())
+    if (
+      request.method() === 'GET' &&
+      url.pathname.startsWith('/api/manage/hotlists') &&
+      !url.searchParams.has('after')
+    )
+      fresh.push(url.pathname)
   })
   await page.reload()
-  await expect.poll(() => Array.from(reads).sort()).toEqual(['realtime'])
+  await expect(page.locator('.hotlist-row')).toHaveCount(5)
+  await expect.poll(() => fresh).toEqual(['/api/manage/hotlists'])
+  const nodeseek = async () =>
+    ((await (await page.request.get('/api/manage/hotlists')).json()).lists as BoardList[])
+      .filter((row) => row.website_id === 'nodeseek')
+      .map((row) => [row.period, row.fetched_at !== null])
+  await expect.poll(nodeseek).toEqual([
+    ['realtime', true],
+    ['daily', true],
+    ['weekly', true],
+  ])
   const after = (await (await page.request.get('/api/manage/overview-preferences')).json())
     .selection
   expect(after).toEqual(before)
   await page.getByRole('button', { name: '每周', exact: true }).click()
   await expect(page.locator('.hotlist-row').first()).toContainText('weekly')
-  expect(Array.from(reads).sort()).toEqual(['realtime', 'weekly'])
+  expect(fresh).toEqual(['/api/manage/hotlists'])
 })
 
 test('hotlist rows open original posts from metadata and with the keyboard', async ({ page }) => {
@@ -432,37 +455,27 @@ test('background refresh silently replaces the list without blocking links or ex
   page,
 }, info) => {
   await page.clock.install()
-  await page.clock.pauseAt(new Date())
-  let reads = 0
   let release = () => {}
   const held = new Promise<void>((resolve) => (release = resolve))
-  await page.route('**/api/manage/hotlists/nodeseek?period=realtime', async (route) => {
-    const read = ++reads
-    const response = await route.fetch()
-    const data = await response.json()
-    if (read === 2) {
-      await held
-      data.items[0].title = '后台更新后的榜首'
-    }
-    await route.fulfill({
-      json: {
-        ...data,
-        refreshing: read === 1,
-        next_attempt_at: (await page.evaluate(() => Date.now())) / 1000 + (read === 1 ? 2 : 600),
-      },
-    })
-  })
+  await routeBoard(
+    page,
+    async (lists, read) => {
+      if (read === 1) list(lists, 'realtime').refreshing = true
+      if (read === 2) {
+        await held
+        list(lists, 'realtime').items[0].title = '后台更新后的榜首'
+      }
+    },
+    2,
+  )
   await page.reload()
   const hotlist = page.getByRole('region', { name: '社区热榜', exact: true })
   await expect(hotlist.locator('.hotlist-row')).toHaveCount(5)
-  await expect(hotlist.getByRole('status')).toHaveCount(0)
-  const title = await hotlist.locator('.hotlist-title').first().textContent()
-  await page.clock.fastForward(2200)
-  await expect.poll(() => reads).toBe(2)
   await page.clock.runFor(250)
   await expect(hotlist.getByRole('status')).toHaveCount(0)
   await expect(hotlist.locator('.read-placeholder, [inert]')).toHaveCount(0)
-  await expect(hotlist.locator('.hotlist-title').first()).toHaveText(title!)
+  const title = await hotlist.locator('.hotlist-title').first().textContent()
+  expect(title).not.toBe('后台更新后的榜首')
   await hotlist.getByRole('button', { name: '展开更多', exact: true }).click()
   await expect(hotlist.locator('.hotlist-row')).toHaveCount(10)
   const row = hotlist.locator('.hotlist-row').first()
@@ -471,44 +484,41 @@ test('background refresh silently replaces the list without blocking links or ex
   await expect(row).toBeFocused()
   await hotlist.screenshot({ path: info.outputPath('hotlist-silent-refresh.png') })
   release()
+  // The completed refresh arrives through the waiting read, without a timer.
   await expect(hotlist.locator('.hotlist-title').first()).toHaveText('后台更新后的榜首')
   await expect(hotlist.locator('.hotlist-row')).toHaveCount(10)
   await expect(hotlist.getByRole('status')).toHaveCount(0)
-  await page.clock.fastForward(3000)
-  expect(reads).toBe(2)
 })
 
 for (const code of ['source_busy', 'source_cooldown', 'collection_priority']) {
-  test(
-    'cached hotlist silently waits for ' + code + ' and updates on schedule',
-    async ({ page }) => {
-      await page.clock.install()
-      let reads = 0
-      await page.route('**/api/manage/hotlists/nodeseek?period=realtime', async (route) => {
-        const read = ++reads
-        const response = await route.fetch()
-        const data = await response.json()
-        if (read > 1) data.items[0].title = '等待后更新的榜首'
-        await route.fulfill({
-          json: {
-            ...data,
-            status: read === 1 ? 'waiting' : 'ready',
-            error_code: read === 1 ? code : null,
-            next_attempt_at:
-              (await page.evaluate(() => Date.now())) / 1000 + (read === 1 ? 2 : 600),
-          },
-        })
-      })
-      await page.reload()
-      const hotlist = page.getByRole('region', { name: '社区热榜', exact: true })
-      await expect(hotlist.locator('.hotlist-row')).toHaveCount(5)
-      await expect(hotlist.getByRole('status')).toHaveCount(0)
-      await page.clock.fastForward(2200)
-      await expect(hotlist.locator('.hotlist-title').first()).toHaveText('等待后更新的榜首')
-      await expect(hotlist.getByRole('status')).toHaveCount(0)
-      expect(reads).toBe(2)
-    },
-  )
+  test('cached hotlist silently waits for ' + code + ' and then updates', async ({ page }) => {
+    let release = () => {}
+    const held = new Promise<void>((resolve) => (release = resolve))
+    await routeBoard(
+      page,
+      async (lists, read) => {
+        const row = list(lists, 'realtime')
+        if (read === 1)
+          Object.assign(row, {
+            status: 'waiting',
+            error_code: code,
+            next_attempt_at: Date.now() / 1000 + 2,
+          })
+        else if (read === 2) {
+          await held
+          row.items[0].title = '等待后更新的榜首'
+        }
+      },
+      2,
+    )
+    await page.reload()
+    const hotlist = page.getByRole('region', { name: '社区热榜', exact: true })
+    await expect(hotlist.locator('.hotlist-row')).toHaveCount(5)
+    await expect(hotlist.getByRole('status')).toHaveCount(0)
+    release()
+    await expect(hotlist.locator('.hotlist-title').first()).toHaveText('等待后更新的榜首')
+    await expect(hotlist.getByRole('status')).toHaveCount(0)
+  })
 }
 
 for (const state of ['ready', 'waiting']) {
@@ -516,33 +526,31 @@ for (const state of ['ready', 'waiting']) {
     'an empty successful hotlist stays visible during ' + state + ' refresh',
     async ({ page }) => {
       await page.clock.install()
-      await page.clock.pauseAt(new Date())
-      let reads = 0
-      await page.route('**/api/manage/hotlists/nodeseek?period=realtime', async (route) => {
-        const read = ++reads
-        const response = await route.fetch()
-        const data = await response.json()
-        await route.fulfill({
-          json: {
-            ...data,
-            items: read === 1 ? [] : data.items,
-            status: read === 1 ? state : 'ready',
-            refreshing: read === 1 && state === 'ready',
-            error_code: read === 1 && state === 'waiting' ? 'source_cooldown' : null,
-            next_attempt_at:
-              (await page.evaluate(() => Date.now())) / 1000 + (read === 1 ? 2 : 600),
-          },
-        })
-      })
+      let release = () => {}
+      const held = new Promise<void>((resolve) => (release = resolve))
+      await routeBoard(
+        page,
+        async (lists, read) => {
+          if (read === 1)
+            Object.assign(list(lists, 'realtime'), {
+              items: [],
+              status: state,
+              refreshing: state === 'ready',
+              error_code: state === 'waiting' ? 'source_cooldown' : null,
+            })
+          else if (read === 2) await held
+        },
+        2,
+      )
       await page.reload()
       const hotlist = page.getByRole('region', { name: '社区热榜', exact: true })
       await expect(hotlist.getByText('当前榜单还没有帖子。', { exact: true })).toBeVisible()
+      await page.clock.runFor(250)
       await expect(hotlist.getByRole('status')).toHaveCount(0)
       await expect(hotlist.locator('.read-placeholder')).toHaveCount(0)
-      await page.clock.fastForward(2200)
+      release()
       await expect(hotlist.locator('.hotlist-row')).toHaveCount(5)
       await expect(hotlist.getByText('当前榜单还没有帖子。', { exact: true })).toHaveCount(0)
-      expect(reads).toBe(2)
     },
   )
 }
@@ -635,37 +643,21 @@ test('Linux DO displays its supported periods and validates drafts before saving
   await expect(dialog).not.toBeVisible()
 })
 
-test('long hotlist backoff shows timing and avoids the old ten-minute status poll', async ({
-  page,
-}) => {
-  await page.clock.install()
-  let reads = 0
-  let completed = 0
-  await page.route('**/api/manage/hotlists/nodeseek?period=realtime', async (route) => {
-    const response = await route.fetch()
-    reads++
-    await route.fulfill({
-      json: {
-        ...(await response.json()),
-        refreshing: false,
-        status: 'stale',
-        error_code: 'http_429',
-        next_attempt_at: (await page.evaluate(() => Date.now())) / 1000 + 3600,
-      },
-    })
-    completed++
-  })
+test('long hotlist backoff shows its retry timing and the last success', async ({ page }) => {
+  await routeBoard(page, (lists) =>
+    Object.assign(list(lists, 'realtime'), {
+      refreshing: false,
+      status: 'stale',
+      error_code: 'http_429',
+      next_attempt_at: Date.now() / 1000 + 3600,
+    }),
+  )
   await page.reload()
   const hotlist = page.getByRole('region', { name: '社区热榜', exact: true })
   await expect(hotlist.getByRole('status')).toContainText('来源请求受限（429）')
   await expect(hotlist.getByRole('status')).toContainText('预计')
   await expect(hotlist.getByRole('status')).toContainText('上次成功获取')
-  await expect(hotlist.getByText('正在后台更新，当前显示上次榜单。')).toHaveCount(0)
-  await page.clock.fastForward(600100)
-  expect(reads).toBe(1)
-  await page.clock.fastForward(3000100)
-  await expect.poll(() => reads).toBe(2)
-  await expect.poll(() => completed).toBe(2)
+  await expect(hotlist.locator('.hotlist-row')).toHaveCount(5)
 })
 
 test('a failed background status read shows an error and recovers after a local retry', async ({
@@ -673,34 +665,22 @@ test('a failed background status read shows an error and recovers after a local 
 }) => {
   await page.clock.install()
   let reads = 0
-  let completed = 0
-  await page.route('**/api/manage/hotlists/nodeseek?period=realtime', async (route) => {
+  await page.route(isBoard, async (route) => {
     const read = ++reads
     if (read === 2) return route.abort('failed')
-    const response = await route.fetch()
-    await route.fulfill({
-      json: {
-        ...(await response.json()),
-        refreshing: read === 1,
-        next_attempt_at: (await page.evaluate(() => Date.now())) / 1000 + (read === 1 ? 2 : 600),
-      },
-    })
-    completed++
+    // Later reads are the real long poll and keep waiting on the server.
+    if (read > 3) return route.continue()
+    const url = new URL(route.request().url())
+    url.searchParams.delete('after')
+    await route.fulfill({ response: await route.fetch({ url: url.toString() }) })
   })
   await page.reload()
   const hotlist = page.getByRole('region', { name: '社区热榜', exact: true })
-  const updating = hotlist.getByText('正在后台更新，当前显示上次榜单。', { exact: true })
-  await expect.poll(() => completed).toBe(1)
-  await expect(hotlist.locator('.hotlist-row')).toHaveCount(5)
-  await expect(updating).toHaveCount(0)
-  await page.clock.fastForward(2200)
   await expect(hotlist.getByRole('alert')).toContainText('刷新失败，当前显示上次结果。')
-  await expect(updating).toHaveCount(0)
   await expect(hotlist.locator('.hotlist-row')).toHaveCount(5)
+  expect(reads).toBe(2)
   await page.clock.fastForward(15100)
-  await expect.poll(() => reads).toBe(3)
-  // The visible cached rows do not prove the final mocked response has finished.
-  await expect.poll(() => completed).toBe(2)
+  await expect.poll(() => reads).toBeGreaterThanOrEqual(3)
   await expect(hotlist.locator('.hotlist-row')).toHaveCount(5)
   await expect(hotlist.getByRole('alert')).toHaveCount(0)
   await expect(hotlist.getByRole('status')).toHaveCount(0)
@@ -783,18 +763,14 @@ test('origin cooldown explains that an unattempted hotlist waits while actual ch
   page,
 }) => {
   let waiting = true
-  await page.route('**/api/manage/hotlists/nodeseek?period=realtime', async (route) => {
-    const response = await route.fetch()
-    await route.fulfill({
-      json: {
-        ...(await response.json()),
-        status: waiting ? 'waiting' : 'stale',
-        error_code: 'access_challenge',
-        refreshing: false,
-        next_attempt_at: Date.now() / 1000 + 300,
-      },
-    })
-  })
+  await routeBoard(page, (lists) =>
+    Object.assign(list(lists, 'realtime'), {
+      status: waiting ? 'waiting' : 'stale',
+      error_code: 'access_challenge',
+      refreshing: false,
+      next_attempt_at: Date.now() / 1000 + 300,
+    }),
+  )
   await page.reload()
   const hotlist = page.getByRole('region', { name: '社区热榜', exact: true })
   await expect(hotlist.getByRole('status')).toContainText('本次榜单更新已延后')

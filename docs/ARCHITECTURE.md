@@ -361,7 +361,7 @@ workspace返回本站热榜能力、来源与有效/推荐/最小间隔；网站
 
 HotlistService将成功缓存fresh_until=fetched_at+当前配置间隔，与失败/服务器next_attempt_at分离，下一尝试取更晚值。每次读取加载当前配置，复用持久快照；策略/预算查询会让出执行权，创建刷新前重新检查在途任务及最新成功时间，防止并发等待后重复请求。预算已知等待和采集优先直接返回延期，不创建假刷新任务。生产实例仅在runtime.active且Linux DO采集启用、到期时间在2秒内时让步；其他站的独立汇总来源不额外占该论坛采集预算。
 
-CommunityHotlist取消全部周期预取，根据next_attempt_at安排本应用查询（最长一天）；刷新完成短查、状态读取网络错误15秒重试、不可见停止。来源失败仍由服务端退避。AppSelect的Naive UI弹层在原生dialog中挂载到最近dialog，避免body门户在模态顶层之外变为不可交互；保留统一键盘/Escape行为。
+（2026-10-30起由“热榜预热与长轮询”取代：）CommunityHotlist取消全部周期预取，根据next_attempt_at安排本应用查询（最长一天）；刷新完成短查、状态读取网络错误15秒重试、不可见停止。来源失败仍由服务端退避。AppSelect的Naive UI弹层在原生dialog中挂载到最近dialog，避免body门户在模态顶层之外变为不可交互；保留统一键盘/Escape行为。
 
 针对性验证入口：uv run --frozen pytest tests/test_hotlist_settings.py tests/test_hotlists.py tests/test_linuxdo.py tests/test_linuxdo_runtime.py -q；pnpm --dir frontend test:hotlist；pnpm --dir frontend test:linuxdo。迁移影响全体schema断言，需另跑完整后端与离线容器升级/备份/回退；全部使用临时合成数据，不读取正式卷或发送真实通知。
 
@@ -390,3 +390,16 @@ GET /auth/sessions只返回本会话到期与其他有效会话数；DELETE /aut
 
 恢复不再验证备份中的管理员：网页设置恢复以当前管理员(用户名,哈希)写入暂存副本，初始化页恢复以新设用户名/密码哈希写入；切换后在新库为发起者建立会话并返回session_response，前端直接进入。备份下载/恢复/删除副本的current_password可省略：authentication.Confirmations在进程内记录每会话最近一次输入时间，与会话开始时间（expires_at−SESSION_SECONDS，即登录/修改账号）取较晚者，CONFIRM_SECONDS=15分钟内有效；GET /api/manage/backups返回confirm_seconds，过期省略返回403“请输入当前管理员密码。”。不新增迁移，重启只会重新要求输入；修改管理员账号仍必须输入当前密码。
 
+## 热榜预热、长轮询与退避拆分（2026-10-30）
+
+产品契约见SPEC 6.6，取代上文“只读当前周期、2秒查询完成”的前端/服务端节奏；缓存、持久快照、按站间隔、失败退避与采集优先不变。
+
+HotlistService拆为_prepare（读配置/恢复持久快照）、_ensure（到期则创建共享刷新任务，否则记录延期）和_render。可见目录由main绑定的hotlist_catalog(engine)给出：热榜模块隐藏时为空，否则为已添加网站及其周期，保存的选择排在最前。看板读取调用touch记录viewed_at；后台warmer按目录逐站执行warm_once，同站周期顺序await，站间并行；按最早到期时间（1～60秒）休眠，viewed_at后900秒或目录为空即退出，下一次看板读取再启动。只有不带after的新读取会唤醒warmer，长轮询续读只延长宽限，避免“状态变化→续读→再检查”的自激循环。
+
+GET /api/manage/hotlists返回{tag, lists}，tag为列表内容哈希。不带after时立即返回并先触发选中榜单；带after时等待任一状态变化（刷新开始/结束、延期变化）或25秒超时。恢复备份quiesce时调用hotlists.wake()，等待中的读取在restoring时立即返回，不拖住切换。单榜GET /api/manage/hotlists/{id}保留（冷读仍等待首次获取），但不启动预热。refreshing时next_attempt_at改报真实到期时间，不再加2秒提示前端轮询。
+
+CommunityHotlist改为一个看板读取循环：首读不带after，之后以tag长轮询；切换网站/周期只在本地选取。目录变化重新开始；页面隐藏/卸载中止请求（AbortController）；读取失败显示错误并15秒后重试。无快照且无错误的榜单显示加载反馈，已有快照的刷新保持无感。看板写入会话读缓存，返回概览先显示上次看板。
+
+WebsiteRequestBudget.request增加auxiliary：热榜请求只在429、access_challenge或带Retry-After时调用failed写共享退避，其他失败（单地址403、5xx、超时、传输错误）只进热榜自身的states退避；成功不调用succeeded，不清除采集失败证据。HotlistService不再在外层超时时额外写共享退避。
+
+验证命令：uv run --frozen pytest tests/test_hotlists.py tests/test_linuxdo_runtime.py tests/test_linuxdo.py tests/test_linuxdo_followups.py tests/test_hotlist_settings.py tests/test_retry_controls.py -q；pnpm --dir frontend test:hotlist；pnpm --dir frontend test:linuxdo。浏览器测试的路由辅助只让前一两次回复立即返回，其余保持真实长轮询；linuxdo套件afterEach改为等待非GET写入完成，因长轮询使networkidle不再成立。

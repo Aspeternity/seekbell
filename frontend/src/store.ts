@@ -42,12 +42,18 @@ export function notify(message: string) {
   timer = setTimeout(() => (toast.value = ''), 6000)
 }
 let csrf = ''
-export async function request<T = any>(path: string, method = 'GET', body?: unknown): Promise<T> {
+export async function request<T = any>(
+  path: string,
+  method = 'GET',
+  body?: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
   const response = await sendRequest(
     path,
     method,
     body === undefined ? undefined : JSON.stringify(body),
     'application/json',
+    signal,
   )
   return response.json()
 }
@@ -56,11 +62,13 @@ export async function sendRequest(
   method: string,
   body?: BodyInit,
   contentType = 'application/octet-stream',
+  signal?: AbortSignal,
 ): Promise<Response> {
   const response = await fetch('/api/' + path, {
     method,
     credentials: 'same-origin',
     cache: 'no-store',
+    signal,
     headers: {
       ...(body === undefined ? {} : { 'Content-Type': contentType }),
       ...(method === 'GET' ? {} : { 'X-CSRF-Token': csrf }),

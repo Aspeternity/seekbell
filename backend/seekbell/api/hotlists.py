@@ -1,6 +1,6 @@
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import Field
 from sqlalchemy.orm import Session
 
@@ -61,6 +61,20 @@ def save_selection(values: SelectionInput, request: Request):
         raise HTTPException(409, str(error)) from None
 
 
+def require_visible(engine):
+    with Session(engine) as session:
+        modules = session.get(OverviewPreferences, 1).modules
+    if not any(row["id"] == "hotlist" and row["visible"] for row in modules):
+        raise HTTPException(409, "社区热榜模块已隐藏。")
+
+
+@router.get("/hotlists")
+async def hotlist_board(request: Request, after: str | None = Query(None, max_length=64)):
+    """All visible lists; given the last tag, answers once something changes (long poll)."""
+    require_visible(request.app.state.engine)
+    return await request.app.state.hotlists.board(after, stop=lambda: request.app.state.restoring)
+
+
 @router.get("/hotlists/{website_id}")
 async def hotlist(website_id: str, request: Request, period: str | None = None):
     source = HOTLIST_SOURCES.get(website_id)
@@ -71,7 +85,5 @@ async def hotlist(website_id: str, request: Request, period: str | None = None):
     with Session(request.app.state.engine) as session:
         if session.get(WebsiteInstallation, website_id) is None:
             raise HTTPException(409, "请先添加该内置网站。")
-        modules = session.get(OverviewPreferences, 1).modules
-        if not any(row["id"] == "hotlist" and row["visible"] for row in modules):
-            raise HTTPException(409, "社区热榜模块已隐藏。")
+    require_visible(request.app.state.engine)
     return await request.app.state.hotlists.get(website_id, period)

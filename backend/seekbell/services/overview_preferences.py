@@ -81,3 +81,27 @@ def installed_sources(engine):
             )
         )
     return [HOTLIST_SOURCES[key].metadata() for key in installed if key in HOTLIST_SOURCES]
+
+
+def hotlist_catalog(engine):
+    """Visible hotlists as [(website_id, periods)], the saved selection first."""
+    from seekbell.sites.hotlists import HOTLIST_SOURCES
+
+    with Session(engine) as session:
+        p = session.get(OverviewPreferences, 1)
+        if not any(row["id"] == "hotlist" and row["visible"] for row in p.modules):
+            return []
+        selected, chosen = p.website_id, dict(p.periods)
+        installed = session.scalars(
+            select(WebsiteInstallation.website_id).order_by(
+                WebsiteInstallation.position, WebsiteInstallation.website_id
+            )
+        ).all()
+    catalog = []
+    for key in installed:
+        source = HOTLIST_SOURCES.get(key)
+        if source is not None:
+            first = chosen.get(key) if chosen.get(key) in source.periods else source.default_period
+            catalog.append((key, [first, *(p for p in source.periods if p != first)]))
+    catalog.sort(key=lambda row: row[0] != selected)
+    return catalog

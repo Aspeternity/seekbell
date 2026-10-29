@@ -1,6 +1,7 @@
 import asyncio
 import secrets
 from contextlib import AsyncExitStack, asynccontextmanager
+from functools import partial
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -35,6 +36,7 @@ from seekbell.notifiers.registry import NotifierRegistry
 from seekbell.services.authentication import Confirmations, LoginLimiter
 from seekbell.services.hotlists import HotlistService
 from seekbell.services.manual_sending import ConfiguredTargetTesting, ManualSending
+from seekbell.services.overview_preferences import hotlist_catalog
 from seekbell.services.request_budget import WebsiteRequestBudget
 from seekbell.services.runtime import Runtime
 
@@ -102,6 +104,8 @@ def create_app(
                     collection_active=lambda: runtime.active,
                 )
             )
+            # Test factories also follow the live catalog of visible hotlists.
+            app.state.hotlists.catalog = partial(hotlist_catalog, engine)
             stack.push_async_callback(app.state.hotlists.aclose)
             app.state.target_testing = ConfiguredTargetTesting(engine, registry.notifiers)
             app.state.manual_sending = ManualSending(engine, registry.notifiers)

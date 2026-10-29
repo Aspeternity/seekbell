@@ -5,6 +5,7 @@ let cookies: Awaited<
 >['cookies']
 let csrf = ''
 const errors = new WeakMap<Page, string[]>()
+const writes = new WeakMap<Page, Set<unknown>>()
 const headers = () => ({ 'X-CSRF-Token': csrf })
 
 test.beforeAll(async ({ request }) => {
@@ -21,6 +22,11 @@ test.beforeAll(async ({ request }) => {
 test.beforeEach(async ({ page }) => {
   errors.set(page, [])
   page.on('pageerror', (error) => errors.get(page)!.push(error.message))
+  const pending = new Set<unknown>()
+  writes.set(page, pending)
+  page.on('request', (request) => request.method() !== 'GET' && pending.add(request))
+  for (const event of ['requestfinished', 'requestfailed'] as const)
+    page.on(event, (request) => pending.delete(request))
   await page.context().addCookies(cookies)
   const workspace = await (await page.request.get('/api/manage/workspace')).json()
   for (const task of workspace.tasks.filter((task: any) => task.website_ids.includes('linuxdo')))
@@ -75,8 +81,9 @@ test.beforeEach(async ({ page }) => {
 })
 
 test.afterEach(async ({ page }) => {
-  // Drain queued selection writes before the next test resets shared preferences.
-  await page.waitForLoadState('networkidle')
+  // Drain queued selection writes before the next test resets shared preferences. The
+  // hotlist long poll stays open, so the network never becomes idle.
+  await expect.poll(() => writes.get(page)!.size).toBe(0)
   expect(errors.get(page)).toEqual([])
 })
 
@@ -186,51 +193,51 @@ test('real multi-site hotlist capabilities selections times and original links p
   await noOverflow(page)
 })
 
-test('late Linux DO replies cannot replace another sites current hotlist', async ({ page }) => {
-  let release = () => {}
-  const held = new Promise<void>((resolve) => (release = resolve))
-  let started = false,
-    finished = false
-  await page.route('**/api/manage/hotlists/linuxdo?period=daily', async (route) => {
-    const response = await route.fetch()
-    started = true
-    await held
-    await route.fulfill({ response })
-    finished = true
+test('switching between sites and periods is local and keeps each sites own list', async ({
+  page,
+}) => {
+  const fresh: string[] = []
+  page.on('request', (request) => {
+    const url = new URL(request.url())
+    if (url.pathname.startsWith('/api/manage/hotlists') && request.method() === 'GET')
+      if (!url.searchParams.has('after')) fresh.push(url.pathname)
   })
   const hotlist = page.getByRole('region', { name: '社区热榜', exact: true })
   await hotlist.getByRole('button', { name: 'LINUX DO', exact: true }).click()
   await expect(hotlist.locator('.hotlist-row').first()).toContainText('LinuxDOhot')
   await hotlist.getByRole('button', { name: '每日', exact: true }).click()
-  await expect.poll(() => started).toBe(true)
+  await expect(hotlist.locator('.hotlist-row').first()).toContainText('LinuxDOdaily')
   await hotlist.getByRole('button', { name: 'NodeSeek', exact: true }).click()
-  release()
-  await expect.poll(() => finished).toBe(true)
   await expect(hotlist.locator('.hotlist-row').first()).toContainText('合成hot热榜帖子')
   await expect(hotlist.getByRole('button', { name: '实时', exact: true })).toHaveAttribute(
     'aria-pressed',
     'true',
   )
-  await page.unroute('**/api/manage/hotlists/linuxdo?period=daily')
+  expect(fresh).toEqual([])
 })
 
 test('Linux DO access errors are explicit and do not block NodeSeek', async ({ page }) => {
-  await page.route('**/api/manage/hotlists/linuxdo?*', async (route) => {
-    const response = await route.fetch()
-    const data = await response.json()
-    await route.fulfill({
-      json: {
-        ...data,
-        items: [],
-        status: 'unavailable',
-        refreshing: false,
-        error_code: 'access_challenge',
-        fetched_at: null,
-        source_updated_at: null,
-        next_attempt_at: Date.now() / 1000 + 300,
-      },
-    })
-  })
+  await page.route(
+    (url) => url.pathname === '/api/manage/hotlists',
+    async (route) => {
+      const response = await route.fetch().catch(() => undefined)
+      if (!response) return
+      const data = await response.json()
+      for (const row of data.lists)
+        if (row.website_id === 'linuxdo')
+          Object.assign(row, {
+            items: [],
+            status: 'unavailable',
+            refreshing: false,
+            error_code: 'access_challenge',
+            fetched_at: null,
+            source_updated_at: null,
+            next_attempt_at: Date.now() / 1000 + 300,
+          })
+      await route.fulfill({ json: data }).catch(() => {})
+    },
+  )
+  await page.reload()
   const hotlist = page.getByRole('region', { name: '社区热榜', exact: true })
   await hotlist.getByRole('button', { name: 'LINUX DO', exact: true }).click()
   await expect(hotlist.getByText(/来源要求 Cloudflare 验证/)).toBeVisible()
@@ -292,50 +299,52 @@ test('websites retain their add order across the catalog, overview and reload', 
   await expect(hotlist.locator('.hotlist-site')).toHaveText(['NodeSeek', 'LINUX DO'])
 })
 
-test('Linux DO loads only the selected period and automatically retries a short daily wait', async ({
+test('a Linux DO list waiting for the shared request gap explains it and then fills in', async ({
   page,
 }) => {
-  const calls: string[] = []
-  page.on('request', (request) => {
-    const url = new URL(request.url())
-    if (url.pathname === '/api/manage/hotlists/linuxdo')
-      calls.push(url.searchParams.get('period') || '')
-  })
+  let reads = 0,
+    release = () => {}
+  const held = new Promise<void>((resolve) => (release = resolve))
+  await page.route(
+    (url) => url.pathname === '/api/manage/hotlists',
+    async (route) => {
+      const read = ++reads
+      if (read > 2) return route.continue()
+      // The first two replies answer at once; the later ones are the real long poll.
+      const url = new URL(route.request().url())
+      url.searchParams.delete('after')
+      const response = await route.fetch({ url: url.toString() }).catch(() => undefined)
+      if (!response) return
+      const data = await response.json()
+      if (read === 1)
+        Object.assign(
+          data.lists.find((row: any) => row.website_id === 'linuxdo' && row.period === 'daily'),
+          {
+            status: 'waiting',
+            refreshing: false,
+            error_code: 'source_cooldown',
+            fetched_at: null,
+            source_updated_at: null,
+            items: [],
+            next_attempt_at: Date.now() / 1000 + 2,
+          },
+        )
+      else await held
+      await route.fulfill({ json: data }).catch(() => {})
+    },
+  )
+  await page.reload()
   const hotlist = page.getByRole('region', { name: '社区热榜', exact: true })
   await hotlist.getByRole('button', { name: 'LINUX DO', exact: true }).click()
-  await expect(hotlist.locator('.hotlist-row')).toHaveCount(5)
-  await page.evaluate(
-    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
-  )
-  expect(calls.length).toBeGreaterThan(0)
-  expect(calls.every((period) => period === 'hot')).toBe(true)
-  let readyAt = 0
-  await page.route('**/api/manage/hotlists/linuxdo?period=daily', async (route) => {
-    const response = await route.fetch()
-    const data = await response.json()
-    if (!readyAt) readyAt = Date.now() + 1000
-    if (Date.now() < readyAt)
-      return route.fulfill({
-        response,
-        json: {
-          ...data,
-          status: 'waiting',
-          error_code: 'source_cooldown',
-          fetched_at: null,
-          items: [],
-          next_attempt_at: readyAt / 1000,
-        },
-      })
-    return route.fulfill({ response, json: data })
-  })
+  await expect(hotlist.locator('.hotlist-row').first()).toContainText('LinuxDOhot')
   await hotlist.getByRole('button', { name: '每日', exact: true }).click()
   await expect(
     hotlist.getByText('正在等待同站请求间隔，稍后自动重试。', { exact: true }),
   ).toBeVisible()
   await expect(hotlist.getByText('暂时无法获取榜单，请稍后重试。', { exact: true })).toHaveCount(0)
+  release()
   await expect(hotlist.locator('.hotlist-row')).toHaveCount(5)
   await expect(hotlist.locator('.hotlist-row').first()).toContainText('LinuxDOdaily')
-  expect(calls).not.toContain('weekly')
 })
 
 test('editor section highlight follows scrolling back after a chapter jump', async ({ page }) => {

@@ -14,7 +14,7 @@ from seekbell.db.models import (
     SourceState,
     WebsiteRequestState,
 )
-from seekbell.db.transactions import write_session
+from seekbell.db.transactions import database_call, write_session
 from seekbell.domain.errors import SourceDeferred, SourceFailure
 from seekbell.main import create_app
 from seekbell.services.hotlists import HotlistService
@@ -108,22 +108,76 @@ def test_linuxdo_shared_budget_excludes_parallel_requests_and_bounds_retries(cor
     asyncio.run(run())
 
 
-def test_linuxdo_hotlist_transport_failure_also_defers_monitoring(core):
+@pytest.mark.parametrize(
+    ("status", "headers", "shared"),
+    [
+        (None, {}, False),
+        (403, {}, False),
+        (502, {}, False),
+        (503, {"Retry-After": "900"}, True),
+        (429, {}, True),
+        (403, {"cf-mitigated": "challenge"}, True),
+    ],
+)
+def test_linuxdo_hotlist_shares_only_origin_wide_limits_with_monitoring(
+    core, status, headers, shared
+):
     async def run():
-        budget = WebsiteRequestBudget(core.engine, clock=lambda: 2000)
+        now = [2000]
+        budget = WebsiteRequestBudget(core.engine, clock=lambda: now[0])
 
         async def handler(request):
-            raise httpx.ReadTimeout("synthetic-private-value")
+            if status is None:
+                raise httpx.ReadTimeout("synthetic-private-value")
+            return httpx.Response(status, headers=headers)
 
         service = HotlistService(
-            request_budget=budget, transport=httpx.MockTransport(handler), clock=lambda: 2000
+            request_budget=budget, transport=httpx.MockTransport(handler), clock=lambda: now[0]
         )
         try:
             data = await service.get("linuxdo", "hot")
-            assert data["status"] == "unavailable" and data["next_attempt_at"] >= 2030
-            with pytest.raises(SourceDeferred):
+            assert data["status"] in ("unavailable", "waiting")
+            # The hotlist keeps its own retry time for path-local failures.
+            assert data["next_attempt_at"] >= 2030
+            now[0] += 2
+            with Session(core.engine) as session:
+                state = session.get(WebsiteRequestState, "linuxdo")
+                assert (state.failures == 1) is shared and (state.blocked_until > now[0]) is shared
+            if shared:
+                with pytest.raises(SourceDeferred):
+                    async with budget.request("linuxdo"):
+                        raise AssertionError("Monitoring must wait for the origin")
+            else:
                 async with budget.request("linuxdo"):
                     pass
+        finally:
+            await service.aclose()
+
+    asyncio.run(run())
+
+
+def test_linuxdo_hotlist_success_does_not_clear_monitoring_backoff_evidence(core):
+    async def run():
+        now = [2000]
+        budget = WebsiteRequestBudget(core.engine, clock=lambda: now[0])
+        await database_call(budget.failed, SourceFailure("http_503"), now[0])
+        now[0] += 31
+
+        async def handler(request):
+            return httpx.Response(
+                200,
+                headers={"Content-Type": "application/rss+xml"},
+                stream=Chunks(linuxdo_rss(9001)),
+            )
+
+        service = HotlistService(
+            request_budget=budget, transport=httpx.MockTransport(handler), clock=lambda: now[0]
+        )
+        try:
+            assert (await service.get("linuxdo", "hot"))["status"] == "ready"
+            with Session(core.engine) as session:
+                state = session.get(WebsiteRequestState, "linuxdo")
+                assert state.failures == 1 and state.error_code == "http_503"
         finally:
             await service.aclose()
 
@@ -362,5 +416,45 @@ def test_anonymous_collectors_never_replay_remote_cookies():
             await service.aclose()
         assert len(requests) == 4
         assert all("cookie" not in request.headers for request in requests)
+
+    asyncio.run(run())
+
+
+def test_linuxdo_warming_reads_one_list_at_a_time_within_the_shared_budget(core):
+    async def run():
+        now, calls = [2000], []
+        budget = WebsiteRequestBudget(core.engine, clock=lambda: now[0])
+
+        async def handler(request):
+            calls.append(str(request.url))
+            return httpx.Response(
+                200,
+                headers={"Content-Type": "application/rss+xml"},
+                stream=Chunks(linuxdo_rss(9001)),
+            )
+
+        service = HotlistService(
+            request_budget=budget, transport=httpx.MockTransport(handler), clock=lambda: now[0]
+        )
+        service.catalog = lambda: [("linuxdo", ["daily", "hot", "weekly"])]
+        service.viewed_at = now[0]
+        try:
+            assert await service.warm_once() == 2002
+            assert calls == ["https://linux.do/top.rss?period=daily"]
+            board = await service._board()
+            assert [(row["status"], row["error_code"]) for row in board["lists"]] == [
+                ("ready", None),
+                ("waiting", "source_cooldown"),
+                ("waiting", "source_cooldown"),
+            ]
+            for url in ("https://linux.do/hot.rss", "https://linux.do/top.rss?period=weekly"):
+                now[0] += 2
+                await service.warm_once()
+                assert calls[-1] == url
+            assert len(calls) == 3
+            with Session(core.engine) as session:
+                assert session.get(WebsiteRequestState, "linuxdo").failures == 0
+        finally:
+            await service.aclose()
 
     asyncio.run(run())

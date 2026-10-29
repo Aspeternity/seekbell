@@ -47,3 +47,7 @@ export interface HotlistData extends HotlistSource {
     views: number | null
   }[]
 }
+export interface HotlistBoard {
+  tag: string
+  lists: HotlistData[]
+}
