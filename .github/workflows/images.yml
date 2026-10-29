@@ -1,6 +1,11 @@
 name: Versioned images and manual candidates
 
 on:
+  # A passed baseline for a push to main publishes its version when that tag is new.
+  workflow_run:
+    workflows: [Local baseline checks]
+    types: [completed]
+    branches: [main]
   release:
     types: [published]
   workflow_dispatch:
@@ -25,8 +30,15 @@ concurrency:
   group: image-publication
   cancel-in-progress: false
 
+env:
+  REVISION: ${{ github.event.workflow_run.head_sha || github.sha }}
+
 jobs:
   preflight:
+    if: >-
+      ${{ github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -35,60 +47,26 @@ jobs:
     outputs:
       repository: ${{ steps.identity.outputs.repository }}
       version: ${{ steps.identity.outputs.version }}
+      publish: ${{ steps.identity.outputs.publish }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ env.REVISION }}
           fetch-depth: 0
           persist-credentials: false
       - name: Check selected revision, release version and publication intent
         id: identity
         env:
           EXPECTED_REVISION: ${{ inputs.revision }}
-          PUBLISH: ${{ github.event_name == 'release' || inputs.publish }}
+          PUBLISH: ${{ inputs.publish }}
           ENABLED: ${{ vars.SEEKBELL_GHCR_ENABLED }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           SHORT_TAG: ${{ inputs.tag }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
           PRERELEASE: ${{ github.event.release.prerelease }}
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          import os
-          import re
-          import subprocess
-          import tomllib
-          from pathlib import Path
-          from scripts.release_images import version_tags
-          version = ''
-          if os.environ['GITHUB_EVENT_NAME'] == 'release':
-              version = os.environ['RELEASE_TAG']
-              version_tags(version)
-              assert os.environ['GITHUB_REF'] == 'refs/tags/' + version
-              subprocess.run(['git', 'merge-base', '--is-ancestor', os.environ['GITHUB_SHA'],
-                              'origin/' + os.environ['DEFAULT_BRANCH']], check=True)
-              expected = re.sub(r'-(alpha|beta|rc)\.([1-9][0-9]*)',
-                                lambda m: {'alpha':'a', 'beta':'b', 'rc':'rc'}[m[1]] + m[2],
-                                version[1:])
-              actual = tomllib.loads(Path('pyproject.toml').read_text())['project']['version']
-              assert actual == expected, 'Bump pyproject.toml and uv.lock before creating the release'
-              assert ('-' in version) == (os.environ['PRERELEASE'] == 'true'), 'Release prerelease flag mismatch'
-          else:
-              revision = os.environ['EXPECTED_REVISION']
-              assert re.fullmatch('[0-9a-f]{40}', revision), 'Use a full commit SHA'
-              assert revision == os.environ['GITHUB_SHA'], 'Selected branch has a different commit'
-              tag = os.environ['SHORT_TAG']
-              if tag:
-                  assert len(tag) <= 64 and re.fullmatch(r'[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*', tag) and tag != 'latest', 'Invalid short candidate tag'
-                  assert os.environ['PUBLISH'] == 'true', 'A short tag requires publication'
-              if os.environ['PUBLISH'] == 'true':
-                  assert os.environ['ENABLED'] == 'true', 'Manual candidate publication is not enabled'
-                  assert os.environ['GITHUB_REF'] == 'refs/heads/' + os.environ['DEFAULT_BRANCH'], 'Publish from the default branch only'
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              output.write('repository=' + os.environ['GITHUB_REPOSITORY'].lower() + '\n')
-              output.write('version=' + version + '\n')
-          PY
+        run: python3 scripts/release_preflight.py
       - name: Check package access and public destination before building a publication candidate
-        if: ${{ github.event_name == 'release' || inputs.publish }}
+        if: ${{ steps.identity.outputs.publish == 'true' }}
         env:
           IMAGE_REPOSITORY: ${{ steps.identity.outputs.repository }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -98,19 +76,25 @@ jobs:
   # merged PR); native builds run in parallel because bytes depend on the SHA.
   baseline:
     needs: preflight
+    if: ${{ github.event_name != 'workflow_run' || needs.preflight.outputs.publish == 'true' }}
     uses: ./.github/workflows/ci.yml
+    with:
+      revision: ${{ github.event.workflow_run.head_sha || github.sha }}
     permissions:
       contents: read
       actions: read
 
   native:
     needs: preflight
+    if: ${{ github.event_name != 'workflow_run' || needs.preflight.outputs.publish == 'true' }}
     uses: ./.github/workflows/native-images.yml
+    with:
+      revision: ${{ github.event.workflow_run.head_sha || github.sha }}
     permissions:
       contents: read
 
   publish:
-    if: ${{ github.event_name == 'release' || inputs.publish }}
+    if: ${{ needs.preflight.outputs.publish == 'true' }}
     needs: [preflight, baseline, native]
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -122,6 +106,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ env.REVISION }}
           persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
@@ -133,7 +118,7 @@ jobs:
           path: ${{ runner.temp }}/images/arm64
       - name: Verify both artifacts before registry authentication
         run: |
-          python3 scripts/release_images.py --revision "$GITHUB_SHA" --repository "$IMAGE_REPOSITORY" \
+          python3 scripts/release_images.py --revision "$REVISION" --repository "$IMAGE_REPOSITORY" \
             release --artifacts "$RUNNER_TEMP/images" --run "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --report plan.json
       - name: Verify public source repository and public package before any registry write
         env:
@@ -146,7 +131,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish tested bytes and verify immutable two-platform index
         run: |
-          python3 scripts/release_images.py --revision "$GITHUB_SHA" --repository "$IMAGE_REPOSITORY" \
+          python3 scripts/release_images.py --revision "$REVISION" --repository "$IMAGE_REPOSITORY" \
             release --artifacts "$RUNNER_TEMP/images" --run "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --execute --report release.json
       - name: Confirm published package remains public and record reported linkage
         env:
@@ -161,21 +146,21 @@ jobs:
           from pathlib import Path
           from scripts.release_images import DIGEST
           report = json.loads(Path('release.json').read_text())
-          assert report['published'] and report['revision'] == os.environ['GITHUB_SHA']
+          assert report['published'] and report['revision'] == os.environ['REVISION']
           assert DIGEST.fullmatch(report['digest'])
           assert report['reference'] == 'ghcr.io/' + os.environ['IMAGE_REPOSITORY'] + '@' + report['digest']
           subprocess.run(['docker', 'pull', '--platform', 'linux/amd64', report['reference']], check=True)
-          subprocess.run(['python3', 'scripts/check_container.py', report['reference'], '--revision', os.environ['GITHUB_SHA']], check=True)
+          subprocess.run(['python3', 'scripts/check_container.py', report['reference'], '--revision', os.environ['REVISION']], check=True)
           PYCODE
       - name: Add explicit short tag after all image checks
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.tag != '' }}
         env:
           SHORT_TAG: ${{ inputs.tag }}
         run: |
-          python3 scripts/release_images.py --revision "$GITHUB_SHA" --repository "$IMAGE_REPOSITORY" \
+          python3 scripts/release_images.py --revision "$REVISION" --repository "$IMAGE_REPOSITORY" \
             alias --receipt release.json --tag "$SHORT_TAG" --execute --report alias.json
       - name: Add version and latest tags only after all image checks
-        if: ${{ github.event_name == 'release' }}
+        if: ${{ needs.preflight.outputs.version != '' }}
         env:
           RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -187,6 +172,7 @@ jobs:
           from pathlib import Path
           from scripts.release_images import promote
           version = os.environ['RELEASE_VERSION']
+          from scripts.release_preflight import newer
           latest = False
           if '-' not in version:
               response = subprocess.run(
@@ -195,21 +181,23 @@ jobs:
               selected = json.loads(response.stdout)
               if response.returncode:
                   assert str(selected.get('status')) == '404', 'Cannot determine latest release'
-              else:
-                  latest = selected['tag_name'] == version
+                  selected = {'tag_name': None}
+              # A merged version bump creates its Release only after the images exist.
+              latest = (selected['tag_name'] == version if os.environ['GITHUB_EVENT_NAME'] == 'release'
+                        else newer(version, selected['tag_name']))
           report = promote(json.loads(Path('release.json').read_text()),
-                           os.environ['GITHUB_SHA'], os.environ['IMAGE_REPOSITORY'],
+                           os.environ['REVISION'], os.environ['IMAGE_REPOSITORY'],
                            version, latest=latest, execute=True)
           Path('version.json').write_text(json.dumps(report, indent=2) + '\n')
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
               summary.write('Version tags: ' + ', '.join(report['tags']) + '\n\n')
           PY
       - name: Package and validate digest-pinned Portainer release assets
-        if: ${{ github.event_name == 'release' }}
+        if: ${{ needs.preflight.outputs.version != '' }}
         env:
           RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
         run: |
-          python3 scripts/release_images.py --revision "$GITHUB_SHA" --repository "$IMAGE_REPOSITORY" \
+          python3 scripts/release_images.py --revision "$REVISION" --repository "$IMAGE_REPOSITORY" \
             compose --receipt version.json --version "$RELEASE_VERSION" --templates deploy --output release-assets
           docker compose -f release-assets/compose.portainer.yaml config --quiet
           docker compose -f release-assets/compose.portainer.compare.yaml config --quiet
@@ -240,8 +228,8 @@ jobs:
 
 
   release-receipt:
-    if: ${{ github.event_name == 'release' }}
-    needs: publish
+    if: ${{ needs.preflight.outputs.version != '' }}
+    needs: [preflight, publish]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -249,25 +237,38 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ env.REVISION }}
           persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: image-release-receipt
           path: receipt
+      - name: Create the Release for a merged version bump
+        if: ${{ github.event_name == 'workflow_run' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.preflight.outputs.version }}
+        run: |
+          python3 scripts/release_preflight.py notes "$RELEASE_TAG" > notes.md
+          latest=false
+          grep -q ':latest"' receipt/version.json && latest=true
+          gh release create "$RELEASE_TAG" --target "$REVISION" --title "$RELEASE_TAG" \
+            --notes-file notes.md --latest="$latest"
       - name: Attach permanent image receipts to the GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ needs.preflight.outputs.version }}
         run: gh release upload "$RELEASE_TAG" receipt/release.json receipt/version.json receipt/package.json receipt/release-assets/deployment.json receipt/release-assets/compose.portainer.yaml receipt/release-assets/compose.portainer.compare.yaml --clobber
       # Final gate: the release is done only when an anonymous user sees
       # matching assets and registry tags, so no manual follow-up check is needed.
       - name: Verify the public release anonymously
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ needs.preflight.outputs.version }}
         run: |
           for attempt in 1 2 3; do
-            python3 scripts/verify_release.py --tag "$RELEASE_TAG" --revision "$GITHUB_SHA" \
+            python3 scripts/verify_release.py --tag "$RELEASE_TAG" --revision "$REVISION" \
               --repository "$GITHUB_REPOSITORY" --report verification.json && break
             test "$attempt" = 3 && exit 1
             sleep 20

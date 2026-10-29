@@ -6,15 +6,15 @@
 
 ## 合并与检查
 
-main要求PR、baseline成功、分支同步main、讨论全部解决，禁止强推/删除，无绕过名单。
+main要求PR、baseline成功、讨论全部解决，禁止强推/删除，无绕过名单。2026-10-30用户确认取消“分支同步main”（strict）并开启自动合并，以免main每变一次就重跑待合并PR；合并后main push的baseline兜底。这两项仓库设置需维护者在GitHub手动修改。
 单维护者阶段批准人数为0，避免要求作者批准自己的PR；仍须完整CI。
 只允许squash，使用PR标题/正文，合并后删分支，允许更新PR分支。
 v*标签禁止更新/删除，发布见[镜像流程](IMAGE_RELEASE.md)。
 
 PR执行完整baseline和原生双架构检查；main push执行baseline。
 main规则强制baseline及native-candidates / native的amd64、arm64检查；三项都绑定GitHub Actions来源，名称已由PR #6实际运行核实。
-依赖更新同样走PR，不自动合并，不用skip ci绕过必需检查。
-第三方Actions固定完整SHA，Dependabot每周检查GitHub Actions、uv和pnpm/npm，每生态最多5条PR。
+依赖更新同样走PR，由维护者决定是否设置自动合并（必需检查通过后才合并），不用skip ci绕过必需检查。
+第三方Actions固定完整SHA。Dependabot每月检查GitHub Actions、uv和pnpm/npm，每生态把次版本/补丁合成一条PR，不自动rebase（main变动不再连带重跑各依赖PR的完整CI），大版本忽略、需要时人工升级；漏洞安全更新不受此计划限制（2026-10-30用户确认）。
 
 ## 安全配置
 

@@ -15,6 +15,11 @@ spec = importlib.util.spec_from_file_location(
 )
 images = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(images)
+spec = importlib.util.spec_from_file_location(
+    "release_preflight", Path(__file__).parents[1] / "scripts" / "release_preflight.py"
+)
+preflight = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(preflight)
 REVISION = "a" * 40
 REPOSITORY = "synthetic/seekbell"
 SOURCE = f"https://github.com/{REPOSITORY}"
@@ -494,35 +499,78 @@ def test_registry_digest_must_match_returned_content(monkeypatch):
     ],
 )
 def test_release_workflow_checks_package_version_and_prerelease_flag(
-    tmp_path, monkeypatch, tag, package_version, prerelease, accepted
+    tmp_path, tag, package_version, prerelease, accepted
 ):
-    workflow = (Path(__file__).parents[1] / ".github/workflows/images.yml").read_text()
-    script = workflow.split("python3 - <<'PY'\n", 1)[1].split("          PY\n", 1)[0]
-    script = "\n".join(line[10:] for line in script.splitlines())
-    monkeypatch.chdir(tmp_path)
     (tmp_path / "pyproject.toml").write_text('[project]\nversion = "' + package_version + '"\n')
-    output = tmp_path / "output"
-    for key, value in {
+    env = {
         "GITHUB_EVENT_NAME": "release",
         "RELEASE_TAG": tag,
         "GITHUB_REF": "refs/tags/" + tag,
-        "GITHUB_SHA": REVISION,
+        "REVISION": REVISION,
         "DEFAULT_BRANCH": "main",
         "PRERELEASE": prerelease,
-        "GITHUB_OUTPUT": str(output),
         "GITHUB_REPOSITORY": REPOSITORY,
-    }.items():
-        monkeypatch.setenv(key, value)
+    }
     calls = []
-    monkeypatch.setattr(images.subprocess, "run", lambda *args, **kwargs: calls.append(args))
+
+    def run(args, **kwargs):
+        calls.append(args)
+
     if accepted:
-        exec(compile(script, "release-preflight", "exec"), {})
-        assert "version=" + tag in output.read_text()
-        assert calls[0][0] == ["git", "merge-base", "--is-ancestor", REVISION, "origin/main"]
+        outputs = preflight.plan(env, run=run, root=tmp_path)
+        assert outputs == {"repository": REPOSITORY, "version": tag, "publish": "true"}
+        assert calls[0] == ["git", "merge-base", "--is-ancestor", REVISION, "origin/main"]
     else:
         with pytest.raises(AssertionError):
-            exec(compile(script, "release-preflight", "exec"), {})
-        assert not output.exists()
+            preflight.plan(env, run=run, root=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "package_version,tagged,publish",
+    [("0.7.0", False, True), ("0.7.0", True, False), ("0.7.0rc1", False, False)],
+)
+def test_merged_version_bump_publishes_only_a_new_final_version(
+    tmp_path, package_version, tagged, publish
+):
+    (tmp_path / "pyproject.toml").write_text('[project]\nversion = "' + package_version + '"\n')
+    calls = []
+
+    class Done:
+        returncode = 0 if tagged else 1
+
+    def run(args, **kwargs):
+        calls.append(args)
+        return Done()
+
+    env = {
+        "GITHUB_EVENT_NAME": "workflow_run",
+        "REVISION": REVISION,
+        "DEFAULT_BRANCH": "main",
+        "GITHUB_REPOSITORY": REPOSITORY,
+    }
+    outputs = preflight.plan(env, run=run, root=tmp_path)
+    assert outputs["publish"] == ("true" if publish else "false")
+    assert outputs["version"] == ("v0.7.0" if publish else "")
+    if publish:
+        assert calls[-1] == ["git", "merge-base", "--is-ancestor", REVISION, "origin/main"]
+
+
+@pytest.mark.parametrize(
+    "other,expected",
+    [(None, True), ("v0.6.0", True), ("v0.7.0", False), ("v0.7.0-rc.1", True), ("v0.10.0", False)],
+)
+def test_automatic_release_becomes_latest_only_when_newest(other, expected):
+    assert preflight.newer("v0.7.0", other) is expected
+
+
+def test_release_notes_come_from_a_finished_changelog_entry(tmp_path):
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text("# 更新记录\n\n## 0.7.0 — 2026-11-01\n\n- 新功能\n\n## 0.6.0\n\n- 旧\n")
+    assert preflight.release_notes("v0.7.0", changelog) == "- 新功能\n"
+    for text in ("## 0.7.0 — x\n\n- TODO: fill in\n", "## 0.6.0 — x\n\n- 旧\n"):
+        changelog.write_text(text)
+        with pytest.raises(AssertionError):
+            preflight.release_notes("v0.7.0", changelog)
 
 
 def versioned_receipt():
