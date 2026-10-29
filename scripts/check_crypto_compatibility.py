@@ -51,8 +51,6 @@ def stage(mode: str, root: Path, destination: Path | None) -> dict:
         archive,
         destination,
         password=PASSWORD,
-        username="backup_admin",
-        admin_password=ADMIN_PASSWORD,
     )
     assert table_data(settings.database_path) == before
     after = table_data(destination / "seekbell.sqlite3")

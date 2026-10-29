@@ -32,7 +32,7 @@ from seekbell.db.models import (
 from seekbell.db.runtime import create_database_engine, instance_lock, migrate
 from seekbell.notifiers.credentials import CredentialError, CredentialVault
 from seekbell.notifiers.registry import NotifierRegistry
-from seekbell.services.authentication import LoginLimiter
+from seekbell.services.authentication import Confirmations, LoginLimiter
 from seekbell.services.hotlists import HotlistService
 from seekbell.services.manual_sending import ConfiguredTargetTesting, ManualSending
 from seekbell.services.request_budget import WebsiteRequestBudget
@@ -133,6 +133,7 @@ def create_app(
     app.state.settings = settings
     app.state.csrf_key = secrets.token_bytes(32)
     app.state.login_limiter = LoginLimiter()
+    app.state.confirmations = Confirmations()
     app.state.open_workspace = open_workspace
     app.state.close_workspace = close_workspace
     app.state.restoring = False

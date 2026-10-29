@@ -159,8 +159,6 @@ def test_web_restore_candidate_uses_parent_lock_and_preserves_original(source, t
         archive,
         restored,
         password=PASSWORD,
-        username="backup_admin",
-        admin_password=ADMIN_PASSWORD,
     )
     settings = Settings(data_dir=restored, build_revision=source.build_revision)
     with instance_lock(source.data_dir), pytest.raises(backup.BackupError):

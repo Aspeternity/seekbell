@@ -239,7 +239,7 @@ compose.yaml显式要求SEEKBELL_IMAGE，pull_policy=never；单实例/10001、�
 
 backup.py只提供交互式本地维护CLI，没有未经认证的备份HTTP接口。create复用instance_lock要求停服，通过sqlite3.Connection.backup复制已提交WAL的一致快照；先校验迁移/SQLAlchemy结构、quick_check/外键、管理员及全量当前/历史密文原钥可解密。格式v1用固定参数scrypt(N=2^17,r=8,p=1,256位输出)、随机salt/96位nonce、AES-256-GCM流式加密；头作AAD、128位tag，完整认证前不解析。元信息/原密钥/数据库全部加密，无可控路径解包；JSON清单上限16KiB/数据库2GiB。原子独占发布0600备份；私有暂存目录0700，成功/异常清理，不宣称强制终止后的安全擦除。
 
-restore仅当前迁移版本，独立新目录，先解密认证、版本/结构/摘要/凭据检查及备份管理员重新验证；不运行迁移。只删除副本LoginSession，管理员/全部业务表/任务版本/来源与队列/租约/账本保留，原库不变；同步文件/目录后Linux renameat2(RENAME_NOREPLACE)发布，竞争创建的空目标也拒绝，无覆盖回退。启动仍需原钥，恢复登录不得沿用备份会话。CLI口令只getpass，不接受参数/环境/管道；错误只输出固定应用消息或脱敏错误，不输出异常参数/SQL/秘密。
+restore仅当前迁移版本，独立新目录，先解密认证、版本/结构/摘要/凭据检查；可选administrator=(用户名,哈希)替换单例管理员，否则沿用备份中的管理员。只删除副本LoginSession，全部业务表/任务版本/来源与队列/租约/账本保留，原库不变；同步文件/目录后Linux renameat2(RENAME_NOREPLACE)发布，竞争创建的空目标也拒绝，无覆盖回退。启动仍需原钥，恢复登录不得沿用备份会话。CLI口令只getpass，不接受参数/环境/管道；错误只输出固定应用消息或脱敏错误，不输出异常参数/SQL/秘密。
 
 备份是时间点状态，不含之后的送达回执；切换前停原实例，恢复实例按原启停/退避/租约执行，不能承诺外部exactly-once。普通配置导出不在本阶段；Web备份/恢复、跨版本/升级/失败回退与正式数据卷切换后续实施。格式、真实命令及依据见[维护说明](BACKUP_RESTORE.md)，自动证据见[本阶段记录](history/2026-10-20-Compose与加密备份恢复.md)。
 
@@ -385,3 +385,8 @@ BackupRecord仅保留最近50次经当前密码验证的导出/恢复操作，�
 GET /auth/sessions只返回本会话到期与其他有效会话数；DELETE /auth/sessions/others在写事务内重查当前会话/CSRF、仅删除其他会话，不修改账号、当前Cookie或延长有效期。所有管理端点继续认证/Origin/CSRF保护。GET /manage/diagnostics只组合版本、后台状态、支持目录、固定故障码和检查时间，无URL/凭据/会话/磁盘路径；前端复制失败时显示可选取文本。
 
 新迁移升级前按既有维护流程完整备份；回退使用0017对应的原镜像/原卷或匹配备份，不能用旧镜像读取0018。验证：uv run --frozen pytest -q；pnpm --dir frontend build；test:system、test:retention、test:backup、test:approved-ui、test:hotlist、test:live。容器升级/备份/回退用scripts/check_release_container.py与check_backup_container.py，均临时合成卷及禁外网网络。
+
+## 备份恢复免旧管理员与短时免确认（2026-10-29）
+
+恢复不再验证备份中的管理员：网页设置恢复以当前管理员(用户名,哈希)写入暂存副本，初始化页恢复以新设用户名/密码哈希写入；切换后在新库为发起者建立会话并返回session_response，前端直接进入。备份下载/恢复/删除副本的current_password可省略：authentication.Confirmations在进程内记录每会话最近一次输入时间，与会话开始时间（expires_at−SESSION_SECONDS，即登录/修改账号）取较晚者，CONFIRM_SECONDS=15分钟内有效；GET /api/manage/backups返回confirm_seconds，过期省略返回403“请输入当前管理员密码。”。不新增迁移，重启只会重新要求输入；修改管理员账号仍必须输入当前密码。
+

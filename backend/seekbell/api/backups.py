@@ -8,11 +8,12 @@ import os
 import shutil
 import sqlite3
 import tempfile
+import time
 from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.exc import SQLAlchemyError
@@ -20,10 +21,16 @@ from sqlalchemy.orm import Session
 from starlette.requests import ClientDisconnect
 
 from seekbell import backup
-from seekbell.api.auth import COOKIE, preauth, rate_limit, require_admin
+from seekbell.api.auth import COOKIE, preauth, rate_limit, require_admin, session_response
 from seekbell.db.models import Administrator
-from seekbell.db.transactions import database_call
-from seekbell.services.authentication import initialized, session_info, verify_password
+from seekbell.db.transactions import database_call, write_session
+from seekbell.services.authentication import (
+    initialized,
+    new_session,
+    password_hash,
+    session_info,
+    verify_password,
+)
 from seekbell.services.maintenance import backup_records, record_backup
 
 router = APIRouter(prefix="/api/manage/backups", dependencies=[Depends(require_admin)])
@@ -36,31 +43,27 @@ DATA_FILES = ("seekbell.sqlite3", "seekbell.sqlite3-wal", "seekbell.sqlite3-shm"
 QUIESCE_SECONDS = 15
 
 
-class CreateValues(BaseModel):
+class DiscardValues(BaseModel):
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
-    current_password: str = Field(min_length=1, max_length=128, repr=False)
+    # Omitted while the session's last password entry is recent (CONFIRM_SECONDS).
+    current_password: str | None = Field(default=None, min_length=1, max_length=128, repr=False)
+
+
+class CreateValues(DiscardValues):
     password: str = Field(min_length=12, max_length=1024, repr=False)
 
 
-class DiscardValues(BaseModel):
-    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
-    current_password: str = Field(min_length=1, max_length=128, repr=False)
-
-
-class RestoreValues(CreateValues):
-    username: str = Field(pattern=r"^[A-Za-z0-9_-]{3,32}$")
-    admin_password: str = Field(min_length=1, max_length=128, repr=False)
-
-
-class ApplyValues(RestoreValues):
+class ApplyValues(CreateValues):
     pause: bool = True
 
 
 class SetupRestoreValues(BaseModel):
+    """A fresh installation restores under a newly chosen administrator."""
+
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
     password: str = Field(min_length=12, max_length=1024, repr=False)
     username: str = Field(pattern=r"^[A-Za-z0-9_-]{3,32}$")
-    admin_password: str = Field(min_length=1, max_length=128, repr=False)
+    admin_password: str = Field(min_length=8, max_length=128, repr=False)
     pause: bool = True
 
 
@@ -68,8 +71,19 @@ def candidate(request):
     return request.app.state.settings.data_dir.resolve() / CANDIDATE
 
 
-def reauthenticate(request, password):
+def reauthenticate(request, password=None):
     engine = request.app.state.engine
+    token = request.cookies.get(COOKIE, "")
+    if password is None:
+        info = session_info(engine, token)
+        if info is None or not hmac.compare_digest(
+            info["csrf"].encode(), request.headers.get("x-csrf-token", "").encode()
+        ):
+            raise HTTPException(401, "会话已过期，请重新登录。")
+        if request.app.state.confirmations.remaining(token, info["expires_at"]) <= 0:
+            raise HTTPException(403, "请输入当前管理员密码。")
+        request.state.backup_authenticated = True
+        return
     with Session(engine) as session:
         admin = session.get(Administrator, 1)
         encoded = admin.password_hash if admin else None
@@ -78,7 +92,7 @@ def reauthenticate(request, password):
     # Account edits/logout during hashing must revoke this privileged operation.
     with Session(engine) as session:
         admin = session.get(Administrator, 1)
-        info = session_info(engine, request.cookies.get(COOKIE, ""))
+        info = session_info(engine, token)
         if (
             admin is None
             or admin.password_hash != encoded
@@ -88,7 +102,14 @@ def reauthenticate(request, password):
             )
         ):
             raise HTTPException(401, "会话已过期，请重新登录。")
+    request.app.state.confirmations.mark(token)
     request.state.backup_authenticated = True
+
+
+def current_administrator(engine):
+    with Session(engine) as session:
+        admin = session.get(Administrator, 1)
+        return admin.username, admin.password_hash
 
 
 def record_failure(request):
@@ -149,7 +170,13 @@ class Download(FileResponse):
 
 @router.get("")
 def status(request: Request):
+    token = request.cookies.get(COOKIE, "")
+    info = session_info(request.app.state.engine, token)
     return {
+        # Seconds the current password may still be omitted; 0 means it must be entered.
+        "confirm_seconds": int(
+            request.app.state.confirmations.remaining(token, info["expires_at"]) if info else 0
+        ),
         "candidate_available": os.path.lexists(candidate(request)),
         "max_archive_bytes": MAX_ARCHIVE,
         "records": backup_records(request.app.state.engine),
@@ -189,7 +216,7 @@ async def download(values: CreateValues, request: Request):
 
 async def read_upload(request, archive, model=None, check=None):
     """One bounded UTF-8 JSON line, then raw encrypted archive bytes (no multipart)."""
-    model = model or RestoreValues
+    model = model or CreateValues
     if request.headers.get("content-type", "").split(";")[0] != "application/octet-stream":
         raise HTTPException(415, "请上传 SeekBell 加密备份。")
     length = request.headers.get("content-length")
@@ -244,8 +271,7 @@ async def restore(request: Request):
                 archive,
                 candidate(request),
                 password=values.password,
-                username=values.username,
-                admin_password=values.admin_password,
+                administrator=await database_call(current_administrator, request.app.state.engine),
             )
             await database_call(
                 record_backup,
@@ -338,7 +364,13 @@ async def quiesce(app):
         await asyncio.sleep(0.05)
 
 
-async def apply_restore(request, values, archive):
+def sign_in(engine):
+    with write_session(engine) as session:
+        return new_session(session, at=time.time())
+
+
+async def apply_restore(request, response, values, archive, administrator):
+    """Replace the live workspace, keeping `administrator` and signing the caller in."""
     app = request.app
     settings = app.state.settings
     data_dir = settings.data_dir.resolve()
@@ -350,8 +382,7 @@ async def apply_restore(request, values, archive):
             archive,
             staged,
             password=values.password,
-            username=values.username,
-            admin_password=values.admin_password,
+            administrator=administrator,
             pause=values.pause,
         )
         await quiesce(app)
@@ -378,11 +409,17 @@ async def apply_restore(request, values, archive):
         archive_bytes=archive.stat().st_size,
         manifest=manifest,
     )
-    return {"restored": True, "paused": values.pause, "previous": previous.name}
+    tokens = await database_call(sign_in, app.state.engine)
+    return {
+        "restored": True,
+        "paused": values.pause,
+        "previous": previous.name,
+        **session_response(request, response, administrator[0], tokens),
+    }
 
 
 @router.post("/apply", dependencies=[Depends(rate_limit)])
-async def apply(request: Request):
+async def apply(request: Request, response: Response):
     async with operation(request):
         with tempfile.TemporaryDirectory(
             prefix=".seekbell-web-", dir=request.app.state.settings.data_dir.resolve()
@@ -393,7 +430,8 @@ async def apply(request: Request):
                     values = await read_upload(request, archive, ApplyValues)
             except TimeoutError:
                 raise HTTPException(408, "上传超时，请重新选择文件重试。") from None
-            return await apply_restore(request, values, archive)
+            administrator = await database_call(current_administrator, request.app.state.engine)
+            return await apply_restore(request, response, values, archive, administrator)
 
 
 async def require_uninitialized(request):
@@ -402,7 +440,7 @@ async def require_uninitialized(request):
 
 
 @setup_router.post("/restore")
-async def setup_restore(request: Request):
+async def setup_restore(request: Request, response: Response):
     await require_uninitialized(request)
     async with operation(request):
         with tempfile.TemporaryDirectory(
@@ -419,4 +457,7 @@ async def setup_restore(request: Request):
             except TimeoutError:
                 raise HTTPException(408, "上传超时，请重新选择文件重试。") from None
             await require_uninitialized(request)
-            return await apply_restore(request, values, archive)
+            # Hash outside the event loop like setup; never stored in plain text.
+            encoded = await database_call(password_hash, values.admin_password)
+            administrator = (values.username, encoded)
+            return await apply_restore(request, response, values, archive, administrator)

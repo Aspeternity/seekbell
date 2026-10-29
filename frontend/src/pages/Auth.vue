@@ -18,12 +18,8 @@ const username = ref(props.setup ? '' : account.username),
   restoring = ref(false)
 function restored(result: { paused: boolean }) {
   restoring.value = false
-  notify(
-    result.paused
-      ? '备份已恢复，采集和通知已暂停。请用备份中的管理员登录。'
-      : '备份已恢复，请用备份中的管理员登录。',
-  )
-  emit('navigate', '/login')
+  notify(result.paused ? '备份已恢复，采集和通知已暂停。' : '备份已恢复。')
+  emit('navigate', '/')
 }
 async function submit() {
   error.value = ''

@@ -2,15 +2,31 @@
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import Icon from './Icon.vue'
 import { confirmAction, restoreBackup } from '../store'
-// `setup` restores a fresh installation, which has no current administrator to confirm.
-const props = defineProps<{ setup?: boolean; maxBytes?: number }>()
+// `setup` restores a fresh installation under a newly chosen administrator; otherwise the
+// current administrator is kept, and `needPassword` asks for its password when the
+// last entry is no longer recent.
+const props = defineProps<{ setup?: boolean; needPassword?: boolean; maxBytes?: number }>()
 const emit = defineEmits<{
   done: [result: { restored: boolean; paused: boolean; previous: string }]
   busy: [value: boolean]
   dirty: [value: boolean]
   failed: []
 }>()
-const fields = reactive({ current: '', password: '', username: '', adminPassword: '' })
+const fields = reactive({
+  current: '',
+  password: '',
+  username: '',
+  adminPassword: '',
+  confirmation: '',
+})
+const ready = computed(
+  () =>
+    !!file.value &&
+    !!fields.password &&
+    (props.setup
+      ? !!fields.username && !!fields.adminPassword && !!fields.confirmation
+      : !props.needPassword || !!fields.current),
+)
 const file = ref<File>(),
   pause = ref(true),
   busy = ref(false),
@@ -34,15 +50,20 @@ async function run() {
     const result = await restoreBackup(
       props.setup ? 'auth/setup/restore' : 'manage/backups/apply',
       {
-        ...(props.setup ? {} : { current_password: fields.current }),
         password: fields.password,
-        username: fields.username,
-        admin_password: fields.adminPassword,
+        ...(props.setup ? { username: fields.username, admin_password: fields.adminPassword } : {}),
+        ...(!props.setup && props.needPassword ? { current_password: fields.current } : {}),
         pause: pause.value,
       },
       file.value,
     )
-    Object.assign(fields, { current: '', password: '', username: '', adminPassword: '' })
+    Object.assign(fields, {
+      current: '',
+      password: '',
+      username: '',
+      adminPassword: '',
+      confirmation: '',
+    })
     file.value = undefined
     emit('done', result)
   } catch (e) {
@@ -50,13 +71,26 @@ async function run() {
     emit('failed')
   } finally {
     fields.current = ''
-    fields.adminPassword = ''
     if (active) busy.value = false
   }
 }
 function submit() {
-  if (busy.value || !file.value) return
+  if (busy.value || !ready.value || !file.value) return
   error.value = ''
+  if (props.setup) {
+    if (!/^[A-Za-z0-9_-]{3,32}$/.test(fields.username)) {
+      error.value = '用户名应为 3–32 位字母、数字、下划线或短横线。'
+      return
+    }
+    if (fields.adminPassword.length < 8) {
+      error.value = '密码应为 8–128 个字符。'
+      return
+    }
+    if (fields.adminPassword !== fields.confirmation) {
+      error.value = '两次输入的密码不一致。'
+      return
+    }
+  }
   if (props.maxBytes && file.value.size > props.maxBytes) {
     error.value = '备份超过支持上限。'
     return
@@ -64,7 +98,7 @@ function submit() {
   if (props.setup) return void run()
   confirmAction(
     '恢复这个备份？',
-    '当前的任务、网站、通知目标和历史将被备份内容替换，原数据会保留在服务器数据目录的 before-restore 文件夹中。恢复后需用备份中的管理员重新登录。',
+    '当前的任务、网站、通知目标和历史将被备份内容替换，原数据会保留在服务器数据目录的 before-restore 文件夹中。管理员账号保持不变。',
     run,
     '确认恢复',
   )
@@ -96,7 +130,7 @@ function submit() {
     </label>
     <div class="settings-fields-grid">
       <div class="form-stack">
-        <label for="restore-archive-password">备份加密口令</label>
+        <label for="restore-archive-password">备份口令</label>
         <input
           id="restore-archive-password"
           v-model="fields.password"
@@ -107,7 +141,7 @@ function submit() {
           :disabled="busy"
         />
       </div>
-      <div v-if="!setup" class="form-stack">
+      <div v-if="!setup && needPassword" class="form-stack">
         <label for="restore-current">当前管理员密码</label>
         <input
           id="restore-current"
@@ -119,29 +153,43 @@ function submit() {
           :disabled="busy"
         />
       </div>
-      <div class="form-stack">
-        <label for="restore-username">备份中的管理员用户名</label>
-        <input
-          id="restore-username"
-          v-model="fields.username"
-          class="text-input"
-          autocomplete="off"
-          maxlength="32"
-          :disabled="busy"
-        />
-      </div>
-      <div class="form-stack">
-        <label for="restore-password">备份中的管理员密码</label>
-        <input
-          id="restore-password"
-          v-model="fields.adminPassword"
-          class="text-input"
-          type="password"
-          autocomplete="off"
-          maxlength="128"
-          :disabled="busy"
-        />
-      </div>
+      <template v-if="setup">
+        <div class="form-stack">
+          <label for="restore-username">管理员用户名</label>
+          <input
+            id="restore-username"
+            v-model="fields.username"
+            class="text-input"
+            autocomplete="username"
+            maxlength="32"
+            :disabled="busy"
+          />
+        </div>
+        <div class="form-stack">
+          <label for="restore-password">设置密码</label>
+          <input
+            id="restore-password"
+            v-model="fields.adminPassword"
+            class="text-input"
+            type="password"
+            autocomplete="new-password"
+            maxlength="128"
+            :disabled="busy"
+          />
+        </div>
+        <div class="form-stack">
+          <label for="restore-confirmation">确认密码</label>
+          <input
+            id="restore-confirmation"
+            v-model="fields.confirmation"
+            class="text-input"
+            type="password"
+            autocomplete="new-password"
+            maxlength="128"
+            :disabled="busy"
+          />
+        </div>
+      </template>
     </div>
     <label class="check-label"
       ><input v-model="pause" type="checkbox" :disabled="busy" />恢复后暂停采集和通知</label
@@ -154,10 +202,7 @@ function submit() {
       }}
     </p>
     <div class="backup-actions">
-      <button
-        class="button primary"
-        :disabled="busy || !file || !fields.password || !fields.username || !fields.adminPassword"
-      >
+      <button class="button primary" :disabled="busy || !ready">
         <Icon name="refresh" :size="15" />{{ busy ? '正在恢复…' : '恢复备份' }}
       </button>
     </div>

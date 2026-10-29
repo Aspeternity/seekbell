@@ -14,6 +14,8 @@ from seekbell.db.models import Administrator, LoginSession
 from seekbell.db.transactions import write_session
 
 SESSION_SECONDS = 12 * 60 * 60
+# Backup operations skip the password prompt this long after it was last entered.
+CONFIRM_SECONDS = 15 * 60
 
 
 def token_hash(value: str) -> str:
@@ -56,6 +58,28 @@ class LoginLimiter:
             self.attempts["*"].append(now)
             self.attempts[peer].append(now)
             return True
+
+
+class Confirmations:
+    """Process-local recent password confirmations per session; a restart only asks again."""
+
+    def __init__(self):
+        self.at = {}
+        self.lock = threading.Lock()
+
+    def mark(self, token: str):
+        now = time.time()
+        with self.lock:
+            for key in [key for key, at in self.at.items() if at <= now - CONFIRM_SECONDS]:
+                del self.at[key]
+            self.at[token_hash(token)] = now
+
+    def remaining(self, token: str, expires_at: float) -> float:
+        # Signing in (or changing the account) entered the password when the session began.
+        started = expires_at - SESSION_SECONDS
+        with self.lock:
+            last = max(started, self.at.get(token_hash(token), 0))
+        return max(0.0, last + CONFIRM_SECONDS - time.time())
 
 
 def new_session(session, *, at: float) -> tuple[str, str]:
@@ -116,7 +140,7 @@ def session_info(engine, token: str):
         admin = session.get(Administrator, 1)
         if record is None or record.expires_at <= time.time() or admin is None:
             return None
-        return {"username": admin.username, "csrf": record.csrf}
+        return {"username": admin.username, "csrf": record.csrf, "expires_at": record.expires_at}
 
 
 def initialized(engine) -> bool:

@@ -15,6 +15,7 @@ interface BackupRecord {
   database_revision: string
 }
 interface BackupStatus {
+  confirm_seconds: number
   candidate_available: boolean
   max_archive_bytes: number
   records: BackupRecord[]
@@ -33,9 +34,19 @@ const discarding = ref(false),
   discardPassword = ref(''),
   restoreDirty = ref(false),
   restoring = ref(false)
+// The server skips the password shortly after it was entered; ask again once that lapses.
+const needPassword = ref(true)
+let confirmTimer: ReturnType<typeof setTimeout> | undefined
+function trackConfirmation(seconds: number) {
+  clearTimeout(confirmTimer)
+  needPassword.value = seconds <= 0
+  if (seconds > 0) confirmTimer = setTimeout(() => (needPassword.value = true), seconds * 1000)
+}
+const currentPassword = (value: string) => (needPassword.value ? { current_password: value } : {})
 let active = true
 onBeforeUnmount(() => {
   active = false
+  clearTimeout(confirmTimer)
 })
 const dirty = computed(
   () =>
@@ -70,7 +81,10 @@ async function load() {
   readError.value = ''
   try {
     const value = await request<BackupStatus>('manage/backups')
-    if (active) status.value = value
+    if (active) {
+      status.value = value
+      trackConfirmation(value.confirm_seconds)
+    }
   } catch (e) {
     if (active) readError.value = (e as Error).message
   } finally {
@@ -91,7 +105,7 @@ async function download() {
       'manage/backups/download',
       'POST',
       JSON.stringify({
-        current_password: downloadFields.current,
+        ...currentPassword(downloadFields.current),
         password: downloadFields.password,
       }),
       'application/json',
@@ -120,14 +134,10 @@ async function download() {
 async function restored(result: { paused: boolean }) {
   restoreDirty.value = false
   restoring.value = false
-  notify(
-    result.paused
-      ? '备份已恢复，采集和通知已暂停。请用备份中的管理员登录。'
-      : '备份已恢复，请用备份中的管理员登录。',
-  )
+  notify(result.paused ? '备份已恢复，采集和通知已暂停。' : '备份已恢复。')
   // Let the cleared draft reach the settings shell before leaving.
   await nextTick()
-  location.hash = '/login'
+  location.hash = '/'
 }
 async function discard() {
   if (busy.value || !status.value?.candidate_available) return
@@ -135,9 +145,7 @@ async function discard() {
   message.value = ''
   busy.value = 'discard'
   try {
-    await request('manage/backups/candidate', 'DELETE', {
-      current_password: discardPassword.value,
-    })
+    await request('manage/backups/candidate', 'DELETE', currentPassword(discardPassword.value))
     if (active) {
       status.value.candidate_available = false
       discarding.value = false
@@ -190,8 +198,8 @@ onMounted(load)
         aria-label="导出备份"
         @submit.prevent="download"
       >
-        <div class="settings-fields-grid three">
-          <div class="form-stack">
+        <div class="settings-fields-grid" :class="{ three: needPassword }">
+          <div v-if="needPassword" class="form-stack">
             <label for="backup-current">当前管理员密码</label>
             <input
               id="backup-current"
@@ -205,7 +213,7 @@ onMounted(load)
             />
           </div>
           <div class="form-stack">
-            <label for="backup-password">备份加密口令</label>
+            <label for="backup-password">备份口令</label>
             <input
               id="backup-password"
               v-model="downloadFields.password"
@@ -220,7 +228,7 @@ onMounted(load)
             <p class="small-note">至少 12 个字符，丢失后无法解密</p>
           </div>
           <div class="form-stack">
-            <label for="backup-confirm">确认下载口令</label>
+            <label for="backup-confirm">确认备份口令</label>
             <input
               id="backup-confirm"
               v-model="downloadFields.confirmation"
@@ -273,18 +281,23 @@ onMounted(load)
             aria-label="删除恢复副本"
             @submit.prevent="discard"
           >
-            <label for="discard-current">当前管理员密码</label>
-            <input
-              id="discard-current"
-              v-model="discardPassword"
-              class="text-input"
-              type="password"
-              autocomplete="current-password"
-              maxlength="128"
-              required
-              :disabled="!!busy"
-            />
-            <button class="button danger-outline" :disabled="!!busy || !discardPassword">
+            <template v-if="needPassword">
+              <label for="discard-current">当前管理员密码</label>
+              <input
+                id="discard-current"
+                v-model="discardPassword"
+                class="text-input"
+                type="password"
+                autocomplete="current-password"
+                maxlength="128"
+                required
+                :disabled="!!busy"
+              />
+            </template>
+            <button
+              class="button danger-outline"
+              :disabled="!!busy || (needPassword && !discardPassword)"
+            >
               {{ busy === 'discard' ? '正在删除…' : '确认删除' }}
             </button>
             <button
@@ -299,6 +312,7 @@ onMounted(load)
           </form>
         </div>
         <BackupRestoreForm
+          :need-password="needPassword"
           :max-bytes="status?.max_archive_bytes"
           @busy="restoring = $event"
           @dirty="restoreDirty = $event"

@@ -34,8 +34,7 @@ before = table_data(settings.database_path)
 archive, destination = Path('/backup/rehearsal.sbbackup'), Path('/restore/restored')
 password = 'Synthetic-Container-Backup'
 create_backup(settings, archive, password=password)
-restore_backup(settings, archive, destination, password=password,
-               username='container_admin', admin_password='Synthetic-Container-2026')
+restore_backup(settings, archive, destination, password=password)
 after = table_data(destination / 'seekbell.sqlite3')
 assert after.pop('login_sessions') == []
 assert table_data(settings.database_path) == before
@@ -68,9 +67,7 @@ with request('manage/backups/download', json.dumps(values).encode()) as response
     assert response.headers['Cache-Control'] == 'no-store'
     archive = response.read()
 assert archive.startswith(MAGIC) and b'SQLite format' not in archive
-metadata = {**values, 'username': credentials['username'],
-            'admin_password': credentials['password']}
-body = json.dumps(metadata).encode() + b'\n' + archive
+body = json.dumps(values).encode() + b'\n' + archive
 result = json.load(request('manage/backups/restore', body, 'application/octet-stream'))
 assert result == {'candidate_available': True, 'activated': False}
 active = table_data(Path('/data/seekbell.sqlite3'))
