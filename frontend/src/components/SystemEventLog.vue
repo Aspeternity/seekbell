@@ -64,10 +64,7 @@ defineExpose({ reload })
 <template>
   <section class="panel settings-card settings-event-log">
     <div class="panel-heading">
-      <div>
-        <h2>系统事件与告警记录</h2>
-        <p>故障、恢复及各告警目标的发送结果</p>
-      </div>
+      <h2>系统事件与告警记录</h2>
       <button class="button" :aria-expanded="showRecords" @click="showRecords = !showRecords">
         {{ showRecords ? '收起告警记录' : '查看系统告警记录' }}
       </button>
@@ -91,9 +88,7 @@ defineExpose({ reload })
             <p>
               {{ stamp(event.at) }} <span v-if="event.code"> · {{ event.code }}</span>
             </p>
-            <p v-if="!Object.keys(event.deliveries).length">
-              事件发生时未启用告警或未选择目标，未生成通知。
-            </p>
+            <p v-if="!Object.keys(event.deliveries).length">未发送告警</p>
             <p v-for="(count, result) in event.deliveries" :key="result">
               {{ labels[result] || result }}：{{ count }}
             </p>

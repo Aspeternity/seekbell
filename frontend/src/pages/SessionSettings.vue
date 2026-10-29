@@ -57,7 +57,7 @@ onMounted(load)
     <div class="panel-heading">
       <div>
         <h2>登录会话</h2>
-        <p>会话有效期为 12 小时，修改管理员资料也会使其他会话失效</p>
+        <p>每次登录有效 12 小时</p>
       </div>
       <button class="button" :disabled="busy || !data?.other_sessions" @click="revoke">
         退出其他会话

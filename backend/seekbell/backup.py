@@ -36,7 +36,12 @@ from seekbell.db.models import (
     Outbox,
     TargetTestAttempt,
 )
-from seekbell.db.runtime import create_database_engine, instance_lock, migration_config
+from seekbell.db.runtime import (
+    create_database_engine,
+    instance_lock,
+    migrate,
+    migration_config,
+)
 from seekbell.notifiers.credentials import CredentialVault
 from seekbell.services.authentication import verify_password
 
@@ -54,6 +59,12 @@ class BackupError(ValueError):
 
 def expected_revision():
     return ScriptDirectory.from_config(migration_config()).get_current_head()
+
+
+def known_revisions():
+    # Linear history: every known revision is the head or one it upgrades from.
+    script = ScriptDirectory.from_config(migration_config())
+    return {revision.revision for revision in script.walk_revisions()}
 
 
 def private_file(path):
@@ -84,7 +95,7 @@ def readonly(path):
     return connection
 
 
-def validate_database(path):
+def validate_database(path, *, allow_older=False):
     if path.is_symlink() or not path.is_file() or not 0 < path.stat().st_size <= MAX_DATABASE:
         raise BackupError("数据库文件不可用或超过 2 GiB 限制。")
     with closing(readonly(path)) as connection:
@@ -93,8 +104,9 @@ def validate_database(path):
         if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
             raise BackupError("数据库关联检查失败。")
         revision = connection.execute("SELECT version_num FROM alembic_version").fetchall()
-        if revision != [(expected_revision(),)]:
-            raise BackupError("备份数据库版本与当前程序不匹配；请使用匹配版本恢复。")
+        accepted = known_revisions() if allow_older else {expected_revision()}
+        if len(revision) != 1 or revision[0][0] not in accepted:
+            raise BackupError("备份数据库版本比当前程序新或无法识别；请先升级 SeekBell。")
         admin = connection.execute(
             "SELECT username,password_hash FROM administrators WHERE id=1"
         ).fetchone()
@@ -287,7 +299,7 @@ def unpack_payload(payload, directory):
             not isinstance(manifest, dict)
             or type(manifest.get("format")) is not int
             or manifest["format"] != 1
-            or manifest.get("database_revision") != expected_revision()
+            or manifest.get("database_revision") not in known_revisions()
             or type(manifest.get("database_bytes")) is not int
             or not 0 < manifest["database_bytes"] <= MAX_DATABASE
             or not isinstance(manifest.get("database_sha256"), str)
@@ -323,7 +335,18 @@ def publish_directory(source, destination):
     sync_directory(destination.parent)
 
 
-def restore_backup(settings, archive, destination, *, password, username, admin_password):
+def pause_activity(database):
+    """Stop collection and delivery in a restored copy; queued sends are then cancelled."""
+    with closing(sqlite3.connect(database)) as connection:
+        connection.execute("PRAGMA trusted_schema=OFF")
+        connection.execute("UPDATE websites SET enabled=0")
+        connection.execute("UPDATE notification_targets SET enabled=0")
+        connection.commit()
+
+
+def restore_backup(
+    settings, archive, destination, *, password, username, admin_password, pause=False
+):
     destination = new_path(destination)
     if destination == settings.data_dir.resolve():
         raise BackupError("恢复必须使用独立的新数据目录。")
@@ -336,11 +359,22 @@ def restore_backup(settings, archive, destination, *, password, username, admin_
         restored.mkdir(mode=0o700)
         decrypt_file(archive, payload, password)
         manifest = unpack_payload(payload, restored)
-        actual_name, encoded = validate_database(restored / "seekbell.sqlite3")
+        actual_name, encoded = validate_database(restored / "seekbell.sqlite3", allow_older=True)
         if not hmac.compare_digest(username.encode(), actual_name.encode()) or not verify_password(
             admin_password, encoded
         ):
             raise BackupError("备份中的管理员验证失败。")
+        if manifest["database_revision"] != expected_revision():
+            # An older backup is upgraded here, inside the private staging copy.
+            engine = create_database_engine(Settings(data_dir=restored))
+            try:
+                migrate(engine)
+            except Exception:
+                raise BackupError("备份数据无法升级到当前版本。") from None
+            finally:
+                engine.dispose()
+        if pause:
+            pause_activity(restored / "seekbell.sqlite3")
         validate_credentials(restored)
         # Revoke old server sessions; keep configuration, ledgers and queues unchanged.
         with closing(sqlite3.connect(restored / "seekbell.sqlite3")) as connection:

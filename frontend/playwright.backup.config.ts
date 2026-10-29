@@ -21,7 +21,7 @@ export default defineConfig({
       },
     },
   ],
-  webServer: [8018, 8019].map((port) => ({
+  webServer: [8018, 8019, 8020, 8021].map((port) => ({
     command: 'cd .. && uv run --frozen python scripts/run_web_smoke.py --port ' + port,
     url: 'http://127.0.0.1:' + port + '/health/ready',
     reuseExistingServer: false,

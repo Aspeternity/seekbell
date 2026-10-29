@@ -155,9 +155,6 @@ function logout() {
           </div>
           <FormFeedback :error="error" retry-label="重试保存" @retry="saveAccount" />
           <form class="form-content form-stack" @submit.prevent="saveAccount">
-            <p class="small-note">
-              修改需验证当前密码。保存后其他浏览器的旧会话失效，当前浏览器继续登录。
-            </p>
             <div class="general-fields-grid account-fields">
               <div class="form-stack">
                 <label for="admin-username">管理员用户名</label>
@@ -172,7 +169,7 @@ function logout() {
                   required
                   :disabled="busy"
                 />
-                <p class="small-note">3–32 位字母、数字、下划线或短横线。</p>
+                <p class="small-note">3–32 位字母、数字、_ 或 -</p>
               </div>
               <div class="form-stack">
                 <label for="current-password">当前密码</label>

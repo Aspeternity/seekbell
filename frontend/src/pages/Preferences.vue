@@ -124,7 +124,6 @@ onMounted(async () => {
     <div class="panel-heading">
       <div>
         <h2>通用设置</h2>
-        <p>工作空间与时间显示</p>
       </div>
     </div>
     <FormFeedback :error="error" @retry="reload" />
@@ -134,7 +133,6 @@ onMounted(async () => {
           <section class="settings-section" aria-labelledby="workspace-section-title">
             <div class="settings-section-heading">
               <h3 id="workspace-section-title">工作空间</h3>
-              <p>给你的消息工作空间一个熟悉的名字。</p>
             </div>
             <div class="form-stack">
               <div class="general-fields-grid">
@@ -149,11 +147,7 @@ onMounted(async () => {
                     aria-describedby="workspace-name-help"
                   />
                   <p id="workspace-name-help" class="small-note">
-                    {{
-                      invalidName
-                        ? '请输入1–24个字符的名称。'
-                        : '名称与说明显示在导航顶部，不改变登录账号。'
-                    }}
+                    {{ invalidName ? '请输入1–24个字符的名称。' : '显示在导航顶部' }}
                   </p>
                 </div>
                 <div class="form-stack">
@@ -187,7 +181,6 @@ onMounted(async () => {
           <section class="settings-section" aria-labelledby="time-section-title">
             <div class="settings-section-heading">
               <h3 id="time-section-title">时间显示</h3>
-              <p>按你习惯的时区阅读动态与通知。</p>
             </div>
             <TimezoneField v-model="timezone" :available="saved.available" :disabled="busy" />
           </section>

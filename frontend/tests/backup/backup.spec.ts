@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 const credentials = { username: 'backup_browser_admin', password: 'Synthetic-Backup-Admin-2026' }
 const password = 'Synthetic-Browser-Backup-2026'
-test('encrypted download, errors and independent restore preserve the active workspace', async ({
+test('encrypted download and in-place restore from settings and the first-run page', async ({
   page,
 }, info) => {
   const errors: string[] = []
@@ -21,16 +21,17 @@ test('encrypted download, errors and independent restore preserve the active wor
   const before = await (await page.request.get('/api/manage/workspace')).json()
   await page.goto('/#/settings/preferences')
   await page.goto('/#/settings/backup')
+  const exportForm = page.getByRole('form', { name: '导出备份', exact: true })
   await expect(page.getByRole('button', { name: '生成并下载加密备份' })).toBeEnabled()
-  await page.getByLabel('当前管理员密码', { exact: true }).fill(credentials.password)
-  await page.getByLabel('备份加密口令', { exact: true }).fill(password)
-  await page.getByLabel('确认下载口令', { exact: true }).fill('Mismatched-Synthetic-Password')
+  await exportForm.getByLabel('当前管理员密码', { exact: true }).fill(credentials.password)
+  await exportForm.getByLabel('备份加密口令', { exact: true }).fill(password)
+  await exportForm.getByLabel('确认下载口令', { exact: true }).fill('Mismatched-Synthetic-Password')
   await page.getByRole('button', { name: '生成并下载加密备份' }).click()
   await expect(page.getByRole('alert')).toContainText('两次备份口令不一致')
   await page.evaluate(() => (location.hash = '/settings/account'))
   await expect(page.getByRole('dialog')).toContainText('尚未保存')
   await page.getByRole('button', { name: '继续编辑', exact: true }).click()
-  await page.getByLabel('确认下载口令', { exact: true }).fill(password)
+  await exportForm.getByLabel('确认下载口令', { exact: true }).fill(password)
   const downloading = page.waitForEvent('download')
   await page.getByRole('button', { name: '生成并下载加密备份' }).click()
   const downloaded = await downloading
@@ -40,36 +41,67 @@ test('encrypted download, errors and independent restore preserve the active wor
   expect(encrypted.subarray(0, 16).toString()).toBe('SEEKBELL-BACKUP' + String.fromCharCode(1))
   expect(encrypted.includes(Buffer.from('SQLite format'))).toBe(false)
   expect(encrypted.includes(Buffer.from(credentials.password))).toBe(false)
-  await expect(page.getByLabel('当前管理员密码', { exact: true })).toHaveValue('')
-  await expect(page.getByLabel('备份加密口令', { exact: true })).toHaveValue('')
-  await page.getByRole('button', { name: '恢复验证', exact: true }).click()
-  await page.getByLabel('加密备份文件', { exact: true }).setInputFiles(path)
-  await page.getByLabel('当前管理员密码（恢复验证）', { exact: true }).fill(credentials.password)
-  await page.getByLabel('所选备份的加密口令', { exact: true }).fill('Incorrect-Synthetic-Password')
-  await page.getByLabel('备份中的管理员用户名', { exact: true }).fill(credentials.username)
-  await page.getByLabel('备份中的管理员密码', { exact: true }).fill(credentials.password)
-  await page.getByRole('checkbox').check()
-  await page.getByRole('button', { name: '验证并生成独立恢复副本' }).click()
-  await expect(page.getByRole('alert')).toContainText('备份口令错误或文件损坏')
-  expect((await (await page.request.get('/api/manage/backups')).json()).candidate_available).toBe(
-    false,
-  )
-  await page.getByLabel('当前管理员密码（恢复验证）', { exact: true }).fill(credentials.password)
-  await page.getByLabel('所选备份的加密口令', { exact: true }).fill(password)
-  await page.getByLabel('备份中的管理员密码', { exact: true }).fill(credentials.password)
-  await page.getByRole('button', { name: '验证并生成独立恢复副本' }).click()
-  await expect(page.getByRole('status').filter({ hasText: '独立恢复副本已生成' })).toBeVisible()
-  await expect(page.getByRole('status').filter({ hasText: '已有独立恢复副本' })).toBeVisible()
-  expect(await (await page.request.get('/api/manage/workspace')).json()).toEqual(before)
-  expect((await (await page.request.get('/api/auth/status')).json()).authenticated).toBe(true)
-  await page.screenshot({ path: info.outputPath('backup-restored.png'), fullPage: true })
+  await expect(exportForm.getByLabel('当前管理员密码', { exact: true })).toHaveValue('')
+  await expect(exportForm.getByLabel('备份加密口令', { exact: true })).toHaveValue('')
+  // Change the live workspace after the backup, then restore it in place.
+  const csrf = (await (await page.request.get('/api/auth/status')).json()).csrf
+  await page.request.put('/api/manage/workspace', {
+    headers: { 'X-CSRF-Token': csrf },
+    data: { name: '恢复前修改', description: '' },
+  })
   await page.reload()
-  await expect(page.getByRole('status').filter({ hasText: '已有独立恢复副本' })).toBeVisible()
-  await expect(page.getByRole('button', { name: '验证并生成独立恢复副本' })).toHaveCount(0)
+  await expect(page.locator('.workspace-label')).toContainText('恢复前修改')
+  await page.getByRole('button', { name: '恢复备份', exact: true }).click()
+  const form = page.getByRole('form', { name: '从文件恢复', exact: true })
+  await form.getByLabel('加密备份文件', { exact: true }).setInputFiles(path)
+  await form.getByLabel('备份加密口令', { exact: true }).fill('Incorrect-Synthetic-Password')
+  await form.getByLabel('当前管理员密码', { exact: true }).fill(credentials.password)
+  await form.getByLabel('备份中的管理员用户名', { exact: true }).fill(credentials.username)
+  await form.getByLabel('备份中的管理员密码', { exact: true }).fill(credentials.password)
+  await expect(form.getByRole('checkbox', { name: '恢复后暂停采集和通知' })).toBeChecked()
+  await form.getByRole('button', { name: '恢复备份', exact: true }).click()
+  await page.getByRole('button', { name: '确认恢复', exact: true }).click()
+  await expect(form.getByRole('alert')).toContainText('备份口令错误或文件损坏')
+  await expect(page.locator('.workspace-label')).toContainText('恢复前修改')
+  await page.screenshot({ path: info.outputPath('backup-restore-form.png'), fullPage: true })
   for (const width of [320, 390, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 })
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   }
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await form.getByLabel('备份加密口令', { exact: true }).fill(password)
+  await form.getByLabel('当前管理员密码', { exact: true }).fill(credentials.password)
+  await form.getByLabel('备份中的管理员密码', { exact: true }).fill(credentials.password)
+  await form.getByRole('button', { name: '恢复备份', exact: true }).click()
+  await page.getByRole('button', { name: '确认恢复', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '欢迎回来' })).toBeVisible()
+  await expect(page.getByText('备份已恢复，采集和通知已暂停')).toBeVisible()
+  await expect(page.getByLabel('管理员用户名')).toHaveValue(credentials.username)
+  await page.getByLabel('密码', { exact: true }).fill(credentials.password)
+  await page.getByRole('button', { name: '登录工作空间' }).click()
+  await expect(page.locator('.workspace-label')).toContainText('个人工作空间')
+  await page.goto('/#/settings/backup')
+  await expect(page.locator('.backup-records li').first()).toContainText('已恢复')
+
+  // A fresh installation restores the same file from its first-run page.
+  const fresh = 'http://127.0.0.1:' + (info.project.name === 'desktop' ? 8020 : 8021)
+  const other = await page.context().browser()!.newPage()
+  await other.goto(fresh + '/')
+  await other.getByRole('button', { name: '已有备份？从备份恢复' }).click()
+  await expect(other.getByRole('heading', { name: '从备份恢复' })).toBeVisible()
+  const setup = other.getByRole('form', { name: '从文件恢复', exact: true })
+  await expect(setup.getByLabel('当前管理员密码', { exact: true })).toHaveCount(0)
+  await setup.getByLabel('加密备份文件', { exact: true }).setInputFiles(path)
+  await setup.getByLabel('备份加密口令', { exact: true }).fill(password)
+  await setup.getByLabel('备份中的管理员用户名', { exact: true }).fill(credentials.username)
+  await setup.getByLabel('备份中的管理员密码', { exact: true }).fill(credentials.password)
+  await setup.getByRole('checkbox', { name: '恢复后暂停采集和通知' }).uncheck()
+  await setup.getByRole('button', { name: '恢复备份', exact: true }).click()
+  await expect(other.getByRole('heading', { name: '欢迎回来' })).toBeVisible()
+  await other.getByLabel('密码', { exact: true }).fill(credentials.password)
+  await other.getByRole('button', { name: '登录工作空间' }).click()
+  await expect(other.locator('.workspace-label')).toContainText('个人工作空间')
+  await other.close()
   expect(
     await page.evaluate(() =>
       Object.values(localStorage).some((value) => value.includes('Synthetic-')),

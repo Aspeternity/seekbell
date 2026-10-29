@@ -36,9 +36,9 @@ test('all seven categories remain reachable across phone tablet and desktop', as
     ['overview', '概览', '概览显示模块'],
     ['alerts', '系统告警', '系统故障与恢复告警'],
     ['retention', '历史与存储', '历史保留策略'],
-    ['backup', '备份与恢复', '导出备份'],
+    ['backup', '备份与恢复', '备份与恢复'],
     ['account', '账户与安全', '管理员资料'],
-    ['about', '关于与诊断', '诊断与帮助'],
+    ['about', '关于与诊断', '服务状态'],
   ]
   for (const width of [320, 390, 768, 900, 1100, 1280, 1440, 1920]) {
     await page.setViewportSize({ width, height: 900 })
@@ -205,7 +205,15 @@ test('maintenance preview is read only and diagnostics provide a copy fallback',
   await expect(page.getByRole('heading', { name: '存储占用', exact: true })).toBeVisible()
   const before = await (await page.request.get('/api/manage/retention')).json()
   await page.getByRole('button', { name: '预览清理影响', exact: true }).click()
-  await expect(page.getByText(/这是只读估算/)).toBeVisible()
+  await expect(page.getByText(/不会删除任何记录/)).toBeVisible()
+  // The same button closes the estimate and a second open reads it again.
+  await page.getByRole('button', { name: '收起预览', exact: true }).click()
+  await expect(page.getByText(/不会删除任何记录/)).toHaveCount(0)
+  await Promise.all([
+    page.waitForResponse((response) => response.url().includes('/api/manage/retention/preview')),
+    page.getByRole('button', { name: '预览清理影响', exact: true }).click(),
+  ])
+  await expect(page.getByText(/不会删除任何记录/)).toBeVisible()
   const after = await (await page.request.get('/api/manage/retention')).json()
   expect(after.days).toBe(before.days)
   expect(after.revision).toBe(before.revision)

@@ -123,6 +123,24 @@ export async function authenticate(setup: boolean, username: string, password: s
   applyAuth(info)
   await refresh()
 }
+// Restoring replaces the whole workspace, so every session and cached read is gone afterwards.
+export async function restoreBackup(
+  path: 'manage/backups/apply' | 'auth/setup/restore',
+  metadata: Record<string, unknown> & { username: string },
+  file: File,
+) {
+  const body = new Blob([JSON.stringify(metadata) + String.fromCharCode(10), file], {
+    type: 'application/octet-stream',
+  })
+  const result = await sendRequest(path, 'POST', body).then((response) => response.json())
+  clearReadCache()
+  clearNotificationCounts()
+  signedIn.value = false
+  Object.assign(state, empty())
+  applyAuth(await request('auth/status'))
+  account.username ||= metadata.username
+  return result as { restored: boolean; paused: boolean; previous: string }
+}
 export async function saveAdministrator(
   username: string,
   currentPassword: string,

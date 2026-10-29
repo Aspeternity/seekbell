@@ -1,9 +1,9 @@
-# SeekBell 0.3.0; schema 0018. Back up the complete data volume before upgrading.
+# SeekBell 0.4.0; schema 0018. Back up the complete data volume before upgrading.
 # GitHub Release assets pin this version to the verified image digest.
 # Portainer standalone Docker Stack. Update the existing stack to retain its volume.
 services:
   seekbell:
-    image: ghcr.io/aspeternity/seekbell:0.3.0
+    image: ghcr.io/aspeternity/seekbell:0.4.0
     restart: unless-stopped
     init: true
     ports:

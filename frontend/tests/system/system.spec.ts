@@ -194,7 +194,9 @@ test('confirmed independent alerts record a single fault and recovery even when 
       .filter({ has: page.locator('.system-event') })
       .first(),
   ).toHaveAttribute('aria-busy', 'false')
-  await expect(page.getByText('当前没有已记录的故障。')).toBeVisible()
+  await expect(
+    page.getByRole('region', { name: '服务状态', exact: true }).getByText('无', { exact: true }),
+  ).toBeVisible()
   const newest = page.locator('.system-event').first()
   await expect(newest).toContainText('恢复')
   await newest.getByRole('button', { name: '查看各目标结果' }).click()

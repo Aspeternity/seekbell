@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import Icon from '../components/Icon.vue'
-import { account, authenticate } from '../store'
+import { account, authenticate, notify } from '../store'
+import BackupRestoreForm from '../components/BackupRestoreForm.vue'
 const props = defineProps<{
   setup: boolean
 }>()
@@ -13,7 +14,17 @@ const username = ref(props.setup ? '' : account.username),
   confirmation = ref(''),
   visible = ref(false),
   error = ref(''),
-  busy = ref(false)
+  busy = ref(false),
+  restoring = ref(false)
+function restored(result: { paused: boolean }) {
+  restoring.value = false
+  notify(
+    result.paused
+      ? '备份已恢复，采集和通知已暂停。请用备份中的管理员登录。'
+      : '备份已恢复，请用备份中的管理员登录。',
+  )
+  emit('navigate', '/login')
+}
 async function submit() {
   error.value = ''
   if (!/^[A-Za-z0-9_-]{3,32}$/.test(username.value)) {
@@ -75,12 +86,19 @@ async function submit() {
     <main class="auth-main">
       <div class="auth-box">
         <span class="data-badge"><span class="status-dot" />自托管工作空间</span
-        ><template v-if="setup && account.created"
+        ><template v-if="setup && account.created && !restoring"
           ><div class="auth-success-icon"><Icon name="shield" :size="32" /></div>
           <h1 tabindex="-1">管理员已经就绪</h1>
           <p class="auth-subtitle">此工作空间已创建唯一管理员，请登录。</p>
           <button class="button primary auth-submit" @click="emit('navigate', '/login')">
             前往登录<Icon name="arrow" :size="17" /></button></template
+        ><template v-else-if="setup && restoring"
+          ><h1 tabindex="-1">从备份恢复</h1>
+          <p class="auth-subtitle">上传之前下载的加密备份，恢复任务、网站、通知目标和历史。</p>
+          <BackupRestoreForm setup @done="restored" />
+          <button class="text-link auth-mode-link" type="button" @click="restoring = false">
+            改为创建新管理员
+          </button></template
         ><template v-else
           ><h1 tabindex="-1">{{ setup ? '欢迎来到 SeekBell' : '欢迎回来' }}</h1>
           <p class="auth-subtitle">
@@ -133,6 +151,14 @@ async function submit() {
             <button class="button primary auth-submit" type="submit" :disabled="busy">
               {{ busy ? '正在处理…' : setup ? '创建管理员并进入' : '登录工作空间'
               }}<Icon name="arrow" :size="17" />
+            </button>
+            <button
+              v-if="setup"
+              class="text-link auth-mode-link"
+              type="button"
+              @click="restoring = true"
+            >
+              已有备份？从备份恢复
             </button>
           </form>
         </template>

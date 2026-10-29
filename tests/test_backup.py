@@ -377,3 +377,60 @@ def test_custom_overview_layout_and_selection_survive_encrypted_restore(source, 
         assert row[1:3] == (7, "nodeseek")
         assert json.loads(row[3]) == {"nodeseek": "weekly"}
         assert row[4] == 4
+
+
+def older_archive(archive, tmp_path):
+    """Hand-revert the latest migration to stand in for a backup from the previous release."""
+
+    def mutate(manifest, key, database):
+        import hashlib
+
+        path = tmp_path / "older.sqlite3"
+        path.write_bytes(database)
+        with closing(sqlite3.connect(path)) as connection:
+            connection.execute("DROP TABLE backup_records")
+            connection.execute("ALTER TABLE workspace_preferences DROP COLUMN workspace_revision")
+            connection.execute("UPDATE alembic_version SET version_num='0017_hotlist_settings'")
+            connection.commit()
+        database = path.read_bytes()
+        path.unlink()
+        manifest["database_revision"] = "0017_hotlist_settings"
+        manifest["database_bytes"] = len(database)
+        manifest["database_sha256"] = hashlib.sha256(database).hexdigest()
+        return manifest, key, database
+
+    rewrite_archive(archive, tmp_path, mutate)
+
+
+def test_older_backup_is_upgraded_inside_the_restored_copy(source, archive, tmp_path):
+    older_archive(archive, tmp_path)
+    destination = tmp_path / "restored"
+    manifest = restore(source, archive, destination)
+    assert manifest["database_revision"] == "0017_hotlist_settings"
+    backup.validate_database(destination / "seekbell.sqlite3")
+    backup.validate_credentials(destination)
+    expected = table_data(source.database_path)
+    restored = table_data(destination / "seekbell.sqlite3")
+    for name in ("tasks", "notification_targets", "websites", "posts"):
+        assert restored[name] == expected[name]
+    assert not list(tmp_path.glob(".seekbell-*"))
+
+
+def test_pause_disables_collection_and_targets_in_the_restored_copy(source, archive, tmp_path):
+    destination = tmp_path / "restored"
+    backup.restore_backup(
+        source,
+        archive,
+        destination,
+        password=PASSWORD,
+        username="backup_admin",
+        admin_password=ADMIN_PASSWORD,
+        pause=True,
+    )
+    with closing(sqlite3.connect(destination / "seekbell.sqlite3")) as connection:
+        assert connection.execute("SELECT max(enabled) FROM websites").fetchone() == (0,)
+        assert connection.execute("SELECT max(enabled) FROM notification_targets").fetchone() == (
+            0,
+        )
+    with closing(sqlite3.connect(source.database_path)) as connection:
+        assert connection.execute("SELECT max(enabled) FROM websites").fetchone() == (1,)

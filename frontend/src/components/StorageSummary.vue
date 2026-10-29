@@ -53,9 +53,7 @@ defineExpose({ reload: data.reload })
       </dl>
       <p class="small-note">
         检查于
-        {{
-          formatTime(new Date(data.data.value.checked_at * 1000).toISOString())
-        }}。浏览器已下载的备份文件不计入服务端占用；清理历史不一定立即缩小数据库文件。
+        {{ formatTime(new Date(data.data.value.checked_at * 1000).toISOString()) }}
       </p>
     </div>
   </ReadRegion>

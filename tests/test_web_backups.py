@@ -1,6 +1,10 @@
 import asyncio
+import fcntl
 import json
+import os
+import sqlite3
 import tempfile
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -46,6 +50,12 @@ def restore(client, body):
         "/api/manage/backups/restore",
         content=body,
         headers={"content-type": "application/octet-stream"},
+    )
+
+
+def discard(client, password=ADMIN_PASSWORD):
+    return client.request(
+        "DELETE", "/api/manage/backups/candidate", json={"current_password": password}
     )
 
 
@@ -101,7 +111,7 @@ def test_web_round_trip_preserves_all_data_key_queue_and_revokes_only_copy_sessi
     assert_clean(settings)
 
 
-@pytest.mark.parametrize("path", ["download", "restore"])
+@pytest.mark.parametrize("path", ["download", "restore", "discard"])
 @pytest.mark.parametrize("kind", ["anonymous", "csrf", "origin", "password"])
 def test_backup_requires_session_csrf_same_origin_and_current_password(web, path, kind):
     client, settings, _ = web
@@ -114,6 +124,8 @@ def test_backup_requires_session_csrf_same_origin_and_current_password(web, path
     data = values(current_password="Incorrect-Current-Password") if kind == "password" else values()
     if path == "download":
         result = client.post("/api/manage/backups/download", json=data)
+    elif path == "discard":
+        result = discard(client, data["current_password"])
     else:
         metadata = {**data, "username": "backup_admin", "admin_password": ADMIN_PASSWORD}
         result = restore(client, json.dumps(metadata).encode() + b"\ninvalid")
@@ -295,3 +307,216 @@ def test_receipt_storage_failure_does_not_expose_database_error(web, monkeypatch
     assert "Synthetic sensitive" not in response.text
     assert "原数据未被覆盖" in response.text
     assert_clean(settings)
+
+
+def test_candidate_can_be_discarded_then_restored_again(web):
+    client, settings, _ = web
+    archive = download(client).content
+    assert restore(client, upload(archive)).status_code == 200
+    destination = settings.data_dir / backups.CANDIDATE
+    before = table_data(settings.database_path)
+    assert discard(client, "Incorrect-Current-Password").status_code == 400
+    assert destination.is_dir()
+    result = discard(client)
+    assert result.status_code == 200, result.text
+    assert result.json() == {"candidate_available": False}
+    assert not os.path.lexists(destination)
+    status = client.get("/api/manage/backups").json()
+    assert not status["candidate_available"]
+    assert (status["records"][0]["kind"], status["records"][0]["result"]) == (
+        "discard",
+        "deleted",
+    )
+    assert discard(client).status_code == 404
+    assert_business_unchanged(settings, before)
+    assert restore(client, upload(archive)).status_code == 200
+    assert destination.is_dir()
+    assert_clean(settings)
+
+
+def test_discard_never_follows_a_linked_candidate(web, tmp_path):
+    client, settings, _ = web
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "keep.txt").write_text("synthetic")
+    (settings.data_dir / backups.CANDIDATE).symlink_to(outside, target_is_directory=True)
+    assert discard(client).status_code == 200
+    assert not os.path.lexists(settings.data_dir / backups.CANDIDATE)
+    assert (outside / "keep.txt").read_text() == "synthetic"
+    assert_clean(settings)
+
+
+def test_discard_refuses_a_candidate_held_by_another_instance(web):
+    client, settings, _ = web
+    destination = settings.data_dir / backups.CANDIDATE
+    destination.mkdir(mode=0o700)
+    lock = destination / ".instance.lock"
+    lock.touch()
+    with lock.open("rb") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        result = discard(client)
+    assert result.status_code == 422
+    assert "其他实例" in result.json()["detail"]
+    assert destination.is_dir()
+    assert client.get("/api/manage/backups").json()["records"][0]["result"] == "failed"
+    assert_clean(settings)
+
+
+def apply_body(archive, **overrides):
+    metadata = {**values(username="backup_admin", admin_password=ADMIN_PASSWORD), **overrides}
+    return json.dumps(metadata).encode() + b"\n" + archive
+
+
+def apply(client, body):
+    return client.post(
+        "/api/manage/backups/apply",
+        content=body,
+        headers={"content-type": "application/octet-stream"},
+    )
+
+
+def login(client, username="backup_admin", password=ADMIN_PASSWORD):
+    client.cookies.clear()
+    client.headers.pop("x-csrf-token", None)
+    csrf = client.get("/api/auth/status").json()["csrf"]
+    return client.post(
+        "/api/auth/login",
+        json={"username": username, "password": password},
+        headers={"x-csrf-token": csrf},
+    )
+
+
+def test_apply_replaces_the_live_workspace_in_place_and_keeps_the_previous(web):
+    client, settings, app = web
+    archive = download(client).content
+    before = table_data(settings.database_path)
+    with closing(sqlite3.connect(settings.database_path)) as connection:
+        connection.execute("UPDATE workspace_preferences SET name='恢复前修改'")
+        connection.execute("DELETE FROM tasks")
+        connection.commit()
+    runtime = app.state.runtime
+    result = apply(client, apply_body(archive, pause=False))
+    assert result.status_code == 200, result.text
+    assert result.json()["restored"] and not result.json()["paused"]
+    previous = settings.data_dir / result.json()["previous"]
+    assert previous.name.startswith("before-restore-")
+    assert previous.stat().st_mode & 0o777 == 0o700
+    assert table_data(previous / "seekbell.sqlite3")["tasks"] == []
+    assert app.state.runtime is not runtime
+    after = table_data(settings.database_path)
+    for name in ("tasks", "notification_targets", "websites", "posts", "workspace_preferences"):
+        assert after[name] == before[name]
+    assert after["login_sessions"] == []
+    # The old session belonged to the replaced workspace.
+    assert client.get("/api/manage/backups").status_code == 401
+    assert login(client).status_code == 200
+    records = client.get("/api/manage/backups").json()["records"]
+    assert (records[0]["kind"], records[0]["result"]) == ("restore", "restored")
+    assert not app.state.restoring and app.state.in_flight == 0
+    assert_clean(settings)
+
+
+def test_apply_pauses_collection_and_targets_by_default(web):
+    client, settings, _ = web
+    archive = download(client).content
+    result = apply(client, apply_body(archive))
+    assert result.status_code == 200, result.text
+    assert result.json()["paused"]
+    with closing(sqlite3.connect(settings.database_path)) as connection:
+        assert connection.execute("SELECT max(enabled) FROM websites").fetchone() == (0,)
+        assert connection.execute("SELECT max(enabled) FROM notification_targets").fetchone() == (
+            0,
+        )
+
+
+@pytest.mark.parametrize("field", ["password", "admin_password", "current_password"])
+def test_failed_apply_keeps_the_live_workspace_running(web, field):
+    client, settings, app = web
+    archive = download(client).content
+    before = table_data(settings.database_path)
+    runtime = app.state.runtime
+    result = apply(client, apply_body(archive, **{field: "Incorrect-Synthetic-Value"}))
+    assert result.status_code in (400, 422)
+    assert "Incorrect-Synthetic-Value" not in result.text
+    assert app.state.runtime is runtime
+    assert not app.state.restoring
+    assert not list(settings.data_dir.glob("before-restore-*"))
+    assert_business_unchanged(settings, before)
+    assert client.get("/api/manage/backups").status_code == 200
+    assert_clean(settings)
+
+
+def test_reopen_failure_returns_to_the_original_workspace(web, monkeypatch):
+    client, settings, app = web
+    archive = download(client).content
+    before = table_data(settings.database_path)
+    original = app.state.open_workspace
+    calls = []
+
+    async def failing_once(target):
+        calls.append(True)
+        if len(calls) == 1:
+            raise RuntimeError("synthetic open failure")
+        await original(target)
+
+    monkeypatch.setattr(app.state, "open_workspace", failing_once)
+    result = apply(client, apply_body(archive))
+    assert result.status_code == 422
+    assert "已回到原数据" in result.json()["detail"]
+    assert len(calls) == 2
+    assert not list(settings.data_dir.glob("before-restore-*"))
+    assert_business_unchanged(settings, before)
+    assert client.get("/api/manage/backups").status_code == 200
+    assert_clean(settings)
+
+
+def test_requests_wait_out_a_restore_with_a_clear_503(web):
+    client, _, app = web
+    app.state.restoring = True
+    try:
+        result = client.get("/api/manage/backups")
+        assert result.status_code == 503
+        assert result.headers["retry-after"] == "5"
+        assert "正在恢复备份" in result.json()["detail"]
+    finally:
+        app.state.restoring = False
+    assert client.get("/api/manage/backups").status_code == 200
+
+
+def test_fresh_installation_can_restore_instead_of_creating_an_administrator(web, tmp_path):
+    client, _, _ = web
+    archive = download(client).content
+    fresh = Settings(data_dir=tmp_path / "fresh")
+    with TestClient(create_app(fresh)) as other:
+        status = other.get("/api/auth/status").json()
+        assert not status["initialized"]
+        body = json.dumps(
+            {
+                "password": PASSWORD,
+                "username": "backup_admin",
+                "admin_password": ADMIN_PASSWORD,
+                "pause": True,
+            }
+        ).encode()
+        result = other.post(
+            "/api/auth/setup/restore",
+            content=body + b"\n" + archive,
+            headers={"content-type": "application/octet-stream", "x-csrf-token": status["csrf"]},
+        )
+        assert result.status_code == 200, result.text
+        assert other.get("/api/auth/status").json()["initialized"]
+        assert login(other).status_code == 200
+        with closing(sqlite3.connect(fresh.database_path)) as connection:
+            name = connection.execute("SELECT name FROM workspace_preferences").fetchone()
+        assert name == ("合成恢复空间",)
+        # Once an administrator exists the unauthenticated entry is closed.
+        csrf = other.get("/api/auth/status").json()["csrf"]
+        other.cookies.clear()
+        csrf = other.get("/api/auth/status").json()["csrf"]
+        again = other.post(
+            "/api/auth/setup/restore",
+            content=body + b"\n" + archive,
+            headers={"content-type": "application/octet-stream", "x-csrf-token": csrf},
+        )
+        assert again.status_code == 409
+    assert not list(fresh.data_dir.glob(".seekbell-*"))
