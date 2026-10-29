@@ -72,7 +72,7 @@ test('retention confirms changes, handles stale revisions and cleans with the br
   await page.getByRole('button', { name: '确认保存策略', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('其他页面改变')
   await expect(input).toHaveValue(String(days))
-  await page.getByRole('button', { name: '重新读取策略与状态' }).click()
+  await page.getByRole('alert').getByRole('button', { name: '重新加载', exact: true }).click()
   await expect(page.getByRole('dialog')).toContainText('尚未保存的保留天数将丢失')
   await page.getByRole('button', { name: '放弃修改并读取', exact: true }).click()
   await expect(input).toHaveValue('365')
@@ -119,8 +119,9 @@ test('retention confirms changes, handles stale revisions and cleans with the br
     )
     await reopened.goto('/#/settings/retention')
     await expect(reopened.getByLabel('普通历史保留天数')).toHaveValue(String(days))
+    await reopened.getByText(/^最近一批共清理 \d+ 条记录$/).click()
     await expect(reopened.getByLabel('最近一批清理数量')).toBeVisible()
-    await expect(reopened.getByText('后台运行中，自动分批清理')).toBeVisible()
+    await expect(reopened.getByText('运行中', { exact: true })).toBeVisible()
     for (const width of [320, 390, 768, 1440]) {
       await reopened.setViewportSize({ width, height: 900 })
       expect(

@@ -90,7 +90,7 @@ onMounted(async () => {
   <section class="panel settings-card">
     <div class="panel-heading">
       <div>
-        <h2>界面与概览</h2>
+        <h2>概览设置</h2>
         <p>选择概览内容及显示顺序</p>
       </div>
     </div>
@@ -106,7 +106,7 @@ onMounted(async () => {
         </div>
         <div class="inline-form-footer settings-savebar">
           <span role="status">{{
-            done ? '概览布局已保存' : dirty ? '有未保存的修改' : '使用已保存的布局'
+            done ? '概览布局已保存' : dirty ? '有未保存的修改' : '没有未保存的修改'
           }}</span>
           <div class="inline-actions">
             <button class="button" type="button" :disabled="busy || !dirty" @click="discard">

@@ -13,7 +13,7 @@ const props = defineProps<{ tab?: string }>()
 const emit = defineEmits<{ navigate: [path: string]; dirty: [value: boolean] }>()
 const categories = [
   { value: 'preferences', label: '通用' },
-  { value: 'overview', label: '界面与概览' },
+  { value: 'overview', label: '概览' },
   { value: 'alerts', label: '系统告警' },
   { value: 'retention', label: '历史与存储' },
   { value: 'backup', label: '备份与恢复' },
@@ -147,7 +147,7 @@ function logout() {
     </nav>
     <div class="settings-content">
       <Preferences v-if="props.tab === 'preferences'" @dirty="auxiliaryDirty = $event" />
-      <div v-else-if="props.tab === 'account'" class="settings-columns">
+      <div v-else-if="props.tab === 'account'" class="settings-stack">
         <section class="panel settings-card">
           <div class="panel-heading">
             <h2>管理员资料</h2>
