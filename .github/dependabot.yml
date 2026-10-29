@@ -1,17 +1,45 @@
+# Routine version updates: one grouped PR per ecosystem each month, never rebased
+# automatically (every rebase reruns the full suite and image builds). Security
+# updates are enabled in the repository settings and still arrive as soon as needed.
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+    rebase-strategy: disabled
+    open-pull-requests-limit: 2
+    groups:
+      actions:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    ignore:
+      # Major versions change runtimes or inputs; upgrade them deliberately.
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
   - package-ecosystem: uv
     directory: /
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+    rebase-strategy: disabled
+    open-pull-requests-limit: 2
+    groups:
+      python:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
   - package-ecosystem: npm
     directory: /frontend
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+    rebase-strategy: disabled
+    open-pull-requests-limit: 2
+    groups:
+      frontend:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]

@@ -10,6 +10,10 @@ permissions:
   contents: read
   actions: read
 
+env:
+  REVISION: ${{ github.sha }}
+  UV_PYTHON_DOWNLOADS: never
+
 jobs:
   # A tree that already passed (for example the PR merge result now on main,
   # or the commit a release tags) is not tested again.
@@ -28,13 +32,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 scripts/ci_reuse.py
 
-  baseline:
+  # The suite runs as parallel jobs; "baseline" below is the single required gate.
+  checks:
     needs: reuse
     if: ${{ needs.reuse.outputs.verified != 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 25
-    env:
-      UV_PYTHON_DOWNLOADS: never
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -59,7 +62,6 @@ jobs:
       - run: uv sync --frozen
       - run: uv run --frozen ruff check .
       - run: uv run --frozen ruff format --check .
-      - run: uv run --frozen pytest -q
       - run: uv run --frozen python -m seekbell.services.demo
       - run: uv run --frozen python -m seekbell.services.runtime_demo
       - run: uv run --frozen python -m seekbell.services.backup_demo
@@ -67,43 +69,6 @@ jobs:
       - run: pnpm --dir frontend install --frozen-lockfile
       - run: pnpm --dir frontend format:check
       - run: pnpm --dir frontend build
-      - name: Prefer Ubuntu archives and bound browser dependency downloads
-        run: |
-          sudo python3 - <<'PY'
-          from pathlib import Path
-          mirrors = Path("/etc/apt/apt-mirrors.txt")
-          if mirrors.is_file():
-              mirrors.write_text(
-                  "https://archive.ubuntu.com/ubuntu/\tpriority:1\n"
-                  "https://security.ubuntu.com/ubuntu/\tpriority:2\n"
-                  "http://azure.archive.ubuntu.com/ubuntu/\tpriority:3\n"
-              )
-          Path("/etc/apt/apt.conf.d/99seekbell-ci-network").write_text(
-              'Acquire::Retries "2";\n'
-              'Acquire::http::Timeout "30";\n'
-              'Acquire::https::Timeout "30";\n'
-          )
-          PY
-          timeout --signal=TERM --kill-after=10s 4m pnpm --dir frontend exec playwright install --with-deps chromium
-      - run: pnpm --dir frontend test:ui
-      - run: pnpm --dir frontend test:live
-      - run: pnpm --dir frontend test:history
-      - run: pnpm --dir frontend test:loading
-      - run: pnpm --dir frontend test:history-ui-fixes
-      - run: pnpm --dir frontend test:content-stability
-      - run: pnpm --dir frontend test:workspace-stability
-      - run: pnpm --dir frontend test:first-entry
-      - run: pnpm --dir frontend test:hotlist
-      - run: pnpm --dir frontend test:evaluations
-      - run: pnpm --dir frontend test:diagnostics
-      - run: pnpm --dir frontend test:linuxdo
-      - run: pnpm --dir frontend test:approved-ui
-      - run: pnpm --dir frontend test:sending
-      - run: pnpm --dir frontend test:runtime
-      - run: pnpm --dir frontend test:operations
-      - run: pnpm --dir frontend test:retention
-      - run: pnpm --dir frontend test:system
-      - run: pnpm --dir frontend test:backup
       - name: Verify migration commands
         env:
           SEEKBELL_DATA_DIR: ${{ runner.temp }}/seekbell-data
@@ -111,9 +76,81 @@ jobs:
           uv run --frozen python -m seekbell.db upgrade
           uv run --frozen python -m seekbell.db current
           uv run --frozen python -m seekbell.db check
-      # Must stay last: the marker vouches that every step above passed.
+
+  pytest:
+    needs: reuse
+    if: ${{ needs.reuse.outputs.verified != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          version: "0.13.1"
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run --frozen pytest -q -n auto
+
+  # Shards are balanced by measured suite duration (about two minutes each).
+  browser:
+    needs: reuse
+    if: ${{ needs.reuse.outputs.verified != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        suites:
+          - ui hotlist history evaluations
+          - system history-ui-fixes live first-entry
+          - linuxdo runtime approved-ui operations
+          - sending workspace-stability diagnostics content-stability backup loading retention
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          version: "0.13.1"
+          enable-cache: true
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: ".node-version"
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          package_json_file: frontend/package.json
+      - run: uv sync --frozen
+      - run: pnpm --dir frontend install --frozen-lockfile
+      - run: pnpm --dir frontend build
+      - run: scripts/ci_install_browser.sh
+      - name: Browser suites
+        env:
+          SUITES: ${{ matrix.suites }}
+        run: for suite in $SUITES; do pnpm --dir frontend "test:$suite"; done
+
+  baseline:
+    needs: [reuse, checks, pytest, browser]
+    if: ${{ always() && needs.reuse.outputs.verified != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every part of the suite
+        env:
+          RESULTS: ${{ needs.checks.result }} ${{ needs.pytest.result }} ${{ needs.browser.result }}
+        run: |
+          echo "checks/pytest/browser: $RESULTS"
+          test "$RESULTS" = "success success success"
+      # Must stay last: the marker vouches that every job above passed.
       - name: Record this tree as verified
-        run: echo "$GITHUB_SHA" > baseline-tree.txt
+        run: echo "$REVISION" > baseline-tree.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ needs.reuse.outputs.marker }}

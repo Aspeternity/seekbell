@@ -20,6 +20,7 @@ jobs:
     timeout-minutes: 40
     env:
       ARCHITECTURE: ${{ matrix.architecture }}
+      REVISION: ${{ github.sha }}
       UV_PYTHON_DOWNLOADS: never
     steps:
       - name: Resolve repository image identity
@@ -32,19 +33,19 @@ jobs:
         run: |
           test "$(docker version --format '{{.Server.Arch}}')" = "$ARCHITECTURE"
           docker build --platform "linux/$ARCHITECTURE" \
-            --build-arg VCS_REF="$GITHUB_SHA" \
+            --build-arg VCS_REF="$REVISION" \
             --label "org.opencontainers.image.source=https://github.com/$IMAGE_REPOSITORY" \
             -t seekbell:candidate .
       - name: Check packaged service and persistence offline
-        run: python3 scripts/check_container.py seekbell:candidate --revision "$GITHUB_SHA"
+        run: python3 scripts/check_container.py seekbell:candidate --revision "$REVISION"
       - name: Rehearse encrypted backup and independent restore offline
-        run: python3 scripts/check_backup_container.py seekbell:candidate --revision "$GITHUB_SHA"
+        run: python3 scripts/check_backup_container.py seekbell:candidate --revision "$REVISION"
       - name: Rehearse migrations, volume switch and explicit rollback offline
-        run: python3 scripts/check_release_container.py seekbell:candidate --revision "$GITHUB_SHA"
+        run: python3 scripts/check_release_container.py seekbell:candidate --revision "$REVISION"
       - name: Load pinned proxy image
         run: docker pull nginx@sha256:970364228b1e4f932abc22d321932816782cca8a20b85a77552a7cfe9acfb3b5
       - name: Rehearse TLS and streaming without external egress
-        run: python3 scripts/check_proxy_container.py seekbell:candidate --revision "$GITHUB_SHA"
+        run: python3 scripts/check_proxy_container.py seekbell:candidate --revision "$REVISION"
       # Browser login through the real proxy needs only one architecture.
       - if: ${{ matrix.architecture == 'amd64' }}
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -67,7 +68,7 @@ jobs:
         if: ${{ matrix.architecture == 'amd64' }}
         env:
           SEEKBELL_IMAGE: seekbell:candidate
-          SEEKBELL_REVISION: ${{ github.sha }}
+          SEEKBELL_REVISION: ${{ env.REVISION }}
         run: |
           uv sync --frozen
           pnpm --dir frontend install --frozen-lockfile
@@ -75,7 +76,7 @@ jobs:
           pnpm --dir frontend test:proxy
       - name: Package and verify exact tested image content
         run: |
-          python3 scripts/release_images.py --revision "$GITHUB_SHA" --repository "$IMAGE_REPOSITORY" \
+          python3 scripts/release_images.py --revision "$REVISION" --repository "$IMAGE_REPOSITORY" \
             pack --image seekbell:candidate --architecture "$ARCHITECTURE" --output "$RUNNER_TEMP/candidate"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
