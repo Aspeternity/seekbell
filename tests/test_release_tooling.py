@@ -132,6 +132,8 @@ def test_failed_lookup_runs_the_full_baseline(tmp_path, monkeypatch):
 
 
 REVISION = "a" * 40
+# Templates in the checkout carry the current release version.
+VERSION = bump.check()[0]
 DIGEST = "sha256:" + "5" * 64
 
 
@@ -167,22 +169,22 @@ def published_release(tamper=None):
         "version.json": {
             "published": True,
             "revision": REVISION,
-            "version": "v0.2.0",
+            "version": "v" + VERSION,
             "digest": digest,
-            "tags": [image + ":0.2.0", image + ":latest"],
+            "tags": [image + ":" + VERSION, image + ":latest"],
         },
         "package.json": {},
     }
     files = {name: json.dumps(value).encode() for name, value in assets.items()}
-    pinned = image + ":0.2.0@" + digest
+    pinned = image + ":" + VERSION + "@" + digest
     for name in bump.TEMPLATES:
         source = (ROOT / name).read_text()
         files[Path(name).name] = source.replace(
-            "image: " + image + ":0.2.0\n", "image: " + pinned + "\n"
+            "image: " + image + ":" + VERSION + "\n", "image: " + pinned + "\n"
         ).encode()
     deployment = {
         "revision": REVISION,
-        "version": "v0.2.0",
+        "version": "v" + VERSION,
         "image": pinned,
         "sha256": {
             Path(n).name: hashlib.sha256(files[Path(n).name]).hexdigest() for n in bump.TEMPLATES
@@ -192,7 +194,7 @@ def published_release(tamper=None):
     if tamper:
         tamper(files)
     responses = {
-        "https://api.github.com/repos/Aspeternity/seekbell/releases/tags/v0.2.0": json.dumps(
+        "https://api.github.com/repos/Aspeternity/seekbell/releases/tags/v" + VERSION: json.dumps(
             {
                 "draft": False,
                 "prerelease": False,
@@ -201,7 +203,7 @@ def published_release(tamper=None):
                 ],
             }
         ).encode(),
-        "manifests/0.2.0": index,
+        "manifests/" + VERSION: index,
         "manifests/latest": index,
         "manifests/" + manifest_digest: manifest,
         "blobs/" + config_digest: config,
@@ -219,7 +221,11 @@ def published_release(tamper=None):
 
 def test_release_matches_the_public_view():
     result = release.verify(
-        "v0.2.0", REVISION, "Aspeternity/seekbell", fetch=published_release(), compose_check=False
+        "v" + VERSION,
+        REVISION,
+        "Aspeternity/seekbell",
+        fetch=published_release(),
+        compose_check=False,
     )
     assert result["tags"][-1].endswith(":latest") and result["platforms"] == ["amd64"]
 
@@ -227,11 +233,11 @@ def test_release_matches_the_public_view():
 @pytest.mark.parametrize("asset", ["compose.portainer.yaml", "deployment.json", "version.json"])
 def test_tampered_or_mismatching_assets_fail_verification(asset):
     def tamper(files):
-        files[asset] = files[asset].replace(b"0.2.0", b"0.2.1", 1)
+        files[asset] = files[asset].replace(VERSION.encode(), b"9.9.9", 1)
 
     with pytest.raises(release.VerificationError):
         release.verify(
-            "v0.2.0",
+            "v" + VERSION,
             REVISION,
             "Aspeternity/seekbell",
             fetch=published_release(tamper),
