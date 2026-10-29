@@ -26,7 +26,7 @@ wsl.exe -d SeekBell-Dev --cd /home/dev/projects/seekbell
 
 Python 3.12.3、uv 0.13.1、Node 24.22.0、pnpm 10.34.7。项目依赖分别位于`.venv`和`frontend/node_modules`，按已有锁文件安装，不复制原目录的依赖、数据库或环境文件。完整Git提交历史由本地bundle复制。此后用户提供GitHub仓库`Aspeternity/seekbell`，正式目录配置origin；现已公开，治理见PUBLIC_REPOSITORY。D盘目录仅保留交接历史。Git认证使用本机Windows GitHub CLI的凭据库helper，不复制token，helper配置仅在.git/config，不入Git。
 
-GitHub CLI 2.103.3于2026-10-29按官方checksums校验，解压到`/home/dev/.local/share/seekbell-tools`并链接为`/home/dev/.local/bin/gh`；认证由用户执行`gh auth login`，Git推送凭据经`gh auth setup-git`。uv及命令链接位于`/home/dev/.local/bin`；Node/pnpm本体位于`/home/dev/.local/share/seekbell-tools`，Node通过官方SHASUMS256校验。`.profile`和`.bashrc`加载`~/.config/seekbell/environment.sh`，只在这个新发行版设置用户PATH和`DOCKER_CONTEXT=rootless`。`/etc/wsl.conf`开启systemd、默认用户dev、`appendWindowsPath=false`，避免混用Windows Node。
+GitHub CLI 2.103.3于2026-10-29按官方checksums校验，解压到`/home/dev/.local/share/seekbell-tools`并链接为`/home/dev/.local/bin/gh`；认证由用户执行`gh auth login`，Git推送凭据经`gh auth setup-git`。仓库`.git/config`中旧的Windows gh.exe凭据助手已移除，避免覆盖本发行版凭据。uv及命令链接位于`/home/dev/.local/bin`；Node/pnpm本体位于`/home/dev/.local/share/seekbell-tools`，Node通过官方SHASUMS256校验。`.profile`和`.bashrc`加载`~/.config/seekbell/environment.sh`，只在这个新发行版设置用户PATH和`DOCKER_CONTEXT=rootless`。`/etc/wsl.conf`开启systemd、默认用户dev、`appendWindowsPath=false`，避免混用Windows Node。
 
 dev没有设置密码或免密sudo。需要维护新发行版系统配置时，Windows用户显式进入`wsl.exe -d SeekBell-Dev -u root`；没有创建应用管理员。
 
