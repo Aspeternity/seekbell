@@ -55,96 +55,54 @@ test('production pages preserve the approved UI while using real persisted data'
   await expect(page.getByText('把关心的消息，送到你习惯的地方。', { exact: true })).toBeVisible()
   await page.screenshot({ path: info.outputPath('approved-records.png'), fullPage: true })
   await page.goto('/#/settings/preferences')
-  await expect(page.locator('.page-tabs button')).toHaveText([
-    '偏好与保留',
-    '管理员',
+  await expect(page.locator('.settings-categories button')).toHaveText([
+    '通用',
+    '界面与概览',
+    '系统告警',
+    '历史与存储',
     '备份与恢复',
-    '关于',
+    '账户与安全',
+    '关于与诊断',
   ])
-  await expect(page.locator('.settings-aside')).toBeVisible()
   await expect(page.getByLabel('显示时区', { exact: true })).toBeEnabled()
-  await expect(page.getByLabel('普通历史保留天数', { exact: true })).toBeEnabled()
-  await expect(page.getByRole('switch', { name: '故障与恢复通知', exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: '保存偏好设置', exact: true })).toHaveCount(1)
-  await page.screenshot({ path: info.outputPath('approved-preferences.png'), fullPage: true })
-
-  // A later preference write failing must retain remaining drafts and not replay
-  // an already successful workspace write when the user retries.
-  const original = await (await page.request.get('/api/manage/workspace')).json()
-  const display = await (await page.request.get('/api/manage/display')).json()
-  const nextZone = display.timezone === 'UTC' ? 'Asia/Shanghai' : 'UTC'
-  const writes: string[] = []
-  page.on('request', (request) => {
-    if (request.method() === 'PUT') writes.push(new URL(request.url()).pathname)
-  })
+  const save = page.getByRole('button', { name: '保存通用设置', exact: true })
+  await expect(save).toBeDisabled()
+  const original = await (await page.request.get('/api/manage/preferences')).json()
+  const nextZone = original.timezone === 'UTC' ? 'Asia/Shanghai' : 'UTC'
   await page.getByLabel('工作空间名称', { exact: true }).fill('UI验收-' + info.project.name)
   await selectChoice(page.getByLabel('显示时区', { exact: true }), nextZone)
   await page.route(
-    '**/api/manage/display',
+    '**/api/manage/preferences',
     (route) =>
       route.request().method() === 'PUT'
         ? route.fulfill({ status: 503, json: { detail: '合成偏好保存失败' } })
         : route.continue(),
     { times: 1 },
   )
-  await page.getByRole('button', { name: '保存偏好设置', exact: true }).click()
+  await save.click()
   await expect(page.getByRole('alert')).toContainText('合成偏好保存失败')
-  await expect(page.getByLabel('显示时区', { exact: true })).toHaveAttribute('data-value', nextZone)
-  expect(writes.filter((path) => path === '/api/manage/workspace')).toHaveLength(1)
-  await page.getByRole('button', { name: '保存偏好设置', exact: true }).click()
-  await expect
-    .poll(async () => (await (await page.request.get('/api/manage/display')).json()).timezone)
-    .toBe(nextZone)
-  expect(writes.filter((path) => path === '/api/manage/workspace')).toHaveLength(1)
-  await page.getByLabel('工作空间名称', { exact: true }).fill(original.settings.workspaceName)
-  await selectChoice(page.getByLabel('显示时区', { exact: true }), display.timezone)
-  await page.getByRole('button', { name: '保存偏好设置', exact: true }).click()
-  await expect(page.locator('.workspace-label')).toContainText(original.settings.workspaceName)
-
-  await expect
-    .poll(async () => (await (await page.request.get('/api/manage/display')).json()).timezone)
-    .toBe(display.timezone)
-  const previous = await (await page.request.get('/api/manage/display')).json()
-  await selectChoice(page.getByLabel('显示时区', { exact: true }), nextZone)
-  const csrf = (await (await page.request.get('/api/auth/status')).json()).csrf
-  const otherZone = ['UTC', 'Asia/Shanghai', 'Asia/Tokyo'].find(
-    (zone) => zone !== previous.timezone && zone !== nextZone,
-  )!
-  expect(
-    (
-      await page.request.put('/api/manage/display', {
-        headers: { 'X-CSRF-Token': csrf },
-        data: { timezone: otherZone, revision: previous.revision },
-      })
-    ).ok(),
-  ).toBe(true)
-  await page.getByRole('button', { name: '保存偏好设置', exact: true }).click()
-  await expect(page.getByRole('alert')).toContainText('其他页面改变')
-  await expect(page.getByLabel('显示时区', { exact: true })).toHaveAttribute('data-value', nextZone)
-  await page.getByRole('button', { name: '重新读取偏好设置', exact: true }).click()
-  await expect(page.getByRole('dialog')).toContainText('尚未保存')
-  await page.getByRole('button', { name: '放弃修改并读取', exact: true }).click()
-  await expect(page.getByLabel('显示时区', { exact: true })).toHaveAttribute(
-    'data-value',
-    otherZone,
+  expect(await (await page.request.get('/api/manage/preferences')).json()).toEqual(original)
+  await expect(page.getByLabel('工作空间名称', { exact: true })).toHaveValue(
+    'UI验收-' + info.project.name,
   )
-  await selectChoice(page.getByLabel('显示时区', { exact: true }), display.timezone)
-  await page.getByRole('button', { name: '保存偏好设置', exact: true }).click()
-  await expect
-    .poll(async () => (await (await page.request.get('/api/manage/display')).json()).timezone)
-    .toBe(display.timezone)
-
-  await page.getByRole('button', { name: '关于', exact: true }).click()
+  await save.click()
+  await expect(page.getByRole('status').filter({ hasText: '通用设置已保存' })).toBeVisible()
+  await page.getByLabel('工作空间名称', { exact: true }).fill(original.name)
+  await selectChoice(page.getByLabel('显示时区', { exact: true }), original.timezone)
+  await save.click()
+  await expect(page.locator('.workspace-label')).toContainText(original.name)
+  await page.screenshot({ path: info.outputPath('approved-preferences.png'), fullPage: true })
+  await page.goto('/#/settings/about')
   await expect(page.locator('.about-card .brand-icon')).toBeVisible()
   await expect(page.getByTestId('build-revision')).toBeVisible()
+  await expect(page.getByText('内置网站适配 · NodeSeek、LINUX DO', { exact: true })).toBeVisible()
   await page.screenshot({ path: info.outputPath('approved-about.png'), fullPage: true })
-  await page.getByRole('button', { name: '备份与恢复', exact: true }).click()
+  await page.goto('/#/settings/backup')
   await expect(page.getByRole('heading', { name: '导出备份', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '恢复验证', exact: true }).click()
   await expect(page.getByRole('heading', { name: '从文件恢复', exact: true })).toBeVisible()
-  await expect(page.locator('.backup-summary')).toBeVisible()
-  const posts = await (await page.request.get('/api/manage/history/posts?page_size=1')).json()
-  await expect(page.locator('.backup-summary strong').nth(2)).toHaveText(String(posts.total))
-  await expect(page.locator('.upload-zone')).toBeVisible()
+  await expect(page.getByLabel('当前管理员密码（恢复验证）', { exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '备份与验证记录', exact: true })).toBeVisible()
   await page.screenshot({ path: info.outputPath('approved-backup.png'), fullPage: true })
   for (const path of [
     '/',
@@ -153,6 +111,9 @@ test('production pages preserve the approved UI while using real persisted data'
     '/notifications/targets',
     '/notifications/deliveries',
     '/settings/preferences',
+    '/settings/overview',
+    '/settings/alerts',
+    '/settings/retention',
     '/settings/account',
     '/settings/backup',
     '/settings/about',

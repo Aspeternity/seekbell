@@ -73,7 +73,11 @@ metadata = {**values, 'username': credentials['username'],
 body = json.dumps(metadata).encode() + b'\n' + archive
 result = json.load(request('manage/backups/restore', body, 'application/octet-stream'))
 assert result == {'candidate_available': True, 'activated': False}
-assert table_data(Path('/data/seekbell.sqlite3')) == before
+active = table_data(Path('/data/seekbell.sqlite3'))
+# Backup operation receipts are the only intended metadata write.
+active.pop('backup_records', None)
+business_before = {name: rows for name, rows in before.items() if name != 'backup_records'}
+assert active == business_before
 restored = table_data(Path('/data/web-restore/seekbell.sqlite3'))
 assert restored.pop('login_sessions') == []
 before.pop('login_sessions')
@@ -91,7 +95,7 @@ else:
     raise AssertionError('Existing candidate must never be overwritten')
 assert not list(Path('/data').glob('.seekbell-*'))
 print(json.dumps({'encrypted_download': True, 'isolated_restore': True,
-                  'source_unchanged': True, 'runtime_running': True,
+                  'source_business_data_unchanged': True, 'runtime_running': True,
                   'copy_sessions_revoked': True, 'overwrite_refused': True}))
 """
 

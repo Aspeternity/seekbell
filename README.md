@@ -161,7 +161,7 @@ uv run --frozen python -m seekbell.services.backup_demo
 
 ### 概览模块与社区热榜验证
 
-概览模块显隐/顺序在系统设置→偏好与保留保存；首接NodeSeek第三方热榜，生产无需额外服务。热榜不参与规则或通知，隐藏后不再专用刷新。
+概览模块显隐/顺序在系统设置→界面与概览保存；首接NodeSeek第三方热榜，生产无需额外服务。热榜不参与规则或通知，隐藏后不再专用刷新。
 
     uv run --frozen pytest -q tests/test_hotlists.py tests/test_release.py tests/test_backup.py
     pnpm --dir frontend build
@@ -194,3 +194,21 @@ pnpm --dir frontend test:linuxdo
 2026-10-24任务多站：新建/编辑任务可复选已添加网站，共用规则与通知目标，保存形成新配置版本，无需删除重建，不补发历史。章节高亮随滚动同步。0014_task_websites只新增并回填版本的网站集合；升级前整卷备份，回退必须恢复匹配0013整卷后启旧镜像。验证：uv run --frozen pytest tests/test_task_websites.py -q；pnpm --dir frontend test:linuxdo。
 
 2026-10-24匹配诊断：未命中直接查看单任务历史原因，搜索切换/完整条件/当前规则只读试算；历史样本用汇总和10条分页弹窗，网站鼠标选择无粗框。0015_category_values通过新配置版本修复已知NodeSeek旧中文版块值，不改旧判定或补发。升级前备份0014整卷，回退必须恢复匹配旧镜像/卷。检查：uv run --frozen pytest tests/test_match_diagnostics.py -q；pnpm --dir frontend test:diagnostics。
+
+
+### 系统设置与维护验证
+
+系统设置按通用、界面与概览、系统告警、历史与存储、备份与恢复、账户与安全、关于与诊断分组。通用与概览各自保存，修改失败保留草稿；数据占用及清理预览只读。备份下载与恢复验证有独立表单，操作记录区分已生成、已验证和副本未启用；账户页可退出其他会话，关于页可复制脱敏诊断。
+
+```bash
+uv run --frozen pytest tests/test_settings_maintenance.py tests/test_web_backups.py -q
+pnpm --dir frontend build
+pnpm --dir frontend test:system
+pnpm --dir frontend test:retention
+pnpm --dir frontend test:backup
+pnpm --dir frontend test:approved-ui
+pnpm --dir frontend test:hotlist
+pnpm --dir frontend test:live
+```
+
+本轮数据库迁移为0018_settings_maintenance，新增工作空间版本保护与备份操作元数据。升级前完整备份；回退应使用0017对应镜像/原卷或匹配备份，不能让旧镜像读取新schema。定时加密备份仍属于独立后续阶段。

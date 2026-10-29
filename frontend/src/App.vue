@@ -27,6 +27,9 @@ import {
 function normalize(hash: string) {
   try {
     const p = decodeURIComponent(hash.replace(/^#/, '')) || '/'
+    if (p === '/settings/display') return '/settings/preferences?section=timezone'
+    if (p.startsWith('/settings/preferences?') && p.includes('section=overview-modules'))
+      return '/settings/overview?section=overview-modules'
     return p === '/notifications'
       ? '/notifications/targets'
       : p === '/settings'
@@ -91,7 +94,7 @@ const validPage = computed(
     (page.value !== 'task' || !!editing.value) &&
     (page.value !== 'target' || !!targetEditing.value) &&
     (page.value !== 'settings' ||
-      ['preferences', 'account', 'backup', 'about', ...['retention', 'display', 'alerts']].includes(
+      ['preferences', 'overview', 'account', 'backup', 'about', 'retention', 'alerts'].includes(
         parts.value[1] || '',
       )) &&
     (page.value !== 'notifications' ||
@@ -253,7 +256,7 @@ function focusMain() {
 function showInfo() {
   infoTitle.value = '使用说明'
   infoBody.value =
-    '初始化、登录、配置保存、历史查询、概览统计与管理员修改已接入服务端。独立目标测试与手动重发需明确确认；服务端采集与自动投递随服务运行，关闭浏览器仍会继续。目标删除、保留策略、时区与系统告警已接入；版本信息可在系统设置查看。已提供停服加密备份与独立恢复维护命令；网页支持加密下载和上传生成独立恢复副本，正式切换通过宿主机维护工具执行；真实 RSS/通知与用户验收尚未完成。'
+    '先添加监控网站和通知目标，再创建监控任务。系统设置可管理工作空间、概览布局、告警、历史保留、备份和账户安全。关闭浏览器不影响后台监控。备份恢复先生成独立副本，启用需按维护说明操作；版本、运行状态和帮助链接见“关于与诊断”。'
   infoDialog.value?.showModal()
 }
 </script>
@@ -432,7 +435,7 @@ function showInfo() {
           class="page-footer"
         >
           <span><Icon name="bell" :size="14" />SeekBell · 留意你关心的</span
-          ><span>管理界面 · v0.4</span>
+          ><span>SeekBell 管理界面</span>
         </footer>
       </main>
     </div></template

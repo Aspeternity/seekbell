@@ -2608,3 +2608,89 @@ h1[tabindex='-1']:focus-visible {
     max-width: none;
   }
 }
+
+/* Settings categories remain reachable at every viewport width. */
+.settings-shell {
+  display: grid;
+  grid-template-columns: 164px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.settings-categories {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  position: sticky;
+  top: 24px;
+}
+.settings-categories button {
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 12px 14px;
+  border-radius: 7px;
+  color: #65717e;
+  font: inherit;
+}
+.settings-categories button.active {
+  color: #b75e32;
+  background: #f9ebe2;
+}
+.settings-content {
+  min-width: 0;
+  max-width: 1050px;
+}
+.settings-mobile-category {
+  display: none;
+}
+.settings-savebar {
+  position: sticky;
+  bottom: 0;
+  background: #fff;
+  padding-bottom: 14px;
+  z-index: 3;
+  flex-wrap: wrap;
+}
+.settings-error {
+  margin: 14px 20px;
+}
+.inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.settings-content .text-input,
+.settings-content .workspace-preview {
+  max-width: 100%;
+  min-width: 0;
+}
+@media (max-width: 1000px) {
+  .settings-shell {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+  .settings-categories {
+    display: none;
+  }
+  .settings-mobile-category {
+    display: block;
+  }
+  .settings-mobile-category .app-select {
+    width: 100%;
+  }
+}
+
+.settings-card .general-fields-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+.settings-card .general-fields-grid > .form-stack {
+  gap: 9px;
+}
+@media (max-width: 760px) {
+  .settings-card .general-fields-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

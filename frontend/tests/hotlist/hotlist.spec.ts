@@ -40,16 +40,12 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByRole('button', { name: '自定义显示', exact: true })).toHaveCount(0)
 })
 async function settings(page: Page) {
-  const menu = page.getByRole('button', { name: '打开导航', exact: true })
-  if (await menu.isVisible()) await menu.click()
-  await page.getByRole('button', { name: '系统设置', exact: true }).click()
-  const heading = page.getByRole('heading', { name: '概览显示模块', exact: true })
-  await heading.scrollIntoViewIfNeeded()
-  await expect(heading).toBeVisible()
+  await page.goto('/#/settings/overview')
+  await expect(page.getByRole('heading', { name: '概览显示模块', exact: true })).toBeVisible()
 }
 async function save(page: Page) {
-  await page.getByRole('button', { name: '保存偏好设置', exact: true }).click()
-  await expect(page.getByText('设置已保存', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '保存概览布局', exact: true }).click()
+  await expect(page.getByText('概览布局已保存', { exact: true })).toBeVisible()
 }
 async function home(page: Page) {
   await page.evaluate(() => (location.hash = '/'))
@@ -274,7 +270,7 @@ test('layout conflict preserves draft and keyboard ordering is accessible', asyn
     headers: { 'X-CSRF-Token': csrf },
     data: { modules, revision: prefs.revision },
   })
-  await page.getByRole('button', { name: '保存偏好设置', exact: true }).click()
+  await page.getByRole('button', { name: '保存概览布局', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('概览布局已在其他页面改变')
   await expect(page.locator('[data-module]').nth(1)).toHaveAttribute('data-module', 'hotlist')
 })

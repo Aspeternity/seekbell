@@ -4,6 +4,7 @@ import { confirmAction, formatTime, request, state } from '../store'
 import { useRemote, resultLabels, kindLabels } from '../history'
 import type { Page } from '../history'
 import Pagination from '../components/Pagination.vue'
+import FormFeedback from '../components/FormFeedback.vue'
 import ReadRegion from '../components/ReadRegion.vue'
 import Toggle from '../components/Toggle.vue'
 interface Settings {
@@ -51,7 +52,34 @@ const baseline = computed(() =>
 const dirty = computed(
   () => !!settings.value && JSON.stringify([enabled.value, targets.value]) !== baseline.value,
 )
-watch(dirty, (value) => emit('dirty', value), { immediate: true })
+watch(
+  dirty,
+  (value) => {
+    emit('dirty', value)
+    if (value) saved.value = false
+  },
+  { immediate: true },
+)
+const receivers = computed(
+  () =>
+    state.targets.filter(
+      (target) => targets.value.includes(target.id) && target.enabled && target.configured,
+    ).length,
+)
+function discard() {
+  if (!settings.value || busy.value) return
+  confirmAction(
+    '放弃本页修改？',
+    '将恢复本次读取的告警设置。',
+    () => {
+      enabled.value = settings.value!.enabled
+      targets.value = [...settings.value!.target_ids]
+      error.value = ''
+    },
+    '放弃修改',
+  )
+}
+const showRecords = ref(false)
 const eventPage = ref(1),
   statePage = ref(1),
   selected = ref(''),
@@ -171,12 +199,13 @@ onMounted(load)
           <p>独立选择接收目标，每次状态变化只通知一次</p>
         </div>
       </div>
+      <FormFeedback :error="error" @retry="reload" />
       <ReadRegion
-        :loading="busy"
-        :error="error"
+        :loading="busy && !settings"
+        error=""
         :has-data="!!settings"
         :min-height="380"
-        @retry="load"
+        @retry="reload"
       >
         <form v-if="settings" class="form-content form-stack" @submit.prevent="save">
           <div class="setting-row">
@@ -193,6 +222,15 @@ onMounted(load)
               {{ target.name }} · {{ target.type }}{{ target.enabled ? '' : '（已暂停，不发送）' }}
             </label>
           </fieldset>
+          <p class="small-note" role="status">
+            已选择 {{ targets.length }} 个目标 · 当前可接收 {{ receivers }} 个
+          </p>
+          <p v-if="enabled && !receivers" class="warning-note">
+            当前没有可接收告警的目标。暂停目标不会发送，也不会补发暂停期间的告警。
+          </p>
+          <a v-if="!state.targets.length" class="text-link" href="#/notifications/targets"
+            >管理通知目标</a
+          >
           <p class="small-note">
             监测正式 RSS
             采集、自动通知渠道和后台服务异常。首次失败标为故障，后续成功标为恢复；持续失败不会每轮通知。暂停不代表恢复，手动连接测试或测试消息不触发系统告警。Webhook
@@ -201,10 +239,13 @@ onMounted(load)
           <p class="info-note">
             所有事件和各目标的发送结果在本页留证，全部渠道失败也可查看。未知可能已经送达，不自动重发；暂停目标恢复后不补发积压告警。
           </p>
-          <div class="inline-form-footer">
+          <div class="inline-form-footer settings-savebar">
             <span role="status">{{
               saved ? '系统告警设置已保存' : dirty ? '有未保存的修改' : '使用已保存的告警设置'
             }}</span>
+            <button class="button" type="button" :disabled="busy || !dirty" @click="discard">
+              放弃修改
+            </button>
             <button class="button primary" :disabled="busy || !dirty">
               {{ busy ? '保存中…' : '保存告警设置' }}
             </button>
@@ -249,8 +290,13 @@ onMounted(load)
       </div>
     </section>
     <section class="panel settings-card">
-      <div class="panel-heading"><h2>系统事件与告警记录</h2></div>
-      <div class="form-content">
+      <div class="panel-heading">
+        <h2>系统事件与告警记录</h2>
+        <button class="button" :aria-expanded="showRecords" @click="showRecords = !showRecords">
+          {{ showRecords ? '收起告警记录' : '查看系统告警记录' }}
+        </button>
+      </div>
+      <div v-if="showRecords" class="form-content">
         <ReadRegion
           :loading="events.loading.value"
           :error="events.error.value"

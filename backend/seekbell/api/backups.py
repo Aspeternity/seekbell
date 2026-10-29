@@ -6,7 +6,8 @@ import json
 import os
 import sqlite3
 import tempfile
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -21,6 +22,7 @@ from seekbell.api.auth import COOKIE, rate_limit, require_admin
 from seekbell.db.models import Administrator
 from seekbell.db.transactions import database_call
 from seekbell.services.authentication import session_info, verify_password
+from seekbell.services.maintenance import backup_records, record_backup
 
 router = APIRouter(prefix="/api/manage/backups", dependencies=[Depends(require_admin)])
 MAX_METADATA = 8192
@@ -63,6 +65,18 @@ def reauthenticate(request, password):
             )
         ):
             raise HTTPException(401, "会话已过期，请重新登录。")
+    request.state.backup_authenticated = True
+
+
+def record_failure(request):
+    if getattr(request.state, "backup_authenticated", False):
+        # Keep the fixed original failure response if receipt storage also fails.
+        with suppress(SQLAlchemyError):
+            record_backup(
+                request.app.state.engine,
+                "restore" if request.url.path.endswith("/restore") else "export",
+                "failed",
+            )
 
 
 @asynccontextmanager
@@ -77,8 +91,10 @@ async def operation(request):
     except ClientDisconnect:
         raise HTTPException(400, "备份上传已中断，请重新选择文件重试。") from None
     except backup.BackupError as error:
+        await database_call(record_failure, request)
         raise HTTPException(422, str(error)) from None
     except (OSError, RuntimeError, ValueError, KeyError, sqlite3.Error, SQLAlchemyError):
+        await database_call(record_failure, request)
         raise HTTPException(
             422, "操作失败，请检查备份、版本、磁盘空间和权限。原数据未被覆盖。"
         ) from None
@@ -92,7 +108,7 @@ class Download(FileResponse):
         super().__init__(
             path,
             media_type="application/octet-stream",
-            filename="seekbell.sbbackup",
+            filename="seekbell-" + datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + ".sbbackup",
             headers={"Cache-Control": "no-store"},
         )
         self.temporary, self.gate = temporary, gate
@@ -112,6 +128,7 @@ def status(request: Request):
     return {
         "candidate_available": os.path.lexists(candidate(request)),
         "max_archive_bytes": MAX_ARCHIVE,
+        "records": backup_records(request.app.state.engine),
     }
 
 
@@ -125,8 +142,16 @@ async def download(values: CreateValues, request: Request):
                 prefix=".seekbell-web-", dir=request.app.state.settings.data_dir.resolve()
             )
             path = Path(temporary.name) / "download.sbbackup"
-            await database_call(
+            manifest = await database_call(
                 backup.snapshot_backup, request.app.state.settings, path, password=values.password
+            )
+            await database_call(
+                record_backup,
+                request.app.state.engine,
+                "export",
+                "generated",
+                archive_bytes=path.stat().st_size,
+                manifest=manifest,
             )
             # Keep the single-operation slot until the response has finished or disconnected.
             response = Download(path, temporary, request.app.state.backup_gate)
@@ -185,7 +210,7 @@ async def restore(request: Request):
                     values = await read_upload(request, archive)
             except TimeoutError:
                 raise HTTPException(408, "上传超时，请重新选择文件重试。") from None
-            await database_call(
+            manifest = await database_call(
                 backup.restore_backup,
                 request.app.state.settings,
                 archive,
@@ -193,5 +218,13 @@ async def restore(request: Request):
                 password=values.password,
                 username=values.username,
                 admin_password=values.admin_password,
+            )
+            await database_call(
+                record_backup,
+                request.app.state.engine,
+                "restore",
+                "verified",
+                archive_bytes=archive.stat().st_size,
+                manifest=manifest,
             )
         return {"candidate_available": True, "activated": False}

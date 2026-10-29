@@ -372,3 +372,16 @@ collectors/http.source_failure共用Cloudflare标记判定和Retry-After解释�
 ## 连接测试展示生命周期（2026-10-25）
 
 SourceProbe持久最近手测与冷却，API语义保持。WebsiteConnectionTest按网站/面板实例持有previous与current：GET只进历史，POST重试先清当前；手测使在途GET版本失效，卸载后忽略迟到响应并清时钟。WebsiteConnectionResult共用诊断展示，历史为中性且按当时语义描述；未来next_attempt_at独立展示并到期消失，不改变服务端限频。本轮无DDL/依赖/采集行为变化。
+
+
+## 系统设置与维护接口（2026-10-29）
+
+0018_settings_maintenance为WorkspacePreferences增加workspace_revision默认1，并新增BackupRecord元数据表，保留既有配置/业务数据。通用GET/PUT /api/manage/preferences以workspace_revision+display_revision双版本在同一短写事务内保存名称/说明/时区；既有workspace和display接口分别推进对应版本，兼容旧调用。错误保留草稿，不将编辑器放进只读缓存。旧时区及概览深链接在Hash路由归一到唯一编辑器，七分类按视口切换导航形式。
+
+GET /manage/storage仅读取固定数据库/WAL/恢复副本文件大小和数据所在文件系统容量，不接收路径，不返回数据目录或枚举用户文件。GET /manage/retention/preview?days=采用与清理器一致的终态/完成/尝试保护条件，统计候选投递和删除这些投递后可删除的帖子及已完成操作、采集记录；只读事务、不改清理计划，不预估磁盘释放字节。精简账本和受保护依赖继续保留。
+
+BackupRecord仅保留最近50次经当前密码验证的导出/恢复操作，字段为操作、结果、时间、大小、应用与迁移版本。加密快照后写生成记录，验证发布恢复副本后写验证记录；已认证失败仅写固定failed结果。记录不存口令、原文件名、原始错误或凭据，包含在后续整库快照；本次快照生成后的回执不在自身备份中。下载文件名含UTC时间，网页操作记录不等于客户端已落盘。副本发布和宿主机切换边界不变。
+
+GET /auth/sessions只返回本会话到期与其他有效会话数；DELETE /auth/sessions/others在写事务内重查当前会话/CSRF、仅删除其他会话，不修改账号、当前Cookie或延长有效期。所有管理端点继续认证/Origin/CSRF保护。GET /manage/diagnostics只组合版本、后台状态、支持目录、固定故障码和检查时间，无URL/凭据/会话/磁盘路径；前端复制失败时显示可选取文本。
+
+新迁移升级前按既有维护流程完整备份；回退使用0017对应的原镜像/原卷或匹配备份，不能用旧镜像读取0018。验证：uv run --frozen pytest -q；pnpm --dir frontend build；test:system、test:retention、test:backup、test:approved-ui、test:hotlist、test:live。容器升级/备份/回退用scripts/check_release_container.py与check_backup_container.py，均临时合成卷及禁外网网络。

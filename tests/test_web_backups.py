@@ -53,6 +53,15 @@ def assert_clean(settings):
     assert not list(settings.data_dir.glob(".seekbell-*"))
 
 
+def assert_business_unchanged(settings, before):
+    after = table_data(settings.database_path)
+    expected = before.copy()
+    # Explicit backup receipts are the only intended write to the active database.
+    after.pop("backup_records")
+    expected.pop("backup_records")
+    assert after == expected
+
+
 def test_web_round_trip_preserves_all_data_key_queue_and_revokes_only_copy_sessions(web):
     client, settings, _ = web
     before = table_data(settings.database_path)
@@ -66,13 +75,19 @@ def test_web_round_trip_preserves_all_data_key_queue_and_revokes_only_copy_sessi
     result = restore(client, upload(response.content))
     assert result.status_code == 200, result.text
     assert result.json() == {"candidate_available": True, "activated": False}
+    receipts = client.get("/api/manage/backups").json()["records"]
+    assert [(row["kind"], row["result"]) for row in receipts] == [
+        ("restore", "verified"),
+        ("export", "generated"),
+    ]
+    assert all(row["archive_bytes"] == len(response.content) for row in receipts)
     destination = settings.data_dir / backups.CANDIDATE
     after = table_data(destination / "seekbell.sqlite3")
     assert after.pop("login_sessions") == []
     expected = before.copy()
     expected.pop("login_sessions")
     assert after == expected
-    assert table_data(settings.database_path) == before
+    assert_business_unchanged(settings, before)
     assert (destination / "credentials.key").read_bytes() == (
         settings.data_dir / "credentials.key"
     ).read_bytes()
@@ -125,7 +140,7 @@ def test_failed_upload_authentication_preserves_live_database_and_cleans_staging
     result = restore(client, body)
     assert result.status_code == 422
     assert "Incorrect-Synthetic-Value" not in result.text
-    assert table_data(settings.database_path) == before
+    assert_business_unchanged(settings, before)
     assert not (settings.data_dir / backups.CANDIDATE).exists()
     assert_clean(settings)
 
@@ -263,6 +278,20 @@ def test_disconnected_upload_cleans_partial_file_and_keeps_live_data(web, monkey
     monkeypatch.setattr(Request, "stream", interrupted)
     result = restore(client, b"ignored")
     assert result.status_code == 400
-    assert table_data(settings.database_path) == before
+    assert_business_unchanged(settings, before)
     assert not (settings.data_dir / backups.CANDIDATE).exists()
+    assert_clean(settings)
+
+
+def test_receipt_storage_failure_does_not_expose_database_error(web, monkeypatch):
+    client, settings, _ = web
+
+    def unavailable(*args, **kwargs):
+        raise backups.SQLAlchemyError("Synthetic sensitive database failure")
+
+    monkeypatch.setattr(backups, "record_backup", unavailable)
+    response = client.post("/api/manage/backups/download", json=values())
+    assert response.status_code == 422
+    assert "Synthetic sensitive" not in response.text
+    assert "原数据未被覆盖" in response.text
     assert_clean(settings)

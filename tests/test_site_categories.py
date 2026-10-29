@@ -189,10 +189,10 @@ def test_schema_marker_preserves_every_existing_table_row_and_scope(tmp_path):
             return result
 
         before = snapshot()
-        migrate(engine)
-        assert schema_revision(engine) == "0017_hotlist_settings"
+        migrate(engine, "0016_site_categories")
+        assert schema_revision(engine) == "0016_site_categories"
         assert snapshot() == before
-        migrate(engine)
+        migrate(engine, "0016_site_categories")
         assert snapshot() == before
         with Session(engine) as session:
             assert session.get(Task, key).current_version == 1

@@ -329,6 +329,7 @@ class WorkspacePreferences(Base):
         String(80), default="Asia/Shanghai", server_default="Asia/Shanghai"
     )
     display_revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    workspace_revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
 
 
 class TaskEvaluation(Base):
@@ -480,3 +481,14 @@ class HotlistSnapshot(Base):
     fetched_at: Mapped[float] = mapped_column(Float)
     source_updated_at: Mapped[float | None] = mapped_column(Float)
     items: Mapped[list] = mapped_column(JSON)
+
+
+class BackupRecord(Base):
+    __tablename__ = "backup_records"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16))
+    result: Mapped[str] = mapped_column(String(16))
+    at: Mapped[float] = mapped_column(Float, index=True)
+    archive_bytes: Mapped[int | None] = mapped_column(Integer)
+    application_version: Mapped[str] = mapped_column(String(80))
+    database_revision: Mapped[str] = mapped_column(String(80))

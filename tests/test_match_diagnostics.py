@@ -63,7 +63,7 @@ def test_repair_new_version_preserves_history_and_never_replays(tmp_path):
         ingestion.ingest("nodeseek-rss", batch(9001, 9002, category="trade"), at=20)
         before = tables(engine)
         migrate(engine)
-        assert schema_revision(engine) == "0017_hotlist_settings"
+        assert schema_revision(engine) == "0018_settings_maintenance"
         after = tables(engine)
         assert {k: v for k, v in after.items() if k != "task_versions"} == {
             k: v for k, v in before.items() if k != "task_versions"
