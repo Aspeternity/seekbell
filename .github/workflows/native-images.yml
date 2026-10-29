@@ -20,6 +20,7 @@ jobs:
     timeout-minutes: 40
     env:
       ARCHITECTURE: ${{ matrix.architecture }}
+      UV_PYTHON_DOWNLOADS: never
     steps:
       - name: Resolve repository image identity
         shell: bash
@@ -44,6 +45,34 @@ jobs:
         run: docker pull nginx@sha256:970364228b1e4f932abc22d321932816782cca8a20b85a77552a7cfe9acfb3b5
       - name: Rehearse TLS and streaming without external egress
         run: python3 scripts/check_proxy_container.py seekbell:candidate --revision "$GITHUB_SHA"
+      # Browser login through the real proxy needs only one architecture.
+      - if: ${{ matrix.architecture == 'amd64' }}
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - if: ${{ matrix.architecture == 'amd64' }}
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          version: "0.13.1"
+          enable-cache: true
+      - if: ${{ matrix.architecture == 'amd64' }}
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: ".node-version"
+      - if: ${{ matrix.architecture == 'amd64' }}
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          package_json_file: frontend/package.json
+      - name: Check browser login through actual HTTPS proxy
+        if: ${{ matrix.architecture == 'amd64' }}
+        env:
+          SEEKBELL_IMAGE: seekbell:candidate
+          SEEKBELL_REVISION: ${{ github.sha }}
+        run: |
+          uv sync --frozen
+          pnpm --dir frontend install --frozen-lockfile
+          timeout --signal=TERM --kill-after=10s 4m pnpm --dir frontend exec playwright install --with-deps chromium
+          pnpm --dir frontend test:proxy
       - name: Package and verify exact tested image content
         run: |
           python3 scripts/release_images.py --revision "$GITHUB_SHA" --repository "$IMAGE_REPOSITORY" \

@@ -1,27 +1,33 @@
 # 当前状态
 
-更新时间：2026-10-29（Asia/Shanghai）。阶段：用户已授权推送、合并并发布新版本与Docker镜像，正在准备v0.2.0；尚未发布或部署。系统设置美化及34项本地浏览器验证已完成。
+更新：2026-10-29（Asia/Shanghai）。分支codex/settings-layout-release-flow（自main 44d79d4），提交下列两项改动；用户2026-10-29授权推送此分支。
 
-## 环境与版本
+## 开局
 
-正式目录SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe执行。分支codex/system-settings-improvements，HEAD 59d169477a46b7f7890cf32e4d87cb8a79bfe4dc；起始工作区干净。本次提交包括UI与0.2.0版本/变更记录、Portainer模板；差异指纹及既有证据见[美化记录](history/2026-10-29-系统设置横向布局美化.md)。
+先运行`python3 scripts/dev_status.py`取得分支、工作区、版本一致性和最新CI，不再逐条手工核对。与本文不符时以实际为准并先更新本文。
 
-旧本地seekbell:settings-local镜像仍对应83a2c6e、schema0018，不含本轮UI；digest见[上一轮实施记录](history/2026-10-29-系统设置修复与维护能力.md)。正式v0.1.0及8附件、既有实例不变；公开发布资料沿[审查前状态](history/2026-10-29-系统设置审查前状态.md)恢复。
+## 计划位置
 
-## 本轮结果
+M0–M4已完成，v0.2.0已公开发布：双架构索引sha256:87d415bb…，0.2.0/latest与6附件经匿名核对一致，见[发布归档](history/2026-10-29-v0.2.0发布进度.md)。现用实例尚未部署0.2.0。下一阶段为M5实机验收（ROADMAP“当前阶段”表），需另行授权。
 
-用户指出左侧分类布局未经许可，要求恢复原横向布局并美化。已核对用户截图及历史源码；此前文档将左侧导航视为批准视觉不准确，已纠正UI_DESIGN，并在SPEC 6.5明确横向要求。七分类与既有功能保留。
+## 进行中（已提交待推送/PR，等待用户验收）
 
-所有宽度使用顶部横向细线标签；窄屏标签栏滚动，切换/缩放时当前项自动可见。通用按工作空间/时间分区，对齐字段与预览；账户会话、历史存储、告警、备份和诊断宽屏主次卡片并排，窄屏单列。保存区就近呈现，备份反馈靠近操作；错误字段为顶栏预留空间。无后端或数据库变更。
+1. 设置单列布局与时区修复：七分类保留，“概览”改名，故障/告警记录移至关于与诊断。证据见[单列布局记录](history/2026-10-29-系统设置单列布局与时区修复.md)。
+2. 发布流程精简：三步发布；CI按源码tree复用已通过基线；容器演练只在原生构建中运行，与基线并行；Release末尾匿名核对。新增bump_version/ci_reuse/verify_release/dev_status脚本。本地后端887项及新增19项测试通过，ruff通过，工作流YAML可解析；actionlint被本机权限拒绝未执行。新工作流尚未在GitHub运行，首个PR是实际验证点。
 
-本次提交范围：frontend/src/pages八个设置相关页面、components/TimezoneField.vue与StorageSummary.vue、styles/workspace.css，tests/system/settings.spec.ts及docs/SPEC.md、UI_DESIGN.md、本状态和美化记录。详细路径见美化记录，意图均为本轮布局与交接。另同步pyproject.toml、uv.lock、frontend/package.json、CHANGELOG、README、IMAGE_RELEASE及两份Portainer模板到0.2.0。
+## 下一步
 
-## 验证与证据
+1. 用户验收设置页面和新发布流程。
+2. 推送并开PR（需用户先完成`gh auth login`）。PR上应见reuse、baseline、native三项；合并后main push的baseline应显示跳过。合并需另行授权。
+3. 以后发布按IMAGE_RELEASE“正式发布（三步）”执行，等待CI用一次`gh run watch`（gh已装在SeekBell-Dev）。
 
-SeekBell-Dev生产构建/类型、全前端Prettier、差异及隐私检查通过；发布准备追加80项release_images测试和离线锁校验通过。system 16、approved-ui 8、backup 2、概览模块定向8，共34项浏览器检查通过；覆盖320–1920px八种宽度、草稿/错误/保存、深链接、备份及键盘/触屏排序。桌面七分类与手机通用截图已目视检查；Windows预览目录与复跑命令见美化记录。
+## 授权
 
-日志位于/home/dev/.local/state/seekbell/audits/settings-ui-2026-10-29。初次手机错误定位已修复并完整复跑；approved-ui与backup共用8019端口，不能并跑，端口冲突失败已排除。既有868项后端及容器验证只沿用为未变功能证据；本轮未重建镜像、未做真机或真实通知验收。
+仅授权推送本分支（含开PR）；无合并、发布、部署或真实发送授权。
 
-## 下一步与授权
+## 按需读取（只读与任务相关的项）
 
-用户本轮明确授权本分支推送、PR合并、发布v0.2.0和GHCR双架构镜像及latest、Release附件。下一步提交/推送，等待PR baseline与原生双架构检查，通过后squash合并main，再创建Release并核对镜像和附件。现用实例部署与真实发送不在本轮授权内。不读实际库、不改原Ubuntu/全局WSL/D盘副本，不组织多代理。恢复读本状态、美化记录、UI_DESIGN末节及受影响代码；维护语义按需读SPEC 6.5与上一轮实施记录。
+- 设置界面：UI_DESIGN末节、SPEC第175行、frontend/src/pages/*Settings.vue
+- 发布/CI：IMAGE_RELEASE“正式发布”、.github/workflows/*.yml、scripts/{bump_version,ci_reuse,verify_release}.py
+- 实机验收：ROADMAP“当前阶段”、ACCEPTANCE、RELEASES
+- 其他历史只在本文链接指向时阅读。
