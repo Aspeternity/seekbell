@@ -113,7 +113,7 @@ test('real setup, login, website, task, workspace and a fresh browser retain ser
   const workspace = '我的关注空间-' + info.project.name
   await page.getByLabel('工作空间名称').fill(workspace)
   await page.getByLabel('工作空间说明').fill('真实保存，刷新保留')
-  await page.getByRole('button', { name: '保存偏好设置' }).click()
+  await page.getByRole('button', { name: '保存通用设置' }).click()
   await expect(page.locator('.workspace-label')).toContainText(workspace)
   await page.reload()
   await expect(page.locator('.workspace-label')).toContainText(workspace)

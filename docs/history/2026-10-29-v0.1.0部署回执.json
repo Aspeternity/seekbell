@@ -1,0 +1,9 @@
+{
+  "revision": "dffce718c97f3bbe59c8cbdca72edfd7ff3c9f9e",
+  "version": "v0.1.0",
+  "image": "ghcr.io/aspeternity/seekbell:0.1.0@sha256:9b2bb08a82a232a2074c997941a179a4e84a8b2bffc95d9931ce36914c7a65b4",
+  "sha256": {
+    "compose.portainer.yaml": "c3f72fa222b423f1c18686d3f37d5cd97fc1ea3a7baa5b2f6496b23130f5f470",
+    "compose.portainer.compare.yaml": "826220e44ffc8ae0257863f4e785b306a3b675804a44ef59b0cb395b72568fd0"
+  }
+}

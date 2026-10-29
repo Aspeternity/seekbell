@@ -71,7 +71,10 @@ export async function sendRequest(
     const data = await response.json().catch(() => ({ detail: '服务响应无效，请稍后重试。' }))
     if (
       response.status === 401 &&
-      (path.startsWith('manage/') || path === 'auth/administrator' || path === 'auth/logout')
+      (path.startsWith('manage/') ||
+        path === 'auth/administrator' ||
+        path === 'auth/logout' ||
+        path.startsWith('auth/sessions'))
     ) {
       clearReadCache()
       clearNotificationCounts()

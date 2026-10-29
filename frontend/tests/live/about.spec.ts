@@ -29,7 +29,7 @@ test('version and readiness remain independent, retry safely and perform no conf
     if (request.method() !== 'GET') writes.push(request.method() + ' ' + request.url())
   })
   await page.goto('/#/settings/preferences')
-  await page.getByRole('button', { name: '关于', exact: true }).click()
+  await page.goto('/#/settings/about')
   await expect(page.getByTestId('app-version')).toHaveText(original.version)
   await expect(page.getByTestId('build-revision')).toHaveText(original.build_revision)
   await expect(page.getByTestId('database-revision')).toHaveText(original.database_revision)
@@ -37,18 +37,20 @@ test('version and readiness remain independent, retry safely and perform no conf
   await expect(page.getByText('服务已就绪', { exact: true })).toBeVisible()
   await page.reload()
   await expect(page.getByTestId('app-version')).toHaveText(original.version)
-  await expect(page.getByRole('button', { name: '关于', exact: true })).toBeInViewport({
-    ratio: 1,
-  })
-  await expect(page.getByRole('button', { name: '关于', exact: true })).toHaveAttribute(
-    'aria-current',
-    'page',
-  )
+  const category = page.getByRole('combobox', { name: '设置分类', exact: true })
+  if (await category.isVisible()) await expect(category).toHaveAttribute('data-value', 'about')
+  else {
+    const selected = page
+      .getByRole('navigation', { name: '设置分类', exact: true })
+      .getByRole('button', { name: '关于与诊断', exact: true })
+    await expect(selected).toBeInViewport({ ratio: 1 })
+    await expect(selected).toHaveAttribute('aria-current', 'page')
+  }
   // The existing compact mobile header intentionally hides the help control.
   if (info.project.name === 'desktop') {
     await page.getByRole('button', { name: '使用说明', exact: true }).click()
-    await expect(page.getByRole('dialog')).toContainText('系统告警已接入')
-    await expect(page.getByRole('dialog')).toContainText('已提供停服加密备份与独立恢复维护命令')
+    await expect(page.getByRole('dialog')).toContainText('关闭浏览器不影响后台监控')
+    await expect(page.getByRole('dialog')).toContainText('备份恢复先生成独立副本')
     await page.getByRole('button', { name: '知道了', exact: true }).click()
   }
 
@@ -121,6 +123,7 @@ test('version and readiness remain independent, retry safely and perform no conf
 
   await page.goto('/#/settings/backup')
   await expect(page.getByRole('button', { name: '生成并下载加密备份' })).toBeVisible()
+  await page.getByRole('button', { name: '恢复验证', exact: true }).click()
   await expect(page.getByRole('button', { name: '验证并生成独立恢复副本' })).toBeDisabled()
   await page.goto('/#/settings/unknown')
   await expect(page.getByRole('heading', { name: '这条线索暂时不在这里' })).toBeVisible()

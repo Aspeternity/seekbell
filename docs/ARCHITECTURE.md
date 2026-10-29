@@ -291,7 +291,7 @@ GET /api/manage/hotlists/{website_id}?period=...校验安装和模块可见后�
 
 网站＋提供方＋周期隔离缓存/在途任务/退避，按网站/周期配置间隔按需刷新；同键并发共享任务。冷读等待共享任务且客户端取消不取消其他读者；已有快照立即返回并触发一次过期后台刷新。refreshing独立于失败状态，刷新期间客户端按next_attempt_at约2秒读完成结果，结束后恢复配置间隔，不轮询来源。生命周期关闭先取消/等待在途任务再关闭HTTP。失败30～600秒退避，遵守Retry-After（上限一天）；频率为工程候选，不冒充提供方限频保证。source_updated_at与fetched_at分开，仅对可靠提供来源时间的提供方检查时间倒退；ready/stale/unavailable区分正常、失败旧快照和无数据。榜单成功快照经0011持久化、重启按需恢复，最多展示24小时，布局和浏览选择持久化。健康检查独立于热榜，无消费者周期轮询。
 
-概览固定统计与可排序内容区分开；同一统计请求只显示一处反馈，模块保留stale交互保护。热榜独立useRemote，身份含网站/周期，切换不串其他榜单，沿用会话/data revision和迟到响应隔离。选择串行保存，其专用写入不使监控查询缓存失效；保存冲突保留当前选择并可重试。页面隐藏/组件卸载停止刷新，手动刷新服从后端冷却。来源时间按保存时区展示。可见卡片只请求当前选中的周期，不预读其他周期或网站；fetchRead合并同身份在途读取。HTTP仍no-store，保留服务进程/认证会话缓存，0011另加独立SQLite成功快照，不增加Service Worker。
+概览固定统计与可排序内容区分开；同一统计请求只显示一处反馈，其他模块沿用stale交互保护。热榜独立useRemote，身份含网站/周期，切换不串其他榜单，沿用会话/data revision和迟到响应隔离。CommunityHotlist以身份匹配后的fetched_at判定成功快照（含空榜）；已有快照时不向ReadRegion传递加载/过期交互保护，正常refreshing及同站短暂等待不展示提示，原帖链接和展开保持可用；来源异常和本应用读取错误仍展示，其他模块的ReadRegion语义不变。选择串行保存，其专用写入不使监控查询缓存失效；保存冲突保留当前选择并可重试。页面隐藏/组件卸载停止刷新，手动刷新服从后端冷却。来源时间按保存时区展示。可见卡片只请求当前选中的周期，不预读其他周期或网站；fetchRead合并同身份在途读取。HTTP仍no-store，保留服务进程/认证会话缓存，0011另加独立SQLite成功快照，不增加Service Worker。
 
 Preferences复用草稿、部分保存、冲突与导航保护；设置支持鼠标/触屏手柄、键盘上下键、上下按钮和默认草稿。概览不再显示设置快捷入口，模块设置从系统设置进入；设置定位参数仍支持直接链接，App只以路径部分识别页面。单站显示名称，多站标签、超过四站AppSelect，单周期不显示无效切换。
 
@@ -372,3 +372,16 @@ collectors/http.source_failure共用Cloudflare标记判定和Retry-After解释�
 ## 连接测试展示生命周期（2026-10-25）
 
 SourceProbe持久最近手测与冷却，API语义保持。WebsiteConnectionTest按网站/面板实例持有previous与current：GET只进历史，POST重试先清当前；手测使在途GET版本失效，卸载后忽略迟到响应并清时钟。WebsiteConnectionResult共用诊断展示，历史为中性且按当时语义描述；未来next_attempt_at独立展示并到期消失，不改变服务端限频。本轮无DDL/依赖/采集行为变化。
+
+
+## 系统设置与维护接口（2026-10-29）
+
+0018_settings_maintenance为WorkspacePreferences增加workspace_revision默认1，并新增BackupRecord元数据表，保留既有配置/业务数据。通用GET/PUT /api/manage/preferences以workspace_revision+display_revision双版本在同一短写事务内保存名称/说明/时区；既有workspace和display接口分别推进对应版本，兼容旧调用。错误保留草稿，不将编辑器放进只读缓存。旧时区及概览深链接在Hash路由归一到唯一编辑器，七分类按视口切换导航形式。
+
+GET /manage/storage仅读取固定数据库/WAL/恢复副本文件大小和数据所在文件系统容量，不接收路径，不返回数据目录或枚举用户文件。GET /manage/retention/preview?days=采用与清理器一致的终态/完成/尝试保护条件，统计候选投递和删除这些投递后可删除的帖子及已完成操作、采集记录；只读事务、不改清理计划，不预估磁盘释放字节。精简账本和受保护依赖继续保留。
+
+BackupRecord仅保留最近50次经当前密码验证的导出/恢复操作，字段为操作、结果、时间、大小、应用与迁移版本。加密快照后写生成记录，验证发布恢复副本后写验证记录；已认证失败仅写固定failed结果。记录不存口令、原文件名、原始错误或凭据，包含在后续整库快照；本次快照生成后的回执不在自身备份中。下载文件名含UTC时间，网页操作记录不等于客户端已落盘。副本发布和宿主机切换边界不变。
+
+GET /auth/sessions只返回本会话到期与其他有效会话数；DELETE /auth/sessions/others在写事务内重查当前会话/CSRF、仅删除其他会话，不修改账号、当前Cookie或延长有效期。所有管理端点继续认证/Origin/CSRF保护。GET /manage/diagnostics只组合版本、后台状态、支持目录、固定故障码和检查时间，无URL/凭据/会话/磁盘路径；前端复制失败时显示可选取文本。
+
+新迁移升级前按既有维护流程完整备份；回退使用0017对应的原镜像/原卷或匹配备份，不能用旧镜像读取0018。验证：uv run --frozen pytest -q；pnpm --dir frontend build；test:system、test:retention、test:backup、test:approved-ui、test:hotlist、test:live。容器升级/备份/回退用scripts/check_release_container.py与check_backup_container.py，均临时合成卷及禁外网网络。

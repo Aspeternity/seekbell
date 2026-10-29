@@ -58,6 +58,16 @@ const snapshot = computed(() =>
     ? remote.data.value
     : null,
 )
+// An empty successful list is also a snapshot; routine reads must stay silent.
+const hasSnapshot = computed(() => snapshot.value?.fetched_at != null)
+const showWaiting = computed(
+  () =>
+    snapshot.value?.status === 'waiting' &&
+    (!hasSnapshot.value ||
+      !['source_busy', 'source_cooldown', 'collection_priority'].includes(
+        snapshot.value.error_code || '',
+      )),
+)
 const stamp = (at: number | null) =>
   at === null ? '来源未提供' : formatTime(new Date(at * 1000).toISOString())
 const selectedLabel = computed(
@@ -150,7 +160,7 @@ onBeforeUnmount(() => {
       <Icon name="spark" :size="20" />
     </div>
     <ReadRegion
-      :loading="catalog.loading.value"
+      :loading="catalog.loading.value && !catalog.data.value"
       :error="catalog.error.value"
       :has-data="!!catalog.data.value"
       :min-height="170"
@@ -224,26 +234,14 @@ onBeforeUnmount(() => {
             >
           </div>
           <ReadRegion
-            :loading="remote.loading.value"
+            :loading="remote.loading.value && !hasSnapshot"
             :error="remote.error.value"
             :has-data="!!snapshot"
-            :stale="remote.stale.value"
             :min-height="210"
             @retry="remote.reload"
           >
             <template v-if="snapshot">
-              <p
-                v-if="snapshot.refreshing && !remote.error.value"
-                class="small-note hotlist-updating"
-                role="status"
-              >
-                正在后台更新，当前显示上次榜单。
-              </p>
-              <p
-                v-else-if="snapshot.status === 'waiting'"
-                class="small-note hotlist-updating"
-                role="status"
-              >
+              <p v-if="showWaiting" class="small-note hotlist-updating" role="status">
                 <span>{{
                   snapshot.error_code === 'collection_priority'
                     ? '优先完成新帖采集，随后更新榜单。'
@@ -257,7 +255,11 @@ onBeforeUnmount(() => {
                 }}</span>
                 <span>预计 {{ stamp(snapshot.next_attempt_at) }} 后重试。</span>
               </p>
-              <p v-else-if="snapshot.status !== 'ready'" class="info-note" role="status">
+              <p
+                v-else-if="snapshot.status === 'stale' || snapshot.status === 'unavailable'"
+                class="info-note"
+                role="status"
+              >
                 {{
                   snapshot.status === 'stale'
                     ? '更新失败，当前显示上次榜单。'
@@ -299,7 +301,7 @@ onBeforeUnmount(() => {
                   </a>
                 </li>
               </ol>
-              <div v-else-if="snapshot.status === 'ready'" class="empty-state">
+              <div v-else-if="hasSnapshot" class="empty-state">
                 <p>当前榜单还没有帖子。</p>
               </div>
             </template>

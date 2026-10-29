@@ -40,16 +40,12 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByRole('button', { name: '自定义显示', exact: true })).toHaveCount(0)
 })
 async function settings(page: Page) {
-  const menu = page.getByRole('button', { name: '打开导航', exact: true })
-  if (await menu.isVisible()) await menu.click()
-  await page.getByRole('button', { name: '系统设置', exact: true }).click()
-  const heading = page.getByRole('heading', { name: '概览显示模块', exact: true })
-  await heading.scrollIntoViewIfNeeded()
-  await expect(heading).toBeVisible()
+  await page.goto('/#/settings/overview')
+  await expect(page.getByRole('heading', { name: '概览显示模块', exact: true })).toBeVisible()
 }
 async function save(page: Page) {
-  await page.getByRole('button', { name: '保存偏好设置', exact: true }).click()
-  await expect(page.getByText('设置已保存', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '保存概览布局', exact: true }).click()
+  await expect(page.getByText('概览布局已保存', { exact: true })).toBeVisible()
 }
 async function home(page: Page) {
   await page.evaluate(() => (location.hash = '/'))
@@ -151,6 +147,7 @@ test('period changes discard late responses and remember last selection', async 
 test('first period read shows feedback and a visited period displays its own cache during refresh', async ({
   page,
 }) => {
+  await page.clock.install()
   let release = () => {}
   let started = 0
   const held = new Promise<void>((resolve) => (release = resolve))
@@ -187,7 +184,12 @@ test('first period read shows feedback and a visited period displays its own cac
   await expect.poll(() => refreshing).toBe(true)
   await expect(page.locator('.hotlist-row').first()).toContainText('daily')
   await expect(page.locator('.hotlist-row')).toHaveCount(5)
+  await page.clock.runFor(250)
   await expect(hotlist.locator('.read-placeholder')).toHaveCount(0)
+  await expect(hotlist.getByRole('status')).toHaveCount(0)
+  await expect(hotlist.locator('[inert]')).toHaveCount(0)
+  await hotlist.getByRole('button', { name: '展开更多', exact: true }).click()
+  await expect(hotlist.locator('.hotlist-row')).toHaveCount(10)
   release()
 })
 test('site switching uses only capabilities of selected source and restores per-site period', async ({
@@ -268,7 +270,7 @@ test('layout conflict preserves draft and keyboard ordering is accessible', asyn
     headers: { 'X-CSRF-Token': csrf },
     data: { modules, revision: prefs.revision },
   })
-  await page.getByRole('button', { name: '保存偏好设置', exact: true }).click()
+  await page.getByRole('button', { name: '保存概览布局', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('概览布局已在其他页面改变')
   await expect(page.locator('[data-module]').nth(1)).toHaveAttribute('data-module', 'hotlist')
 })
@@ -426,24 +428,124 @@ test('recent matches are whole-row links and explain the historical task version
   await expect(row).not.toHaveRole('link')
 })
 
-test('background refresh keeps the displayed list and reports refresh separately from failure', async ({
+test('background refresh silently replaces the list without blocking links or expansion', async ({
   page,
-}) => {
+}, info) => {
+  await page.clock.install()
+  await page.clock.pauseAt(new Date())
+  let reads = 0
+  let release = () => {}
+  const held = new Promise<void>((resolve) => (release = resolve))
   await page.route('**/api/manage/hotlists/nodeseek?period=realtime', async (route) => {
+    const read = ++reads
     const response = await route.fetch()
     const data = await response.json()
-    data.refreshing = true
-    data.next_attempt_at = Date.now() / 1000 + 600
-    await route.fulfill({ json: data })
+    if (read === 2) {
+      await held
+      data.items[0].title = '后台更新后的榜首'
+    }
+    await route.fulfill({
+      json: {
+        ...data,
+        refreshing: read === 1,
+        next_attempt_at: (await page.evaluate(() => Date.now())) / 1000 + (read === 1 ? 2 : 600),
+      },
+    })
   })
   await page.reload()
-  await expect(
-    page.getByRole('status').filter({ hasText: '正在后台更新，当前显示上次榜单。' }),
-  ).toBeVisible()
-  await expect(page.locator('.hotlist-row')).toHaveCount(5)
-  await expect(page.getByText('更新失败，当前显示上次榜单。', { exact: true })).toHaveCount(0)
-  await expect(page.locator('.hotlist-row').first()).toHaveRole('link')
+  const hotlist = page.getByRole('region', { name: '社区热榜', exact: true })
+  await expect(hotlist.locator('.hotlist-row')).toHaveCount(5)
+  await expect(hotlist.getByRole('status')).toHaveCount(0)
+  const title = await hotlist.locator('.hotlist-title').first().textContent()
+  await page.clock.fastForward(2200)
+  await expect.poll(() => reads).toBe(2)
+  await page.clock.runFor(250)
+  await expect(hotlist.getByRole('status')).toHaveCount(0)
+  await expect(hotlist.locator('.read-placeholder, [inert]')).toHaveCount(0)
+  await expect(hotlist.locator('.hotlist-title').first()).toHaveText(title!)
+  await hotlist.getByRole('button', { name: '展开更多', exact: true }).click()
+  await expect(hotlist.locator('.hotlist-row')).toHaveCount(10)
+  const row = hotlist.locator('.hotlist-row').first()
+  await row.click({ trial: true })
+  await row.focus()
+  await expect(row).toBeFocused()
+  await hotlist.screenshot({ path: info.outputPath('hotlist-silent-refresh.png') })
+  release()
+  await expect(hotlist.locator('.hotlist-title').first()).toHaveText('后台更新后的榜首')
+  await expect(hotlist.locator('.hotlist-row')).toHaveCount(10)
+  await expect(hotlist.getByRole('status')).toHaveCount(0)
+  await page.clock.fastForward(3000)
+  expect(reads).toBe(2)
 })
+
+for (const code of ['source_busy', 'source_cooldown', 'collection_priority']) {
+  test(
+    'cached hotlist silently waits for ' + code + ' and updates on schedule',
+    async ({ page }) => {
+      await page.clock.install()
+      let reads = 0
+      await page.route('**/api/manage/hotlists/nodeseek?period=realtime', async (route) => {
+        const read = ++reads
+        const response = await route.fetch()
+        const data = await response.json()
+        if (read > 1) data.items[0].title = '等待后更新的榜首'
+        await route.fulfill({
+          json: {
+            ...data,
+            status: read === 1 ? 'waiting' : 'ready',
+            error_code: read === 1 ? code : null,
+            next_attempt_at:
+              (await page.evaluate(() => Date.now())) / 1000 + (read === 1 ? 2 : 600),
+          },
+        })
+      })
+      await page.reload()
+      const hotlist = page.getByRole('region', { name: '社区热榜', exact: true })
+      await expect(hotlist.locator('.hotlist-row')).toHaveCount(5)
+      await expect(hotlist.getByRole('status')).toHaveCount(0)
+      await page.clock.fastForward(2200)
+      await expect(hotlist.locator('.hotlist-title').first()).toHaveText('等待后更新的榜首')
+      await expect(hotlist.getByRole('status')).toHaveCount(0)
+      expect(reads).toBe(2)
+    },
+  )
+}
+
+for (const state of ['ready', 'waiting']) {
+  test(
+    'an empty successful hotlist stays visible during ' + state + ' refresh',
+    async ({ page }) => {
+      await page.clock.install()
+      await page.clock.pauseAt(new Date())
+      let reads = 0
+      await page.route('**/api/manage/hotlists/nodeseek?period=realtime', async (route) => {
+        const read = ++reads
+        const response = await route.fetch()
+        const data = await response.json()
+        await route.fulfill({
+          json: {
+            ...data,
+            items: read === 1 ? [] : data.items,
+            status: read === 1 ? state : 'ready',
+            refreshing: read === 1 && state === 'ready',
+            error_code: read === 1 && state === 'waiting' ? 'source_cooldown' : null,
+            next_attempt_at:
+              (await page.evaluate(() => Date.now())) / 1000 + (read === 1 ? 2 : 600),
+          },
+        })
+      })
+      await page.reload()
+      const hotlist = page.getByRole('region', { name: '社区热榜', exact: true })
+      await expect(hotlist.getByText('当前榜单还没有帖子。', { exact: true })).toBeVisible()
+      await expect(hotlist.getByRole('status')).toHaveCount(0)
+      await expect(hotlist.locator('.read-placeholder')).toHaveCount(0)
+      await page.clock.fastForward(2200)
+      await expect(hotlist.locator('.hotlist-row')).toHaveCount(5)
+      await expect(hotlist.getByText('当前榜单还没有帖子。', { exact: true })).toHaveCount(0)
+      expect(reads).toBe(2)
+    },
+  )
+}
 
 async function websitePanel(page: Page, site: string) {
   await page.goto('/#/websites')
@@ -566,7 +668,7 @@ test('long hotlist backoff shows timing and avoids the old ten-minute status pol
   await expect.poll(() => completed).toBe(2)
 })
 
-test('a failed status read suppresses an outdated refreshing badge and retries locally', async ({
+test('a failed background status read shows an error and recovers after a local retry', async ({
   page,
 }) => {
   await page.clock.install()
@@ -588,8 +690,11 @@ test('a failed status read suppresses an outdated refreshing badge and retries l
   await page.reload()
   const hotlist = page.getByRole('region', { name: '社区热榜', exact: true })
   const updating = hotlist.getByText('正在后台更新，当前显示上次榜单。', { exact: true })
-  await expect(updating).toBeVisible()
+  await expect.poll(() => completed).toBe(1)
+  await expect(hotlist.locator('.hotlist-row')).toHaveCount(5)
+  await expect(updating).toHaveCount(0)
   await page.clock.fastForward(2200)
+  await expect(hotlist.getByRole('alert')).toContainText('刷新失败，当前显示上次结果。')
   await expect(updating).toHaveCount(0)
   await expect(hotlist.locator('.hotlist-row')).toHaveCount(5)
   await page.clock.fastForward(15100)
@@ -597,6 +702,8 @@ test('a failed status read suppresses an outdated refreshing badge and retries l
   // The visible cached rows do not prove the final mocked response has finished.
   await expect.poll(() => completed).toBe(2)
   await expect(hotlist.locator('.hotlist-row')).toHaveCount(5)
+  await expect(hotlist.getByRole('alert')).toHaveCount(0)
+  await expect(hotlist.getByRole('status')).toHaveCount(0)
 })
 
 test('website hotlist controls follow supplied capabilities and omit unsupported sites', async ({

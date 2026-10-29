@@ -82,7 +82,7 @@ def test_hotlist_upgrade_is_atomic_and_preserves_every_old_column(tmp_path):
         assert original_rows() == before
         migrate(engine)
         migrate(engine)
-        assert schema_revision(engine) == "0017_hotlist_settings"
+        assert schema_revision(engine) == "0018_settings_maintenance"
         assert original_rows() == before
         with Session(engine) as session:
             assert session.get(WebsiteInstallation, "nodeseek").hotlist_settings == {}

@@ -1,10 +1,12 @@
 import hashlib
 import hmac
 import secrets
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import delete
+from sqlalchemy import delete, func, select
+from sqlalchemy.orm import Session
 
 from seekbell.db.models import LoginSession
 from seekbell.db.transactions import write_session
@@ -183,3 +185,38 @@ def administrator(values: AdministratorUpdate, request: Request, response: Respo
         except auth.IncorrectPassword:
             raise HTTPException(400, "当前密码不正确。") from None
     return session_response(request, response, values, tokens)
+
+
+@router.get("/sessions", dependencies=[Depends(require_admin)])
+def sessions(request: Request):
+    current = auth.token_hash(request.cookies.get(COOKIE, ""))
+    with Session(request.app.state.engine) as session:
+        row = session.get(LoginSession, current)
+        if row is None or row.expires_at <= time.time():
+            raise HTTPException(401, "会话已过期，请重新登录。")
+        return {
+            "expires_at": row.expires_at,
+            "other_sessions": session.scalar(
+                select(func.count())
+                .select_from(LoginSession)
+                .where(LoginSession.token_hash != current, LoginSession.expires_at > time.time())
+            ),
+        }
+
+
+@router.delete("/sessions/others", dependencies=[Depends(require_admin)])
+def revoke_other_sessions(request: Request):
+    current = auth.token_hash(request.cookies.get(COOKIE, ""))
+    with write_session(request.app.state.engine) as session:
+        row = session.get(LoginSession, current)
+        supplied = request.headers.get("x-csrf-token", "")
+        if (
+            row is None
+            or row.expires_at <= time.time()
+            or not hmac.compare_digest(row.csrf.encode(), supplied.encode())
+        ):
+            raise HTTPException(401, "会话已过期，请重新登录。")
+        removed = session.execute(
+            delete(LoginSession).where(LoginSession.token_hash != current)
+        ).rowcount
+    return {"revoked": removed}

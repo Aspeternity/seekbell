@@ -31,7 +31,7 @@ test('real TLS proxy preserves secure sessions, configuration and logout', async
   await page.goto('/#/settings/preferences')
   const workspace = 'TLS ' + info.project.name
   await page.getByLabel('工作空间名称', { exact: true }).fill(workspace)
-  await page.getByRole('button', { name: '保存偏好设置' }).click()
+  await page.getByRole('button', { name: '保存通用设置' }).click()
   await expect(page.locator('.sidebar .workspace-copy strong')).toHaveText(workspace)
   await page.reload()
   await expect(page.getByLabel('工作空间名称', { exact: true })).toHaveValue(workspace)
@@ -41,7 +41,7 @@ test('real TLS proxy preserves secure sessions, configuration and logout', async
     headers: { 'X-CSRF-Token': auth.csrf, Origin: 'https://other.example.test' },
   })
   expect(rejected.status()).toBe(403)
-  await page.getByRole('button', { name: '管理员', exact: true }).click()
+  await page.goto('/#/settings/account')
   await page.locator('#main-content').getByRole('button', { name: '退出登录', exact: true }).click()
   await expect(page.getByRole('heading', { name: '欢迎回来' })).toBeVisible()
   await page.getByLabel('管理员用户名').fill(credentials.username)

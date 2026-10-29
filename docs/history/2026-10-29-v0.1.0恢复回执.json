@@ -1,0 +1,47 @@
+{
+  "version": "v0.1.0",
+  "revision": "dffce718c97f3bbe59c8cbdca72edfd7ff3c9f9e",
+  "image_digest": "sha256:9b2bb08a82a232a2074c997941a179a4e84a8b2bffc95d9931ce36914c7a65b4",
+  "original_publish_run": 40735980970,
+  "failed_attachment_job": 122996666073,
+  "original_artifact": 12839060982,
+  "original_zip_sha256": "807a917946dadb0ab7325fb1bf5e82d48b969382ba846ef2bd764ee00e94b86c",
+  "original_receipt_sha256": "38154e38f8d9ceb3f9335b2910cd3ea7a091f94e61e47dd575e5ab070a87095d",
+  "observed_existing_tags": {
+    "0.1.0": "sha256:9b2bb08a82a232a2074c997941a179a4e84a8b2bffc95d9931ce36914c7a65b4",
+    "latest": "sha256:9b2bb08a82a232a2074c997941a179a4e84a8b2bffc95d9931ce36914c7a65b4"
+  },
+  "rebuilt_compose_hashes_match_original_publish_log": true,
+  "version_receipt_reconstructed": true,
+  "image_rebuilt": false,
+  "tag_or_digest_changed": false,
+  "status": "assets_uploaded_and_anonymously_verified",
+  "workflow_fix_pr": 21,
+  "workflow_fix_ci": 40774483932,
+  "workflow_fix_status": "merged_after_all_required_checks",
+  "anonymous_verification_sha256": "accc5fb5273b620c0655ea327f13fbd23ba9f1c53e40017b15f08b28f0c8c240",
+  "workflow_fix_attempts": [
+    {
+      "run": 40771852239,
+      "head": "af2225bcdbd314e9e898d734bb3f41e1383e341c",
+      "conclusion": "failure",
+      "cause": "existing history UI pauseAt wall-clock race"
+    },
+    {
+      "run": 40774483932,
+      "head": "a48cf111668a1340a19b1dea7dac1a734c1cf280",
+      "conclusion": "success",
+      "pytest": 861,
+      "browser_tests": 174,
+      "native": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "codeql": "success"
+    }
+  ],
+  "workflow_fix_head": "a48cf111668a1340a19b1dea7dac1a734c1cf280",
+  "workflow_fix_codeql": 40774478950,
+  "workflow_fix_merged_sha": "ae5eff015226d6538c167b9a746550db6ce17a88",
+  "tested_fix_tree_matches_main": true
+}

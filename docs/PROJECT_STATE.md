@@ -1,44 +1,27 @@
 # 当前状态
 
-更新时间：2026-10-29（Asia/Shanghai）。阶段：v0.1.0代码/镜像已发布；附件已恢复并通过真实匿名验收；PR #21首轮被旧虚拟时钟竞态拦住，Clock初始化已修并通过本机重复/完整检查，待标准CI复验。
+更新时间：2026-10-29（Asia/Shanghai）。阶段：用户已授权推送、合并并发布新版本与Docker镜像，正在准备v0.2.0；尚未发布或部署。系统设置美化及34项本地浏览器验证已完成。
 
-## 环境与发布身份
+## 环境与版本
 
-唯一SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe执行。
-main及v0.1.0为dffce718c97f3bbe59c8cbdca72edfd7ff3c9f9e，PR #20已授权合并。
-当前codex/fix-release-artifact-bundle，只修复CI清单/回归测试及文档，不改应用或镜像。
-Release id426978304，非草稿/非预发布且为GitHub latest；许可继续待定。
+正式目录SeekBell-Dev:/home/dev/projects/seekbell，经原Ubuntu的wsl.exe执行。分支codex/system-settings-improvements，HEAD 59d169477a46b7f7890cf32e4d87cb8a79bfe4dc；起始工作区干净。本次提交包括UI与0.2.0版本/变更记录、Portainer模板；差异指纹及既有证据见[美化记录](history/2026-10-29-系统设置横向布局美化.md)。
 
-## 已通过与部分失败
+旧本地seekbell:settings-local镜像仍对应83a2c6e、schema0018，不含本轮UI；digest见[上一轮实施记录](history/2026-10-29-系统设置修复与维护能力.md)。正式v0.1.0及8附件、既有实例不变；公开发布资料沿[审查前状态](history/2026-10-29-系统设置审查前状态.md)恢复。
 
-PR #20运行40732294202：860后端/174浏览器/双原生架构全过，CodeQL 40732286961全过。
-main运行40735701320全过。发布40735980970的完整baseline、原生amd64/arm64、publish成功；
-release-receipt最后上传失败，不称整轮发布工作流成功。
-索引sha256:9b2bb08a82a232a2074c997941a179a4e84a8b2bffc95d9931ce36914c7a65b4，已生成0.1.0/latest。
+## 本轮结果
 
-根因是artifact清单version.json与release-assets/之间为字面反斜杠n，
-原artifact12839060982只有release/package两个JSON。原publish日志含部署文件校验和。
-新增契约测试已在旧清单下准确复现缺失四文件；修复后80项发布测试、Ruff、actionlint通过；PR #21已推送af2225b，CI 40771852239在history-ui-fixes因clock.pauseAt过去时间失败，CodeQL 40771848738已过。
-恢复方案/边界见history/2026-10-29-v0.1.0附件恢复.md。
+用户指出左侧分类布局未经许可，要求恢复原横向布局并美化。已核对用户截图及历史源码；此前文档将左侧导航视为批准视觉不准确，已纠正UI_DESIGN，并在SPEC 6.5明确横向要求。七分类与既有功能保留。
 
-## 安全与运行边界
+所有宽度使用顶部横向细线标签；窄屏标签栏滚动，切换/缩放时当前项自动可见。通用按工作空间/时间分区，对齐字段与预览；账户会话、历史存储、告警、备份和诊断宽屏主次卡片并排，窄屏单列。保存区就近呈现，备份反馈靠近操作；错误字段为顶栏预留空间。无后端或数据库变更。
 
-0.1.0锁cryptography50.0.2、certifi2026.10.18，原9条依赖告警已回读为0，安全PR #4/#5已关闭。
-46.0.7与50.0.2双向加密配置/整库备份兼容通过，报告在本轮加密兼容JSON；
-189项专项、79项发布检查及12重复/40完整热榜本机检查已过。
-旧main热榜收尾竞态已修，未改业务行为/限流；无新迁移，schema0017。
+本次提交范围：frontend/src/pages八个设置相关页面、components/TimezoneField.vue与StorageSummary.vue、styles/workspace.css，tests/system/settings.spec.ts及docs/SPEC.md、UI_DESIGN.md、本状态和美化记录。详细路径见美化记录，意图均为本轮布局与交接。另同步pyproject.toml、uv.lock、frontend/package.json、CHANGELOG、README、IMAGE_RELEASE及两份Portainer模板到0.2.0。
 
-没有部署或操作现有Portainer/8001实例，没有真实论坛请求/通知。
-旧镜像、原卷/备份及来源429限制按正式发布前状态归档保留。
-不组织多代理，不改旧Ubuntu、D盘交接副本或全局WSL。
+## 验证与证据
+
+SeekBell-Dev生产构建/类型、全前端Prettier、差异及隐私检查通过；发布准备追加80项release_images测试和离线锁校验通过。system 16、approved-ui 8、backup 2、概览模块定向8，共34项浏览器检查通过；覆盖320–1920px八种宽度、草稿/错误/保存、深链接、备份及键盘/触屏排序。桌面七分类与手机通用截图已目视检查；Windows预览目录与复跑命令见美化记录。
+
+日志位于/home/dev/.local/state/seekbell/audits/settings-ui-2026-10-29。初次手机错误定位已修复并完整复跑；approved-ui与backup共用8019端口，不能并跑，端口冲突失败已排除。既有868项后端及容器验证只沿用为未变功能证据；本轮未重建镜像、未做真机或真实通知验收。
 
 ## 下一步与授权
 
-用户已明确授权正式版本和镜像发布及必要修复/PR合并，不重复询问。
-清单修复PR #21待标准检查完成并合并；原ZIP校验807a9179…一致，六个附件已恢复，另上传recovery/anonymous-verification两份核验JSON。
-真实匿名拉取/双平台配置层/容器0.1.0及附件原始校验和均通过；镜像9b2bb08a…保持不变。待PR21合并后记录完整交付。
-不重建已占用0.1.0，不改写标签/历史，不将修复授权扩大成部署或真实发送。
-
-本次提交另修frontend/tests/history-ui-fixes/history-ui-fixes.spec.ts的两处Clock初始化：共享目标并在其前一分钟安装；6项重复/6项完整用例全过，不改199/200ms断言、业务或已发布镜像。恢复说明和PROJECT_STATE同步留证，随后推送PR21复验。
-私有原始材料/检查脚本在/home/dev/.local/state/seekbell/releases/v0.1.0。
-读取仅需本轮恢复记录、IMAGE_RELEASE及相应CI/发布脚本；其余既有证据复用。
+用户本轮明确授权本分支推送、PR合并、发布v0.2.0和GHCR双架构镜像及latest、Release附件。下一步提交/推送，等待PR baseline与原生双架构检查，通过后squash合并main，再创建Release并核对镜像和附件。现用实例部署与真实发送不在本轮授权内。不读实际库、不改原Ubuntu/全局WSL/D盘副本，不组织多代理。恢复读本状态、美化记录、UI_DESIGN末节及受影响代码；维护语义按需读SPEC 6.5与上一轮实施记录。

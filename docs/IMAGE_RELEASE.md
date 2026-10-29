@@ -6,15 +6,15 @@
 
 ## 版本与部署引用
 
-Git标签/Release使用vX.Y.Z，镜像使用X.Y.Z；0.1.0正式版对应
-`ghcr.io/aspeternity/seekbell:0.1.0`。
+Git标签/Release使用vX.Y.Z，镜像使用X.Y.Z；0.2.0正式版对应
+`ghcr.io/aspeternity/seekbell:0.2.0`。
 GitHub最新正式Release在检查全部通过后同时更新latest；
 预发布vX.Y.Z-alpha.N、-beta.N、-rc.N（N从1开始）只生成自身标签。
 补发旧正式Release且未被设为GitHub最新版本时，也只生成自身标签。
 
 源码中的[8000](../deploy/compose.portainer.yaml)和[8001](../deploy/compose.portainer.compare.yaml)
 模板固定明确版本；Release附件在相同版本上追加已验证的索引digest，例如
-`ghcr.io/aspeternity/seekbell:0.1.0@sha256:…`。
+`ghcr.io/aspeternity/seekbell:0.2.0@sha256:…`。
 正式升级优先下载Release附件的同名Compose，核对deployment.json；不会随latest漂移。
 更新现有Portainer Stack，保留Stack名、端口和实际数据卷；使用自定义配置时仅替换image更稳妥。
 
@@ -25,7 +25,7 @@ SHA、运行编号和架构标签保留供追溯，日常部署使用版本号�
 ## 正式发布
 
 1. 在分支中更新pyproject.toml、uv.lock、frontend/package.json、两份Portainer模板的版本和CHANGELOG，
-   通过PR合并main。正式0.1.0对应v0.1.0；Python的0.1.0rc1对应v0.1.0-rc.1。
+   通过PR合并main。正式0.2.0对应v0.2.0；Python的0.1.0rc1对应v0.1.0-rc.1。
    前端/Compose的预发布标签使用SemVer形式；应用版本使用PEP 440形式。
 2. 在本次明确发布授权下，为main上选定完整提交创建v*标签、发布GitHub Release。
    预发布勾选pre-release，正式发布按需要设为latest；草稿和普通push/PR不写GHCR。
@@ -56,9 +56,9 @@ CLI的promote默认只读计划，仅显式--execute写registry；compose只写�
 uv run --frozen pytest -q tests/test_release_images.py
 python3 scripts/release_images.py --help
 python3 scripts/release_images.py --revision "$SEEKBELL_REVISION" --repository aspeternity/seekbell \
-  promote --receipt release.json --version v0.1.0 --report version-plan.json
+  promote --receipt release.json --version v0.2.0 --report version-plan.json
 python3 scripts/release_images.py --revision "$SEEKBELL_REVISION" --repository aspeternity/seekbell \
-  compose --receipt version.json --version v0.1.0 --templates deploy --output release-assets
+  compose --receipt version.json --version v0.2.0 --templates deploy --output release-assets
 ```
 
 pack/verify/release/alias保持兼容，两平台归档必须来自同一次运行。
@@ -74,6 +74,11 @@ pack/verify/release/alias保持兼容，两平台归档必须来自同一次运�
 同时修复主分支的上传清单并通过PR检查；保留原失败运行与恢复证据，不能把失败历史描述为全绿。
 
 ## 安全升级与历史
+
+0.2.0新增0018_settings_maintenance迁移，用于工作空间修改版本与备份操作记录；
+系统设置恢复顶部横向分类并加入维护能力。升级前完整备份，回退0.1.0必须匹配0017的原卷或备份，
+不能用旧镜像读取已迁移到0018的卷。
+
 
 0.1.0更新cryptography至50.0.2及certifi至2026.10.18，未新增数据库迁移。
 用合成数据库实际验证cryptography 46.0.7与50.0.2双向恢复、原密钥、历史密文、队列和登录。

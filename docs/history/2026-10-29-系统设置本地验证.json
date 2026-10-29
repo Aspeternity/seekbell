@@ -1,0 +1,136 @@
+{
+  "checked_at": "2026-10-29T11:47:07.587733+08:00",
+  "environment": "SeekBell-Dev /home/dev/projects/seekbell; synthetic data only",
+  "implementation_revision": "87e0649fd772183551a8b843706bd47db436e762",
+  "code_revision": "83a2c6e0c08ba863b5c0a75baacd0a7b875d37fc",
+  "image": {
+    "tag": "seekbell:settings-local",
+    "id": "sha256:6474e05015dbe712c49e463bb1cc6c363aef9f4ebfe3a042716b1d0502704f18",
+    "platform": "linux/amd64"
+  },
+  "backend": {
+    "passed": 868,
+    "command": "uv run --frozen pytest -q",
+    "log": "/home/dev/.local/state/seekbell/audits/settings-2026-10-29/backend-final.log"
+  },
+  "browser": {
+    "unique_passed": 86,
+    "suites": {
+      "system": 16,
+      "hotlist": 50,
+      "backup": 2,
+      "retention": 2,
+      "approved_ui": 8,
+      "live": 6,
+      "https_proxy": 2
+    },
+    "final_css_targeted_rechecks": 4
+  },
+  "container_basic": {
+    "image_id": "sha256:6474e05015dbe712c49e463bb1cc6c363aef9f4ebfe3a042716b1d0502704f18",
+    "version": {
+      "name": "SeekBell",
+      "version": "0.1.0",
+      "build_revision": "83a2c6e0c08ba863b5c0a75baacd0a7b875d37fc",
+      "database_revision": "0018_settings_maintenance"
+    },
+    "uid": 10001,
+    "assets": [
+      "/assets/index-C7HJCSa8.js",
+      "/assets/index-CyVWG37H.css"
+    ],
+    "marker": [
+      [
+        1,
+        "2026-10-29 03:42:46"
+      ]
+    ],
+    "healthcheck": "passed before restart",
+    "restart_persistence": "passed",
+    "instance_lock": "passed",
+    "network": "none",
+    "management_persistence": {
+      "website": "nodeseek",
+      "task": "7c055d9a-e646-478b-903f-d2174152539b",
+      "target": "0f32da6c-9ed8-41d2-a3d1-91810354446c",
+      "note": "Retained across service restart",
+      "retention_days": 45,
+      "timezone": "America/Los_Angeles"
+    },
+    "offline_core_demo": {
+      "mode": "offline_synthetic",
+      "database_revision": "0018_settings_maintenance",
+      "baseline_posts": 1,
+      "new_posts": 1,
+      "rule_hits": 2,
+      "merged_outbox_events": 1,
+      "attempts_including_expired_lease": 3,
+      "mock_send_calls": 2,
+      "delivered_receipts": 1,
+      "final_status": "sent",
+      "uncertainty_retained": true,
+      "duplicate_poll_queued": 0,
+      "manual_send_calls": 1,
+      "target_test_send_calls": 1,
+      "manual_dedup_preserved": true
+    },
+    "offline_runtime": {
+      "mode": "offline_synthetic",
+      "polls": 2,
+      "sends": 1,
+      "system_alert_sends": 2,
+      "alert_history_removed": true,
+      "merged_tasks": 2,
+      "baseline_silent": true,
+      "cleanup_history_removed": true,
+      "cleanup_ledgers_preserved": true,
+      "runtime_stopped": true,
+      "http_closed": true
+    }
+  },
+  "container_backup": {
+    "revision": "83a2c6e0c08ba863b5c0a75baacd0a7b875d37fc",
+    "network": "none",
+    "compose": "passed",
+    "running_backup_refused": true,
+    "web_backup": {
+      "encrypted_download": true,
+      "isolated_restore": true,
+      "source_business_data_unchanged": true,
+      "runtime_running": true,
+      "copy_sessions_revoked": true,
+      "overwrite_refused": true
+    },
+    "restore": {
+      "all_tables_preserved": true,
+      "source_unchanged": true,
+      "sessions_revoked": true
+    },
+    "restored_service_login_and_configuration": "passed",
+    "offline_demo": {
+      "mode": "offline_synthetic",
+      "all_tables_preserved": true,
+      "source_unchanged": true,
+      "old_sessions_revoked": true,
+      "restored_login": true,
+      "original_key_usable": true,
+      "pending_automatic": 1,
+      "pending_alerts": 2,
+      "resumed_sends": 1
+    }
+  },
+  "container_upgrade": {
+    "revision": "83a2c6e0c08ba863b5c0a75baacd0a7b875d37fc",
+    "base_image": "sha256:9b2bb08a82a232a2074c997941a179a4e84a8b2bffc95d9931ce36914c7a65b4",
+    "network": "none",
+    "synthetic_failed_migration_preserves_original": true,
+    "synthetic_future_migration_switch": true,
+    "explicit_rollback_to_original_pair": true,
+    "startup_failure_stopped_without_automatic_rollback": true,
+    "web_candidate_switch": true,
+    "original_volume_retained": true
+  },
+  "published": false,
+  "deployed": false,
+  "real_sources_or_notifications_tested": false
+}

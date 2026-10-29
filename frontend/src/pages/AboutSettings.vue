@@ -1,10 +1,41 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import Icon from '../components/Icon.vue'
 import { loadReadiness, loadVersionInfo } from '../api'
 import { request } from '../store'
 import { useRemote } from '../history'
 import ReadRegion from '../components/ReadRegion.vue'
+interface Diagnostics {
+  application: string
+  version: string
+  build_revision: string
+  database_revision: string
+  runtime: RuntimeInfo
+  supported_websites: { id: string; name: string }[]
+  fault_codes: string[]
+  checked_at: number
+}
+const diagnostics = useRemote(
+  () => request<Diagnostics>('manage/diagnostics'),
+  () => [],
+  { cacheKey: () => 'about:diagnostics' },
+)
+const copied = ref(''),
+  showing = ref(false)
+const summary = computed(() =>
+  diagnostics.data.value ? JSON.stringify(diagnostics.data.value, null, 2) : '',
+)
+async function copyDiagnostics() {
+  showing.value = true
+  copied.value = ''
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error()
+    await navigator.clipboard.writeText(summary.value)
+    copied.value = '诊断摘要已复制。'
+  } catch {
+    copied.value = '请在下方选择并复制诊断摘要。'
+  }
+}
 interface RuntimeInfo {
   active: boolean
   status: string
@@ -39,10 +70,11 @@ function refresh() {
   version.reload()
   readiness.reload()
   runtime.reload()
+  diagnostics.reload()
 }
 </script>
 <template>
-  <div class="side-stack">
+  <div class="settings-about-grid">
     <section class="panel about-card" aria-label="版本信息">
       <span class="brand-icon"><Icon name="bell" :size="26" /></span>
       <h2 id="version-title">SeekBell<span class="brand-period">.</span></h2>
@@ -80,7 +112,10 @@ function refresh() {
             </p>
           </template>
         </ReadRegion>
-        <p>内置网站适配 · 当前支持 NodeSeek</p>
+        <p v-if="diagnostics.data.value">
+          内置网站适配 ·
+          {{ diagnostics.data.value.supported_websites.map((row) => row.name).join('、') }}
+        </p>
         <button class="button spaced" :disabled="busy" @click="refresh">刷新运行信息</button>
       </div>
     </section>
@@ -126,6 +161,53 @@ function refresh() {
           就绪检查验证数据库和后台循环。RSS 与通知渠道的实际结果请查看概览和系统告警；
           就绪不表示外部服务可用或消息已送达。
         </p>
+      </div>
+    </section>
+    <section class="panel settings-card">
+      <div class="panel-heading"><h2>诊断与帮助</h2></div>
+      <div class="form-content form-stack">
+        <ReadRegion
+          :loading="diagnostics.loading.value"
+          :error="diagnostics.error.value"
+          :has-data="!!diagnostics.data.value"
+          :min-height="100"
+          @retry="diagnostics.reload"
+        >
+          <div v-if="diagnostics.data.value" class="form-stack">
+            <p class="small-note">摘要包含版本、后台状态、固定故障代码和检查时间，便于反馈问题。</p>
+            <button class="button" @click="copyDiagnostics">复制诊断摘要</button>
+            <p v-if="copied" role="status">{{ copied }}</p>
+            <label v-if="showing"
+              >诊断摘要<textarea
+                class="text-input diagnostic-summary"
+                :value="summary"
+                readonly
+                rows="12"
+              />
+            </label>
+          </div>
+        </ReadRegion>
+        <a
+          class="text-link"
+          href="https://github.com/Aspeternity/seekbell/blob/main/README.md"
+          target="_blank"
+          rel="noopener noreferrer"
+          >使用说明</a
+        >
+        <a
+          class="text-link"
+          href="https://github.com/Aspeternity/seekbell/blob/main/docs/BACKUP_RESTORE.md"
+          target="_blank"
+          rel="noopener noreferrer"
+          >备份恢复维护说明</a
+        >
+        <a
+          class="text-link"
+          href="https://github.com/Aspeternity/seekbell/blob/main/docs/RELEASES.md"
+          target="_blank"
+          rel="noopener noreferrer"
+          >升级与回退说明</a
+        >
       </div>
     </section>
   </div>

@@ -27,9 +27,10 @@ from seekbell.domain.posts import PostFields
 from seekbell.domain.rules import Rule, evaluate
 from seekbell.services import alerts
 from seekbell.services.configuration import Configuration, TargetDeleteChanged, TargetInUse
-from seekbell.services.display import DisplayConflict, get_display, update_display
+from seekbell.services.display import DisplayConflict, get_display, timezone_name, update_display
 from seekbell.services.hotlist_settings import configuration as hotlist_configuration
 from seekbell.services.hotlist_settings import validate_settings as validate_hotlist_settings
+from seekbell.services.maintenance import retention_preview, storage_view
 from seekbell.services.request_budget import request_state
 from seekbell.services.retention import PolicyConflict, get_policy, update_policy
 from seekbell.services.rule_trial import trial_history
@@ -69,6 +70,7 @@ class WebsiteUpdate(Input):
 class WorkspaceInput(Input):
     name: str = Field(min_length=1, max_length=24)
     description: str = Field(default="", max_length=40)
+    revision: int | None = Field(default=None, ge=1)
 
 
 class WebsiteSelection(Input):
@@ -212,7 +214,11 @@ def update_workspace(values: WorkspaceInput, request: Request):
         raise HTTPException(422, "工作空间名称不能为空。")
     with write_session(request.app.state.engine) as session:
         preferences = session.get(WorkspacePreferences, 1)
-        preferences.name, preferences.description = name, values.description.strip()
+        if values.revision is not None and preferences.workspace_revision != values.revision:
+            raise HTTPException(409, "工作空间已在其他页面改变，请重新读取后保存。")
+        if (preferences.name, preferences.description) != (name, values.description.strip()):
+            preferences.name, preferences.description = name, values.description.strip()
+            preferences.workspace_revision += 1
     return {"ok": True}
 
 
@@ -533,3 +539,91 @@ def alert_detail(key: str, request: Request, params: Paging):
         return alerts.detail(request.app.state.engine, key, **params)
     except LookupError as error:
         raise HTTPException(404, str(error)) from None
+
+
+class GeneralInput(Input):
+    name: str = Field(min_length=1, max_length=24)
+    description: str = Field(default="", max_length=40)
+    timezone: str = Field(max_length=80)
+    workspace_revision: int = Field(ge=1)
+    display_revision: int = Field(ge=1)
+
+
+def general_view(preferences):
+    from seekbell.services.display import TIMEZONES
+
+    return {
+        "name": preferences.name,
+        "description": preferences.description,
+        "timezone": preferences.timezone,
+        "available": TIMEZONES,
+        "workspace_revision": preferences.workspace_revision,
+        "display_revision": preferences.display_revision,
+    }
+
+
+@router.get("/preferences")
+def general_preferences(request: Request):
+    with Session(request.app.state.engine) as session:
+        return general_view(session.get(WorkspacePreferences, 1))
+
+
+@router.put("/preferences")
+def save_general_preferences(values: GeneralInput, request: Request):
+    name, description = values.name.strip(), values.description.strip()
+    if not name:
+        raise HTTPException(422, "工作空间名称不能为空。")
+    try:
+        timezone_name(values.timezone)
+    except ValueError:
+        raise HTTPException(422, "请选择有效的显示时区。") from None
+    with write_session(request.app.state.engine) as session:
+        row = session.get(WorkspacePreferences, 1)
+        if (row.workspace_revision, row.display_revision) != (
+            values.workspace_revision,
+            values.display_revision,
+        ):
+            raise HTTPException(409, "通用设置已在其他页面改变，请重新读取后保存。")
+        if (row.name, row.description) != (name, description):
+            row.name, row.description = name, description
+            row.workspace_revision += 1
+        if row.timezone != values.timezone:
+            row.timezone = values.timezone
+            row.display_revision += 1
+        return general_view(row)
+
+
+@router.get("/storage")
+def storage(request: Request):
+    return storage_view(request.app.state.settings)
+
+
+@router.get("/retention/preview")
+def preview_retention(request: Request, days: int):
+    if not 1 <= days <= 365:
+        raise HTTPException(422, "保留天数应为1–365天。")
+    return retention_preview(request.app.state.engine, days)
+
+
+@router.get("/diagnostics")
+def diagnostics(request: Request):
+    from importlib.metadata import version
+
+    from seekbell.db.models import SystemState
+    from seekbell.db.runtime import schema_revision
+
+    with Session(request.app.state.engine) as session:
+        faults = list(session.scalars(select(SystemState).where(SystemState.fault.is_(True))))
+        supported = [
+            {"id": key, "name": session.get(Website, key).name} for key in BUILTIN_ADAPTERS
+        ]
+    return {
+        "application": "SeekBell",
+        "version": version("seekbell"),
+        "build_revision": request.app.state.settings.build_revision,
+        "database_revision": schema_revision(request.app.state.engine),
+        "runtime": runtime_status(request),
+        "supported_websites": supported,
+        "fault_codes": sorted({row.code for row in faults if row.code}),
+        "checked_at": time.time(),
+    }
