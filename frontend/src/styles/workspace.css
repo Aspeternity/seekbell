@@ -2644,8 +2644,7 @@ h1[tabindex='-1']:focus-visible {
   display: none;
 }
 .settings-savebar {
-  position: sticky;
-  bottom: 0;
+  position: static;
   background: #fff;
   padding-bottom: 14px;
   z-index: 3;
