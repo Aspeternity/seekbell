@@ -54,11 +54,19 @@ onMounted(load)
 </script>
 <template>
   <section class="panel settings-card">
-    <div class="panel-heading"><h2>登录会话</h2></div>
+    <div class="panel-heading">
+      <div>
+        <h2>登录会话</h2>
+        <p>会话有效期为 12 小时，修改管理员资料也会使其他会话失效</p>
+      </div>
+      <button class="button" :disabled="busy || !data?.other_sessions" @click="revoke">
+        退出其他会话
+      </button>
+    </div>
     <FormFeedback :error="error" @retry="load" />
     <ReadRegion :loading="busy && !data" error="" :has-data="!!data" :min-height="130">
       <div v-if="data" class="form-content form-stack">
-        <dl class="session-summary">
+        <dl class="detail-grid settings-metrics">
           <div>
             <dt>当前会话到期</dt>
             <dd>{{ formatTime(new Date(data.expires_at * 1000).toISOString()) }}</dd>
@@ -68,11 +76,7 @@ onMounted(load)
             <dd>{{ data.other_sessions }}</dd>
           </div>
         </dl>
-        <p class="small-note">会话有效期为12小时。修改管理员资料也会使其他会话失效。</p>
         <p v-if="done" class="info-note" role="status">{{ done }}</p>
-        <button class="button" :disabled="busy || !data.other_sessions" @click="revoke">
-          退出其他会话
-        </button>
       </div>
     </ReadRegion>
   </section>

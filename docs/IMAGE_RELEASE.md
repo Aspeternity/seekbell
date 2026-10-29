@@ -6,7 +6,7 @@
 
 ## 版本与部署引用
 
-Git标签/Release使用vX.Y.Z，镜像使用X.Y.Z；0.2.0正式版对应
+Git标签/Release使用vX.Y.Z，镜像使用X.Y.Z，例如v0.2.0对应
 `ghcr.io/aspeternity/seekbell:0.2.0`。
 GitHub最新正式Release在检查全部通过后同时更新latest；
 预发布vX.Y.Z-alpha.N、-beta.N、-rc.N（N从1开始）只生成自身标签。
@@ -14,7 +14,7 @@ GitHub最新正式Release在检查全部通过后同时更新latest；
 
 源码中的[8000](../deploy/compose.portainer.yaml)和[8001](../deploy/compose.portainer.compare.yaml)
 模板固定明确版本；Release附件在相同版本上追加已验证的索引digest，例如
-`ghcr.io/aspeternity/seekbell:0.2.0@sha256:…`。
+`ghcr.io/aspeternity/seekbell:X.Y.Z@sha256:…`。
 正式升级优先下载Release附件的同名Compose，核对deployment.json；不会随latest漂移。
 更新现有Portainer Stack，保留Stack名、端口和实际数据卷；使用自定义配置时仅替换image更稳妥。
 
@@ -22,22 +22,27 @@ GitHub最新正式Release在检查全部通过后同时更新latest；
 SHA、运行编号和架构标签保留供追溯，日常部署使用版本号或Release的固定digest引用。
 镜像的真实身份以digest为准，不能假定有写权限的管理员永远不会手动改标签。
 
-## 正式发布
+## 正式发布（三步）
 
-1. 在分支中更新pyproject.toml、uv.lock、frontend/package.json、两份Portainer模板的版本和CHANGELOG，
-   通过PR合并main。正式0.2.0对应v0.2.0；Python的0.1.0rc1对应v0.1.0-rc.1。
-   前端/Compose的预发布标签使用SemVer形式；应用版本使用PEP 440形式。
-2. 在本次明确发布授权下，为main上选定完整提交创建v*标签、发布GitHub Release。
-   预发布勾选pre-release，正式发布按需要设为latest；草稿和普通push/PR不写GHCR。
-3. Versioned images and manual candidates核对标签、版本、main祖先关系和源码/包public，
-   执行完整baseline，再由ubuntu-24.04和ubuntu-24.04-arm原生构建并离线演练。
-4. 发布复用同次测试归档中的配置和层，不重新构建；分别推送平台后组合、核对双架构索引。
-   按digest拉取并完成禁外网容器检查后，才添加版本标签及受控latest。
-5. 由已发布version.json生成固定digest的两份Compose，保留各自端口、卷名和安全选项，
-   验证Compose配置；生成记录SHA256的deployment.json。
-6. 独立contents:write job把release.json、package.json、version.json、deployment.json及两份Compose
-   上传到Release。构建/发布job仅持contents:read/packages:write。整个运行成功后才宣告镜像发布完成。
+前提：本次发布已获用户明确授权；改动已在PR中通过CI并合并main。
 
+1. 在发布分支运行`python3 scripts/bump_version.py X.Y.Z`（预发布用`X.Y.Z-rc.N`），
+   一次更新pyproject.toml、uv.lock、frontend/package.json和两份Portainer模板（含当前schema），
+   并在CHANGELOG补写自动生成的条目；`--check`通过后随PR合并。其他文档不写死当前版本号。
+2. 在合并后的main完整提交上创建Release：
+   `gh release create vX.Y.Z --target <SHA> --title vX.Y.Z --notes-file <说明>`（预发布加`--prerelease`）。
+3. `gh run watch <run-id> --exit-status`一次性等待“Versioned images and manual candidates”结束，
+   不要逐项轮询。工作流成功即发布完成；最后一步已用匿名身份核对Release附件、模板、
+   版本/latest标签与双架构索引，无需另写本地核对脚本。失败时只看失败job日志。
+
+工作流内部：preflight核对标签、版本、main祖先关系与包public；baseline对同一源码tree复用PR已通过的结果
+（`scripts/ci_reuse.py`，只认本仓库自身运行的标记），与ubuntu-24.04/ubuntu-24.04-arm原生构建和离线演练并行。
+publish复用同次测试归档的配置和层，不重新构建；推送并核对双架构索引、按digest禁外网复验后才加版本标签及受控latest；
+生成固定digest的两份Compose与deployment.json。独立contents:write job上传附件并执行匿名核对
+（`scripts/verify_release.py`，也可在tagged检出上本地重跑）。构建/发布job仅持contents:read/packages:write。
+
+CI去重原则：基线结果只取决于源码tree，PR合并后的main push与Release对同一tree直接复用；
+镜像字节与提交SHA绑定，所以原生双架构只在PR和Release各跑一次，容器演练不再在基线中重复。
 所有镜像发布使用同一串行并发组。Release条目出现不表示镜像已完成；失败要检查Actions和回执。
 签名/SBOM尚未提供，校验和说明传输与内容一致性，不等同独立来源签名。
 
@@ -56,9 +61,9 @@ CLI的promote默认只读计划，仅显式--execute写registry；compose只写�
 uv run --frozen pytest -q tests/test_release_images.py
 python3 scripts/release_images.py --help
 python3 scripts/release_images.py --revision "$SEEKBELL_REVISION" --repository aspeternity/seekbell \
-  promote --receipt release.json --version v0.2.0 --report version-plan.json
+  promote --receipt release.json --version vX.Y.Z --report version-plan.json
 python3 scripts/release_images.py --revision "$SEEKBELL_REVISION" --repository aspeternity/seekbell \
-  compose --receipt version.json --version v0.2.0 --templates deploy --output release-assets
+  compose --receipt version.json --version vX.Y.Z --templates deploy --output release-assets
 ```
 
 pack/verify/release/alias保持兼容，两平台归档必须来自同一次运行。

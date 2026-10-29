@@ -193,14 +193,9 @@ onMounted(async () => {
           </section>
         </fieldset>
         <div class="inline-form-footer settings-savebar">
-          <div class="settings-save-meta">
-            <span role="status">{{
-              done ? '通用设置已保存' : dirty ? '有未保存的修改' : '使用已保存的设置'
-            }}</span>
-            <button class="text-link" type="button" :disabled="busy" @click="reload">
-              重新读取通用设置
-            </button>
-          </div>
+          <span role="status">{{
+            done ? '通用设置已保存' : dirty ? '有未保存的修改' : '没有未保存的修改'
+          }}</span>
           <div class="inline-actions">
             <button class="button" type="button" :disabled="busy || !dirty" @click="discard">
               放弃修改

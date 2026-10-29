@@ -7,7 +7,7 @@ defineOptions({ inheritAttrs: false })
 const props = withDefaults(
   defineProps<{
     modelValue: T
-    options: readonly { value: T; label: string; disabled?: boolean }[]
+    options: readonly { value: T; label: string; disabled?: boolean; group?: string }[]
     disabled?: boolean
     placeholder?: string
   }>(),
@@ -178,21 +178,28 @@ onBeforeUnmount(() => {
       :aria-labelledby="($attrs['aria-labelledby'] as string) || undefined"
       @keydown="keys"
     >
-      <button
-        v-for="(option, index) in options"
-        :key="option.value"
-        type="button"
-        role="option"
-        tabindex="-1"
-        :data-value="String(option.value)"
-        :aria-selected="option.value === modelValue"
-        :disabled="option.disabled"
-        @focus="active = index"
-        @click="choose(option.value)"
-      >
-        <span>{{ option.label }}</span
-        ><Icon v-if="option.value === modelValue" name="check" :size="14" />
-      </button>
+      <template v-for="(option, index) in options" :key="option.value">
+        <div
+          v-if="option.group && option.group !== options[index - 1]?.group"
+          class="app-select-group"
+          role="presentation"
+        >
+          {{ option.group }}
+        </div>
+        <button
+          type="button"
+          role="option"
+          tabindex="-1"
+          :data-value="String(option.value)"
+          :aria-selected="option.value === modelValue"
+          :disabled="option.disabled"
+          @focus="active = index"
+          @click="choose(option.value)"
+        >
+          <span>{{ option.label }}</span
+          ><Icon v-if="option.value === modelValue" name="check" :size="14" />
+        </button>
+      </template>
     </div>
   </NPopover>
 </template>
@@ -264,6 +271,15 @@ onBeforeUnmount(() => {
   border-radius: 7px;
   background: #fff;
   box-shadow: 0 8px 28px #292e351a;
+}
+.app-select-group {
+  padding: 8px 8px 4px;
+  color: #8a93a0;
+  font-size: 11px;
+}
+.app-select-group:not(:first-child) {
+  margin-top: 4px;
+  border-top: 1px solid #f0f1f3;
 }
 .app-select-menu > button {
   display: flex;

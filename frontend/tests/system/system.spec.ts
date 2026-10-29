@@ -179,11 +179,13 @@ test('confirmed independent alerts record a single fault and recovery even when 
   ).toBe(true)
   const captured = await (await page.request.get('/api/manage/alerts/history')).json()
   expect(captured.items.slice(0, 2).map((event: any) => event.phase)).toEqual(['recovery', 'fault'])
+  // Faults and alert records live under About & Diagnostics; settings stay on the alerts tab.
+  await page.goto('/#/settings/about')
   await Promise.all([
     page.waitForResponse((response) =>
       response.url().includes('/api/manage/alerts/history?page=1'),
     ),
-    page.getByRole('button', { name: '刷新系统事件', exact: true }).click(),
+    page.getByRole('button', { name: '刷新运行信息', exact: true }).click(),
   ])
   await page.getByRole('button', { name: '查看系统告警记录', exact: true }).click()
   await expect(
@@ -205,7 +207,7 @@ test('confirmed independent alerts record a single fault and recovery even when 
   await page.screenshot({ path: info.outputPath('system-alert-results.png'), fullPage: true })
   await page.getByLabel('下一页系统事件', { exact: true }).click()
   await expect(page.locator('.system-event').first()).toContainText('合成历史事件')
-  await page.reload()
+  await page.goto('/#/settings/alerts')
   await expect(page.getByLabel('启用故障与恢复告警')).toHaveAttribute('aria-checked', 'true')
   for (const name of names)
     await expect(page.getByRole('checkbox', { name: new RegExp(name) })).toBeChecked()

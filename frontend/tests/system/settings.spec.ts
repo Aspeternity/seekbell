@@ -33,7 +33,7 @@ test('all seven categories remain reachable across phone tablet and desktop', as
   await page.goto('/#/settings/preferences')
   const rows = [
     ['preferences', '通用', '通用设置'],
-    ['overview', '界面与概览', '概览显示模块'],
+    ['overview', '概览', '概览显示模块'],
     ['alerts', '系统告警', '系统故障与恢复告警'],
     ['retention', '历史与存储', '历史保留策略'],
     ['backup', '备份与恢复', '导出备份'],
@@ -217,4 +217,41 @@ test('maintenance preview is read only and diagnostics provide a copy fallback',
   expect(data.supported_websites).toHaveLength(2)
   expect(Object.keys(data)).not.toContain('csrf')
   expect(Object.keys(data)).not.toContain('password')
+})
+test('timezone picker groups common zones and previews the offset without a search box', async ({
+  page,
+}) => {
+  await page.goto('/#/settings/preferences')
+  await expect(page.locator('#timezone-search')).toHaveCount(0)
+  const select = page.getByRole('combobox', { name: '显示时区', exact: true })
+  const preview = page.locator('.timezone-preview')
+  await expect(preview).toContainText(/UTC[+-]\d/)
+  // The current-time field matches the select's height and, when side by side, its row.
+  const [field, output] = await Promise.all([select.boundingBox(), preview.boundingBox()])
+  expect(Math.abs(field!.height - output!.height)).toBeLessThan(1)
+  if (output!.x > field!.x) expect(Math.abs(field!.y - output!.y)).toBeLessThan(1)
+  await select.click()
+  const menu = page.locator(
+    '[id=' + JSON.stringify(await select.getAttribute('aria-controls')) + ']',
+  )
+  await expect(menu.locator('.app-select-group')).toHaveText(['常用时区', '全部时区'])
+  await expect(menu.getByRole('option').first()).toHaveAttribute('data-value', 'Asia/Shanghai')
+  await select.press('Escape')
+})
+test('storage status refresh keeps an unsaved retention draft', async ({ page }) => {
+  await page.goto('/#/settings/retention')
+  const input = page.getByLabel('普通历史保留天数', { exact: true })
+  const old = Number(await input.inputValue())
+  const value = String(old < 365 ? old + 1 : old - 1)
+  await input.fill(value)
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/api/manage/retention') && response.request().method() === 'GET',
+    ),
+    page.getByRole('button', { name: '刷新状态', exact: true }).click(),
+  ])
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(input).toHaveValue(value)
+  await expect(page.getByRole('status').filter({ hasText: '有未保存的修改' })).toBeVisible()
 })

@@ -57,7 +57,7 @@ test('production pages preserve the approved UI while using real persisted data'
   await page.goto('/#/settings/preferences')
   await expect(page.locator('.settings-categories button')).toHaveText([
     '通用',
-    '界面与概览',
+    '概览',
     '系统告警',
     '历史与存储',
     '备份与恢复',

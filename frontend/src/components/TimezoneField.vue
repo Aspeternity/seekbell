@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import AppSelect from './AppSelect.vue'
 const props = defineProps<{ modelValue: string; available: string[]; disabled?: boolean }>()
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 function choose(value: string) {
   emit('update:modelValue', value)
 }
-const search = ref('')
 const names: Record<string, string> = {
   'Asia/Shanghai': '中国标准时间 · 上海 · Asia/Shanghai',
   UTC: '协调世界时 · UTC',
@@ -22,53 +21,46 @@ const supported = (zone: string) => {
     return false
   }
 }
+// Common zones lead the list; the rest keep the server's IANA order so
+// keyboard type-ahead by region prefix (for example "Asia/") still works.
 const options = computed(() => {
-  const term = search.value.trim().toLocaleLowerCase()
-  const available = [
-    ...new Set([
-      props.modelValue,
-      ...Object.keys(names).filter((zone) => props.available.includes(zone)),
-      ...props.available,
-    ]),
-  ]
-  return available
-    .filter(
-      (zone) =>
-        zone === props.modelValue ||
-        !term ||
-        (names[zone] || zone).toLocaleLowerCase().includes(term),
-    )
-    .map((zone) => ({
-      value: zone,
-      label: (names[zone] || zone) + (supported(zone) ? '' : '（浏览器不支持）'),
-      disabled: !supported(zone),
-    }))
+  const common = Object.keys(names).filter((zone) => props.available.includes(zone))
+  const rest = props.available.filter((zone) => !common.includes(zone))
+  if (props.modelValue && !props.available.includes(props.modelValue))
+    rest.unshift(props.modelValue)
+  return [
+    ...common.map((zone) => ({ zone, group: '常用时区' })),
+    ...rest.map((zone) => ({ zone, group: '全部时区' })),
+  ].map(({ zone, group }) => ({
+    value: zone,
+    label: (names[zone] || zone) + (supported(zone) ? '' : '（浏览器不支持）'),
+    disabled: !supported(zone),
+    group,
+  }))
 })
-const now = new Date()
-const preview = computed(() =>
-  supported(props.modelValue)
-    ? new Intl.DateTimeFormat('zh-CN', {
-        timeZone: props.modelValue,
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      }).format(now)
-    : '当前浏览器不支持，网页时间暂以 UTC 显示',
-)
+const now = ref(new Date())
+const clock = window.setInterval(() => (now.value = new Date()), 30_000)
+onBeforeUnmount(() => window.clearInterval(clock))
+const preview = computed(() => {
+  if (!supported(props.modelValue)) return '当前浏览器不支持，网页时间暂以 UTC 显示'
+  const time = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: props.modelValue,
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(now.value)
+  const offset = new Intl.DateTimeFormat('en-US', {
+    timeZone: props.modelValue,
+    timeZoneName: 'shortOffset',
+  })
+    .formatToParts(now.value)
+    .find((part) => part.type === 'timeZoneName')
+    ?.value.replace(/^GMT/, 'UTC')
+  return offset ? time + ' · ' + (offset === 'UTC' ? 'UTC+0' : offset) : time
+})
 </script>
 <template>
   <div id="timezone-settings" class="form-stack">
     <div class="general-fields-grid">
-      <div class="form-stack">
-        <label for="timezone-search">搜索时区</label>
-        <input
-          id="timezone-search"
-          v-model="search"
-          class="text-input"
-          type="search"
-          placeholder="城市、中文名称或 IANA 时区"
-          :disabled="disabled"
-        />
-      </div>
       <div class="form-stack">
         <label for="display-timezone">显示时区</label>
         <AppSelect
@@ -80,13 +72,16 @@ const preview = computed(() =>
           @update:model-value="choose"
         />
       </div>
+      <div class="form-stack">
+        <span id="timezone-preview-label" class="timezone-preview-label">当前时间</span>
+        <output class="timezone-preview" aria-labelledby="timezone-preview-label">{{
+          preview
+        }}</output>
+      </div>
     </div>
-    <p class="timezone-preview">
-      <span class="small-note">当前时刻预览</span><strong>{{ preview }}</strong>
-    </p>
     <p class="small-note">
-      网页、日期筛选及之后发送的 Telegram、Bark、邮件通知按所选时区显示。数据和 Webhook 时间保持
-      UTC；时区不改变采集频率或历史保留时长。
+      网页、日期筛选及之后发送的 Telegram、Bark、邮件通知按所选时区显示；数据和 Webhook 保持
+      UTC，时区不影响采集频率或历史保留时长。
     </p>
   </div>
 </template>

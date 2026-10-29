@@ -2643,8 +2643,7 @@ h1[tabindex='-1']:focus-visible {
 .settings-content .text-input,
 .settings-content .workspace-preview,
 .settings-section > *,
-.settings-columns > *,
-.settings-about-grid > * {
+.settings-stack > * {
   min-width: 0;
   max-width: 100%;
 }
@@ -2667,19 +2666,10 @@ h1[tabindex='-1']:focus-visible {
 .settings-content .settings-card .form-stack > label + .text-input {
   margin-top: -10px;
 }
-.settings-columns,
-.settings-about-grid {
+.settings-stack {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(270px, 0.48fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 24px;
-  align-items: start;
-}
-.settings-about-grid {
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr);
-}
-.settings-about-grid .about-card {
-  grid-row: span 2;
-  padding: 34px 28px;
 }
 .settings-content .settings-section {
   display: grid;
@@ -2706,10 +2696,25 @@ h1[tabindex='-1']:focus-visible {
   gap: 20px;
   align-items: start;
 }
-.settings-content .general-fields-grid > .form-stack {
+.settings-content .general-fields-grid > .form-stack,
+.settings-content .settings-fields-grid > .form-stack {
   gap: 9px;
 }
-.settings-content .general-fields-grid > .form-stack > label + .text-input {
+.settings-fields-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+.settings-fields-grid.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.settings-content .settings-fields-grid .small-note,
+.workspace-preview-row > .small-note {
+  margin-top: 0;
+}
+.settings-content .general-fields-grid > .form-stack > label + .text-input,
+.settings-content .settings-fields-grid > .form-stack > label + .text-input {
   margin-top: 0;
 }
 .workspace-preview-row {
@@ -2723,19 +2728,52 @@ h1[tabindex='-1']:focus-visible {
   padding: 14px 16px;
   background: #fafbfc;
 }
+.timezone-preview-label {
+  font-size: 12px;
+  color: #65707d;
+  line-height: 1.8;
+}
+/* Fixed block size: CJK fallback glyphs otherwise make the two boxes differ. */
+.settings-content #display-timezone,
+.timezone-preview {
+  box-sizing: border-box;
+  min-height: 42px;
+}
 .timezone-preview {
   display: flex;
   align-items: center;
-  gap: 10px 18px;
-  flex-wrap: wrap;
-  padding: 12px 15px;
-  border-radius: 8px;
+  padding: 4px 14px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  line-height: 1.6;
   background: #f7f8fa;
-}
-.timezone-preview strong {
   font-size: 12px;
   font-weight: 550;
+  color: #2f343b;
   font-variant-numeric: tabular-nums;
+}
+.settings-body-text {
+  font-size: 13px;
+  line-height: 1.8;
+}
+.settings-details > summary {
+  width: fit-content;
+  font-size: 12px;
+  color: var(--accent);
+  cursor: pointer;
+}
+.settings-details[open] > summary {
+  margin-bottom: 10px;
+}
+.settings-details > .small-note {
+  margin-top: 0;
+}
+.settings-content .button.primary:disabled {
+  opacity: 1;
+  color: #9aa3ae;
+  background: #f1f2f4;
+  border-color: #e4e7eb;
+  box-shadow: none;
 }
 .settings-savebar {
   position: static;
@@ -2745,19 +2783,10 @@ h1[tabindex='-1']:focus-visible {
   padding-bottom: 0;
   background: #fff;
 }
-.settings-savebar > [role='status'],
-.settings-save-meta {
+.settings-savebar > [role='status'] {
   margin-right: auto;
-}
-.settings-save-meta {
-  display: grid;
-  gap: 6px;
-  justify-items: start;
   font-size: 11px;
   color: #748092;
-}
-.settings-save-meta .text-link {
-  font-size: 11px;
 }
 .inline-actions {
   display: flex;
@@ -2767,48 +2796,24 @@ h1[tabindex='-1']:focus-visible {
 .settings-error {
   margin: 16px 26px;
 }
-.session-summary {
-  margin: 0;
-  display: grid;
-  gap: 18px;
-}
-.session-summary dt {
-  margin-bottom: 5px;
-  color: var(--muted);
-  font-size: 12px;
-}
-.session-summary dd {
-  margin: 0;
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-}
-.settings-content .storage-metrics {
-  grid-template-columns: minmax(0, 1fr);
-  margin: 0;
-  gap: 10px;
-}
-.storage-metrics > div {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-}
-.storage-metrics dt {
+.settings-content .settings-metrics {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
   margin: 0;
 }
-.storage-metrics > div {
-  padding: 14px;
-  background: #f7f8fa;
+.settings-metrics > div {
+  padding: 14px 16px;
   border-radius: 8px;
+  background: #f7f8fa;
 }
-.settings-content .storage-metrics dd {
-  font-size: 15px;
+.settings-content .settings-metrics dd {
+  font-size: 14px;
   font-variant-numeric: tabular-nums;
 }
 .settings-content .retention-counts {
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   margin: 0;
-  gap: 12px 20px;
+  gap: 12px 24px;
 }
 .retention-counts > div {
   display: flex;
@@ -2821,17 +2826,73 @@ h1[tabindex='-1']:focus-visible {
 .retention-counts dt {
   margin: 0;
 }
-.settings-about-grid .about-card .detail-grid {
-  grid-template-columns: minmax(0, 1fr);
+.settings-content .about-card {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.32fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 32px;
+  padding: 28px 32px;
+  text-align: left;
+}
+.about-brand {
+  display: flex;
+  align-items: center;
   gap: 18px;
 }
-.settings-about-grid .about-card code {
+.about-brand .brand-icon {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+}
+.about-brand h2 {
+  font-size: 26px;
+  letter-spacing: -1px;
+}
+.about-brand p {
+  margin: 4px 0 10px;
+  font-size: 13px;
+  color: #7b8591;
+}
+.about-details {
+  display: grid;
+  gap: 12px;
+  padding-left: 32px;
+  border-left: 1px solid var(--border);
+}
+.settings-content .about-card .detail-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin: 0;
+  padding: 0;
+  border-top: 0;
+}
+.about-details .small-note {
+  margin-top: 0;
+}
+.settings-content .about-card code {
   font-size: 12px;
 }
-.settings-alerts-grid .panel-heading {
+.about-help-row {
+  display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 18px;
 }
-.settings-alerts-grid .pagination {
+.about-help-row > p {
+  font-size: 12px;
+  color: var(--muted);
+}
+.about-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+}
+.settings-content .panel-heading {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.settings-content .pagination {
   flex-wrap: wrap;
 }
 .settings-backup-feedback {
@@ -2852,17 +2913,22 @@ h1[tabindex='-1']:focus-visible {
 }
 .settings-backup-editor .form-content > .button,
 .settings-backup-editor form > .button,
-.settings-about-grid .form-stack > .button,
-.settings-columns .form-content > .button {
+.settings-content .settings-section .form-stack > .button,
+.settings-content .system-event > .button {
   justify-self: start;
 }
 @media (max-width: 1100px) {
-  .settings-columns,
-  .settings-about-grid {
+  .settings-content .about-card {
     grid-template-columns: minmax(0, 1fr);
+    gap: 22px;
   }
-  .settings-about-grid .about-card {
-    grid-row: auto;
+  .about-details {
+    padding: 22px 0 0;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+  .settings-fields-grid.three {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .settings-content .settings-section {
     grid-template-columns: minmax(0, 1fr);
@@ -2871,8 +2937,7 @@ h1[tabindex='-1']:focus-visible {
 }
 @media (max-width: 760px) {
   .settings-shell,
-  .settings-columns,
-  .settings-about-grid {
+  .settings-stack {
     gap: 18px;
   }
   .settings-categories.page-tabs {
@@ -2887,9 +2952,22 @@ h1[tabindex='-1']:focus-visible {
   .settings-content .settings-card .form-content {
     padding: 20px 18px;
   }
-  .settings-card .general-fields-grid {
+  .settings-card .general-fields-grid,
+  .settings-fields-grid,
+  .settings-fields-grid.three,
+  .settings-content .about-card .detail-grid {
     grid-template-columns: minmax(0, 1fr);
     gap: 18px;
+  }
+  .settings-content .about-card {
+    padding: 24px 20px;
+  }
+  .settings-content .settings-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .settings-metrics > div {
+    padding: 12px;
   }
   .settings-content .settings-section {
     padding-bottom: 20px;

@@ -94,14 +94,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 scripts/check_ghcr_package.py --repository "$IMAGE_REPOSITORY" --visibility public --repository-visibility public
 
+  # Skipped inside ci.yml when this exact tree already passed (normally the
+  # merged PR); native builds run in parallel because bytes depend on the SHA.
   baseline:
     needs: preflight
     uses: ./.github/workflows/ci.yml
     permissions:
       contents: read
+      actions: read
 
   native:
-    needs: [preflight, baseline]
+    needs: preflight
     uses: ./.github/workflows/native-images.yml
     permissions:
       contents: read
@@ -240,10 +243,13 @@ jobs:
     if: ${{ github.event_name == 'release' }}
     needs: publish
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: image-release-receipt
@@ -254,3 +260,16 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: gh release upload "$RELEASE_TAG" receipt/release.json receipt/version.json receipt/package.json receipt/release-assets/deployment.json receipt/release-assets/compose.portainer.yaml receipt/release-assets/compose.portainer.compare.yaml --clobber
+      # Final gate: the release is done only when an anonymous user sees
+      # matching assets and registry tags, so no manual follow-up check is needed.
+      - name: Verify the public release anonymously
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          for attempt in 1 2 3; do
+            python3 scripts/verify_release.py --tag "$RELEASE_TAG" --revision "$GITHUB_SHA" \
+              --repository "$GITHUB_REPOSITORY" --report verification.json && break
+            test "$attempt" = 3 && exit 1
+            sleep 20
+          done
+          { echo '### Anonymous release verification'; echo '```json'; cat verification.json; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
