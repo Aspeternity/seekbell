@@ -402,4 +402,10 @@ CommunityHotlist改为一个看板读取循环：首读不带after，之后以ta
 
 WebsiteRequestBudget.request增加auxiliary：热榜请求只在429、access_challenge或带Retry-After时调用failed写共享退避，其他失败（单地址403、5xx、超时、传输错误）只进热榜自身的states退避；成功不调用succeeded，不清除采集失败证据。HotlistService不再在外层超时时额外写共享退避。
 
+### Linux DO错峰（2026-11-07）
+
+契约见SPEC 6.6。WebsiteRequestBudget在request实际放行时把时刻记入内存deque（最近2个，含采集、手测、热榜），无迁移；重启清空可接受，因重启本身已隔开请求。pace(website_id, background, collection_soon)只服务热榜：最近15秒请求数＋采集是否15秒内到期须≤1，后台榜另需距上次请求≥30秒；其他站返回0。采集最小间隔60秒，后台榜不会饿死。
+
+HotlistService._ensure在到期判断内先查pace、后查共享等待：错峰时不写state、不notify，返回paced供_warm_site算下次唤醒，看板tag不变、长轮询不被唤醒。warm_once把目录首站首周期视为正在查看，其余为后台。切换为前端本地操作，PUT /hotlists/selection改为异步并在保存成功后touch(nudge=True)，这是服务端得知当前榜单的入口；不能在同步线程池端点调用touch。_render在快照未超2倍刷新间隔时把状态归为ready且隐藏error_code，退避时间仍在内部生效；前端无改动。刷新失败写日志，只含网站、周期和固定错误码。
+
 验证命令：uv run --frozen pytest tests/test_hotlists.py tests/test_linuxdo_runtime.py tests/test_linuxdo.py tests/test_linuxdo_followups.py tests/test_hotlist_settings.py tests/test_retry_controls.py -q；pnpm --dir frontend test:hotlist；pnpm --dir frontend test:linuxdo。浏览器测试的路由辅助只让前一两次回复立即返回，其余保持真实长轮询；linuxdo套件afterEach改为等待非GET写入完成，因长轮询使networkidle不再成立。

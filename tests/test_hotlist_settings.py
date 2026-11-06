@@ -450,13 +450,13 @@ def test_shared_origin_wait_is_not_a_failed_hotlist_and_recovers_without_waiting
         )
         try:
             original = await service.get("linuxdo", "hot")
-            now[0] = 2900
+            now[0] = 3900
             budget.failed(SourceFailure(code, retry_after=600), now[0])
             waiting = await service.get("linuxdo", "hot")
             assert waiting["status"] == "waiting" and not waiting["refreshing"]
             assert waiting["error_code"] == code
             assert waiting["items"] == original["items"]
-            assert waiting["next_attempt_at"] == 3500
+            assert waiting["next_attempt_at"] == 4500
             assert not service.pending and len(calls) == 1
             # A genuine successful same-origin request can release the shared
             # wait; this period has never made a failed attempt of its own.

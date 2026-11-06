@@ -143,8 +143,16 @@ def test_failed_refresh_preserves_snapshot_and_respects_retry_after():
             pending = await service.get("nodeseek", "realtime")
             assert pending["refreshing"] and pending["items"] == original["items"]
             await asyncio.gather(*service.pending.values())
+            # A recent list says nothing about one failed refresh.
+            quiet = await service.get("nodeseek", "realtime")
+            assert quiet["status"] == "ready" and quiet["error_code"] is None
+            assert quiet["items"] == original["items"] and quiet["next_attempt_at"] == 3801
+            now[0] = 3200
+            assert (await service.get("nodeseek", "realtime"))["status"] == "ready"
+            now[0] = 3201
             stale = await service.get("nodeseek", "realtime")
-            assert stale["status"] == "stale" and stale["items"] == original["items"]
+            assert stale["status"] == "stale" and stale["error_code"] == "http_429"
+            assert stale["items"] == original["items"]
             assert stale["source_updated_at"] == 1900 and stale["fetched_at"] == 2000
             assert stale["next_attempt_at"] == 3801
             await service.get("nodeseek", "realtime")
@@ -375,10 +383,16 @@ def test_board_api_follows_visibility_and_selection_order(tmp_path):
         client.post("/api/manage/websites", json={"adapter_id": "nodeseek"})
         client.post("/api/manage/websites", json={"adapter_id": "linuxdo"})
         revision = client.get("/api/manage/overview-preferences").json()["selection"]["revision"]
-        client.put(
-            "/api/manage/hotlists/selection",
-            json={"website_id": "linuxdo", "period": "weekly", "revision": revision},
-        )
+        service, nudges = app.state.hotlists, []
+        touch = service.touch
+        service.touch = lambda nudge=False: (nudges.append(nudge), touch(nudge))[1]
+        selection = {"website_id": "linuxdo", "period": "weekly", "revision": revision}
+        assert client.put("/api/manage/hotlists/selection", json=selection).status_code == 200
+        # A saved switch wakes the warmer for the list now being read; a conflict does not.
+        assert nudges == [True]
+        assert client.put("/api/manage/hotlists/selection", json=selection).status_code == 409
+        assert nudges == [True]
+        service.touch = touch
         board = client.get("/api/manage/hotlists").json()
         assert [(row["website_id"], row["period"]) for row in board["lists"]] == [
             ("linuxdo", "weekly"),
