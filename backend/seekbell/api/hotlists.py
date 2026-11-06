@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from seekbell.api.auth import require_admin
 from seekbell.api.management import Input
 from seekbell.db.models import OverviewPreferences, WebsiteInstallation
+from seekbell.db.transactions import database_call
 from seekbell.services.overview_preferences import (
     OverviewConflict,
     get_preferences,
@@ -52,13 +53,20 @@ def save_preferences(values: LayoutInput, request: Request):
 
 
 @router.put("/hotlists/selection")
-def save_selection(values: SelectionInput, request: Request):
+async def save_selection(values: SelectionInput, request: Request):
     try:
-        return update_selection(
-            request.app.state.engine, values.website_id, values.period, values.revision
+        result = await database_call(
+            update_selection,
+            request.app.state.engine,
+            values.website_id,
+            values.period,
+            values.revision,
         )
     except OverviewConflict as error:
         raise HTTPException(409, str(error)) from None
+    # Switching is local, so this is how the server learns which list is being read.
+    request.app.state.hotlists.touch(nudge=True)
+    return result
 
 
 def require_visible(engine):

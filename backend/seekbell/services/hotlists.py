@@ -5,6 +5,7 @@ import copy
 import hashlib
 import json
 import logging
+import math
 import time
 from contextlib import asynccontextmanager, suppress
 
@@ -22,6 +23,7 @@ from seekbell.db.models import (
 from seekbell.db.transactions import database_call, write_session
 from seekbell.domain.errors import SourceDeferred, SourceFailure
 from seekbell.services.hotlist_settings import configuration
+from seekbell.services.request_budget import BURST_WINDOW
 from seekbell.sites.hotlists import HOTLIST_SOURCES, number, text
 from seekbell.sites.registry import BUILTIN_ADAPTERS
 
@@ -32,6 +34,9 @@ WAITING_CODES = ("source_busy", "source_cooldown", "collection_priority")
 # Keep every visible list warm while viewed and for this long after the last viewer left.
 VIEW_GRACE = 900
 WARM_TICK = 60
+# A recent list stays quiet through a failed refresh; only a list this many intervals
+# old says so, which keeps a passing challenge out of a normal view.
+QUIET_INTERVALS = 2
 
 
 class HotlistService:
@@ -214,6 +219,12 @@ class HotlistService:
         state["deferred"] = False
         state["failures"] = min(6, state["failures"] + 1)
         state["error_code"] = code
+        logger.warning(
+            "Hotlist refresh failed: website=%s period=%s code=%s",
+            source.website_id,
+            period,
+            code,
+        )
         state["next_attempt_at"] = self.clock() + max(
             min(300 if source.website_id == "linuxdo" else 600, 30 * 2 ** (state["failures"] - 1)),
             min(86400, retry_after or 0),
@@ -231,7 +242,7 @@ class HotlistService:
 
     def _policy(self, website_id, period, collection_active):
         source = HOTLIST_SOURCES[website_id]
-        interval, priority = source.recommended_interval(period), False
+        interval, collection_at = source.recommended_interval(period), math.inf
         if self.engine is not None:
             with Session(self.engine) as session:
                 installation = session.get(WebsiteInstallation, website_id)
@@ -244,12 +255,9 @@ class HotlistService:
                         rss = session.get(Source, BUILTIN_ADAPTERS[website_id].source_id)
                         state = session.get(SourceState, rss.id)
                         website = session.get(Website, website_id)
-                        priority = (
-                            rss.enabled
-                            and website.enabled
-                            and state.next_attempt_at <= self.clock() + 2
-                        )
-        return interval, priority
+                        if rss.enabled and website.enabled:
+                            collection_at = state.next_attempt_at
+        return interval, collection_at
 
     async def _prepare(self, website_id, period, collection_active=False):
         if self.closed:
@@ -259,7 +267,7 @@ class HotlistService:
         state = self.states.setdefault(
             key, {"next_attempt_at": 0, "failures": 0, "error_code": None, "deferred": False}
         )
-        interval, priority = await database_call(
+        interval, collection_at = await database_call(
             self._policy, website_id, period, collection_active
         )
         if self.engine is not None and key not in self.loaded:
@@ -271,7 +279,7 @@ class HotlistService:
             raise RuntimeError("Hotlist service is closed")
         if key in self.cache and self.cache[key]["fetched_at"] < self.clock() - SNAPSHOT_MAX_AGE:
             del self.cache[key]
-        return source, key, state, interval, priority
+        return source, key, state, interval, collection_at
 
     def _due(self, key, state, interval):
         # Successful freshness and failed-attempt backoff are independent. A new
@@ -279,12 +287,24 @@ class HotlistService:
         snapshot = self.cache.get(key)
         return max(snapshot["fetched_at"] + interval if snapshot else 0, state["next_attempt_at"])
 
-    async def _ensure(self, website_id, period):
-        """Start the shared refresh when this list is due; returns it, if any."""
-        source, key, state, interval, priority = await self._prepare(
+    def _pace(self, website_id, viewed, collection_at):
+        if self.request_budget is None:
+            return 0
+        return self.request_budget.pace(
+            website_id,
+            background=not viewed,
+            collection_soon=collection_at <= self.clock() + BURST_WINDOW,
+        )
+
+    async def _ensure(self, website_id, period, viewed=True):
+        """Start the shared refresh when this list is due and returns (key, interval, task,
+        paced); paced is when a due list may go, leaving its state and the board untouched.
+        """
+        source, key, state, interval, collection_at = await self._prepare(
             website_id, period, self.collection_active()
         )
         before = dict(state)
+        paced = 0
         task = self.pending.get(key)
         if task is None and state["deferred"] and self.request_budget is not None:
             until, code = await database_call(self.request_budget.view, website_id)
@@ -304,11 +324,14 @@ class HotlistService:
             # Budget/database reads may yield until another reader has already
             # completed a refresh. Recheck both the task and successful freshness.
             if task is None and self.clock() >= self._due(key, state, interval):
-                if until > self.clock():
+                paced = self._pace(website_id, viewed, collection_at)
+                if paced > self.clock():
+                    pass
+                elif until > self.clock():
                     state.update(
                         next_attempt_at=until, error_code=code or "source_cooldown", deferred=True
                     )
-                elif priority:
+                elif collection_at <= self.clock() + 2:
                     state.update(
                         next_attempt_at=self.clock() + 2,
                         error_code="collection_priority",
@@ -321,15 +344,18 @@ class HotlistService:
                     self._notify()
         if state != before:
             self._notify()
-        return key, interval, task
+        return key, interval, task, paced
 
     def _render(self, website_id, period, key, interval):
         source, state, snapshot = HOTLIST_SOURCES[website_id], self.states[key], self.cache.get(key)
         task = self.pending.get(key)
+        quiet = snapshot and self.clock() <= snapshot["fetched_at"] + QUIET_INTERVALS * interval
         return {
             **source.metadata(),
             "period": period,
-            "status": "waiting"
+            "status": "ready"
+            if quiet
+            else "waiting"
             if state["deferred"] or state["error_code"] in WAITING_CODES
             else "stale"
             if snapshot and state["error_code"]
@@ -337,7 +363,7 @@ class HotlistService:
             if snapshot
             else "unavailable",
             "refreshing": task is not None and not task.done(),
-            "error_code": state["error_code"],
+            "error_code": None if quiet else state["error_code"],
             "next_attempt_at": self._due(key, state, interval),
             "refresh_interval": interval,
             "source_updated_at": snapshot["source_updated_at"] if snapshot else None,
@@ -347,20 +373,23 @@ class HotlistService:
 
     async def get(self, website_id, period):
         """One list; a cold read waits for its first fetch. Does not start warming."""
-        key, interval, task = await self._ensure(website_id, period)
+        key, interval, task, _ = await self._ensure(website_id, period)
         if key not in self.cache and task is not None:
             await asyncio.shield(task)
         return self._render(website_id, period, key, interval)
 
-    async def _warm_site(self, website_id, periods):
+    async def _warm_site(self, website_id, periods, selected):
         # One list at a time per site, so a shared request budget is never contended.
-        due = []
-        for period in periods:
-            key, interval, task = await self._ensure(website_id, period)
+        wake = []
+        for index, period in enumerate(periods):
+            viewed = selected and index == 0
+            key, interval, task, paced = await self._ensure(website_id, period, viewed)
             if task is not None:
                 await asyncio.shield(task)
-            due.append((key, interval))
-        return min(self._due(key, self.states[key], interval) for key, interval in due)
+            wake.append((key, interval, paced))
+        return min(
+            max(self._due(key, self.states[key], interval), paced) for key, interval, paced in wake
+        )
 
     async def warm_once(self):
         """Refresh due visible lists; returns when to look again, or None to stop."""
@@ -372,7 +401,12 @@ class HotlistService:
             return None
         return min(
             until,
-            *await asyncio.gather(*(self._warm_site(site, periods) for site, periods in catalog)),
+            *await asyncio.gather(
+                *(
+                    self._warm_site(site, periods, index == 0)
+                    for index, (site, periods) in enumerate(catalog)
+                )
+            ),
         )
 
     async def _warm(self):
