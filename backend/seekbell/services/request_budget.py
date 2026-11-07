@@ -2,7 +2,6 @@
 
 import asyncio
 import time
-from collections import deque
 from contextlib import asynccontextmanager
 
 import httpx
@@ -14,11 +13,6 @@ from seekbell.domain.errors import SourceDeferred, SourceFailure
 
 REQUEST_GAP = 2
 MANUAL_RETRY_GAP = 60
-# Linux DO challenged bursts of three requests within 6-13 seconds. Hotlists stay below
-# that: at most two requests in any window, unviewed lists well apart from any request.
-BURST_WINDOW = 15
-BURST_LIMIT = 2
-BACKGROUND_GAP = 30
 MAX_RETRY_AFTER = 86400
 SITE_FAILURES = (
     "access_challenge",
@@ -68,19 +62,6 @@ class WebsiteRequestBudget:
     def __init__(self, engine, *, clock=time.time):
         self.engine, self.clock = engine, clock
         self.lock = asyncio.Lock()
-        self.sent = deque(maxlen=BURST_LIMIT)
-
-    def pace(self, website_id, *, background=False, collection_soon=False):
-        """When a hotlist read may be sent; every other request is only counted."""
-        if website_id != "linuxdo":
-            return 0
-        now = self.clock()
-        recent = [at for at in self.sent if now - at < BURST_WINDOW]
-        excess = len(recent) + collection_soon - (BURST_LIMIT - 1)
-        until = recent[excess - 1] + BURST_WINDOW if excess > 0 else 0
-        if background and self.sent:
-            until = max(until, self.sent[-1] + BACKGROUND_GAP)
-        return until
 
     def reserve(self, now, *, manual=False):
         with write_session(self.engine) as session:
@@ -130,7 +111,6 @@ class WebsiteRequestBudget:
             until, code = await database_call(self.reserve, self.clock(), manual=manual)
             if until > self.clock():
                 raise SourceDeferred(until, code or "source_cooldown")
-            self.sent.append(self.clock())
             try:
                 yield
             except (SourceFailure, httpx.HTTPError, TimeoutError) as error:

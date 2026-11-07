@@ -29,7 +29,7 @@ SHA、运行编号和架构标签保留供追溯，日常部署使用版本号�
 1. 在发布分支运行`python3 scripts/bump_version.py X.Y.Z`，一次更新pyproject.toml、uv.lock、
    frontend/package.json和两份Portainer模板（含当前schema），并在CHANGELOG补写自动生成的条目
    （不能留TODO）；`--check`通过后随PR提交。其他文档不写死当前版本号。
-2. `gh pr merge <PR> --auto --squash`：必需检查通过后自动合并（需仓库开启allow auto-merge；未开启时CI通过后手动squash合并）。
+2. `gh pr merge <PR> --auto --squash`：必需检查通过后自动合并。
 3. 合并后main的“Local baseline checks”成功即触发“Versioned images and manual candidates”
    （workflow_run）：只检出main当前head（不检出事件给出的SHA，避免以特权上下文执行未经信任的代码），且必须等于刚通过基线的提交，否则交给更新的那次推送；preflight发现pyproject的正式版本尚无标签，就构建双架构镜像、发布并加版本/latest标签，
    再以CHANGELOG该版本条目创建Release（标签指向合并提交）、上传固定digest附件并匿名核对。
@@ -47,7 +47,7 @@ publish复用同次测试归档的配置和层，不重新构建；推送并核�
 （`scripts/verify_release.py`，也可在tagged检出上本地重跑）。构建/发布job仅持contents:read/packages:write。
 
 CI：基线拆为并行job（静态检查与构建、pytest-xdist多进程、浏览器套件分4组），汇总job名为`baseline`
-（必需检查名不变），只在全部通过时写复用标记。PR另跑原生双架构构建。建议main规则不要求PR基于最新main（ruleset的strict关闭），
+（必需检查名不变），只在全部通过时写复用标记。PR另跑原生双架构构建。main规则不要求PR基于最新main（strict已关闭），
 由合并后main push的基线兜底。本机只跑与改动相关的测试，全量交给CI，不在本机重复。
 所有镜像发布使用同一串行并发组。失败要检查Actions和回执。
 签名/SBOM尚未提供，校验和说明传输与内容一致性，不等同独立来源签名。

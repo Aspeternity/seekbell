@@ -170,13 +170,14 @@ test('real multi-site hotlist capabilities selections times and original links p
   )
   await expect(hotlist.locator('.hotlist-row').first()).toHaveAttribute('target', '_blank')
   await expect(hotlist.getByText(/条评论/)).toHaveCount(0)
-  await periods.getByRole('button', { name: '每周', exact: true }).click()
-  await expect(hotlist.locator('.hotlist-row').first()).toContainText('LinuxDOweekly')
+  // Weekly is staggered a minute after hot and daily, so the saved choice uses daily.
+  await periods.getByRole('button', { name: '每日', exact: true }).click()
+  await expect(hotlist.locator('.hotlist-row').first()).toContainText('LinuxDOdaily')
   await hotlist.getByRole('button', { name: 'NodeSeek', exact: true }).click()
   await expect(periods.getByRole('button')).toHaveText(['实时', '每日', '每周'])
   await expect(hotlist.locator('.hotlist-row').first()).toContainText('合成hot热榜帖子')
   await hotlist.getByRole('button', { name: 'LINUX DO', exact: true }).click()
-  await expect(periods.getByRole('button', { name: '每周', exact: true })).toHaveAttribute(
+  await expect(periods.getByRole('button', { name: '每日', exact: true })).toHaveAttribute(
     'aria-pressed',
     'true',
   )
@@ -188,7 +189,7 @@ test('real multi-site hotlist capabilities selections times and original links p
     )
     .toBe('linuxdo')
   await page.reload()
-  await expect(page.locator('.hotlist-row').first()).toContainText('LinuxDOweekly')
+  await expect(page.locator('.hotlist-row').first()).toContainText('LinuxDOdaily')
   await page.screenshot({ path: info.outputPath('linuxdo-hotlist.png'), fullPage: true })
   await noOverflow(page)
 })

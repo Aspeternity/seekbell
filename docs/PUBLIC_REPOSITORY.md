@@ -6,7 +6,7 @@
 
 ## 合并与检查
 
-main要求PR、baseline成功、讨论全部解决，禁止强推/删除，无绕过名单。2026-10-30用户确认取消“分支同步main”（strict）并开启自动合并，以免main每变一次就重跑待合并PR；合并后main push的baseline兜底。这两项仓库设置需维护者在GitHub手动修改。
+main要求PR、baseline成功、讨论全部解决，禁止强推/删除，无绕过名单。2026-10-30用户确认取消“分支同步main”（strict）并开启自动合并，以免main每变一次就重跑待合并PR；合并后main push的baseline兜底。两项设置已由维护者手动修改并核实。
 单维护者阶段批准人数为0，避免要求作者批准自己的PR；仍须完整CI。
 只允许squash，使用PR标题/正文，合并后删分支，允许更新PR分支。
 v*标签禁止更新/删除，发布见[镜像流程](IMAGE_RELEASE.md)。
