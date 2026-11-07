@@ -423,53 +423,6 @@ def test_anonymous_collectors_never_replay_remote_cookies():
     asyncio.run(run())
 
 
-def test_linuxdo_warming_reads_one_list_at_a_time_within_the_shared_budget(core):
-    async def run():
-        now, calls = [2000], []
-        budget = WebsiteRequestBudget(core.engine, clock=lambda: now[0])
-
-        async def handler(request):
-            calls.append(str(request.url))
-            return httpx.Response(
-                200,
-                headers={"Content-Type": "application/rss+xml"},
-                stream=Chunks(linuxdo_rss(9001)),
-            )
-
-        service = HotlistService(
-            request_budget=budget, transport=httpx.MockTransport(handler), clock=lambda: now[0]
-        )
-        service.catalog = lambda: [("linuxdo", ["daily", "hot", "weekly"])]
-        service.viewed_at = now[0]
-        try:
-            # The viewed list goes at once; the others wait without changing the board.
-            assert await service.warm_once() == 2030
-            assert calls == ["https://linux.do/top.rss?period=daily"]
-            board = await service._board()
-            assert [(row["status"], row["error_code"]) for row in board["lists"]] == [
-                ("ready", None),
-                ("unavailable", None),
-                ("unavailable", None),
-            ]
-            now[0] = 2029
-            assert await service.warm_once() == 2030 and len(calls) == 1
-            assert (await service._board())["tag"] == board["tag"]
-            for url, at, wake in (
-                ("https://linux.do/hot.rss", 2030, 2060),
-                ("https://linux.do/top.rss?period=weekly", 2060, 2900),
-            ):
-                now[0] = at
-                assert await service.warm_once() == wake
-                assert calls[-1] == url
-            assert len(calls) == 3
-            with Session(core.engine) as session:
-                assert session.get(WebsiteRequestState, "linuxdo").failures == 0
-        finally:
-            await service.aclose()
-
-    asyncio.run(run())
-
-
 def rss_handler(calls):
     async def handler(request):
         calls.append(str(request.url))
@@ -482,36 +435,12 @@ def rss_handler(calls):
     return handler
 
 
-async def sent_requests(budget, now, *offsets):
-    for offset in offsets:
-        now[0] = offset
-        async with budget.request("linuxdo"):
-            pass
+HOT = "https://linux.do/hot.rss"
+DAILY = "https://linux.do/top.rss?period=daily"
+WEEKLY = "https://linux.do/top.rss?period=weekly"
 
 
-def test_budget_paces_hotlists_around_every_counted_request(core):
-    async def run():
-        now = [2000]
-        budget = WebsiteRequestBudget(core.engine, clock=lambda: now[0])
-        assert budget.pace("linuxdo", background=True) == 0
-        assert budget.pace("nodeseek", background=True, collection_soon=True) == 0
-        await sent_requests(budget, now, 2000)
-        assert budget.pace("linuxdo") == 0
-        assert budget.pace("linuxdo", collection_soon=True) == 2015
-        assert budget.pace("linuxdo", background=True) == 2030
-        await sent_requests(budget, now, 2005)
-        assert budget.pace("linuxdo") == 2015
-        assert budget.pace("linuxdo", collection_soon=True) == 2020
-        assert budget.pace("linuxdo", background=True) == 2035
-        now[0] = 2015
-        assert budget.pace("linuxdo") == 0
-        now[0] = 2020
-        assert budget.pace("linuxdo", collection_soon=True) == 0
-
-    asyncio.run(run())
-
-
-def test_viewed_list_is_held_only_by_the_burst_window(core):
+def test_linuxdo_hot_and_daily_go_at_once_and_weekly_a_minute_later(core):
     async def run():
         now, calls = [2000], []
         budget = WebsiteRequestBudget(core.engine, clock=lambda: now[0])
@@ -520,44 +449,82 @@ def test_viewed_list_is_held_only_by_the_burst_window(core):
             transport=httpx.MockTransport(rss_handler(calls)),
             clock=lambda: now[0],
         )
-        service.catalog = lambda: [("linuxdo", ["hot", "daily", "weekly"])]
-        service.viewed_at = 2000
+        # Even with weekly selected, the time-sensitive lists go first.
+        service.catalog = lambda: [("linuxdo", ["weekly", "hot", "daily"])]
+        service.viewed_at = now[0]
         try:
-            await sent_requests(budget, now, 2000, 2005)
-            assert await service.warm_once() == 2015 and not calls
-            now[0] = 2015
-            await service.warm_once()
-            assert calls == ["https://linux.do/hot.rss"]
+            assert await service.warm_once() == 2002
+            assert calls == [HOT]
+            lists = (await service._board())["lists"]
+            assert [(row["period"], row["status"], row["error_code"]) for row in lists] == [
+                ("weekly", "unavailable", None),
+                ("hot", "ready", None),
+                ("daily", "waiting", "source_cooldown"),
+            ]
+            now[0] = 2002
+            assert await service.warm_once() == 2062
+            assert calls == [HOT, DAILY]
+            # The weekly wait leaves its state and the board alone.
+            tag = (await service._board())["tag"]
+            now[0] = 2061
+            assert await service.warm_once() == 2062 and len(calls) == 2
+            assert (await service._board())["tag"] == tag
+            now[0] = 2062
+            assert await service.warm_once() == 2900
+            assert calls == [HOT, DAILY, WEEKLY]
+            with Session(core.engine) as session:
+                assert session.get(WebsiteRequestState, "linuxdo").failures == 0
         finally:
             await service.aclose()
 
     asyncio.run(run())
 
 
-def test_due_collection_counts_against_a_hotlist_but_is_never_held(core):
+def test_weekly_waits_for_hot_and_daily_due_within_a_minute(core):
     async def run():
-        install(core.engine, "linuxdo")
-        with write_session(core.engine) as session:
-            session.get(Website, "linuxdo").enabled = True
-            session.get(Source, "linuxdo-rss").enabled = True
-            session.get(SourceState, "linuxdo-rss").next_attempt_at = 2010
-        now, calls = [2000], []
-        budget = WebsiteRequestBudget(core.engine, clock=lambda: now[0])
+        now, sent = [2000], []
+        calls = rss_handler([])
+
+        async def handler(request):
+            sent.append((now[0], str(request.url)))
+            return await calls(request)
+
         service = HotlistService(
-            engine=core.engine,
-            request_budget=budget,
-            collection_active=lambda: True,
+            request_budget=WebsiteRequestBudget(core.engine, clock=lambda: now[0]),
+            transport=httpx.MockTransport(handler),
+            clock=lambda: now[0],
+        )
+        service.catalog = lambda: [("linuxdo", ["weekly", "hot", "daily"])]
+        try:
+            # Due times: weekly 5700, hot 5730, daily 5800.
+            for period, at in (("weekly", 2100), ("daily", 4000), ("hot", 4830)):
+                now[0] = at
+                await service.get("linuxdo", period)
+            sent.clear()
+            service.viewed_at = 5700
+            for second in range(5700, 5900):
+                now[0] = second
+                await service.warm_once()
+            assert sent == [(5730, HOT), (5800, DAILY), (5860, WEEKLY)]
+        finally:
+            await service.aclose()
+
+    asyncio.run(run())
+
+
+def test_explicit_read_is_not_staggered(core):
+    async def run():
+        now, calls = [2000], []
+        service = HotlistService(
+            request_budget=WebsiteRequestBudget(core.engine, clock=lambda: now[0]),
             transport=httpx.MockTransport(rss_handler(calls)),
             clock=lambda: now[0],
         )
         try:
-            # Alone, a viewed list still goes; collection only adds to the count.
             await service.get("linuxdo", "hot")
-            assert len(calls) == 1
-            held = await service.get("linuxdo", "daily")
-            assert len(calls) == 1 and held["error_code"] is None
-            await sent_requests(budget, now, 2010)
-            assert budget.sent[-1] == 2010
+            now[0] = 2002
+            await service.get("linuxdo", "weekly")
+            assert calls == [HOT, WEEKLY]
         finally:
             await service.aclose()
 
@@ -588,7 +555,10 @@ def test_failed_refresh_logs_only_the_list_and_fixed_code(core, caplog):
     assert "SECRET-BODY" not in caplog.text and "cf-mitigated" not in caplog.text
 
 
-def test_three_due_lists_and_collection_never_burst(core):
+def test_entering_after_a_long_absence_stays_within_three_requests_a_minute(core):
+    """Linux DO challenged the fourth request within about a minute; collection runs
+    once a minute, so hot and daily may share a minute with it but weekly may not."""
+
     async def run():
         install(core.engine, "linuxdo")
         with write_session(core.engine) as session:
@@ -610,11 +580,11 @@ def test_three_due_lists_and_collection_never_burst(core):
             transport=httpx.MockTransport(handler),
             clock=lambda: now[0],
         )
-        service.catalog = lambda: [("linuxdo", ["weekly", "hot", "daily"])]
+        service.catalog = lambda: [("linuxdo", ["weekly", "daily", "hot"])]
         service.viewed_at = 2000
         rss_due = 2005
         try:
-            for second in range(2000, 2121):
+            for second in range(2000, 2200):
                 now[0] = second
                 if second >= rss_due:
                     async with budget.request("linuxdo"):
@@ -623,9 +593,9 @@ def test_three_due_lists_and_collection_never_burst(core):
                     with write_session(core.engine) as session:
                         session.get(SourceState, "linuxdo-rss").next_attempt_at = rss_due
                 await service.warm_once()
-            # Viewed list, collection, then one unviewed list between each collection.
-            assert sent == [2000, 2005, 2035, 2065, 2095]
-            assert hotlists[0] == "https://linux.do/top.rss?period=weekly" and len(hotlists) == 3
+            assert hotlists == [DAILY, HOT, WEEKLY]
+            assert sent == [2000, 2002, 2005, 2062, 2065, 2125, 2185]
+            assert all(sum(at <= other < at + 60 for other in sent) <= 3 for at in sent)
         finally:
             await service.aclose()
 

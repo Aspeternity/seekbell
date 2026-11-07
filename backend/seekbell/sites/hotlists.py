@@ -97,6 +97,8 @@ class HotlistSource:
     refresh_intervals: dict[str, int]
     default_period: str = "realtime"
     format: str = "json"
+    # Periods refreshed alone, apart from the site's other lists (see HotlistService).
+    staggered: tuple[str, ...] = ()
 
     def recommended_interval(self, period):
         return self.refresh_intervals[period]
@@ -150,5 +152,6 @@ HOTLIST_SOURCES = {
         refresh_intervals={"hot": 900, "daily": 1800, "weekly": 3600},
         default_period="hot",
         format="rss",
+        staggered=("weekly",),
     ),
 }

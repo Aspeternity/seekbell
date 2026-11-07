@@ -23,7 +23,6 @@ from seekbell.db.models import (
 from seekbell.db.transactions import database_call, write_session
 from seekbell.domain.errors import SourceDeferred, SourceFailure
 from seekbell.services.hotlist_settings import configuration
-from seekbell.services.request_budget import BURST_WINDOW
 from seekbell.sites.hotlists import HOTLIST_SOURCES, number, text
 from seekbell.sites.registry import BUILTIN_ADAPTERS
 
@@ -37,6 +36,10 @@ WARM_TICK = 60
 # A recent list stays quiet through a failed refresh; only a list this many intervals
 # old says so, which keeps a passing challenge out of a normal view.
 QUIET_INTERVALS = 2
+# Linux DO challenged the fourth or fifth request within about a minute, while collection
+# alone (once a minute) passed for hours. Time-sensitive lists keep the plain 2-second gap;
+# a staggered list goes only when the site's other lists are this far from any request.
+STAGGER = 60
 
 
 class HotlistService:
@@ -60,7 +63,7 @@ class HotlistService:
                 "User-Agent": "SeekBell/0.1",
             },
         )
-        self.cache, self.states, self.pending = {}, {}, {}
+        self.cache, self.states, self.pending, self.started = {}, {}, {}, {}
         self.loaded = set()
         self.closed = False
         # [(website_id, periods)] in warm order; the application binds it to the database.
@@ -287,18 +290,25 @@ class HotlistService:
         snapshot = self.cache.get(key)
         return max(snapshot["fetched_at"] + interval if snapshot else 0, state["next_attempt_at"])
 
-    def _pace(self, website_id, viewed, collection_at):
-        if self.request_budget is None:
-            return 0
-        return self.request_budget.pace(
-            website_id,
-            background=not viewed,
-            collection_soon=collection_at <= self.clock() + BURST_WINDOW,
-        )
+    async def _stagger(self, website_id, period):
+        """When a staggered list may go: once the site's other lists were last requested a
+        minute ago and none is due within the next minute, so it never joins their burst."""
+        source = HOTLIST_SOURCES[website_id]
+        until = 0
+        if period in source.staggered:
+            for other in source.periods:
+                if other not in source.staggered:
+                    _, key, state, interval, _ = await self._prepare(website_id, other)
+                    until = max(until, self.started.get(key, -STAGGER) + STAGGER)
+                    due = self._due(key, state, interval)
+                    if due < self.clock() + STAGGER:
+                        until = max(until, due + STAGGER, self.clock() + STAGGER)
+        return until
 
-    async def _ensure(self, website_id, period, viewed=True):
+    async def _ensure(self, website_id, period, stagger=False):
         """Start the shared refresh when this list is due and returns (key, interval, task,
-        paced); paced is when a due list may go, leaving its state and the board untouched.
+        paced); paced is when a staggered list may go, leaving its state and the board
+        untouched. Automatic refreshes stagger; an explicit single read does not.
         """
         source, key, state, interval, collection_at = await self._prepare(
             website_id, period, self.collection_active()
@@ -315,6 +325,7 @@ class HotlistService:
             task = self.pending.get(key)
         if task is None and self.clock() >= self._due(key, state, interval):
             until, code = 0, None
+            paced = await self._stagger(website_id, period) if stagger else 0
             if self.request_budget is not None:
                 until, code = await database_call(self.request_budget.view, website_id)
                 if website_id == "linuxdo" and self.request_budget.lock.locked():
@@ -324,7 +335,6 @@ class HotlistService:
             # Budget/database reads may yield until another reader has already
             # completed a refresh. Recheck both the task and successful freshness.
             if task is None and self.clock() >= self._due(key, state, interval):
-                paced = self._pace(website_id, viewed, collection_at)
                 if paced > self.clock():
                     pass
                 elif until > self.clock():
@@ -339,7 +349,7 @@ class HotlistService:
                     )
                 else:
                     task = asyncio.create_task(self._refresh(source, period, key, state))
-                    self.pending[key] = task
+                    self.pending[key], self.started[key] = task, self.clock()
                     task.add_done_callback(lambda finished: self._finished(key, finished))
                     self._notify()
         if state != before:
@@ -378,12 +388,11 @@ class HotlistService:
             await asyncio.shield(task)
         return self._render(website_id, period, key, interval)
 
-    async def _warm_site(self, website_id, periods, selected):
+    async def _warm_site(self, website_id, periods):
         # One list at a time per site, so a shared request budget is never contended.
         wake = []
-        for index, period in enumerate(periods):
-            viewed = selected and index == 0
-            key, interval, task, paced = await self._ensure(website_id, period, viewed)
+        for period in periods:
+            key, interval, task, paced = await self._ensure(website_id, period, stagger=True)
             if task is not None:
                 await asyncio.shield(task)
             wake.append((key, interval, paced))
@@ -401,12 +410,7 @@ class HotlistService:
             return None
         return min(
             until,
-            *await asyncio.gather(
-                *(
-                    self._warm_site(site, periods, index == 0)
-                    for index, (site, periods) in enumerate(catalog)
-                )
-            ),
+            *await asyncio.gather(*(self._warm_site(site, periods) for site, periods in catalog)),
         )
 
     async def _warm(self):
@@ -453,7 +457,7 @@ class HotlistService:
             # The selected list leads the catalog: start it now so the reply shows it.
             catalog = await database_call(self.catalog)
             if catalog:
-                await self._ensure(catalog[0][0], catalog[0][1][0])
+                await self._ensure(catalog[0][0], catalog[0][1][0], stagger=True)
         loop = asyncio.get_running_loop()
         deadline = loop.time() + self.wait_seconds
         while True:
