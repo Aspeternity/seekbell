@@ -382,13 +382,13 @@ def compose_assets(
         raise ReleaseError("Deployment assets require the matching published version receipt")
     pinned = f"{tag}@{digest}"
     rendered = {}
-    for name in ("compose.portainer.yaml", "compose.portainer.compare.yaml"):
+    for name in ("compose.portainer.yaml",):
         source = (templates / name).read_text()
         expected = f"    image: {tag}\n"
         if source.count(expected) != 1:
             raise ReleaseError("Deployment template does not match the selected release version")
         rendered[name] = source.replace(expected, f"    image: {pinned}\n")
-    # Validate both inputs before publishing either deployment file.
+    # Validate every template before publishing any deployment file.
     output.mkdir()
     for name, content in rendered.items():
         (output / name).write_text(content)

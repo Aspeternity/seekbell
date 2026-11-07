@@ -1,5 +1,7 @@
 import asyncio
 import secrets
+import signal
+import threading
 from contextlib import AsyncExitStack, asynccontextmanager
 from functools import partial
 
@@ -65,6 +67,35 @@ def stored_credentials(session):
     return values
 
 
+def answer_long_polls_on_stop(app: FastAPI):
+    """Uvicorn waits for open requests before the lifespan shutdown begins, and a hotlist
+    long poll lasts up to 25 s. Chain its stop-signal handler so long polls answer at once;
+    returns a callable restoring the previous handlers."""
+    if threading.current_thread() is not threading.main_thread():
+        return lambda: None
+    loop, previous = asyncio.get_running_loop(), {}
+
+    def stopping():
+        app.state.stopping = True
+        app.state.hotlists.wake()
+
+    def handler(number, frame):
+        loop.call_soon_threadsafe(stopping)
+        previous[number](number, frame)
+
+    for number in (signal.SIGINT, signal.SIGTERM):
+        current = signal.getsignal(number)
+        if callable(current):
+            previous[number] = current
+            signal.signal(number, handler)
+
+    def restore():
+        for number, current in previous.items():
+            signal.signal(number, current)
+
+    return restore
+
+
 def create_app(
     settings: Settings | None = None, *, runtime_factory=None, hotlist_factory=None
 ) -> FastAPI:
@@ -128,9 +159,11 @@ def create_app(
         with instance_lock(settings.data_dir.resolve()):
             app.state.backup_gate = asyncio.Lock()
             await open_workspace(app)
+            restore_signals = answer_long_polls_on_stop(app)
             try:
                 yield
             finally:
+                restore_signals()
                 await close_workspace(app)
 
     app = FastAPI(title="SeekBell", lifespan=lifespan, docs_url=None, redoc_url=None)
@@ -141,6 +174,7 @@ def create_app(
     app.state.open_workspace = open_workspace
     app.state.close_workspace = close_workspace
     app.state.restoring = False
+    app.state.stopping = False
     app.state.in_flight = 0
 
     @app.exception_handler(RequestValidationError)

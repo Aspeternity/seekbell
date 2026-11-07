@@ -82,9 +82,9 @@ def test_bump_updates_every_record_and_requires_a_written_changelog(project):
 
 def test_check_reports_a_file_left_behind(project):
     bump.bump("0.3.0", root=project)
-    path = project / bump.TEMPLATES[1]
+    path = project / bump.TEMPLATES[0]
     path.write_text(path.read_text().replace("seekbell:0.3.0", "seekbell:0.2.0"))
-    assert any(bump.TEMPLATES[1] in problem for problem in bump.check(project)[1])
+    assert any(bump.TEMPLATES[0] in problem for problem in bump.check(project)[1])
 
 
 def artifact(repository_id=7, head_repository_id=7, expired=False):

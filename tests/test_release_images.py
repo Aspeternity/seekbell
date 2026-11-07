@@ -592,10 +592,7 @@ def versioned_receipt():
 def deployment_templates(tmp_path):
     root = tmp_path / "templates"
     root.mkdir()
-    for name, port, volume in [
-        ("compose.portainer.yaml", 8000, "seekbell_data"),
-        ("compose.portainer.compare.yaml", 8001, "seekbell_compare_data"),
-    ]:
+    for name, port, volume in [("compose.portainer.yaml", 8000, "seekbell_data")]:
         (root / name).write_text(
             "services:\n  seekbell:\n"
             f"    image: ghcr.io/{REPOSITORY}:0.1.0\n"
@@ -633,8 +630,8 @@ def test_deployment_assets_reject_a_mismatching_receipt(deployment_templates, tm
     assert not output.exists()
 
 
-def test_bad_second_template_prevents_all_deployment_files(deployment_templates, tmp_path):
-    (deployment_templates / "compose.portainer.compare.yaml").write_text("unexpected")
+def test_bad_template_prevents_all_deployment_files(deployment_templates, tmp_path):
+    (deployment_templates / "compose.portainer.yaml").write_text("unexpected")
     output = tmp_path / "release-assets"
     with pytest.raises(images.ReleaseError, match="template"):
         images.compose_assets(

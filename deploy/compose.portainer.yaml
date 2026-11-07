@@ -1,23 +1,17 @@
-# SeekBell 0.6.2; schema 0018. Back up the complete data volume before upgrading.
-# GitHub Release assets pin this version to the verified image digest.
-# Portainer standalone Docker Stack. Update the existing stack to retain its volume.
+# SeekBell 0.6.3; schema 0018. Back up the data before upgrading.
+# Portainer: update the existing stack to keep its data. Reverse proxy and optional
+# hardening: docs/PROXY_DEPLOYMENT.md, docs/IMAGE_RELEASE.md.
 services:
   seekbell:
-    image: ghcr.io/aspeternity/seekbell:0.6.2
+    image: ghcr.io/aspeternity/seekbell:0.6.3
+    container_name: seekbell
     restart: unless-stopped
-    init: true
     ports:
       - "8000:8000"
     volumes:
       - seekbell_data:/data
-    read_only: true
-    tmpfs:
-      - /tmp:mode=1777,size=256m
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    stop_grace_period: 30s
+      # Or a host directory, first: chown 10001:10001 /opt/seekbell/data
+      # - /opt/seekbell/data:/data
 
 volumes:
   seekbell_data:

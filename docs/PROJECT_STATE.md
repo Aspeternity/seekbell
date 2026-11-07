@@ -1,6 +1,6 @@
 # 当前状态
 
-更新：2026-11-08（Asia/Shanghai）。main 24a05e8（PR #31，v0.6.1）；分支hotlist-weekly-stagger准备v0.6.2；图标资产仍未提交。
+更新：2026-11-08（Asia/Shanghai）。main 98b5fcb（PR #32），产品版本v0.6.2；本文与发布回执、图标资产未提交。
 
 ## 开局
 
@@ -8,7 +8,7 @@
 
 ## 计划位置
 
-M0–M4已完成。最新公开版本v0.6.1（Linux DO热榜错峰）：ghcr.io/aspeternity/seekbell:0.6.1@sha256:f083cd811bd91dda2cc24d032d1c76598e4b0eb5388319af9d6e94571177b046，改动与证据见[方案记录](history/2026-11-07-LinuxDO热榜错峰方案.md)。[v0.6.0记录](history/2026-10-30-v0.6.0热榜即时切换.md)，v0.5.0见[记录](history/2026-10-30-v0.5.0备份恢复简化.md)，v0.4.0见[记录](history/2026-10-29-v0.4.0设置纠正与网页直接恢复.md)。现用实例已运行0.6.1（latest标签，revision 24a05e8，11/08只读核实）；M5实机验收（ROADMAP“当前阶段”表）未完成，需另行授权。
+M0–M4已完成。最新公开版本v0.6.2（Linux DO每周榜错开）：ghcr.io/aspeternity/seekbell:0.6.2@sha256:e5271dba07fc40e936a1ffd95a05ebd1113f4baf80b82d0e8623193e5219bb03，见[记录](history/2026-11-08-LinuxDO每周榜错开.md)；v0.6.1见[错峰记录](history/2026-11-07-LinuxDO热榜错峰方案.md)。[v0.6.0记录](history/2026-10-30-v0.6.0热榜即时切换.md)，v0.5.0见[记录](history/2026-10-30-v0.5.0备份恢复简化.md)，v0.4.0见[记录](history/2026-10-29-v0.4.0设置纠正与网页直接恢复.md)。现用实例已运行0.6.1（latest标签，revision 24a05e8，11/08只读核实）；M5实机验收（ROADMAP“当前阶段”表）未完成，需另行授权。
 
 ## 已完成：发版提速（PR #28 → main fd310e5）
 
@@ -22,11 +22,13 @@ CI拆为checks/pytest(-n auto)/browser×4并行，汇总job仍名baseline：PR�
 
 未提交：assets/brand/新资产（不随v0.6.2提交）。
 
-## 进行中：Linux DO每周榜错开（v0.6.2）
+## 已发布：Linux DO每周榜错开（v0.6.2）
 
-用户否定v0.6.1错峰（热门/每日要等几十秒，采集仍被挑战），按用户方向重做：热门、每日到期即刷新（2秒间隔），只把每周错开到热门/每日请求1分钟后。实机证据、方案与验证见[记录](history/2026-11-08-LinuxDO每周榜错开.md)；v0.6.1方案见[旧记录](history/2026-11-07-LinuxDO热榜错峰方案.md)。
+用户否定v0.6.1错峰后按用户方向重做：热门、每日到期即刷新（2秒间隔），只把每周错开到热门/每日请求1分钟后。PR #32全部CI通过，合并为98b5fcb，自动发版运行42425292442成功。证据、方案、验证与回执见[记录](history/2026-11-08-LinuxDO每周榜错开.md)。仅模拟来源验证。
 
-分支hotlist-weekly-stagger（基于24a05e8）：改services/hotlists.py、request_budget.py（恢复0.6.0形态）、sites/hotlists.py、tests/test_linuxdo_runtime.py、frontend/tests/linuxdo/linuxdo.spec.ts，SPEC 6.6、ARCHITECTURE末节、CHANGELOG，版本号已改0.6.2。本机相关测试通过，未推送。
+## 进行中：v0.6.3快速停止与模板精简
+
+用户确认并授权发布。分支fast-stop-simple-compose（基于98b5fcb）：收到停止信号时长轮询立即返回，uvicorn兜底超时3秒，后台宽限5秒，在Docker默认10秒内停完；镜像去除setuid；模板精简并删除8001对比模板。查证、改动和验证见[记录](history/2026-11-08-v0.6.3快速停止与模板精简.md)。
 
 ## 暂缓：关于与诊断改版
 
@@ -34,14 +36,15 @@ CI拆为checks/pytest(-n auto)/browser×4并行，汇总job仍名baseline：PR�
 
 ## 下一步
 
-1. 经用户授权后推送分支、开PR并`gh pr merge --auto --squash`，合并后自动发版v0.6.2；之后用户升级现用实例，再用只读查询核对Linux DO采集失败（source_runs）和热榜日志。
-2. 重新讨论关于与诊断页。
-3. 图标待审阅，采用后再制作使用尺寸并接入；资产说明为本任务读取入口。
-4. M5实机验收：在现用实例核验v0.6.0网页恢复与热榜真实来源，验证真实RSS与四渠道收信，见ROADMAP“当前阶段”和ACCEPTANCE。
+1. 用户升级现用实例到0.6.2后，用记录中的只读查询核对Linux DO采集失败（source_runs）、热榜日志，以及热门/每日打开即刷新、每周晚约1分钟。
+2. 用户在docker-vm改用`/opt/docker/SeekBell/data`绑定目录、删除旧卷（不保留数据，用户自行执行）；0.6.3发布后换成精简compose（image/container_name/restart/ports/environment/volumes）。
+3. 重新讨论关于与诊断页。
+4. 图标待审阅，采用后再制作使用尺寸并接入；资产说明为本任务读取入口。
+5. M5实机验收：在现用实例核验v0.6.0网页恢复与热榜真实来源，验证真实RSS与四渠道收信，见ROADMAP“当前阶段”和ACCEPTANCE。
 
 ## 授权
 
-v0.6.1发布授权已用完；当前无推送、合并、发布、部署或真实发送授权。用户11/08授权过在docker-vm由用户本人执行只读诊断命令。
+v0.6.2发布授权已用完；v0.6.3（PR、自动合并、自动发版）已获授权；当前无推送、合并、发布、部署或真实发送授权。用户11/08授权过在docker-vm由用户本人执行只读诊断命令。
 
 ## 按需读取（只读与任务相关的项）
 

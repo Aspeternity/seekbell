@@ -9,4 +9,5 @@ if __name__ == "__main__":
         workers=1,
         proxy_headers=False,
         access_log=False,
+        timeout_graceful_shutdown=3,
     )
