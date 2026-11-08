@@ -62,7 +62,8 @@ test('production pages preserve the approved UI while using real persisted data'
     '历史与存储',
     '备份与恢复',
     '账户与安全',
-    '关于与诊断',
+    '诊断',
+    '关于',
   ])
   await expect(page.getByLabel('显示时区', { exact: true })).toBeEnabled()
   const save = page.getByRole('button', { name: '保存通用设置', exact: true })
@@ -94,8 +95,13 @@ test('production pages preserve the approved UI while using real persisted data'
   await page.screenshot({ path: info.outputPath('approved-preferences.png'), fullPage: true })
   await page.goto('/#/settings/about')
   await expect(page.locator('.about-card .brand-icon')).toBeVisible()
+  await expect(page.getByTestId('app-version')).toBeVisible()
+  await expect(page.getByTestId('build-revision')).toBeHidden()
+  await page.getByText('构建信息', { exact: true }).click()
   await expect(page.getByTestId('build-revision')).toBeVisible()
-  await expect(page.getByTestId('supported-websites')).toHaveText('NodeSeek、LINUX DO')
+  const system = page.getByRole('region', { name: '系统信息', exact: true })
+  await expect(system).toContainText('NodeSeek')
+  await expect(system).toContainText('LINUX DO')
   await page.screenshot({ path: info.outputPath('approved-about.png'), fullPage: true })
   await page.goto('/#/settings/backup')
   await expect(page.getByRole('form', { name: '导出备份', exact: true })).toBeVisible()
@@ -120,6 +126,7 @@ test('production pages preserve the approved UI while using real persisted data'
     '/settings/retention',
     '/settings/account',
     '/settings/backup',
+    '/settings/diagnostics',
     '/settings/about',
   ]) {
     await page.goto('/#' + path)

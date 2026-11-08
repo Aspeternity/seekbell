@@ -179,8 +179,8 @@ test('confirmed independent alerts record a single fault and recovery even when 
   ).toBe(true)
   const captured = await (await page.request.get('/api/manage/alerts/history')).json()
   expect(captured.items.slice(0, 2).map((event: any) => event.phase)).toEqual(['recovery', 'fault'])
-  // Faults and alert records live under About & Diagnostics; settings stay on the alerts tab.
-  await page.goto('/#/settings/about')
+  // Faults and alert records live under Diagnostics; settings stay on the alerts tab.
+  await page.goto('/#/settings/diagnostics')
   await Promise.all([
     page.waitForResponse((response) =>
       response.url().includes('/api/manage/alerts/history?page=1'),

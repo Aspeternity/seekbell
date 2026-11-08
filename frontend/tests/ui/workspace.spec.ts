@@ -83,6 +83,7 @@ test('the single real workspace covers routes, empty states and responsive navig
     '/settings/alerts',
     '/settings/backup',
     '/settings/account',
+    '/settings/diagnostics',
     '/settings/about',
     '/missing',
   ]
