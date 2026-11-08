@@ -197,7 +197,6 @@ jobs:
           python3 scripts/release_images.py --revision "$REVISION" --repository "$IMAGE_REPOSITORY" \
             compose --receipt version.json --version "$RELEASE_VERSION" --templates deploy --output release-assets
           docker compose -f release-assets/compose.portainer.yaml config --quiet
-          docker compose -f release-assets/compose.portainer.compare.yaml config --quiet
       - name: Record pinned deployment reference
         run: |
           python3 - <<'PY'
@@ -256,7 +255,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ needs.preflight.outputs.version }}
-        run: gh release upload "$RELEASE_TAG" receipt/release.json receipt/version.json receipt/package.json receipt/release-assets/deployment.json receipt/release-assets/compose.portainer.yaml receipt/release-assets/compose.portainer.compare.yaml --clobber
+        run: gh release upload "$RELEASE_TAG" receipt/release.json receipt/version.json receipt/package.json receipt/release-assets/deployment.json receipt/release-assets/compose.portainer.yaml --clobber
       # Final gate: the release is done only when an anonymous user sees
       # matching assets and registry tags, so no manual follow-up check is needed.
       - name: Verify the public release anonymously

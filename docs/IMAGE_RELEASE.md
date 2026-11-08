@@ -12,11 +12,23 @@ GitHub最新正式Release在检查全部通过后同时更新latest；
 预发布vX.Y.Z-alpha.N、-beta.N、-rc.N（N从1开始）只生成自身标签。
 补发旧正式Release且未被设为GitHub最新版本时，也只生成自身标签。
 
-源码中的[8000](../deploy/compose.portainer.yaml)和[8001](../deploy/compose.portainer.compare.yaml)
-模板固定明确版本；Release附件在相同版本上追加已验证的索引digest，例如
+源码中的[Portainer模板](../deploy/compose.portainer.yaml)固定明确版本；Release附件在相同版本上追加已验证的索引digest，例如
 `ghcr.io/aspeternity/seekbell:X.Y.Z@sha256:…`。
 正式升级优先下载Release附件的同名Compose，核对deployment.json；不会随latest漂移。
 更新现有Portainer Stack，保留Stack名、端口和实际数据卷；使用自定义配置时仅替换image更稳妥。
+
+模板只写运行必需的项（2026-11-08用户确认精简，0.6.3起删除8001对比模板）。镜像已内置非root用户10001、健康检查、
+去除setuid/setgid程序，并在Docker默认10秒内停完（收到停止信号时热榜长轮询立即返回，其他请求最多3秒，后台任务最多5秒），无需
+`init`或`stop_grace_period`。数据默认放命名卷；改用宿主目录时先`chown 10001:10001`该目录。
+
+安全加固（可选）：容器运行限制只能由部署方设置，镜像无法内置。需要时在服务下加：
+
+```yaml
+    read_only: true          # 根文件系统只读，只有 /data 和 /tmp 可写
+    tmpfs:
+      - /tmp:size=256m
+    cap_drop: [ALL]          # 去掉全部 Linux 特权
+```
 
 同版本不同digest拒绝覆盖；同版本同digest可从已验证回执恢复。v*标签禁止更新/删除。
 SHA、运行编号和架构标签保留供追溯，日常部署使用版本号或Release的固定digest引用。

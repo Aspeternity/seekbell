@@ -24,7 +24,6 @@ ASSETS = {
     "package.json",
     "deployment.json",
     "compose.portainer.yaml",
-    "compose.portainer.compare.yaml",
 }
 MANIFESTS = ", ".join(
     [

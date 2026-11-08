@@ -80,7 +80,8 @@ def require_visible(engine):
 async def hotlist_board(request: Request, after: str | None = Query(None, max_length=64)):
     """All visible lists; given the last tag, answers once something changes (long poll)."""
     require_visible(request.app.state.engine)
-    return await request.app.state.hotlists.board(after, stop=lambda: request.app.state.restoring)
+    state = request.app.state
+    return await state.hotlists.board(after, stop=lambda: state.restoring or state.stopping)
 
 
 @router.get("/hotlists/{website_id}")

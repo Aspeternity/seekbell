@@ -28,7 +28,8 @@ class Runtime:
         *,
         http_transport=None,
         tick=1,
-        shutdown_grace=16,
+        # With uvicorn's 3 s for open requests, a stop fits Docker's default 10 s.
+        shutdown_grace=5,
         collector_timeout=15,
         request_budget=None,
     ):

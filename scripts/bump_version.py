@@ -4,7 +4,7 @@
     python3 scripts/bump_version.py --check      # all files agree, CHANGELOG has an entry
 
 Updates pyproject.toml, the seekbell entry in uv.lock, frontend/package.json
-and both Portainer templates (version, image tag and current schema). A
+and the Portainer template (version, image tag and current schema). A
 missing CHANGELOG heading is added as a stub that still has to be written.
 """
 
@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-TEMPLATES = ["deploy/compose.portainer.yaml", "deploy/compose.portainer.compare.yaml"]
+TEMPLATES = ["deploy/compose.portainer.yaml"]
 IMAGE = "ghcr.io/aspeternity/seekbell"
 VERSION = re.compile(r"v?(\d+\.\d+\.\d+)(?:-(alpha|beta|rc)\.([1-9]\d*))?")
 PEP440 = {"alpha": "a", "beta": "b", "rc": "rc"}

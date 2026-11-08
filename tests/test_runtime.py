@@ -365,3 +365,22 @@ def test_lifespan_routes_automatic_messages_through_encrypted_channel_registry(
         payload = json.loads(requests[0].content)
         assert payload["matched_tasks"][0]["name"] == "VPS radar"
         assert payload["event_id"] == requests[0].headers["idempotency-key"]
+
+
+def test_a_container_stop_fits_dockers_default_ten_seconds():
+    """Uvicorn first waits for open requests (a hotlist long poll lasts up to 25 s), then
+    the runtime for its actors; both bounds together stay below Docker's SIGKILL."""
+    import inspect
+    import json
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).parents[1]
+    command = json.loads(re.search(r"^CMD (\[.*\])$", (root / "Dockerfile").read_text(), re.M)[1])
+    requests = float(command[command.index("--timeout-graceful-shutdown") + 1])
+    actors = inspect.signature(Runtime).parameters["shutdown_grace"].default
+    assert requests + actors < 10
+    assert (
+        f"timeout_graceful_shutdown={requests:g},"
+        in (root / "backend/seekbell/__main__.py").read_text()
+    )
