@@ -135,6 +135,15 @@ jobs:
         env:
           SUITES: ${{ matrix.suites }}
         run: for suite in $SUITES; do pnpm --dir frontend "test:$suite"; done
+      # Playwright keeps a trace for each failed test; keep it to diagnose CI-only failures.
+      - name: Keep failed browser traces
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: browser-traces-${{ strategy.job-index }}
+          path: frontend/test-results*/
+          retention-days: 7
+          if-no-files-found: ignore
 
   baseline:
     needs: [reuse, checks, pytest, browser]
