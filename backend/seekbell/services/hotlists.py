@@ -27,7 +27,6 @@ from seekbell.sites.hotlists import HOTLIST_SOURCES, number, text
 from seekbell.sites.registry import BUILTIN_ADAPTERS
 
 MAX_BYTES = 1024 * 1024
-SNAPSHOT_MAX_AGE = 86400
 logger = logging.getLogger(__name__)
 WAITING_CODES = ("source_busy", "source_cooldown", "collection_priority")
 # Keep every visible list warm while viewed and for this long after the last viewer left.
@@ -105,9 +104,10 @@ class HotlistService:
                 return None
             fetched, updated = number(row.fetched_at), number(row.source_updated_at)
             now = self.clock()
+            max_age = HOTLIST_SOURCES[key[0]].snapshot_max_age(key[2])
             if (
                 fetched is None
-                or not now - SNAPSHOT_MAX_AGE <= fetched <= now + 300
+                or not now - max_age <= fetched <= now + 300
                 or (updated is not None and updated > now + 300)
                 or (key[0] != "linuxdo" and not updated)
                 or not isinstance(row.items, list)
@@ -280,7 +280,8 @@ class HotlistService:
                 self.cache.setdefault(key, stored)
         if self.closed:
             raise RuntimeError("Hotlist service is closed")
-        if key in self.cache and self.cache[key]["fetched_at"] < self.clock() - SNAPSHOT_MAX_AGE:
+        oldest = self.clock() - source.snapshot_max_age(period)
+        if key in self.cache and self.cache[key]["fetched_at"] < oldest:
             del self.cache[key]
         return source, key, state, interval, collection_at
 

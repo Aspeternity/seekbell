@@ -412,3 +412,6 @@ WebsiteRequestBudget.request增加auxiliary：热榜请求只在429、access_cha
 
 镜像不再声明USER，ENTRYPOINT为/usr/local/bin/seekbell-entrypoint（docker-entrypoint.sh）。以root启动时：校验PUID/PGID（默认10001，数字且非0），mkdir -p数据目录，find只对所有者/组不符的条目chown -h（不跟随符号链接），目录chmod 700，先试探setpriv切换，失败即一行中文报错退出；再以目标用户试写数据目录，最后exec setpriv --reuid --regid --clear-groups进入CMD，uvicorn仍是PID 1。非root启动（Compose user:）只做试写。所有面向用户的失败只输出一行“SeekBell: …”。维护工具（manage_release.run、check_backup_container、proxy_fixture）的一次性容器用--entrypoint ""或指定程序绕过入口脚本并显式--user；release_images按Entrypoint校验新镜像，manage_release.image兼容旧镜像的User 10001以便回退；check_deployment只接受空或该入口。check_container在CI中先把数据卷改为root所有，验证入口脚本接管、PID 1为10001。
 
+### 每周旧榜保留7天（2026-11-08，0.6.5）
+
+HotlistSource新增retention（周期→秒），snapshot_max_age(period)默认86400；Linux DO为{"weekly": 604800}。HotlistService._load与_prepare按该值判定快照是否还能展示，取代全局SNAPSHOT_MAX_AGE。无迁移。

@@ -3,7 +3,7 @@
 import json
 import math
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from seekbell.collectors.rss import parse_rss
 from seekbell.sites.labels import category_label
@@ -99,9 +99,14 @@ class HotlistSource:
     format: str = "json"
     # Periods refreshed alone, apart from the site's other lists (see HotlistService).
     staggered: tuple[str, ...] = ()
+    # How long a stored snapshot may still be shown, per period (default one day).
+    retention: dict[str, int] = field(default_factory=dict)
 
     def recommended_interval(self, period):
         return self.refresh_intervals[period]
+
+    def snapshot_max_age(self, period):
+        return self.retention.get(period, 86400)
 
     def minimum_interval(self, period):
         return {"daily": 900, "weekly": 1800}.get(period, 300)
@@ -153,5 +158,8 @@ HOTLIST_SOURCES = {
         default_period="hot",
         format="rss",
         staggered=("weekly",),
+        # A staggered list waits a minute for its first read; a week-old weekly list
+        # still shows at once after a long absence and refreshes quietly behind it.
+        retention={"weekly": 7 * 86400},
     ),
 }
