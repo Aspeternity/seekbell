@@ -76,7 +76,7 @@ docker compose -p seekbell-test stop
 
 ~~~bash
 docker compose -p seekbell-test -f compose.yaml -f compose.maintenance.yaml \
-  run --rm --no-deps -T --user 0 --cap-add CHOWN seekbell python -c \
+  run --rm --no-deps -T --user 0 --cap-add CHOWN --entrypoint python seekbell -c \
   "import os; [(os.chmod(p,0o700),os.chown(p,10001,10001)) for p in ('/backup','/restore')]"
 
 docker compose -p seekbell-test -f compose.yaml -f compose.maintenance.yaml \

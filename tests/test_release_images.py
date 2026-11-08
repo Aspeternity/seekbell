@@ -35,7 +35,7 @@ def image(architecture):
         "Architecture": architecture,
         "RootFS": {"Layers": ["sha256:" + "9" * 64]},
         "Config": {
-            "User": "10001:10001",
+            "Entrypoint": ["/usr/local/bin/seekbell-entrypoint"],
             "Env": [f"SEEKBELL_BUILD_REVISION={REVISION}"],
             "Labels": {
                 "org.opencontainers.image.revision": REVISION,
@@ -170,13 +170,15 @@ def test_second_artifact_mismatch_prevents_all_registry_writes(artifacts, docker
     assert all(args[0] == "image" and args[1] in ("load", "inspect") for args in docker)
 
 
-@pytest.mark.parametrize("fault", ["Architecture", "Os", "Id", "User", "Env", "revision", "source"])
+@pytest.mark.parametrize(
+    "fault", ["Architecture", "Os", "Id", "Entrypoint", "Env", "revision", "source"]
+)
 def test_loaded_image_is_checked_independently_of_receipt(monkeypatch, fault):
     item = image("amd64")
     if fault in ("Architecture", "Os", "Id"):
         item[fault] = "wrong"
-    elif fault in ("User", "Env"):
-        item["Config"][fault] = [] if fault == "Env" else "root"
+    elif fault in ("Entrypoint", "Env"):
+        item["Config"][fault] = []
     else:
         item["Config"]["Labels"]["org.opencontainers.image." + fault] = "wrong"
     monkeypatch.setattr(images, "docker", lambda *args: json.dumps([item]))

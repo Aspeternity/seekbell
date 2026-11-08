@@ -144,6 +144,10 @@ def test_preflight_container_guards_detect_exposed_ports_and_unsafe_runtime():
         "RestartCount": 0,
     }
     assert tool.container_report(info, "a" * 40)["proxy_headers"] == "disabled"
+    # 0.6.4+ images start through their own entrypoint, which switches to 10001.
+    standard = copy.deepcopy(info)
+    standard["Config"]["Entrypoint"] = ["/usr/local/bin/seekbell-entrypoint"]
+    assert tool.container_report(standard, "a" * 40)["proxy_headers"] == "disabled"
     explicit = copy.deepcopy(info)
     explicit["Config"]["Env"].append("SEEKBELL_TRUSTED_PROXY_IPS=192.0.2.10, ::1")
     assert tool.container_report(explicit, "a" * 40)["proxy_headers"] == "explicit"
@@ -152,6 +156,7 @@ def test_preflight_container_guards_detect_exposed_ports_and_unsafe_runtime():
         lambda item: item["HostConfig"].update(ReadonlyRootfs=False),
         lambda item: item["HostConfig"].update(SecurityOpt=["no-new-privileges:false"]),
         lambda item: item["Config"].update(User="0"),
+        lambda item: item["Config"].update(Entrypoint=["/bin/sh", "-c"]),
         lambda item: item["Config"].update(
             Cmd=["uvicorn", "--proxy-headers", "--forwarded-allow-ips", "*"]
         ),

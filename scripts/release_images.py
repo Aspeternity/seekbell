@@ -12,6 +12,8 @@ import urllib.request
 from pathlib import Path
 
 ARCHITECTURES = ("amd64", "arm64")
+# Owns /data, then runs the server as UID/GID 10001 (see docker-entrypoint.sh).
+ENTRYPOINT = ["/usr/local/bin/seekbell-entrypoint"]
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 REVISION = re.compile(r"[0-9a-f]{40}")
 REPOSITORY = re.compile(r"[a-z0-9]+(?:[._-][a-z0-9]+)*/[a-z0-9]+(?:[._-][a-z0-9]+)*")
@@ -61,12 +63,12 @@ def inspect_image(image: str, architecture: str, revision: str, source: str) -> 
         item.get("Os") != "linux"
         or item.get("Architecture") != architecture
         or not DIGEST.fullmatch(item.get("Id", ""))
-        or config.get("User") != "10001:10001"
+        or config.get("Entrypoint") != ENTRYPOINT
         or labels.get("org.opencontainers.image.revision") != revision
         or labels.get("org.opencontainers.image.source") != source
         or f"SEEKBELL_BUILD_REVISION={revision}" not in config.get("Env", [])
     ):
-        raise ReleaseError("Image platform, source, revision, environment or user mismatch")
+        raise ReleaseError("Image platform, source, revision, environment or entrypoint mismatch")
     return item
 
 

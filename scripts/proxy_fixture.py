@@ -200,8 +200,9 @@ class ProxyFixture:
                 "CHOWN",
                 "-v",
                 self.files + ":/fixture",
-                self.image,
+                "--entrypoint",
                 "python",
+                self.image,
                 "-c",
                 CERTIFICATE + "\n(root/'nginx.conf').write_text(" + repr(config) + ")",
             )
@@ -214,8 +215,9 @@ class ProxyFixture:
                     "none",
                     "-v",
                     self.files + ":/fixture:ro",
-                    self.image,
+                    "--entrypoint",
                     "cat",
+                    self.image,
                     "/fixture/ca.crt",
                 ).stdout
             )
@@ -244,6 +246,8 @@ class ProxyFixture:
                 "no-new-privileges:true",
                 "-p",
                 "127.0.0.1::8000",
+                "--user",
+                "10001:10001",
                 "-e",
                 "SEEKBELL_TRUSTED_PROXY_IPS=" + self.proxy_ip,
                 "-v",

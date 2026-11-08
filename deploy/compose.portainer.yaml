@@ -1,17 +1,16 @@
-# SeekBell 0.6.3; schema 0018. Back up the data before upgrading.
+# SeekBell 0.6.4; schema 0018. Back up the data before upgrading.
 # Portainer: update the existing stack to keep its data. Reverse proxy and optional
 # hardening: docs/PROXY_DEPLOYMENT.md, docs/IMAGE_RELEASE.md.
 services:
   seekbell:
-    image: ghcr.io/aspeternity/seekbell:0.6.3
+    image: ghcr.io/aspeternity/seekbell:0.6.4
     container_name: seekbell
     restart: unless-stopped
     ports:
       - "8000:8000"
     volumes:
       - seekbell_data:/data
-      # Or a host directory, first: chown 10001:10001 /opt/seekbell/data
-      # - /opt/seekbell/data:/data
+      # Or any host directory, no permission setup needed: - /opt/seekbell/data:/data
 
 volumes:
   seekbell_data:
