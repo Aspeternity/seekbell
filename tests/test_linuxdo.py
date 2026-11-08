@@ -335,3 +335,32 @@ def test_invalid_or_expired_disk_snapshot_is_not_used_as_current_content(core, i
             await service.aclose()
 
     asyncio.run(run())
+
+
+def test_linuxdo_weekly_snapshot_is_shown_for_a_week_and_others_for_a_day(core):
+    async def run():
+        now = [1_000_000]
+        with write_session(core.engine) as session:
+            for period, age in (("weekly", 6 * 86400), ("hot", 86401)):
+                session.add(
+                    HotlistSnapshot(
+                        website_id="linuxdo",
+                        provider_id="linuxdo-rss",
+                        period=period,
+                        **parse_linuxdo_snapshot(linuxdo_rss(9001), now[0] - age),
+                    )
+                )
+        service = HotlistService(engine=core.engine, clock=lambda: now[0])
+        service.catalog = lambda: [("linuxdo", ["hot", "daily", "weekly"])]
+        try:
+            lists = {row["period"]: row for row in (await service._board())["lists"]}
+            assert lists["weekly"]["fetched_at"] == now[0] - 6 * 86400
+            assert lists["weekly"]["items"]
+            assert lists["hot"]["fetched_at"] is None and not lists["hot"]["items"]
+            now[0] += 86400 + 1
+            lists = {row["period"]: row for row in (await service._board())["lists"]}
+            assert lists["weekly"]["fetched_at"] is None and not lists["weekly"]["items"]
+        finally:
+            await service.aclose()
+
+    asyncio.run(run())
