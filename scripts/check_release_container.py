@@ -93,7 +93,6 @@ def main():
                     "FROM " + args.image + "\nUSER root\n"
                     "COPY 0010_release_fixture.py /app/.venv/lib/python3.12/site-packages/"
                     "seekbell/migrations/versions/0010_release_fixture.py\n"
-                    "USER 10001:10001\n"
                 )
                 subprocess.run(
                     ["docker", "build", "-t", tag, str(directory)],

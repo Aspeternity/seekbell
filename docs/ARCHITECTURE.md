@@ -235,7 +235,7 @@ Runtime增加独立alert_stop；其他actor意外失败降低就绪并停止采�
 
 ## M4本地Compose与停服加密备份（2026-10-20，第一子阶段）
 
-compose.yaml显式要求SEEKBELL_IMAGE，pull_policy=never；单实例/10001、只读根、/data命名卷、/tmp、cap_drop ALL/no-new-privileges和30秒stop_grace_period，默认只绑定127.0.0.1。维护覆盖文件禁外网/端口，私有/backup及/restore绑定路径必须已存在；首次目录初始化仅对新的空目录由临时root+CHOWN准备UID10001，不改变业务权限。检查脚本为每次创建唯一项目/卷，禁外网执行并清理，不接触日常卷。
+compose.yaml显式要求SEEKBELL_IMAGE，pull_policy=never；单实例、显式user 10001（0.6.4起镜像以root启动由入口脚本降权，此文件丢弃全部capabilities故直接指定用户）、只读根、/data命名卷、/tmp、cap_drop ALL/no-new-privileges和30秒stop_grace_period，默认只绑定127.0.0.1。维护覆盖文件禁外网/端口，私有/backup及/restore绑定路径必须已存在；首次目录初始化仅对新的空目录由临时root+CHOWN准备UID10001，不改变业务权限。检查脚本为每次创建唯一项目/卷，禁外网执行并清理，不接触日常卷。
 
 backup.py只提供交互式本地维护CLI，没有未经认证的备份HTTP接口。create复用instance_lock要求停服，通过sqlite3.Connection.backup复制已提交WAL的一致快照；先校验迁移/SQLAlchemy结构、quick_check/外键、管理员及全量当前/历史密文原钥可解密。格式v1用固定参数scrypt(N=2^17,r=8,p=1,256位输出)、随机salt/96位nonce、AES-256-GCM流式加密；头作AAD、128位tag，完整认证前不解析。元信息/原密钥/数据库全部加密，无可控路径解包；JSON清单上限16KiB/数据库2GiB。原子独占发布0600备份；私有暂存目录0700，成功/异常清理，不宣称强制终止后的安全擦除。
 
@@ -407,3 +407,8 @@ WebsiteRequestBudget.request增加auxiliary：热榜请求只在429、access_cha
 契约见SPEC 6.6。WebsiteRequestBudget恢复为0.6.0形态（同站单请求、2秒间隔、整站退避），去掉内存请求计数和pace。HotlistSource新增staggered周期元组，Linux DO为("weekly",)。HotlistService记录各榜上次发起请求的时刻（started，内存，重启清空可接受）；_stagger只服务staggered周期：对同站每个非错开周期，须started+60秒已过，且其到期时刻不早于“现在+60秒”，否则返回下次检查时刻。_ensure(stagger=True)用于预热和看板首读，错开等待不写state、不notify，返回paced供_warm_site算唤醒；get()单榜读取不错开。预热不再区分在看/后台，每站各周期按目录顺序逐个；采集到期前2秒让行（collection_priority）照旧。PUT /hotlists/selection保存后touch(nudge=True)。_render在快照未超2倍刷新间隔时把状态归为ready且隐藏error_code；刷新失败写日志，只含网站、周期和固定错误码。
 
 验证命令：uv run --frozen pytest tests/test_hotlists.py tests/test_linuxdo_runtime.py tests/test_linuxdo.py tests/test_linuxdo_followups.py tests/test_hotlist_settings.py tests/test_retry_controls.py -q；pnpm --dir frontend test:hotlist；pnpm --dir frontend test:linuxdo。浏览器测试的路由辅助只让前一两次回复立即返回，其余保持真实长轮询；linuxdo套件afterEach改为等待非GET写入完成，因长轮询使networkidle不再成立。
+
+### 入口脚本接管数据目录（2026-11-08，0.6.4）
+
+镜像不再声明USER，ENTRYPOINT为/usr/local/bin/seekbell-entrypoint（docker-entrypoint.sh）。以root启动时：校验PUID/PGID（默认10001，数字且非0），mkdir -p数据目录，find只对所有者/组不符的条目chown -h（不跟随符号链接），目录chmod 700，先试探setpriv切换，失败即一行中文报错退出；再以目标用户试写数据目录，最后exec setpriv --reuid --regid --clear-groups进入CMD，uvicorn仍是PID 1。非root启动（Compose user:）只做试写。所有面向用户的失败只输出一行“SeekBell: …”。维护工具（manage_release.run、check_backup_container、proxy_fixture）的一次性容器用--entrypoint ""或指定程序绕过入口脚本并显式--user；release_images按Entrypoint校验新镜像，manage_release.image兼容旧镜像的User 10001以便回退；check_deployment只接受空或该入口。check_container在CI中先把数据卷改为root所有，验证入口脚本接管、PID 1为10001。
+

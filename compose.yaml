@@ -2,6 +2,9 @@ services:
   seekbell:
     image: ${SEEKBELL_IMAGE:?Set SEEKBELL_IMAGE to a fixed commit tag or digest}
     pull_policy: never
+    # This hardened file drops every capability, so it names the user instead of letting
+    # the entrypoint switch to it.
+    user: "10001:10001"
     restart: unless-stopped
     init: true
     ports:

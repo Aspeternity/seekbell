@@ -33,10 +33,12 @@ RUN groupadd --gid 10001 seekbell \
     && find / -xdev -perm /6000 -type f -exec chmod a-s {} +
 COPY --from=backend /app/.venv /app/.venv
 COPY --from=frontend /build/frontend/dist /app/frontend/dist
-USER 10001:10001
+# Starts as root only to own /data (any bind mount works as is), then runs as 10001.
+COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/seekbell-entrypoint
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=3)"
+ENTRYPOINT ["/usr/local/bin/seekbell-entrypoint"]
 # Open requests (a hotlist long poll lasts up to 25 s) get 3 s, so a stop fits Docker's
 # default 10 s together with the background shutdown.
 CMD ["uvicorn", "seekbell.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--no-proxy-headers", "--no-access-log", "--timeout-graceful-shutdown", "3"]

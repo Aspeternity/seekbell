@@ -189,8 +189,13 @@ def unused(*volumes):
 def image(name):
     info = inspect("image", name)
     revision = info["Config"].get("Labels", {}).get("org.opencontainers.image.revision", "")
-    if not re.fullmatch("[0-9a-f]{40}", revision) or info["Config"]["User"] != "10001:10001":
-        raise ReleaseError("镜像须固定完整提交版本并使用UID/GID10001。")
+    # 0.6.4 and later switch to 10001 in the entrypoint; older images declare the user.
+    unprivileged = (
+        info["Config"].get("Entrypoint") == ["/usr/local/bin/seekbell-entrypoint"]
+        or info["Config"].get("User") == "10001:10001"
+    )
+    if not re.fullmatch("[0-9a-f]{40}", revision) or not unprivileged:
+        raise ReleaseError("镜像须固定完整提交版本并以UID/GID10001运行。")
     return info["Id"]
 
 
@@ -208,8 +213,9 @@ def run(image_id, mounts, *command, root=False):
         "--security-opt",
         "no-new-privileges:true",
     ]
-    if root:
-        arguments += ["--user", "0", "--cap-add", "CHOWN"]
+    # Maintenance commands bypass the entrypoint and name their user explicitly.
+    arguments += ["--entrypoint", ""]
+    arguments += ["--user", "0", "--cap-add", "CHOWN"] if root else ["--user", "10001:10001"]
     for volume, target, readonly in mounts:
         arguments += [
             "--mount",

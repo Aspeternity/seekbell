@@ -140,7 +140,7 @@ def container_report(info, revision):
         or "--no-access-log" not in command
         or "--proxy-headers" in command
         or "--forwarded-allow-ips" in command
-        or config.get("Entrypoint")
+        or config.get("Entrypoint") not in (None, [], ["/usr/local/bin/seekbell-entrypoint"])
     ):
         raise CheckError("请使用标准单入口及关闭访问日志的固定镜像命令。")
     trusted = environment.get("SEEKBELL_TRUSTED_PROXY_IPS", "")

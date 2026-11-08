@@ -29,6 +29,9 @@ assert len(assets) >= 2
 for asset in assets:
     assert get(asset)
 assert os.getuid() == 10001
+# The entrypoint switched the server (PID 1) to 10001 and gave it /data.
+assert open('/proc/1/status').read().split('Uid:')[1].split()[0] == '10001'
+assert (os.stat('/data').st_uid, os.stat('/data').st_gid) == (10001, 10001)
 for module in ('pytest', 'ruff'):
     assert importlib.util.find_spec(module) is None
 with sqlite3.connect('/data/seekbell.sqlite3') as connection:
@@ -157,6 +160,9 @@ print(json.dumps({
 """
 
 
+APP_USER = "10001:10001"
+
+
 def docker(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["docker", *args], check=check, text=True, capture_output=True, timeout=30
@@ -166,7 +172,7 @@ def docker(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
 def wait_ready(container: str, *, require_healthcheck: bool = False, probe: str = PROBE) -> None:
     deadline = time.monotonic() + 45
     while time.monotonic() < deadline:
-        result = docker("exec", container, "python", "-c", probe, check=False)
+        result = docker("exec", "--user", APP_USER, container, "python", "-c", probe, check=False)
         if result.returncode == 0:
             health = docker("inspect", container, "--format", "{{.State.Health.Status}}")
             if not require_healthcheck or health.stdout.strip() == "healthy":
@@ -184,6 +190,25 @@ def main() -> None:
     volume = container + "-data"
     try:
         docker("volume", "create", volume)
+        # A root-owned data directory, as a fresh host bind mount would be: the entrypoint
+        # must take it over without any manual chown.
+        docker(
+            "run",
+            "--rm",
+            "--pull",
+            "never",
+            "--network",
+            "none",
+            "--user",
+            "0",
+            "--entrypoint",
+            "chown",
+            "--mount",
+            f"type=volume,source={volume},target=/data",
+            args.image,
+            "0:0",
+            "/data",
+        )
         docker(
             "run",
             "-d",
@@ -198,23 +223,47 @@ def main() -> None:
             args.image,
         )
         wait_ready(container, require_healthcheck=True)
-        first = json.loads(docker("exec", container, "python", "-c", PROBE).stdout)
+        first = json.loads(
+            docker("exec", "--user", APP_USER, container, "python", "-c", PROBE).stdout
+        )
         assert first["version"]["build_revision"] == args.revision
-        locked = docker("exec", container, "python", "-m", "seekbell.db", "current", check=False)
+        locked = docker(
+            "exec",
+            "--user",
+            APP_USER,
+            container,
+            "python",
+            "-m",
+            "seekbell.db",
+            "current",
+            check=False,
+        )
         assert locked.returncode != 0 and "Another SeekBell process" in locked.stderr
         docker("restart", container)
         wait_ready(container)
-        second = json.loads(docker("exec", container, "python", "-c", PROBE).stdout)
+        second = json.loads(
+            docker("exec", "--user", APP_USER, container, "python", "-c", PROBE).stdout
+        )
         assert first == second, "Installation or API changed across restart"
         demo = json.loads(
-            docker("exec", container, "python", "-m", "seekbell.services.demo").stdout
+            docker(
+                "exec", "--user", APP_USER, container, "python", "-m", "seekbell.services.demo"
+            ).stdout
         )
         assert demo["mode"] == "offline_synthetic"
         assert demo["final_status"] == "sent" and demo["duplicate_poll_queued"] == 0
         assert demo["manual_send_calls"] == 1 and demo["manual_dedup_preserved"]
         assert demo["target_test_send_calls"] == 1
         lifecycle = json.loads(
-            docker("exec", container, "python", "-m", "seekbell.services.runtime_demo").stdout
+            docker(
+                "exec",
+                "--user",
+                APP_USER,
+                container,
+                "python",
+                "-m",
+                "seekbell.services.runtime_demo",
+            ).stdout
         )
         assert lifecycle["mode"] == "offline_synthetic" and lifecycle["sends"] == 1
         assert lifecycle["system_alert_sends"] == 2 and lifecycle["alert_history_removed"]
@@ -226,7 +275,7 @@ def main() -> None:
             and lifecycle["http_closed"]
         )
         managed_first = json.loads(
-            docker("exec", container, "python", "-c", MANAGEMENT_PROBE).stdout
+            docker("exec", "--user", APP_USER, container, "python", "-c", MANAGEMENT_PROBE).stdout
         )
         account_probe = MANAGEMENT_PROBE.replace(
             "print(json.dumps({",
@@ -238,14 +287,14 @@ def main() -> None:
             'assert request("auth/status")["username"] == "container_updated"\n'
             "print(json.dumps({",
         )
-        docker("exec", container, "python", "-c", account_probe)
+        docker("exec", "--user", APP_USER, container, "python", "-c", account_probe)
         persisted_probe = MANAGEMENT_PROBE.replace(
             '"container_admin"', '"container_updated"'
         ).replace('"Synthetic-Container-2026"', '"Synthetic-Container-Updated-2026"')
         docker("restart", container)
         wait_ready(container, probe=persisted_probe)
         managed_second = json.loads(
-            docker("exec", container, "python", "-c", persisted_probe).stdout
+            docker("exec", "--user", APP_USER, container, "python", "-c", persisted_probe).stdout
         )
         assert managed_first == managed_second, "Management configuration changed across restart"
         image_id = docker("image", "inspect", args.image, "--format", "{{.Id}}").stdout.strip()

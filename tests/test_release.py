@@ -311,3 +311,36 @@ def test_symlink_wal_is_rejected_without_publishing(source, tmp_path):
         release.prepare(source, tmp_path / "candidate")
     assert not (tmp_path / "candidate").exists()
     assert (tmp_path / "private").read_text() == "Synthetic-private-not-a-WAL"
+
+
+@pytest.mark.parametrize(
+    "config, accepted",
+    [
+        ({"Entrypoint": ["/usr/local/bin/seekbell-entrypoint"]}, True),
+        ({"User": "10001:10001"}, True),  # images before 0.6.4, for rollback
+        ({"User": "root"}, False),
+        ({}, False),
+    ],
+)
+def test_maintenance_accepts_images_that_run_as_10001(monkeypatch, config, accepted):
+    tool = operator()
+    labels = {"org.opencontainers.image.revision": "a" * 40}
+    info = {"Id": "sha256:" + "1" * 64, "Config": {"Labels": labels, **config}}
+    monkeypatch.setattr(tool, "inspect", lambda kind, name: info)
+    if accepted:
+        assert tool.image("candidate") == info["Id"]
+    else:
+        with pytest.raises(tool.ReleaseError):
+            tool.image("candidate")
+
+
+def test_maintenance_runs_bypass_the_entrypoint_with_an_explicit_user(monkeypatch):
+    tool = operator()
+    calls = []
+    monkeypatch.setattr(tool, "docker", lambda *args, **options: calls.append(args))
+    tool.run("image", [], "python", "-c", "pass")
+    tool.run("image", [], "python", "-c", "pass", root=True)
+    for args, user in zip(calls, ("10001:10001", "0"), strict=True):
+        assert args[args.index("--entrypoint") + 1] == ""
+        assert args[args.index("--user") + 1] == user
+        assert args[args.index("image") + 1 :] == ("python", "-c", "pass")
