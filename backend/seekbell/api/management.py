@@ -26,6 +26,7 @@ from seekbell.db.transactions import write_session
 from seekbell.domain.posts import PostFields
 from seekbell.domain.rules import Rule, evaluate
 from seekbell.services import alerts
+from seekbell.services.about import about_view
 from seekbell.services.configuration import Configuration, TargetDeleteChanged, TargetInUse
 from seekbell.services.display import DisplayConflict, get_display, timezone_name, update_display
 from seekbell.services.hotlist_settings import configuration as hotlist_configuration
@@ -603,6 +604,11 @@ def preview_retention(request: Request, days: int):
     if not 1 <= days <= 365:
         raise HTTPException(422, "保留天数应为1–365天。")
     return retention_preview(request.app.state.engine, days)
+
+
+@router.get("/about")
+def about(request: Request):
+    return about_view(request.app.state)
 
 
 @router.get("/diagnostics")

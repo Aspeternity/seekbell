@@ -43,6 +43,11 @@ const paths: Record<string, string> = {
   filter: 'M3 5h18l-7 8v6l-4 2v-8L3 5Z',
   external: 'M14 3h7v7M21 3 10 14M10 3H3v18h18v-7',
   shield: 'm12 2 9 4v6c0 5-9 10-9 10S3 17 3 12V6l9-4Zm-5 10 3 3 7-7',
+  book: 'M4 4h5a3 3 0 0 1 3 3v13a2 2 0 0 0-2-2H4V4Zm16 0h-5a3 3 0 0 0-3 3v13a2 2 0 0 1 2-2h6V4Z',
+  database:
+    'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3Zm0 0v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3',
+  cpu: 'M7 7h10v10H7zM10 3v4m4-4v4m-4 10v4m4-4v4M3 10h4m-4 4h4m10-4h4m-4 4h4',
+  message: 'M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z',
 }
 </script>
 <template>

@@ -2,6 +2,7 @@ import asyncio
 import secrets
 import signal
 import threading
+import time
 from contextlib import AsyncExitStack, asynccontextmanager
 from functools import partial
 
@@ -168,6 +169,7 @@ def create_app(
 
     app = FastAPI(title="SeekBell", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.state.settings = settings
+    app.state.started_at = time.time()
     app.state.csrf_key = secrets.token_bytes(32)
     app.state.login_limiter = LoginLimiter()
     app.state.confirmations = Confirmations()

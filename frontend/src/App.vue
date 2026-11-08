@@ -94,9 +94,16 @@ const validPage = computed(
     (page.value !== 'task' || !!editing.value) &&
     (page.value !== 'target' || !!targetEditing.value) &&
     (page.value !== 'settings' ||
-      ['preferences', 'overview', 'account', 'backup', 'about', 'retention', 'alerts'].includes(
-        parts.value[1] || '',
-      )) &&
+      [
+        'preferences',
+        'overview',
+        'account',
+        'backup',
+        'diagnostics',
+        'about',
+        'retention',
+        'alerts',
+      ].includes(parts.value[1] || '')) &&
     (page.value !== 'notifications' ||
       ['targets', 'deliveries', 'tests', ...['manual']].includes(parts.value[1] || '')),
 )
@@ -256,7 +263,7 @@ function focusMain() {
 function showInfo() {
   infoTitle.value = '使用说明'
   infoBody.value =
-    '先添加监控网站和通知目标，再创建监控任务。系统设置可管理工作空间、概览布局、告警、历史保留、备份和账户安全。关闭浏览器不影响后台监控。备份可在系统设置中直接恢复，新安装也能在初始化页从备份恢复；版本、运行状态和帮助链接见“关于与诊断”。'
+    '先添加监控网站和通知目标，再创建监控任务。系统设置可管理工作空间、概览布局、告警、历史保留、备份和账户安全。关闭浏览器不影响后台监控。备份可在系统设置中直接恢复，新安装也能在初始化页从备份恢复；运行状态见“诊断”，版本、系统信息和帮助链接见“关于”。'
   infoDialog.value?.showModal()
 }
 </script>

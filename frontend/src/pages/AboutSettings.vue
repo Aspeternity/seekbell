@@ -1,227 +1,239 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import Icon from '../components/Icon.vue'
-import { loadReadiness, loadVersionInfo } from '../api'
-import { request } from '../store'
-import { useRemote } from '../history'
-import Feedback from '../components/Feedback.vue'
 import ReadRegion from '../components/ReadRegion.vue'
-import CurrentFaults from '../components/CurrentFaults.vue'
-import SystemEventLog from '../components/SystemEventLog.vue'
-interface Diagnostics {
-  application: string
+import { formatTime, request } from '../store'
+import { useRemote } from '../history'
+interface About {
   version: string
   build_revision: string
-  database_revision: string
-  runtime: RuntimeInfo
+  database_revision: string | null
   supported_websites: { id: string; name: string }[]
-  fault_codes: string[]
+  timezone: string
+  started_at: number
+  environment: { python: string; system: string; container: boolean }
+  storage: {
+    database_bytes: number
+    filesystem_free_bytes: number
+    filesystem_total_bytes: number
+  }
   checked_at: number
 }
-interface RuntimeInfo {
-  active: boolean
-  status: string
-  code: string | null
+const about = useRemote(
+  () => request<About>('manage/about'),
+  () => [],
+  { cacheKey: () => 'about:system' },
+)
+const repository = 'https://github.com/Aspeternity/seekbell'
+const links = [
+  {
+    label: '使用文档',
+    note: '部署、配置与日常使用',
+    icon: 'book',
+    href: repository + '/blob/main/README.md',
+  },
+  {
+    label: '更新日志',
+    note: '每个版本带来的变化',
+    icon: 'clock',
+    href: repository + '/blob/main/CHANGELOG.md',
+  },
+  { label: '项目主页', note: '源码仓库与发布版本', icon: 'code', href: repository },
+  {
+    label: '反馈问题',
+    note: '报告问题或提出建议',
+    icon: 'message',
+    href: repository + '/issues',
+  },
+]
+const stamp = (seconds: number) => formatTime(new Date(seconds * 1000).toISOString())
+const size = (bytes: number) =>
+  bytes >= 1024 ** 3
+    ? (bytes / 1024 ** 3).toFixed(2) + ' GiB'
+    : (bytes / 1024 ** 2).toFixed(2) + ' MiB'
+function duration(seconds: number) {
+  const minutes = Math.floor(Math.max(0, seconds) / 60)
+  const days = Math.floor(minutes / 1440),
+    hours = Math.floor((minutes % 1440) / 60),
+    rest = minutes % 60
+  if (days) return `${days} 天 ${hours} 小时`
+  if (hours) return `${hours} 小时 ${rest} 分钟`
+  return minutes ? `${minutes} 分钟` : '不到 1 分钟'
 }
-const diagnostics = useRemote(
-  () => request<Diagnostics>('manage/diagnostics'),
-  () => [],
-  { cacheKey: () => 'about:diagnostics' },
-)
-const version = useRemote(loadVersionInfo, () => [], { cacheKey: () => 'about:version' })
-const readiness = useRemote(loadReadiness, () => [], { cacheKey: () => 'about:ready' })
-const runtime = useRemote(
-  () => request<RuntimeInfo>('manage/runtime'),
-  () => [],
-  { cacheKey: () => 'about:runtime' },
-)
-const faults = ref<InstanceType<typeof CurrentFaults>>(),
-  eventLog = ref<InstanceType<typeof SystemEventLog>>(),
-  faultTotal = ref<number>()
-const copied = ref(''),
-  showing = ref(false)
-const summary = computed(() =>
-  diagnostics.data.value ? JSON.stringify(diagnostics.data.value, null, 2) : '',
-)
-async function copyDiagnostics() {
-  showing.value = true
+function offset(timeZone: string) {
+  try {
+    const name = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'longOffset' })
+      .formatToParts(new Date())
+      .find((part) => part.type === 'timeZoneName')?.value
+    return name ? name.replace('GMT', 'UTC').replace(/^UTC$/, 'UTC+00:00') : ''
+  } catch {
+    return ''
+  }
+}
+const diskUsed = computed(() => {
+  const storage = about.data.value?.storage
+  if (!storage?.filesystem_total_bytes) return 0
+  const used = 1 - storage.filesystem_free_bytes / storage.filesystem_total_bytes
+  return Math.min(100, Math.max(0, Math.round(used * 100)))
+})
+const development = computed(() => about.data.value?.build_revision === 'development')
+const copied = ref('')
+async function copyRevision() {
   copied.value = ''
   try {
     if (!navigator.clipboard?.writeText) throw new Error()
-    await navigator.clipboard.writeText(summary.value)
+    await navigator.clipboard.writeText(about.data.value?.build_revision ?? '')
     copied.value = '已复制'
   } catch {
-    copied.value = '请手动复制下方内容'
+    copied.value = '复制失败，请手动选取'
   }
-}
-const busy = computed(
-  () => version.loading.value || readiness.loading.value || runtime.loading.value,
-)
-const runtimeLabel = computed(() => {
-  const data = runtime.data.value
-  if (!data) return ''
-  if (data.active) return '运行中'
-  return (
-    {
-      starting: '正在启动',
-      stopping: '正在停止',
-      stopped: '已停止',
-      failed: '异常停止',
-      unavailable: '状态不可用',
-      idle: '未启动',
-    }[data.status] || '未运行'
-  )
-})
-const websites = computed(() =>
-  diagnostics.data.value?.supported_websites.map((row) => row.name).join('、'),
-)
-const docs = 'https://github.com/Aspeternity/seekbell/blob/main/'
-function refresh() {
-  version.reload()
-  readiness.reload()
-  runtime.reload()
-  diagnostics.reload()
-  faults.value?.reload()
-  eventLog.value?.reload()
 }
 </script>
 <template>
   <div class="settings-stack">
-    <section class="panel about-card" aria-label="版本信息">
-      <div class="about-brand">
-        <span class="brand-icon"><Icon name="bell" :size="24" /></span>
-        <div>
+    <section class="panel about-card" aria-label="关于 SeekBell">
+      <div class="about-hero">
+        <span class="brand-icon"><Icon name="bell" :size="30" /><i /></span>
+        <div class="about-hero-text">
           <h2>SeekBell<span class="brand-period">.</span></h2>
           <p>留意你关心的。</p>
+          <div v-if="about.data.value" class="about-badges">
+            <span class="about-version"
+              >版本 <strong data-testid="app-version">{{ about.data.value.version }}</strong></span
+            >
+            <span class="small-badge neutral">{{
+              development
+                ? '本地开发构建'
+                : '正式构建 · ' + about.data.value.build_revision.slice(0, 7)
+            }}</span>
+          </div>
         </div>
       </div>
-      <ReadRegion
-        :loading="version.loading.value"
-        :error="version.error.value"
-        :has-data="!!version.data.value"
-        :min-height="64"
-        @retry="version.reload"
-      >
-        <dl v-if="version.data.value" class="about-facts">
-          <div>
-            <dt>应用版本</dt>
-            <dd data-testid="app-version">{{ version.data.value.version }}</dd>
-          </div>
-          <div>
-            <dt>数据库版本</dt>
-            <dd data-testid="database-revision">
-              <code>{{ version.data.value.database_revision ?? '未记录迁移版本' }}</code>
-            </dd>
-          </div>
-          <div>
-            <dt>代码版本</dt>
-            <dd data-testid="build-revision" :title="version.data.value.build_revision">
-              <code>{{ version.data.value.build_revision }}</code>
-            </dd>
-          </div>
-          <div v-if="websites">
-            <dt>支持网站</dt>
-            <dd data-testid="supported-websites">{{ websites }}</dd>
-          </div>
-        </dl>
-        <p v-if="version.data.value?.build_revision === 'development'" class="small-note">
-          本地开发构建，未固定代码提交版本。
-        </p>
-      </ReadRegion>
-      <div class="about-footer">
-        <nav class="about-links" aria-label="帮助文档">
-          <a class="text-link" :href="docs + 'README.md'" target="_blank" rel="noopener noreferrer"
-            >使用说明</a
-          >
-          <a
-            class="text-link"
-            :href="docs + 'docs/BACKUP_RESTORE.md'"
-            target="_blank"
-            rel="noopener noreferrer"
-            >备份恢复</a
-          >
-          <a
-            class="text-link"
-            :href="docs + 'docs/RELEASES.md'"
-            target="_blank"
-            rel="noopener noreferrer"
-            >升级与回退</a
-          >
-        </nav>
-        <div class="about-copy">
-          <span v-if="copied" role="status">{{ copied }}</span>
-          <button class="button" :disabled="!diagnostics.data.value" @click="copyDiagnostics">
-            <Icon name="copy" :size="14" />复制诊断摘要
-          </button>
-        </div>
-      </div>
-      <textarea
-        v-if="showing"
-        class="text-input diagnostic-summary"
-        aria-label="诊断摘要"
-        :value="summary"
-        readonly
-        rows="10"
-      />
+      <nav class="about-links" aria-label="项目链接">
+        <a
+          v-for="link in links"
+          :key="link.label"
+          class="about-link"
+          :href="link.href"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <span class="about-link-icon"><Icon :name="link.icon" :size="18" /></span>
+          <span class="about-link-text">
+            <strong>{{ link.label }}</strong>
+            <small>{{ link.note }}</small>
+          </span>
+          <Icon class="about-link-arrow" name="external" :size="14" />
+        </a>
+      </nav>
     </section>
-    <section class="panel settings-card" aria-labelledby="readiness-title">
+    <section class="panel settings-card about-system" aria-labelledby="about-system-title">
       <div class="panel-heading">
-        <h2 id="readiness-title">服务状态</h2>
-        <button class="button" :disabled="busy" @click="refresh">
-          <Icon name="refresh" :size="14" />刷新运行信息
-        </button>
+        <h2 id="about-system-title">系统信息</h2>
+        <span v-if="about.data.value" class="small-note"
+          >检查于 {{ stamp(about.data.value.checked_at) }}</span
+        >
       </div>
-      <div class="form-content form-stack">
-        <dl class="status-tiles">
-          <div>
-            <dt>服务</dt>
-            <dd v-if="readiness.data.value === 'ok'" class="status-value ok" role="status">
-              已就绪
-            </dd>
-            <dd v-else-if="readiness.data.value" class="status-value bad" role="alert">
-              未就绪，请检查数据库和后台
-            </dd>
-            <dd v-else class="status-value pending" aria-label="读取中" />
+      <div class="form-content">
+        <ReadRegion
+          :loading="about.loading.value"
+          :error="about.error.value"
+          :has-data="!!about.data.value"
+          :min-height="220"
+          @retry="about.reload"
+        >
+          <div v-if="about.data.value" class="about-body">
+            <dl class="about-tiles">
+              <div>
+                <dt>
+                  <span class="about-tile-icon"><Icon name="globe" :size="16" /></span>支持网站
+                </dt>
+                <dd class="about-chips">
+                  <span v-for="site in about.data.value.supported_websites" :key="site.id">{{
+                    site.name
+                  }}</span>
+                </dd>
+              </div>
+              <div>
+                <dt>
+                  <span class="about-tile-icon"><Icon name="clock" :size="16" /></span>显示时区
+                </dt>
+                <dd>
+                  {{ about.data.value.timezone }}
+                  <small>{{ offset(about.data.value.timezone) || '偏移未知' }}</small>
+                </dd>
+              </div>
+              <div>
+                <dt>
+                  <span class="about-tile-icon"><Icon name="activity" :size="16" /></span>已运行
+                </dt>
+                <dd>
+                  {{ duration(about.data.value.checked_at - about.data.value.started_at) }}
+                  <small>启动于 {{ stamp(about.data.value.started_at) }}</small>
+                </dd>
+              </div>
+              <div>
+                <dt>
+                  <span class="about-tile-icon"><Icon name="cpu" :size="16" /></span>运行环境
+                </dt>
+                <dd>
+                  Python {{ about.data.value.environment.python }}
+                  <small
+                    >{{ about.data.value.environment.system }} ·
+                    {{ about.data.value.environment.container ? '容器内运行' : '非容器' }}</small
+                  >
+                </dd>
+              </div>
+              <div class="about-storage">
+                <dt>
+                  <span class="about-tile-icon"><Icon name="database" :size="16" /></span>数据存储
+                </dt>
+                <dd>
+                  数据库 {{ size(about.data.value.storage.database_bytes) }}
+                  <span
+                    class="about-meter"
+                    role="meter"
+                    aria-label="磁盘已用"
+                    :aria-valuenow="diskUsed"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                    ><span :style="{ width: diskUsed + '%' }"
+                  /></span>
+                  <small
+                    >磁盘可用 {{ size(about.data.value.storage.filesystem_free_bytes) }} /
+                    {{ size(about.data.value.storage.filesystem_total_bytes) }}（已用
+                    {{ diskUsed }}%）</small
+                  >
+                </dd>
+              </div>
+            </dl>
+            <details class="about-build">
+              <summary><Icon name="next" :size="14" />构建信息</summary>
+              <dl>
+                <div>
+                  <dt>代码提交</dt>
+                  <dd>
+                    <code data-testid="build-revision">{{ about.data.value.build_revision }}</code>
+                    <button class="text-link" type="button" @click="copyRevision">
+                      <Icon name="copy" :size="13" />复制
+                    </button>
+                    <span v-if="copied" class="small-note" role="status">{{ copied }}</span>
+                  </dd>
+                </div>
+                <div>
+                  <dt>数据库结构版本</dt>
+                  <dd>
+                    <code data-testid="database-revision">{{
+                      about.data.value.database_revision ?? '未记录迁移版本'
+                    }}</code>
+                  </dd>
+                </div>
+              </dl>
+              <p v-if="development" class="small-note">本地开发构建，未固定代码提交版本。</p>
+            </details>
           </div>
-          <div>
-            <dt>后台任务</dt>
-            <dd
-              v-if="runtime.data.value"
-              class="status-value"
-              :class="runtime.data.value.active ? 'ok' : 'bad'"
-            >
-              <span>{{ runtimeLabel }}</span>
-              <code v-if="runtime.data.value.code">{{ runtime.data.value.code }}</code>
-            </dd>
-            <dd v-else class="status-value pending" aria-label="读取中" />
-          </div>
-          <div>
-            <dt>当前故障</dt>
-            <dd
-              v-if="faultTotal !== undefined"
-              class="status-value"
-              :class="faultTotal ? 'bad' : 'ok'"
-            >
-              {{ faultTotal ? faultTotal + ' 项' : '无' }}
-            </dd>
-            <dd v-else class="status-value pending" aria-label="读取中" />
-          </div>
-        </dl>
-        <Feedback
-          :loading="false"
-          :error="readiness.error.value"
-          :retained="!!readiness.data.value"
-          @retry="readiness.reload"
-        />
-        <Feedback
-          :loading="false"
-          :error="runtime.error.value"
-          :retained="!!runtime.data.value"
-          @retry="runtime.reload"
-        />
-        <CurrentFaults ref="faults" @total="faultTotal = $event" />
+        </ReadRegion>
       </div>
     </section>
-    <SystemEventLog ref="eventLog" />
   </div>
 </template>

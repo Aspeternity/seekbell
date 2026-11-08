@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AboutSettings from './AboutSettings.vue'
+import DiagnosticsSettings from './DiagnosticsSettings.vue'
 import Preferences from './Preferences.vue'
 import BackupSettings from './BackupSettings.vue'
 import OverviewSettings from './OverviewSettings.vue'
@@ -18,7 +19,8 @@ const categories = [
   { value: 'retention', label: '历史与存储' },
   { value: 'backup', label: '备份与恢复' },
   { value: 'account', label: '账户与安全' },
-  { value: 'about', label: '关于与诊断' },
+  { value: 'diagnostics', label: '诊断' },
+  { value: 'about', label: '关于' },
 ]
 const selectedTab = computed(() => props.tab || 'preferences')
 const tabs = ref<HTMLElement>()
@@ -234,6 +236,7 @@ function logout() {
       <RetentionSettings v-else-if="props.tab === 'retention'" @dirty="retentionDirty = $event" />
       <OverviewSettings v-else-if="props.tab === 'overview'" @dirty="auxiliaryDirty = $event" />
       <AlertsSettings v-else-if="props.tab === 'alerts'" @dirty="auxiliaryDirty = $event" />
+      <DiagnosticsSettings v-else-if="props.tab === 'diagnostics'" />
       <AboutSettings v-else-if="props.tab === 'about'" />
       <BackupSettings v-else-if="props.tab === 'backup'" @dirty="auxiliaryDirty = $event" />
     </div>

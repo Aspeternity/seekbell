@@ -133,6 +133,38 @@ def test_storage_and_diagnostics_are_readonly_and_exclude_credentials(web):
     assert table_data(settings.database_path) == before
 
 
+def test_about_reports_system_facts_without_paths_or_writes(web):
+    client, app, settings = web
+    before = table_data(settings.database_path)
+    about = client.get("/api/manage/about")
+    assert about.status_code == 200
+    data = about.json()
+    assert set(data) == {
+        "version",
+        "build_revision",
+        "database_revision",
+        "supported_websites",
+        "timezone",
+        "started_at",
+        "environment",
+        "storage",
+        "checked_at",
+    }
+    assert data["database_revision"] == schema_revision(app.state.engine)
+    assert [row["id"] for row in data["supported_websites"]] == ["nodeseek", "linuxdo"]
+    assert data["timezone"] == client.get("/api/manage/preferences").json()["timezone"]
+    assert data["started_at"] == app.state.started_at <= data["checked_at"]
+    assert set(data["environment"]) == {"python", "system", "container"}
+    assert isinstance(data["environment"]["container"], bool)
+    assert data["storage"]["database_bytes"] > 0
+    assert data["storage"]["filesystem_free_bytes"] > 0
+    assert str(settings.data_dir) not in about.text
+    assert "csrf" not in about.text and "password" not in about.text
+    assert table_data(settings.database_path) == before
+    client.cookies.clear()
+    assert client.get("/api/manage/about").status_code == 401
+
+
 def test_backup_receipts_are_bounded_and_nonsecret(web):
     _, app, _ = web
     for index in range(55):
