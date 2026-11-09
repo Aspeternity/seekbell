@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, watch } from 'vue'
-import { state, signedIn } from '../store'
+import { signedIn } from '../store'
 import { historyGet } from '../history'
 import Feedback from './Feedback.vue'
 import {
@@ -31,10 +31,9 @@ onBeforeUnmount(() => {
 </script>
 <template>
   <div class="notification-tabs-region">
-    <nav class="page-tabs" aria-label="通知管理分类">
+    <nav class="record-tabs" aria-label="通知记录分类">
       <button
         v-for="item in [
-          { id: 'targets', label: '通知目标', count: state.targets.length },
           { id: 'deliveries', label: '投递记录', count: notificationCounts?.deliveries },
           { id: 'manual', label: '手动重发', count: notificationCounts?.manual },
           { id: 'tests', label: '测试记录', count: notificationCounts?.tests },
@@ -43,7 +42,7 @@ onBeforeUnmount(() => {
         :class="{ active: tab === item.id }"
         :aria-current="tab === item.id ? 'page' : undefined"
         :aria-busy="pendingTab === item.id || undefined"
-        @click="emit('navigate', '/notifications/' + item.id)"
+        @click="emit('navigate', '/operations/' + item.id)"
       >
         {{ item.label
         }}<span
@@ -69,6 +68,32 @@ onBeforeUnmount(() => {
 <style scoped>
 .notification-tabs-region {
   position: relative;
+  margin-bottom: 14px;
+}
+.record-tabs {
+  display: inline-flex;
+  max-width: 100%;
+  overflow-x: auto;
+  gap: 2px;
+  padding: 3px;
+  background: #eff1f4;
+  border-radius: 8px;
+}
+.record-tabs button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #4c5561;
+  white-space: nowrap;
+}
+.record-tabs button.active {
+  background: #fff;
+  color: #ad643c;
+  font-weight: 550;
 }
 .notification-tabs-feedback {
   position: absolute;

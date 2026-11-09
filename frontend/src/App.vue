@@ -7,10 +7,11 @@ import Websites from './pages/Websites.vue'
 import TargetEditor from './pages/TargetEditor.vue'
 import Auth from './pages/Auth.vue'
 import Overview from './pages/Overview.vue'
-import Content from './pages/Content.vue'
-import Notifications from './pages/Notifications.vue'
+import Operations from './pages/Operations.vue'
+import Targets from './pages/Targets.vue'
 import Settings from './pages/Settings.vue'
 import { emptyTask } from './model'
+import { recordTabs } from './recordQueries'
 import type { Task } from './model'
 import {
   state,
@@ -28,6 +29,10 @@ function normalize(hash: string) {
   try {
     const p = decodeURIComponent(hash.replace(/^#/, '')) || '/'
     if (p === '/settings/display') return '/settings/preferences?section=timezone'
+    if (p === '/settings/diagnostics' || p === '/operations') return '/operations/status'
+    if (p === '/content' || p.startsWith('/content/')) return '/operations' + p
+    const record = p.match(/^\/notifications\/(deliveries|manual|tests)(\/.*)?$/)
+    if (record) return '/operations/' + record[1] + (record[2] || '')
     if (p.startsWith('/settings/preferences?') && p.includes('section=overview-modules'))
       return '/settings/overview?section=overview-modules'
     return p === '/notifications'
@@ -50,6 +55,9 @@ if (signedIn.value && path.value === '/login') path.value = '/'
 history.replaceState(null, '', '#' + path.value)
 const parts = computed(() => path.value.split('?')[0]!.split('/').filter(Boolean))
 const page = computed(() => parts.value[0] || 'overview')
+const recordTarget = computed(
+  () => new URLSearchParams(path.value.split('?')[1] || '').get('target') || undefined,
+)
 const authPage = computed(() => ['login', 'setup'].includes(page.value))
 const editId = computed(() => parts.value[1] || 'new')
 const editing = computed(() =>
@@ -63,9 +71,9 @@ const targetEditing = computed(() =>
 const navItems = [
   { name: '概览', icon: 'grid', path: '/', key: 'overview' },
   { name: '监控网站', icon: 'globe', path: '/websites', key: 'websites' },
-  { name: '通知管理', icon: 'bell', path: '/notifications/targets', key: 'notifications' },
+  { name: '通知目标', icon: 'bell', path: '/notifications/targets', key: 'notifications' },
   { name: '监控任务', icon: 'layers', path: '/tasks', key: 'tasks' },
-  { name: '内容与命中', icon: 'inbox', path: '/content', key: 'content' },
+  { name: '运行中心', icon: 'activity', path: '/operations/status', key: 'operations' },
 ]
 const activeKey = computed(() =>
   page.value === 'task' ? 'tasks' : page.value === 'target' ? 'notifications' : page.value,
@@ -85,7 +93,7 @@ const validPage = computed(
       'overview',
       'tasks',
       'websites',
-      'content',
+      'operations',
       'notifications',
       'target',
       'task',
@@ -94,18 +102,12 @@ const validPage = computed(
     (page.value !== 'task' || !!editing.value) &&
     (page.value !== 'target' || !!targetEditing.value) &&
     (page.value !== 'settings' ||
-      [
-        'preferences',
-        'overview',
-        'account',
-        'backup',
-        'diagnostics',
-        'about',
-        'retention',
-        'alerts',
-      ].includes(parts.value[1] || '')) &&
-    (page.value !== 'notifications' ||
-      ['targets', 'deliveries', 'tests', ...['manual']].includes(parts.value[1] || '')),
+      ['preferences', 'overview', 'account', 'backup', 'about', 'retention', 'alerts'].includes(
+        parts.value[1] || '',
+      )) &&
+    (page.value !== 'notifications' || parts.value[1] === 'targets') &&
+    (page.value !== 'operations' ||
+      ['status', 'content', ...recordTabs].includes(parts.value[1] || '')),
 )
 const dialog = ref<HTMLDialogElement>(),
   infoDialog = ref<HTMLDialogElement>(),
@@ -122,7 +124,7 @@ function accept() {
   action?.()
 }
 function applyRoute(next: string, push = true) {
-  const sectionTabs = /^\/(notifications|settings)\/[^/]+$/
+  const sectionTabs = /^\/(operations|settings)\/[^/]+$/
   const internalTab =
     sectionTabs.test(path.value) &&
     sectionTabs.test(next) &&
@@ -377,21 +379,14 @@ function showInfo() {
       </header>
       <main id="main-content" tabindex="-1">
         <Overview v-if="page === 'overview'" @navigate="navigate" />
-        <Content
-          v-else-if="page === 'content'"
-          :key="path"
-          :selected-id="parts[1]"
-          @navigate="navigate"
-        />
-        <Notifications
-          v-else-if="
-            page === 'notifications' &&
-            ['targets', 'deliveries', 'tests', 'manual'].includes(parts[1] || '')
-          "
-          :tab="parts[1]!"
+        <Operations
+          v-else-if="page === 'operations' && validPage"
+          :section="parts[1]!"
           :record-id="parts[2]"
+          :initial-target="recordTarget"
           @navigate="navigate"
         />
+        <Targets v-else-if="page === 'notifications' && validPage" @navigate="navigate" />
         <TaskList v-else-if="page === 'tasks'" @navigate="navigate" />
         <section v-else-if="page === 'task' && !state.websites.length" class="panel empty-state">
           <Icon name="globe" :size="36" />
@@ -413,6 +408,7 @@ function showInfo() {
         />
         <Websites
           v-else-if="page === 'websites'"
+          :open-id="parts[1]"
           @navigate="navigate"
           @dirty="(value: boolean) => (dirty = value)"
         />

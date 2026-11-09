@@ -33,7 +33,7 @@ test('date triggers share one boundary and custom select menus follow existing c
 }, info) => {
   await login(page)
   for (const tab of ['posts', 'deliveries', 'manual', 'tests']) {
-    await nav(page, tab === 'posts' ? '/content' : '/notifications/' + tab)
+    await nav(page, tab === 'posts' ? '/operations/content' : '/operations/' + tab)
     const control = page.getByRole('button', {
       name: tab === 'posts' ? '发现日期' : '记录日期',
       exact: true,
@@ -53,7 +53,7 @@ test('date triggers share one boundary and custom select menus follow existing c
     await expect(control).toBeFocused()
     expect(await page.locator('select').count()).toBe(0)
   }
-  await nav(page, '/content')
+  await nav(page, '/operations/content')
   const control = page.getByRole('combobox', { name: '匹配结果', exact: true })
   await control.click()
   const menu = page.getByRole('listbox', { name: '匹配结果', exact: true })
@@ -80,19 +80,19 @@ test('notification tabs preserve their shell and filtering commits a complete sn
   page,
 }, info) => {
   await login(page)
-  await nav(page, '/notifications/targets')
-  const tabs = page.getByRole('navigation', { name: '通知管理分类' })
+  await nav(page, '/operations/manual')
+  const tabs = page.getByRole('navigation', { name: '通知记录分类' })
   await expect(tabs).toBeVisible()
   await page.evaluate(() => {
     ;(window as any).__heading = document.querySelector('.page-heading')
-    ;(window as any).__tabs = document.querySelector('[aria-label="通知管理分类"]')
+    ;(window as any).__tabs = document.querySelector('[aria-label="通知记录分类"]')
   })
   await tabs.getByRole('button', { name: /^投递记录/ }).click()
   await expect(page.locator('.delivery-row')).toHaveCount(20)
   expect(
     await page.evaluate(() => ({
       heading: (window as any).__heading === document.querySelector('.page-heading'),
-      tabs: (window as any).__tabs === document.querySelector('[aria-label="通知管理分类"]'),
+      tabs: (window as any).__tabs === document.querySelector('[aria-label="通知记录分类"]'),
     })),
   ).toEqual({ heading: true, tabs: true })
   const held = gate()
@@ -143,7 +143,7 @@ test('initial detail reads start immediately and overview query controls remain 
   page,
 }) => {
   await login(page)
-  await nav(page, '/notifications/deliveries')
+  await nav(page, '/operations/deliveries')
   await expect(page.locator('.delivery-row')).toHaveCount(20)
   const detail = gate()
   let began = false
@@ -225,9 +225,9 @@ test('select menus retain scroll and values while task websites use independent 
   for (const [path, names] of [
     ['/', ['筛选任务状态']],
     ['/websites', ['筛选网站状态']],
-    ['/content', ['匹配结果', '关联任务', '历史网站', '版块筛选']],
+    ['/operations/content', ['匹配结果', '关联任务', '历史网站', '版块筛选']],
     ['/notifications/targets', ['通知渠道筛选']],
-    ['/notifications/deliveries', ['投递状态筛选', '投递目标筛选', '结果未知筛选']],
+    ['/operations/deliveries', ['投递状态筛选', '投递目标筛选', '结果未知筛选']],
     ['/settings/preferences', ['显示时区']],
     ['/settings/display', ['显示时区']],
     ['/task/new', []],

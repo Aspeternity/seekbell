@@ -1,7 +1,7 @@
 import time
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -22,10 +22,10 @@ from seekbell.db.models import (
     WebsiteInstallation,
     WorkspacePreferences,
 )
-from seekbell.db.transactions import write_session
+from seekbell.db.transactions import database_call, write_session
 from seekbell.domain.posts import PostFields
 from seekbell.domain.rules import Rule, evaluate
-from seekbell.services import alerts
+from seekbell.services import alerts, operations
 from seekbell.services.about import about_view
 from seekbell.services.configuration import Configuration, TargetDeleteChanged, TargetInUse
 from seekbell.services.display import DisplayConflict, get_display, timezone_name, update_display
@@ -524,6 +524,43 @@ def save_alerts(values: AlertInput, request: Request):
         raise HTTPException(409, str(error)) from None
 
 
+@router.get("/operations/status")
+async def operations_status(request: Request):
+    state = request.app.state
+    # Actor and hotlist state live on the event loop; read them there, then query off it.
+    observed, hotlists = state.runtime.observation(), state.hotlists.observation()
+    return await database_call(operations.status, state.engine, observed, hotlists, at=time.time())
+
+
+@router.get("/operations/problems")
+def operations_problems(
+    request: Request,
+    params: Paging,
+    kind: Literal["", "source", "delivery", "runtime"] = "",
+    days: int = Query(7, ge=1, le=365),
+    show_short: bool = False,
+):
+    return operations.problem_history(
+        request.app.state.engine,
+        at=time.time(),
+        kind=kind,
+        days=days,
+        show_short=show_short,
+        **params,
+    )
+
+
+@router.get("/operations/problems/{key}")
+def operations_problem(key: str, request: Request):
+    state = request.app.state
+    try:
+        return operations.problem_detail(
+            state.engine, key, state.crash_records.read(), at=time.time()
+        )
+    except operations.MissingProblem as error:
+        raise HTTPException(404, str(error)) from None
+
+
 @router.get("/alerts/state")
 def alert_states(request: Request, params: Paging):
     return alerts.states(request.app.state.engine, **params)
@@ -609,27 +646,3 @@ def preview_retention(request: Request, days: int):
 @router.get("/about")
 def about(request: Request):
     return about_view(request.app.state)
-
-
-@router.get("/diagnostics")
-def diagnostics(request: Request):
-    from importlib.metadata import version
-
-    from seekbell.db.models import SystemState
-    from seekbell.db.runtime import schema_revision
-
-    with Session(request.app.state.engine) as session:
-        faults = list(session.scalars(select(SystemState).where(SystemState.fault.is_(True))))
-        supported = [
-            {"id": key, "name": session.get(Website, key).name} for key in BUILTIN_ADAPTERS
-        ]
-    return {
-        "application": "SeekBell",
-        "version": version("seekbell"),
-        "build_revision": request.app.state.settings.build_revision,
-        "database_revision": schema_revision(request.app.state.engine),
-        "runtime": runtime_status(request),
-        "supported_websites": supported,
-        "fault_codes": sorted({row.code for row in faults if row.code}),
-        "checked_at": time.time(),
-    }

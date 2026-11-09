@@ -100,7 +100,7 @@ test('explicit tests and resends confirm intent, recover lost responses and pres
     await page.request.get('/api/manage/history/deliveries/' + source.id)
   ).json()
   const beforeManual = (await (await page.request.get('/api/manage/history/manual')).json()).total
-  await page.goto('/#/notifications/deliveries/' + source.id)
+  await page.goto('/#/operations/deliveries/' + source.id)
   await page.getByRole('button', { name: '手动重发', exact: true }).click()
   await expect(page.getByRole('dialog')).toContainText('原投递曾有结果未知')
   await expect(page.getByRole('dialog')).toContainText('合成成功当前目标')

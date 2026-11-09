@@ -508,7 +508,17 @@ async function save() {
       </section>
       <div class="editor-tip">
         <Icon name="shield" :size="18" />
-        <p>保存后可用于任务目标选择；可在通知目标页显式运行独立测试。</p>
+        <p>
+          保存后可用于任务目标选择；可在通知目标页显式运行独立测试。
+          <button
+            v-if="draft.id"
+            type="button"
+            class="text-link"
+            @click="emit('navigate', '/operations/deliveries?target=' + draft.id)"
+          >
+            查看此目标的通知记录
+          </button>
+        </p>
       </div>
     </aside>
     <div class="save-bar">

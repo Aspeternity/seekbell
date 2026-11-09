@@ -283,7 +283,7 @@ export async function saveWebsite(
   notify(
     runtime.active
       ? '网站配置已保存，后台将按启停状态采集。'
-      : '配置已保存；后台未运行，请检查概览。',
+      : '配置已保存；后台未运行，请查看运行中心。',
   )
 }
 export async function removeWebsite(id: string) {

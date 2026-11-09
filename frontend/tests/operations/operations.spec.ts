@@ -211,7 +211,7 @@ test('draft history trials, confirmed source checks and dependency-safe deletion
   const detail = await page.request.get('/api/manage/history/tests/' + recordId)
   expect(detail.ok()).toBe(true)
   expect((await detail.json()).target_name).toBe(name)
-  await page.goto('/#/notifications/tests/' + recordId)
+  await page.goto('/#/operations/tests/' + recordId)
   await expect(page.getByRole('heading', { name: '目标测试详情' })).toBeVisible()
   await expect(page.locator('.reading-panel')).toContainText(name)
   await page.screenshot({ path: info.outputPath('deleted-target-history.png'), fullPage: true })

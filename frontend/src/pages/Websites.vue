@@ -4,7 +4,7 @@ import WebsiteHotlistSettings from '../components/WebsiteHotlistSettings.vue'
 import WebsiteConnectionTest from '../components/WebsiteConnectionTest.vue'
 import { hotlistDraft, hotlistInput, hotlistError } from '../hotlistSettings'
 import type { HotlistDraft } from '../hotlistSettings'
-import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import Icon from '../components/Icon.vue'
 import Toggle from '../components/Toggle.vue'
 import {
@@ -19,6 +19,7 @@ import {
 } from '../store'
 import { websiteCatalog, websiteDefinition } from '../websites'
 import type { InstalledWebsite } from '../websites'
+const props = defineProps<{ openId?: string }>()
 const emit = defineEmits<{
   dirty: [value: boolean]
   navigate: [path: string]
@@ -94,11 +95,25 @@ function detail(w: InstalledWebsite) {
   error.value = ''
   show()
 }
+watch(
+  [() => props.openId, () => state.websites.length],
+  () => {
+    const website = state.websites.find((item) => item.id === props.openId)
+    if (website && selectedId.value !== website.id) detail(website)
+  },
+  { flush: 'post' },
+)
+onMounted(() => {
+  const website = state.websites.find((item) => item.id === props.openId)
+  if (website) detail(website)
+})
 function close() {
   panel.value?.close()
   document.body.classList.remove('website-panel-open')
   selectedId.value = ''
   emit('dirty', false)
+  // A panel opened from a link must not reopen when the website list next changes.
+  if (props.openId) emit('navigate', '/websites')
 }
 function requestClose() {
   if (dirty.value)

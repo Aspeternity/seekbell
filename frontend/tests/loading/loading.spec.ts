@@ -48,7 +48,7 @@ test('content requests start immediately, share one delayed indicator and isolat
       await route.fulfill({ response })
     })
   }
-  await navigate(page, '/content')
+  await navigate(page, '/operations/content')
   // With browser time paused, reaching both requests proves there is no initial 180ms delay.
   await expect.poll(() => started).toBe(2)
   await expect(page.locator('.remote-feedback')).toHaveCount(0)
@@ -73,7 +73,7 @@ test('content requests start immediately, share one delayed indicator and isolat
     return route.fulfill({ response })
   })
   await navigate(page, '/tasks')
-  await navigate(page, '/content')
+  await navigate(page, '/operations/content')
   await expect.poll(() => refreshStarted).toBe(true)
   await expect(page.locator('.content-row')).toHaveCount(20)
   await expect(page.locator('.remote-feedback')).toHaveText('正在更新…')
@@ -118,7 +118,7 @@ test('overview keeps results on refresh errors and logout discards cache and lat
   page,
 }, info) => {
   await login(page)
-  await navigate(page, '/content')
+  await navigate(page, '/operations/content')
   await expect(page.locator('.content-row')).toHaveCount(20)
 
   const overview = gate()
@@ -173,7 +173,7 @@ test('overview keeps results on refresh errors and logout discards cache and lat
     await late.promise
     await route.fulfill({ response })
   })
-  await navigate(page, '/content')
+  await navigate(page, '/operations/content')
   await expect.poll(() => lateBegan).toBe(true)
   await expect(page.locator('.content-row')).toHaveCount(20)
   if (info.project.name === 'mobile')
@@ -206,7 +206,7 @@ test('overview keeps results on refresh errors and logout discards cache and lat
     await freshContent.promise
     await route.fulfill({ response })
   })
-  await navigate(page, '/content')
+  await navigate(page, '/operations/content')
   await expect.poll(() => freshContentBegan).toBe(true)
   await expect(page.locator('.content-row')).toHaveCount(0)
   freshContent.release()

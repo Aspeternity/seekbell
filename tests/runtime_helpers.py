@@ -21,6 +21,9 @@ class PassiveRuntime:
     def snapshot(self):
         return {"active": False, "status": self.status, "code": None}
 
+    def observation(self):
+        return {**self.snapshot(), "started_at": None, "actors": {}, "sources": {}}
+
     async def start(self):
         pass
 

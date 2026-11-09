@@ -68,7 +68,7 @@ test('real overview and administrator forms preserve records and rotate sessions
   await page.getByLabel('当前密码', { exact: true }).fill(credentials.password)
   await page.getByRole('button', { name: '更新管理员资料', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('两次输入的新密码不一致')
-  await page.goto('/#/content')
+  await page.goto('/#/operations/content')
   await expect(page.getByRole('dialog')).toContainText('尚未保存')
   await page.getByRole('button', { name: '继续编辑', exact: true }).click()
   await expect(page.getByLabel('当前密码', { exact: true })).toHaveValue(credentials.password)

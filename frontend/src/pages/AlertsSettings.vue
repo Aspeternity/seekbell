@@ -154,7 +154,7 @@ onMounted(load)
           <div class="form-stack">
             <fieldset class="plain-fieldset alert-target-list">
               <legend class="field-label">告警通知目标</legend>
-              <p v-if="!state.targets.length">请先在通知管理中添加已配置目标。</p>
+              <p v-if="!state.targets.length">请先在通知目标中添加已配置目标。</p>
               <label v-for="target in state.targets" :key="target.id" class="check-label">
                 <input v-model="targets" type="checkbox" :value="target.id" :disabled="busy" />
                 {{ target.name }} · {{ target.type
@@ -177,7 +177,7 @@ onMounted(load)
                 系统告警使用 schema_version 2、type 为 system_alert，请选择可接收此格式的目标。
               </p>
             </details>
-            <a class="text-link" href="#/settings/diagnostics">查看告警记录</a>
+            <a class="text-link" href="#/operations/status">查看告警记录</a>
           </div>
         </section>
         <div class="inline-form-footer settings-savebar">

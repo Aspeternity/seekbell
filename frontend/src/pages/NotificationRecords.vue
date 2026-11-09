@@ -1,15 +1,13 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
-import Icon from '../components/Icon.vue'
+import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import Feedback from '../components/Feedback.vue'
 import ReadRegion from '../components/ReadRegion.vue'
-import NotificationTabs from '../components/NotificationTabs.vue'
-import Targets from './Targets.vue'
+import RecordTabs from '../components/RecordTabs.vue'
 import Records from './Records.vue'
 import { signedIn, state } from '../store'
 import { readCacheRevision, readSessionRevision } from '../readCache'
-import { prepareRecords, recordsPrepared, recordTabs } from '../recordQueries'
-const props = defineProps<{ tab: string; recordId?: string }>()
+import { prepareRecords, recordsPrepared } from '../recordQueries'
+const props = defineProps<{ tab: string; recordId?: string; initialTarget?: string }>()
 const emit = defineEmits<{ navigate: [path: string] }>()
 const shown = shallowRef({ tab: props.tab, recordId: props.recordId, prepared: false })
 const hasView = ref(false),
@@ -39,11 +37,7 @@ async function transition() {
     shown.value.recordId === destination.recordId
   )
     return
-  if (
-    destination.tab === 'targets' ||
-    destination.recordId ||
-    recordsPrepared(destination.tab, state.settings.timezone)
-  ) {
+  if (destination.recordId || recordsPrepared(destination.tab, state.settings.timezone)) {
     shown.value = destination
     hasView.value = true
     return
@@ -78,43 +72,27 @@ watch(
   transition,
   { immediate: true },
 )
-onMounted(() => {
-  if (signedIn.value)
-    for (const tab of recordTabs) void prepareRecords(tab, state.settings.timezone).catch(() => {})
-})
 onBeforeUnmount(() => {
   ++generation
 })
 </script>
 <template>
-  <template v-if="!shown.recordId">
-    <section class="page-heading">
-      <div>
-        <p class="eyebrow">GOOD NEWS, YOUR WAY</p>
-        <h1 tabindex="-1">通知管理</h1>
-        <p class="subtitle">把关心的消息，送到你习惯的地方。</p>
-      </div>
-      <button class="button primary" @click="emit('navigate', '/target/new')">
-        <Icon name="plus" :size="18" />添加通知目标
-      </button>
-    </section>
-    <NotificationTabs
-      :tab="shown.tab"
-      :pending-tab="pending ? tab : undefined"
-      @navigate="(path) => emit('navigate', path)"
-    />
-  </template>
+  <RecordTabs
+    v-if="!shown.recordId"
+    :tab="shown.tab"
+    :pending-tab="pending ? tab : undefined"
+    @navigate="(path) => emit('navigate', path)"
+  />
   <div class="notification-panel-region">
     <div v-if="hasView" class="notification-switch-feedback">
       <Feedback :loading="pending" :error="error" :message="message" subtle @retry="transition" />
     </div>
     <template v-if="hasView">
-      <Targets v-if="shown.tab === 'targets'" @navigate="(path) => emit('navigate', path)" />
       <Records
-        v-else
-        :key="shown.tab + ':' + (shown.recordId || '')"
+        :key="shown.tab + ':' + (shown.recordId || '') + ':' + (initialTarget || '')"
         :tab="shown.tab"
         :record-id="shown.recordId"
+        :initial-target="initialTarget"
         :prepared="shown.prepared"
         @navigate="(path) => emit('navigate', path)"
       />

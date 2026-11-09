@@ -242,6 +242,7 @@ class AlertWorker:
             raise ValueError("Invalid alert timeout")
         self.engine, self.notifiers = engine, notifiers
         self.clock, self.tick, self.timeout = clock, tick, timeout
+        self.last_loop_at = None
 
     def _claim(self):
         with write_session(self.engine) as session:
@@ -318,5 +319,6 @@ class AlertWorker:
     async def run(self, stop: asyncio.Event):
         while not stop.is_set():
             await self.run_once()
+            self.last_loop_at = self.clock()
             with suppress(TimeoutError):
                 await asyncio.wait_for(stop.wait(), self.tick)

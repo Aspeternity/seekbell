@@ -51,6 +51,7 @@ class DeliveryWorker:
         self.policy = policy or DeliveryPolicy()
         self.clock = clock
         self.managed, self.tick = managed, tick
+        self.last_loop_at: float | None = None
 
     @staticmethod
     def _active_tasks(session, event_id: str) -> list[dict]:
@@ -274,6 +275,7 @@ class DeliveryWorker:
     async def run(self, stop: asyncio.Event) -> None:
         while not stop.is_set():
             event_id = await self.run_once()
+            self.last_loop_at = self.clock()
             if event_id is None:
                 with suppress(TimeoutError):
                     await asyncio.wait_for(stop.wait(), timeout=self.tick)
