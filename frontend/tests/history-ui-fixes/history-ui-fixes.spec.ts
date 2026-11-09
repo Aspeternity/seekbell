@@ -40,7 +40,7 @@ test('content filters preserve geometry, task notes are inset and post details a
   page,
 }, info) => {
   await login(page)
-  await navigate(page, '/content')
+  await navigate(page, '/operations/content')
   await expect(page.locator('.content-row')).toHaveCount(20)
   const search = page.getByLabel('搜索内容', { exact: true })
   await page.evaluate(() => window.scrollTo(0, 150))
@@ -126,7 +126,7 @@ test('approved date ranges cover all four lists, compose with filters and cancel
 }, info) => {
   await login(page)
   for (const tab of ['posts', 'deliveries', 'manual', 'tests']) {
-    const path = tab === 'posts' ? '/content' : '/notifications/' + tab
+    const path = tab === 'posts' ? '/operations/content' : '/operations/' + tab
     const label = tab === 'posts' ? '发现日期' : '记录日期'
     await navigate(page, path)
     const date = page.getByRole('button', { name: label, exact: true })
@@ -230,7 +230,7 @@ test('approved date ranges cover all four lists, compose with filters and cancel
     await expect(menu).toHaveCount(0)
     page.off('request', capture)
   }
-  await navigate(page, '/content')
+  await navigate(page, '/operations/content')
   expect((await readChoices(page.getByLabel('关联任务'))).join('')).not.toContain('已删除')
   await navigate(page, '/websites')
   const input = page.getByLabel('搜索已添加网站')
@@ -264,9 +264,9 @@ test('notification counts are immediate, shared across tabs and retained during 
     await route.fulfill({ json: snapshot })
   })
   await pauseClock(page)
-  await navigate(page, '/notifications/targets')
+  await navigate(page, '/operations/manual')
   await expect.poll(() => started).toBe(1)
-  const nav = page.getByRole('navigation', { name: '通知管理分类' })
+  const nav = page.getByRole('navigation', { name: '通知记录分类' })
   const deliveries = nav.getByRole('button', { name: /^投递记录/ }).locator('span')
   await expect(deliveries).toHaveText('')
   await expect(nav).not.toContainText('—')
@@ -300,18 +300,20 @@ test('notification counts are immediate, shared across tabs and retained during 
   fail = false
   await page.getByRole('button', { name: '重新加载', exact: true }).click()
   await expect(page.getByRole('alert')).toHaveCount(0)
-  await nav.getByRole('button', { name: /^通知目标/ }).click()
+  await navigate(page, '/notifications/targets')
   await expect(page.locator('.notification-card')).toHaveCount(1)
   totals = { deliveries: 27, manual: 1, tests: 3 }
   const toggle = page.locator('.notification-card').getByRole('switch')
   await toggle.click()
-  await expect(deliveries).toHaveText('27')
+  await expect(toggle).toHaveAttribute('aria-checked', 'false')
   await toggle.click()
   await expect(toggle).toHaveAttribute('aria-checked', 'true')
+  await navigate(page, '/operations/deliveries')
+  await expect(deliveries).toHaveText('27')
   const late = gate()
   waiting = late
   const previous = started
-  await nav.getByRole('button', { name: /^投递记录/ }).click()
+  await nav.getByRole('button', { name: /^手动重发/ }).click()
   await expect.poll(() => started).toBeGreaterThan(previous)
   if (page.viewportSize()!.width <= 760)
     await page.getByRole('button', { name: '打开导航', exact: true }).click()
@@ -324,7 +326,7 @@ test('notification counts are immediate, shared across tabs and retained during 
   await page.getByLabel('密码', { exact: true }).fill(credentials.password)
   await page.getByRole('button', { name: '登录工作空间', exact: true }).click()
   await expect(page.getByTestId('overview-matches')).toBeVisible()
-  await navigate(page, '/notifications/targets')
+  await navigate(page, '/operations/manual')
   await expect(deliveries).toHaveText('')
   late.release()
   await expect(deliveries).toHaveText('')

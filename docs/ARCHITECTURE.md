@@ -415,3 +415,13 @@ WebsiteRequestBudget.request增加auxiliary：热榜请求只在429、access_cha
 ### 每周旧榜保留7天（2026-11-08，0.6.5）
 
 HotlistSource新增retention（周期→秒），snapshot_max_age(period)默认86400；Linux DO为{"weekly": 604800}。HotlistService._load与_prepare按该值判定快照是否还能展示，取代全局SNAPSHOT_MAX_AGE。无迁移。
+
+## 运行中心读模型（2026-11-09）
+
+`services/operations.py`只读聚合状态、问题历史和问题详情，不访问网络、不写库；`/api/manage/operations/status`在事件循环内取`Runtime.observation()`与`HotlistService.observation()`的内存快照，再到线程查库。
+
+`observe()`只在下一次真实成功时清除故障，暂停、删除、改配置都不会清，所以“当前问题”在读取时判定：对象已暂停/删除的不算当前问题；通知目标在故障后改过配置或测试通过的为“等待验证”。后台停止时只列后台问题，旧故障此时无法重试。问题历史以fault事件为行、按`(component, generation, phase)`左连接recovery，不新增表。
+
+错误码的阶段、说明、可能原因、下一步和验证方式集中在`services/fault_guide.py`，测试扫描源码中的固定错误码防止遗漏。
+
+后台崩溃只能靠重启恢复，崩溃原因写入数据目录`runtime-crashes.json`（最近20条，原子替换，只含服务名、时间、版本、异常类型和脱敏代码位置；不进备份，不依赖数据库）。各后台循环记录`last_loop_at`，超过120秒只陈述“循环未完成”。本轮不增加数据库迁移。

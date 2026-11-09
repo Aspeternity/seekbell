@@ -12,7 +12,6 @@ from seekbell.collectors.rss import RssCollector
 from seekbell.db.models import (
     Administrator,
     Source,
-    SourceProbe,
     SourceState,
     Website,
     WebsiteInstallation,
@@ -20,8 +19,8 @@ from seekbell.db.models import (
 from seekbell.db.transactions import database_call
 from seekbell.domain.errors import SourceDeferred, SourceFailure
 from seekbell.services.ingestion import Ingestion, IngestReport
-from seekbell.services.request_budget import MAX_RETRY_AFTER, request_state
-from seekbell.services.source_probe import probe_backoff
+from seekbell.services.request_budget import MAX_RETRY_AFTER
+from seekbell.services.source_probe import next_source_attempt
 from seekbell.sites.registry import BUILTIN_ADAPTERS
 
 
@@ -55,6 +54,7 @@ class SourceRunner:
         self.jitter = jitter or (lambda: random.uniform(0, 0.5))
         self._lock = asyncio.Lock()
         self.managed, self.tick, self.fetch_timeout = managed, tick, fetch_timeout
+        self.last_loop_at: float | None = None
 
     def _snapshot(self) -> dict:
         with Session(self.engine) as session:
@@ -62,7 +62,6 @@ class SourceRunner:
             state = session.get(SourceState, self.source_id)
             if source is None or state is None:
                 raise ValueError("Unknown source")
-            probe = session.get(SourceProbe, self.source_id)
             website = session.get(Website, source.website_id)
             return {
                 "enabled": source.enabled
@@ -76,10 +75,8 @@ class SourceRunner:
                 ),
                 "website_id": source.website_id,
                 "url": source.url,
-                "next_attempt_at": max(
-                    state.next_attempt_at,
-                    probe_backoff(probe),
-                    request_state(session, source.website_id, self.clock())[0],
+                "next_attempt_at": next_source_attempt(
+                    session, state, source.website_id, self.clock()
                 ),
                 "interval_seconds": source.interval_seconds,
             }
@@ -144,6 +141,7 @@ class SourceRunner:
     async def run(self, stop: asyncio.Event) -> None:
         while not stop.is_set():
             await self.run_once()
+            self.last_loop_at = self.clock()
             # Persisted next_attempt_at controls network frequency. Short wakes
             # observe configuration changes without replaying missed polls.
             with suppress(TimeoutError):

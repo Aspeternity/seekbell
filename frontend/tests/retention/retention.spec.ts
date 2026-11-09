@@ -136,7 +136,7 @@ test('retention confirms changes, handles stale revisions and cleans with the br
       path: info.outputPath('retention-policy-status.png'),
       fullPage: true,
     })
-    await reopened.goto('/#/content')
+    await reopened.goto('/#/operations/content')
     await expect(reopened.locator('.content-row')).toHaveCount(after.total)
     await reopened.screenshot({ path: info.outputPath('retained-history.png'), fullPage: true })
     expect(errors).toEqual([])

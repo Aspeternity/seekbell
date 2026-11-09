@@ -37,6 +37,7 @@ from seekbell.db.runtime import create_database_engine, instance_lock, migrate
 from seekbell.notifiers.credentials import CredentialError, CredentialVault
 from seekbell.notifiers.registry import NotifierRegistry
 from seekbell.services.authentication import Confirmations, LoginLimiter
+from seekbell.services.crash_records import CrashRecords
 from seekbell.services.hotlists import HotlistService
 from seekbell.services.manual_sending import ConfiguredTargetTesting, ManualSending
 from seekbell.services.overview_preferences import hotlist_catalog
@@ -124,6 +125,7 @@ def create_app(
             registry = NotifierRegistry(app.state.vault)
             stack.push_async_callback(registry.aclose)
             runtime = (runtime_factory or Runtime)(engine, registry.notifiers)
+            runtime.crash_records = app.state.crash_records
             request_budget = getattr(runtime, "request_budget", None) or WebsiteRequestBudget(
                 engine
             )
@@ -169,6 +171,7 @@ def create_app(
 
     app = FastAPI(title="SeekBell", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.state.settings = settings
+    app.state.crash_records = CrashRecords(settings.data_dir.resolve() / "runtime-crashes.json")
     app.state.started_at = time.time()
     app.state.csrf_key = secrets.token_bytes(32)
     app.state.login_limiter = LoginLimiter()

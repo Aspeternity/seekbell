@@ -112,24 +112,6 @@ def test_storage_and_diagnostics_are_readonly_and_exclude_credentials(web):
     assert client.get("/api/manage/retention/preview?days=0").status_code == 422
     assert client.get("/api/manage/retention/preview?days=1.5").status_code == 422
     assert client.get("/api/manage/retention/preview?days=30").status_code == 200
-    diagnostics = client.get("/api/manage/diagnostics")
-    assert diagnostics.status_code == 200
-    assert set(diagnostics.json()) == {
-        "application",
-        "version",
-        "build_revision",
-        "database_revision",
-        "runtime",
-        "supported_websites",
-        "fault_codes",
-        "checked_at",
-    }
-    assert [row["id"] for row in diagnostics.json()["supported_websites"]] == [
-        "nodeseek",
-        "linuxdo",
-    ]
-    assert str(settings.data_dir) not in diagnostics.text
-    assert "csrf" not in diagnostics.text and "password" not in diagnostics.text
     assert table_data(settings.database_path) == before
 
 

@@ -23,13 +23,14 @@ import {
   loadRecordOptions,
 } from '../recordQueries'
 import ReadRegion from '../components/ReadRegion.vue'
-const props = withDefaults(defineProps<{ tab?: string; recordId?: string; prepared?: boolean }>(), {
-  tab: 'deliveries',
-})
+const props = withDefaults(
+  defineProps<{ tab?: string; recordId?: string; prepared?: boolean; initialTarget?: string }>(),
+  { tab: 'deliveries' },
+)
 const emit = defineEmits<{ navigate: [path: string] }>()
 const q = ref(''),
   status = ref('all'),
-  target = ref(''),
+  target = ref(props.initialTarget || ''),
   dateRange = ref<HistoryDateRange>(null),
   uncertain = ref('all'),
   page = ref(1)
@@ -114,7 +115,7 @@ function clear() {
 </script>
 <template>
   <template v-if="recordId">
-    <button class="back-link" @click="emit('navigate', '/notifications/' + tab)">
+    <button class="back-link" @click="emit('navigate', '/operations/' + tab)">
       <Icon name="back" :size="17" />返回{{
         tab === 'tests' ? '测试记录' : tab === 'manual' ? '手动重发记录' : '投递记录'
       }}
@@ -202,7 +203,7 @@ function clear() {
                   @click="
                     emit(
                       'navigate',
-                      '/notifications/deliveries/' + testDetail.data.value.source_event_id,
+                      '/operations/deliveries/' + testDetail.data.value.source_event_id,
                     )
                   "
                 >
@@ -327,7 +328,7 @@ function clear() {
                 <button
                   v-if="detail.data.value.post_id"
                   class="button"
-                  @click="emit('navigate', '/content/' + detail.data.value.post_id)"
+                  @click="emit('navigate', '/operations/content/' + detail.data.value.post_id)"
                 >
                   查看关联内容<Icon name="arrow" :size="15" />
                 </button>
@@ -481,7 +482,7 @@ function clear() {
             <div class="management-copy">
               <button
                 class="text-link task-title"
-                @click="emit('navigate', '/notifications/' + tab + '/' + record.id)"
+                @click="emit('navigate', '/operations/' + tab + '/' + record.id)"
               >
                 {{ title(record) }}
               </button>
@@ -500,7 +501,7 @@ function clear() {
             <button
               class="icon-button"
               :aria-label="'查看投递' + record.id"
-              @click="emit('navigate', '/notifications/' + tab + '/' + record.id)"
+              @click="emit('navigate', '/operations/' + tab + '/' + record.id)"
             >
               <Icon name="arrow" :size="17" />
             </button>

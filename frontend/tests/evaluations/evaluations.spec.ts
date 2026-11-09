@@ -25,7 +25,7 @@ async function post(page: Page, status: string, index = 0) {
   return data.items[index].id as string
 }
 async function go(page: Page, id: string, heading = '命中依据') {
-  await page.goto('/#/content/' + id)
+  await page.goto('/#/operations/content/' + id)
   await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible()
 }
 test('one match shows only its own evidence even with nine other decisions', async ({
@@ -162,13 +162,13 @@ test('cold reads do not pretend to be no match and changing content rejects late
   await expect.poll(() => started).toBe(true)
   await expect(page.locator('.support-panel').getByRole('status')).toHaveText('加载中…')
   await expect(page.getByText('该内容未命中任何任务。', { exact: true })).toHaveCount(0)
-  await page.evaluate((id) => (location.hash = '/content/' + id), next)
+  await page.evaluate((id) => (location.hash = '/operations/content/' + id), next)
   await expect(page.getByRole('heading', { name: '未命中原因', exact: true })).toBeVisible()
   release()
   await done
   await expect(page.locator('.history-evaluation')).toHaveCount(0)
   await expect(page.getByRole('heading', { name: '未命中原因', exact: true })).toBeVisible()
   await page.unroute('**/api/manage/history/posts/' + id + '/evaluations?*')
-  await page.evaluate((id) => (location.hash = '/content/' + id), id)
+  await page.evaluate((id) => (location.hash = '/operations/content/' + id), id)
   await expect(page.locator('.history-evaluation')).toHaveCount(1)
 })

@@ -86,6 +86,15 @@ def probe_backoff(probe):
     return probe.next_attempt_at if probe is not None and probe.status == "failure" else 0
 
 
+def next_source_attempt(session, state, website_id, at):
+    """The earliest automatic poll allowed by backoff, a failed probe and origin limits."""
+    return max(
+        state.next_attempt_at,
+        probe_backoff(session.get(SourceProbe, state.source_id)),
+        request_state(session, website_id, at)[0],
+    )
+
+
 def test_due(state, probe):
     return max(state.next_attempt_at if state.failures else 0, probe_due(probe))
 

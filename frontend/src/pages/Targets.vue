@@ -29,6 +29,16 @@ function completed(path: string) {
 }
 </script>
 <template>
+  <section class="page-heading">
+    <div>
+      <p class="eyebrow">GOOD NEWS, YOUR WAY</p>
+      <h1 tabindex="-1">通知目标</h1>
+      <p class="subtitle">把关心的消息，送到你习惯的地方。</p>
+    </div>
+    <button class="button primary" @click="emit('navigate', '/target/new')">
+      <Icon name="plus" :size="18" />添加通知目标
+    </button>
+  </section>
   <div class="filter-toolbar free-toolbar">
     <label class="search-input grow"
       ><Icon name="search" :size="16" /><input

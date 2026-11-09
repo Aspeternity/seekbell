@@ -98,43 +98,6 @@ test('about and diagnostics stay independent, retry safely and perform no config
   )
   await page.screenshot({ path: info.outputPath('about-version.png'), fullPage: true })
 
-  // Diagnostics keeps the readiness/runtime status that used to share the About page.
-  await page.goto('/#/settings/diagnostics')
-  await expect(page.getByText('已就绪', { exact: true })).toBeVisible()
-  await page.route('**/health/ready', (route) =>
-    route.fulfill({
-      status: 503,
-      json: { status: 'unavailable' },
-    }),
-  )
-  await page.route('**/api/manage/runtime', (route) =>
-    route.fulfill({
-      json: { active: false, status: 'failed', code: 'delivery_stopped' },
-    }),
-  )
-  await page.getByRole('button', { name: '刷新运行信息', exact: true }).click()
-  await expect(page.getByRole('alert')).toContainText('未就绪')
-  await expect(page.getByText('异常停止', { exact: true })).toBeVisible()
-  await expect(page.getByText('delivery_stopped', { exact: true })).toBeVisible()
-  await expect(page.getByText('已就绪', { exact: true })).toHaveCount(0)
-  await page.screenshot({ path: info.outputPath('diagnostics-unready.png'), fullPage: true })
-  // A malformed health response must never be presented as ready.
-  await page.unroute('**/health/ready')
-  await page.route('**/health/ready', (route) => route.fulfill({ json: { status: 'unexpected' } }))
-  await page.getByRole('button', { name: '刷新运行信息', exact: true }).click()
-  const status = page.getByRole('region', { name: '服务状态', exact: true })
-  await expect(status.getByRole('alert').filter({ hasText: '无法读取就绪状态' })).toContainText(
-    '上次结果',
-  )
-  await expect(page.getByText('已就绪', { exact: true })).toHaveCount(0)
-  for (const width of [320, 390, 768, 1440]) {
-    await page.setViewportSize({ width, height: 900 })
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
-  }
-  await page.unroute('**/health/ready')
-  await page.unroute('**/api/manage/runtime')
-  await page.getByRole('button', { name: '刷新运行信息', exact: true }).click()
-  await expect(page.getByText('已就绪', { exact: true })).toBeVisible()
   expect(await (await page.request.get('/api/manage/workspace')).json()).toEqual(workspace)
   expect(writes).toEqual([])
 

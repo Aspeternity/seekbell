@@ -90,7 +90,7 @@ test('browser timezone initializes once and the general editor preserves conflic
   } finally {
     await context.close()
   }
-  await page.goto('/#/content')
+  await page.goto('/#/operations/content')
   await page.getByRole('button', { name: '发现日期', exact: true }).click()
   await page.getByLabel('开始日期', { exact: true }).fill('2026-10-18')
   await page.getByLabel('结束日期', { exact: true }).fill('2026-10-18')
@@ -179,36 +179,21 @@ test('confirmed independent alerts record a single fault and recovery even when 
   ).toBe(true)
   const captured = await (await page.request.get('/api/manage/alerts/history')).json()
   expect(captured.items.slice(0, 2).map((event: any) => event.phase)).toEqual(['recovery', 'fault'])
-  // Faults and alert records live under Diagnostics; settings stay on the alerts tab.
-  await page.goto('/#/settings/diagnostics')
-  await Promise.all([
-    page.waitForResponse((response) =>
-      response.url().includes('/api/manage/alerts/history?page=1'),
-    ),
-    page.getByRole('button', { name: '刷新运行信息', exact: true }).click(),
-  ])
-  await page.getByRole('button', { name: '查看系统告警记录', exact: true }).click()
-  await expect(
-    page
-      .locator('.read-region')
-      .filter({ has: page.locator('.system-event') })
-      .first(),
-  ).toHaveAttribute('aria-busy', 'false')
-  await expect(
-    page.getByRole('region', { name: '服务状态', exact: true }).getByText('无', { exact: true }),
-  ).toBeVisible()
-  const newest = page.locator('.system-event').first()
-  await expect(newest).toContainText('恢复')
-  await newest.getByRole('button', { name: '查看各目标结果' }).click()
-  await expect(newest.locator('.alert-delivery')).toHaveCount(2)
-  await expect(newest).toContainText('结果未知')
-  await expect(newest).toContainText('明确拒绝')
-  await expect(newest).toContainText('synthetic_timeout')
-  const detail = await page.request.get('/api/manage/alerts/history/' + captured.items[0].id)
+  // Alert results live in the problem details; settings stay on the alerts tab.
+  await page.goto('/#/operations/status')
+  await page.getByLabel('显示 1 分钟内自动恢复的问题', { exact: true }).check()
+  const newest = page.locator('.ops-history-row').first()
+  await expect(newest).toContainText('已恢复')
+  await newest.click()
+  const drawer = page.getByRole('dialog', { name: /问题详情/ })
+  await expect(drawer).toContainText('恢复通知')
+  await expect(drawer).toContainText('结果未知')
+  await expect(drawer).toContainText('明确拒绝')
+  await expect(drawer).toContainText('synthetic_timeout')
+  const detail = await page.request.get('/api/manage/operations/problems/' + captured.items[1].id)
   expect(await detail.text()).not.toContain('synthetic-system-secret')
   await page.screenshot({ path: info.outputPath('system-alert-results.png'), fullPage: true })
-  await page.getByLabel('下一页系统事件', { exact: true }).click()
-  await expect(page.locator('.system-event').first()).toContainText('合成历史事件')
+  await drawer.getByRole('button', { name: '关闭问题详情', exact: true }).click()
   await page.goto('/#/settings/alerts')
   await expect(page.getByLabel('启用故障与恢复告警')).toHaveAttribute('aria-checked', 'true')
   for (const name of names)

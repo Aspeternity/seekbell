@@ -45,14 +45,14 @@ test('production pages preserve the approved UI while using real persisted data'
   await checkWebsitePicker(page, info)
   await page.goto('/#/notifications/targets')
   const total = await (await page.request.get('/api/manage/history/deliveries?page_size=1')).json()
-  await expect(
-    page.locator('.page-tabs button').filter({ hasText: '投递记录' }).locator('span'),
-  ).toHaveText(String(total.total))
   const target = page.locator('.notification-card').first()
   await expect(target.locator('.notification-card-actions .icon-button svg')).toHaveCount(1)
   await page.screenshot({ path: info.outputPath('approved-targets.png'), fullPage: true })
-  await page.goto('/#/notifications/deliveries')
-  await expect(page.getByText('把关心的消息，送到你习惯的地方。', { exact: true })).toBeVisible()
+  await page.goto('/#/operations/deliveries')
+  await expect(page.getByRole('heading', { name: '运行中心', exact: true })).toBeVisible()
+  await expect(
+    page.locator('.record-tabs button').filter({ hasText: '投递记录' }).locator('span'),
+  ).toHaveText(String(total.total))
   await page.screenshot({ path: info.outputPath('approved-records.png'), fullPage: true })
   await page.goto('/#/settings/preferences')
   await expect(page.locator('.settings-categories button')).toHaveText([
@@ -62,7 +62,6 @@ test('production pages preserve the approved UI while using real persisted data'
     '历史与存储',
     '备份与恢复',
     '账户与安全',
-    '诊断',
     '关于',
   ])
   await expect(page.getByLabel('显示时区', { exact: true })).toBeEnabled()
@@ -117,16 +116,16 @@ test('production pages preserve the approved UI while using real persisted data'
   for (const path of [
     '/',
     '/tasks',
-    '/content',
+    '/operations/content',
     '/notifications/targets',
-    '/notifications/deliveries',
+    '/operations/deliveries',
     '/settings/preferences',
     '/settings/overview',
     '/settings/alerts',
     '/settings/retention',
     '/settings/account',
     '/settings/backup',
-    '/settings/diagnostics',
+    '/operations/status',
     '/settings/about',
   ]) {
     await page.goto('/#' + path)

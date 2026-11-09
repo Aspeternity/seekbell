@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 
 import httpx
 
@@ -11,6 +12,7 @@ from seekbell.db.models import Administrator
 from seekbell.db.transactions import database_call, write_session
 from seekbell.services.alerts import AlertWorker, observe
 from seekbell.services.collection import SourceRunner
+from seekbell.services.crash_records import describe
 from seekbell.services.delivery import DeliveryWorker
 from seekbell.services.request_budget import WebsiteRequestBudget
 from seekbell.services.retention import HistoryRetention
@@ -67,6 +69,8 @@ class Runtime:
         self.status = "starting"
         self.code = None
         self.shutdown_grace = shutdown_grace
+        self.started_at = None
+        self.crash_records = None
 
     @property
     def active(self):
@@ -83,7 +87,36 @@ class Runtime:
     def snapshot(self):
         return {"active": self.active, "status": self.status, "code": self.code}
 
-    def _failed(self, name):
+    def observation(self):
+        """Live actor facts for the status page; reads memory only."""
+        runners = {
+            "delivery": self.worker,
+            "retention": self.retention,
+            "alerts": self.alerts,
+        }
+        loops = {name: runner.last_loop_at for name, runner in runners.items()}
+        finished = [source.last_loop_at for source in self.sources.values()]
+        loops["collection"] = None if None in finished else min(finished)
+        return {
+            **self.snapshot(),
+            "started_at": self.started_at,
+            "actors": {
+                name: {"alive": not task.done(), "last_loop_at": loops[name]}
+                for name, task in self.tasks.items()
+            },
+            "sources": {source.source_id: source.last_loop_at for source in self.sources.values()},
+        }
+
+    def _remember_crash(self, name, error):
+        if self.crash_records is None:
+            return describe(error)
+        try:
+            return self.crash_records.add(name, error, at=time.time())
+        except OSError:
+            logger.error("SeekBell crash record could not be saved")
+            return describe(error)
+
+    def _failed(self, name, error=None):
         if self.status in ("stopping", "stopped"):
             return
         if self.status != "failed":
@@ -94,8 +127,14 @@ class Runtime:
         task = asyncio.create_task(self._report_failure(name))
         self.reports.add(task)
         task.add_done_callback(self.reports.discard)
-        # Only fixed actor names, never exception text or configuration.
-        logger.error("SeekBell background actor stopped: %s", name)
+        crash = self._remember_crash(name, error)
+        # Fixed names and code locations only, never exception text or configuration.
+        logger.error(
+            "SeekBell background actor stopped: %s exception=%s location=%s",
+            name,
+            crash["exception"],
+            crash["location"],
+        )
 
     async def _report_failure(self, name):
         try:
@@ -104,8 +143,6 @@ class Runtime:
             logger.error("SeekBell runtime incident could not be persisted")
 
     def _runtime_transition(self, name, fault):
-        import time
-
         with write_session(self.engine) as session:
             if session.get(Administrator, 1) is not None:
                 observe(
@@ -129,8 +166,8 @@ class Runtime:
         except asyncio.CancelledError:
             if self.status != "stopping":
                 self._failed(name)
-        except Exception:
-            self._failed(name)
+        except Exception as error:
+            self._failed(name, error)
         finally:
             if not stop.is_set():
                 self._failed(name)
@@ -158,6 +195,7 @@ class Runtime:
             )
         }
         self.status = "running"
+        self.started_at = time.time()
         await asyncio.sleep(0)
         if self.active:
             for name in self.tasks:
@@ -166,7 +204,7 @@ class Runtime:
 
     async def check_source(self, website_id="nodeseek"):
         if not self.active:
-            raise ProbeConflict("后台未运行，请先检查概览。")
+            raise ProbeConflict("后台未运行，请先查看运行中心。")
         source = self.sources.get(website_id)
         if source is None:
             raise ProbeConflict("该网站尚未支持。")

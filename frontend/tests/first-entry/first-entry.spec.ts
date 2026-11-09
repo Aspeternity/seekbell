@@ -44,10 +44,12 @@ test('cold notification menus commit complete panes and preloads merge without e
       await route.fulfill({ response })
     },
   )
-  await nav(page, '/notifications/targets')
-  const tabs = page.getByRole('navigation', { name: '通知管理分类' })
+  await nav(page, '/operations/tests')
+  const tabs = page.getByRole('navigation', { name: '通知记录分类' })
   await expect(tabs).toBeVisible()
   await expect.poll(() => requests).toEqual({ deliveries: 1, manual: 1, tests: 1, options: 1 })
+  held.tests.release()
+  await expect(page.locator('.delivery-row')).toHaveCount(2)
   await page.evaluate(() => {
     ;(window as any).__coldFrames = []
     ;(window as any).__coldSampling = true
@@ -55,7 +57,7 @@ test('cold notification menus commit complete panes and preloads merge without e
       if (!(window as any).__coldSampling) return
       ;(window as any).__coldFrames.push({
         placeholder: document.querySelectorAll('.read-placeholder').length,
-        active: document.querySelector('[aria-label="通知管理分类"] [aria-current="page"]')
+        active: document.querySelector('[aria-label="通知记录分类"] [aria-current="page"]')
           ?.textContent,
         rows: document.querySelectorAll('.delivery-row').length,
       })
@@ -64,11 +66,10 @@ test('cold notification menus commit complete panes and preloads merge without e
     requestAnimationFrame(sample)
   })
   await tabs.getByRole('button', { name: /^投递记录/ }).click()
-  await expect(tabs.getByRole('button', { name: /^通知目标/ })).toHaveAttribute(
+  await expect(tabs.getByRole('button', { name: /^测试记录/ })).toHaveAttribute(
     'aria-current',
     'page',
   )
-  await expect(page.getByRole('textbox', { name: '搜索通知目标', exact: true })).toBeVisible()
   await expect(page.locator('.notification-switch-feedback')).toContainText('正在读取投递记录')
   await expect(page.locator('.read-placeholder')).toHaveCount(0)
   held.deliveries.release()
@@ -89,17 +90,6 @@ test('cold notification menus commit complete panes and preloads merge without e
     'page',
   )
   await expect(page.getByRole('heading', { name: '这里还没有记录' })).toBeVisible()
-  await tabs.getByRole('button', { name: /^测试记录/ }).click()
-  await expect(tabs.getByRole('button', { name: /^手动重发/ })).toHaveAttribute(
-    'aria-current',
-    'page',
-  )
-  held.tests.release()
-  await expect(page.locator('.delivery-row')).toHaveCount(2)
-  await expect(tabs.getByRole('button', { name: /^测试记录/ })).toHaveAttribute(
-    'aria-current',
-    'page',
-  )
   const frames = await page.evaluate(() => {
     ;(window as any).__coldSampling = false
     return (window as any).__coldFrames as { placeholder: number; active: string; rows: number }[]
@@ -136,14 +126,15 @@ test('cold menu failures retain the original pane, retry once, and rapid navigat
     await tests.promise
     await route.fulfill({ response })
   })
-  await nav(page, '/notifications/targets')
-  const tabs = page.getByRole('navigation', { name: '通知管理分类' })
+  await nav(page, '/operations/deliveries')
+  const tabs = page.getByRole('navigation', { name: '通知记录分类' })
+  await expect(page.locator('.delivery-row')).toHaveCount(20)
   await expect.poll(() => began).toBe(true)
   await tabs.getByRole('button', { name: /^手动重发/ }).click()
   await expect(page.locator('.notification-switch-feedback').getByRole('alert')).toContainText(
     '合成读取失败',
   )
-  await expect(tabs.getByRole('button', { name: /^通知目标/ })).toHaveAttribute(
+  await expect(tabs.getByRole('button', { name: /^投递记录/ })).toHaveAttribute(
     'aria-current',
     'page',
   )
@@ -154,7 +145,7 @@ test('cold menu failures retain the original pane, retry once, and rapid navigat
     .click()
   await tabs.getByRole('button', { name: /^测试记录/ }).click()
   manual.release()
-  await expect(tabs.getByRole('button', { name: /^通知目标/ })).toHaveAttribute(
+  await expect(tabs.getByRole('button', { name: /^投递记录/ })).toHaveAttribute(
     'aria-current',
     'page',
   )
@@ -185,7 +176,11 @@ test('short labels fit with classic scrollbar geometry and wide toolbars allocat
     content:
       '.app-select-menu {scrollbar-gutter:stable} .app-select-menu::-webkit-scrollbar {width:15px}',
   })
-  await nav(page, '/content')
+  // An open select closes when its options change, so wait for them before opening one.
+  const optionsLoaded = page.waitForResponse(/\/api\/manage\/history\/options(?:\?|$)/)
+  await nav(page, '/operations/content')
+  await optionsLoaded
+  await expect(page.locator('.content-row').first()).toBeVisible()
   if (info.project.name === 'desktop') {
     const result = await page.getByRole('combobox', { name: '匹配结果', exact: true }).boundingBox()
     const date = await page.getByRole('button', { name: '发现日期', exact: true }).boundingBox()
@@ -241,7 +236,7 @@ test('direct record entry starts immediately and delays every loading visual unt
   })
   await page.clock.install()
   await page.clock.pauseAt(new Date())
-  await nav(page, '/notifications/deliveries')
+  await nav(page, '/operations/deliveries')
   await expect.poll(() => began).toBe(true)
   await expect(page.locator('.read-placeholder')).toHaveCount(0)
   await expect(page.locator('.remote-feedback')).toHaveCount(0)

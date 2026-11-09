@@ -382,6 +382,19 @@ class HotlistService:
             "items": copy.deepcopy(snapshot["items"]) if snapshot else [],
         }
 
+    def observation(self):
+        """Raw refresh state for the status page; never starts a refresh or warming."""
+        return {
+            "viewing": self.viewed_at is not None and self.clock() <= self.viewed_at + VIEW_GRACE,
+            "lists": {
+                key: {
+                    **state,
+                    "refreshing": key in self.pending and not self.pending[key].done(),
+                }
+                for key, state in self.states.items()
+            },
+        }
+
     async def get(self, website_id, period):
         """One list; a cold read waits for its first fetch. Does not start warming."""
         key, interval, task, _ = await self._ensure(website_id, period)

@@ -13,7 +13,6 @@ from seekbell.db.models import (
     Post,
     SeenPost,
     Source,
-    SourceProbe,
     SourceRun,
     SourceState,
     Task,
@@ -24,7 +23,7 @@ from seekbell.db.models import (
 )
 from seekbell.services.history import date_window, decisions, error_code, post_key, read_session
 from seekbell.services.request_budget import request_state
-from seekbell.services.source_probe import probe_backoff
+from seekbell.services.source_probe import next_source_attempt
 
 
 def overview(engine, range_name="24h", *, at=None):
@@ -103,11 +102,7 @@ def overview(engine, range_name="24h", *, at=None):
                     ],
                     "last_attempt_at": state.last_attempt_at,
                     "last_success_at": state.last_success_at,
-                    "next_attempt_at": max(
-                        state.next_attempt_at,
-                        probe_backoff(session.get(SourceProbe, source.id)),
-                        request_state(session, website.id, end)[0],
-                    ),
+                    "next_attempt_at": next_source_attempt(session, state, website.id, end),
                     "failures": state.failures,
                     "error_code": error_code(
                         state.last_error_code or request_state(session, website.id, end)[1]

@@ -13,7 +13,7 @@ async function backToTargets(page: Page) {
     .poll(async () => (await discard.isVisible()) || page.url().includes('#/notifications/targets'))
     .toBe(true)
   if (await discard.isVisible()) await discard.click()
-  await expect(page.getByRole('heading', { name: '通知管理', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '通知目标', exact: true })).toBeVisible()
 }
 test('Telegram preview shares real formatting and target cards open without hijacking controls', async ({
   page,

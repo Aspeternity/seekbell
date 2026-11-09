@@ -151,7 +151,7 @@ const emptyMatchMessage = computed(() => {
 const time = (at: number | null) =>
   at === null ? '未记录' : formatTime(new Date(at * 1000).toISOString())
 function openPost(id: string) {
-  if (!window.getSelection()?.toString()) emit('navigate', '/content/' + id)
+  if (!window.getSelection()?.toString()) emit('navigate', '/operations/content/' + id)
 }
 function reloadListing() {
   options.reload()
@@ -168,7 +168,7 @@ function clear() {
 </script>
 <template>
   <template v-if="selectedId">
-    <button class="back-link" @click="emit('navigate', '/content')">
+    <button class="back-link" @click="emit('navigate', '/operations/content')">
       <Icon name="back" :size="17" />返回内容列表
     </button>
     <ReadRegion
@@ -260,7 +260,7 @@ function clear() {
                     <button
                       class="result-pill"
                       :class="resultClass(record.status)"
-                      @click="emit('navigate', '/notifications/deliveries/' + record.id)"
+                      @click="emit('navigate', '/operations/deliveries/' + record.id)"
                     >
                       {{ deliveryLabels[record.status] }}<Icon name="arrow" :size="13" />
                     </button>
@@ -336,18 +336,6 @@ function clear() {
         </div> </template></ReadRegion
   ></template>
   <template v-else>
-    <section class="page-heading">
-      <div>
-        <p class="eyebrow">FROM THE FEED, TO YOUR FOCUS</p>
-        <h1 tabindex="-1">内容与命中</h1>
-        <p class="subtitle">留住发现的线索，也看清每一次匹配。</p>
-      </div>
-      <span
-        :style="{ visibility: listing.data.value ? undefined : 'hidden' }"
-        class="small-badge neutral"
-        >{{ listing.data.value?.total ?? '…' }} 条本地内容</span
-      >
-    </section>
     <div
       class="metric-strip"
       :aria-busy="listing.loading.value"
@@ -454,7 +442,7 @@ function clear() {
             class="content-row"
             @click="
               (event) => {
-                if (shouldOpenContentRow(event)) emit('navigate', '/content/' + post.id)
+                if (shouldOpenContentRow(event)) emit('navigate', '/operations/content/' + post.id)
               }
             "
           >
@@ -498,7 +486,7 @@ function clear() {
             <Icon name="search" :size="30" />
             <h3>没有符合条件的内容</h3>
             <p>
-              当前没有已保存的记录，或筛选条件未匹配。请检查网站启停状态与概览中的最近采集结果。
+              当前没有已保存的记录，或筛选条件未匹配。请检查网站启停状态与运行状态中的采集结果。
             </p>
             <button class="button" @click="clear">清除筛选</button>
           </div>

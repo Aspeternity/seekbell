@@ -25,25 +25,23 @@ test('notification tabs preserve destinations through clicks, history and reload
   page,
 }) => {
   await session(page)
-  await page.goto('/#/notifications/targets')
-  const tabs = page.getByRole('navigation', { name: '通知管理分类' })
+  await page.goto('/#/operations/deliveries')
+  const tabs = page.getByRole('navigation', { name: '通知记录分类' })
   const routes = [
-    ['通知目标', 'targets'],
-    ['投递记录', 'deliveries'],
     ['手动重发', 'manual'],
     ['测试记录', 'tests'],
-    ['通知目标', 'targets'],
+    ['投递记录', 'deliveries'],
   ]
   for (const [label, path] of routes) {
     const button = tabs.getByRole('button', { name: new RegExp('^' + label) })
     await button.click()
-    await expect(page).toHaveURL(new RegExp('#/notifications/' + path + '$'))
+    await expect(page).toHaveURL(new RegExp('#/operations/' + path + '$'))
     await expect(button).toHaveAttribute('aria-current', 'page')
-    await expect(page.getByRole('heading', { name: '通知管理', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '运行中心', exact: true })).toBeVisible()
     await expect(page.getByText('这条线索暂时不在这里', { exact: true })).toHaveCount(0)
   }
   await page.goBack()
-  await expect(page).toHaveURL(/#\/notifications\/tests$/)
+  await expect(page).toHaveURL(/#\/operations\/tests$/)
   await expect(tabs.getByRole('button', { name: /^测试记录/ })).toHaveAttribute(
     'aria-current',
     'page',
@@ -54,7 +52,7 @@ test('notification tabs preserve destinations through clicks, history and reload
     'page',
   )
   await page.goForward()
-  await expect(page).toHaveURL(/#\/notifications\/targets$/)
+  await expect(page).toHaveURL(/#\/operations\/deliveries$/)
 })
 
 test('search and select focus stays on the full control without an inner orange outline', async ({
@@ -64,10 +62,10 @@ test('search and select focus stays on the full control without an inner orange 
   for (const [path, label, select] of [
     ['/websites', '搜索已添加网站', '筛选网站状态'],
     ['/', '搜索任务', '筛选任务状态'],
-    ['/content', '搜索内容', '匹配结果'],
+    ['/operations/content', '搜索内容', '匹配结果'],
     ['/tasks', '搜索全部任务', ''],
     ['/notifications/targets', '搜索通知目标', '通知渠道筛选'],
-    ['/notifications/deliveries', '搜索投递记录', '投递状态筛选'],
+    ['/operations/deliveries', '搜索投递记录', '投递状态筛选'],
   ]) {
     await page.goto('/#' + path)
     const input = page.getByRole('textbox', { name: label, exact: true })

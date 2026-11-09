@@ -3101,113 +3101,6 @@ h1[tabindex='-1']:focus-visible {
     transform: none;
   }
 }
-.status-tiles {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin: 0;
-}
-.status-tiles > div {
-  min-width: 0;
-  padding: 14px 16px;
-  border-radius: 10px;
-  background: #f7f8fa;
-}
-.status-tiles dt {
-  margin-bottom: 6px;
-  font-size: 11px;
-  color: #808b98;
-}
-.about-copy {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-}
-.about-copy > span {
-  font-size: 12px;
-  color: var(--muted);
-}
-.settings-content .diagnostic-summary {
-  width: 100%;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
-  resize: vertical;
-}
-.status-value {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  min-height: 22px;
-  margin: 0;
-  font-size: 14px;
-  font-weight: 550;
-  color: #2f343b;
-}
-.status-value::before {
-  content: '';
-  flex-shrink: 0;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #c4cad1;
-}
-.status-value.ok::before {
-  background: #7ca58f;
-  box-shadow: 0 0 0 3px #7ca58f26;
-}
-.status-value.bad {
-  color: #a4552c;
-}
-.status-value.bad::before {
-  background: #d0703f;
-  box-shadow: 0 0 0 3px #d0703f26;
-}
-.status-value.pending::before {
-  display: none;
-}
-.status-value.pending {
-  width: 60%;
-  min-height: 12px;
-  margin-top: 5px;
-  border-radius: 4px;
-  background: #eceef1;
-}
-.status-value code {
-  font-size: 11px;
-  font-weight: 400;
-  color: #8a6a55;
-}
-.fault-list {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.fault-list li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 12px;
-  padding: 12px 14px;
-  border: 1px solid #f0dccd;
-  border-radius: 8px;
-  background: #fffaf6;
-  font-size: 12px;
-}
-.fault-list strong {
-  font-size: 13px;
-  color: #2f343b;
-}
-.fault-list code {
-  color: #a4552c;
-}
-.fault-list span {
-  margin-left: auto;
-  color: var(--muted);
-}
 .settings-content .panel-heading {
   flex-wrap: wrap;
   gap: 12px;
@@ -3374,9 +3267,6 @@ h1[tabindex='-1']:focus-visible {
   .settings-fields-grid.three {
     grid-template-columns: minmax(0, 1fr);
     gap: 18px;
-  }
-  .status-tiles {
-    grid-template-columns: minmax(0, 1fr);
   }
   .settings-content .about-card {
     padding: 0;

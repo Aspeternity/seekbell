@@ -143,8 +143,10 @@ async function toggle(id: string) {
         v-else-if="state.websites.some((w) => w.enabled && w.health === 'error')"
         class="warning-note overview-notice"
       >
-        <Icon name="alert" :size="18" /><span>来源连接异常，请检查采集设置。</span>
-        <button class="text-link" @click="emit('navigate', '/websites')">查看网站</button>
+        <Icon name="alert" :size="18" /><span>来源连接异常，请查看运行状态。</span>
+        <button class="text-link" @click="emit('navigate', '/operations/status')">
+          查看运行状态
+        </button>
       </div>
       <section class="stats-grid" aria-label="概览统计">
         <article class="stat-card">
@@ -194,7 +196,11 @@ async function toggle(id: string) {
           <div class="stat-value" data-testid="overview-attention">
             {{ attentionCount }}<span>次</span><span class="small-badge amber">需关注</span>
           </div>
-          <p>查看通知管理中的异常与重试记录</p>
+          <p>
+            <button class="text-link" @click="emit('navigate', '/operations/deliveries')">
+              查看运行中心的通知记录
+            </button>
+          </p>
         </article>
       </section>
       <div class="overview-columns">
@@ -424,7 +430,9 @@ async function toggle(id: string) {
               <h2>最近命中</h2>
               <p>从信息流中，找到与你有关的内容</p>
             </div>
-            <button class="text-link" @click="emit('navigate', '/content')">查看内容与命中</button>
+            <button class="text-link" @click="emit('navigate', '/operations/content')">
+              查看内容与命中
+            </button>
           </div>
           <component
             :is="item.post_id ? 'a' : 'div'"
@@ -432,7 +440,7 @@ async function toggle(id: string) {
             :key="index"
             class="activity-row"
             :class="{ 'activity-link': item.post_id }"
-            :href="item.post_id ? '#/content/' + item.post_id : undefined"
+            :href="item.post_id ? '#/operations/content/' + item.post_id : undefined"
           >
             <span class="timeline-dot orange"><Icon name="spark" :size="17" /></span>
             <div class="activity-copy">

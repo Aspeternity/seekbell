@@ -131,10 +131,10 @@ export async function checkCollection(page: Page, info: TestInfo, data: Overview
     }),
   )
   await page.reload()
-  await expect(page.getByText('来源连接异常，请检查采集设置。', { exact: true })).toBeVisible()
+  await expect(page.getByText('来源连接异常，请查看运行状态。', { exact: true })).toBeVisible()
   await page.unroute('**/api/manage/workspace')
   await page.reload()
-  await expect(page.getByText('来源连接异常，请检查采集设置。', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('来源连接异常，请查看运行状态。', { exact: true })).toHaveCount(0)
 }
 
 export async function checkWebsitePicker(page: Page, info: TestInfo) {

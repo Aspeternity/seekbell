@@ -27,7 +27,7 @@ async function category(page: Page, value: string, label: string) {
     .click()
   await expect(page).toHaveURL(new RegExp('/settings/' + value + '$'))
 }
-test('all eight categories remain reachable across phone tablet and desktop', async ({
+test('all seven categories remain reachable across phone tablet and desktop', async ({
   page,
 }, info) => {
   await page.goto('/#/settings/preferences')
@@ -38,7 +38,6 @@ test('all eight categories remain reachable across phone tablet and desktop', as
     ['retention', '历史与存储', '历史保留策略'],
     ['backup', '备份与恢复', '备份与恢复'],
     ['account', '账户与安全', '管理员资料'],
-    ['diagnostics', '诊断', '服务状态'],
     ['about', '关于', 'SeekBell.'],
   ]
   for (const width of [320, 390, 768, 900, 1100, 1280, 1440, 1920]) {
@@ -218,14 +217,6 @@ test('maintenance preview is read only and diagnostics provide a copy fallback',
   const after = await (await page.request.get('/api/manage/retention')).json()
   expect(after.days).toBe(before.days)
   expect(after.revision).toBe(before.revision)
-  await page.goto('/#/settings/diagnostics')
-  await page.getByRole('button', { name: '复制诊断摘要', exact: true }).click()
-  const summary = page.getByRole('textbox', { name: '诊断摘要', exact: true })
-  await expect(summary).toBeVisible()
-  const data = JSON.parse(await summary.inputValue())
-  expect(data.supported_websites).toHaveLength(2)
-  expect(Object.keys(data)).not.toContain('csrf')
-  expect(Object.keys(data)).not.toContain('password')
 })
 test('timezone picker groups common zones and previews the offset without a search box', async ({
   page,

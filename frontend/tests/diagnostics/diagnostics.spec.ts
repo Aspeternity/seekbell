@@ -37,7 +37,7 @@ async function sample(page: Page) {
 }
 async function openPost(page: Page) {
   const id = await sample(page)
-  await page.goto('/#/content/' + id)
+  await page.goto('/#/operations/content/' + id)
   await expect(page.getByRole('heading', { name: '未命中原因', exact: true })).toBeVisible()
   return id
 }
@@ -190,10 +190,10 @@ test('switching content rejects a late historical detail', async ({ page }) => {
     await route.fulfill({ response }).catch(() => {})
     finish()
   })
-  await page.goto('/#/content/' + id)
+  await page.goto('/#/operations/content/' + id)
   await expect.poll(() => started).toBe(true)
   await expect(page.locator('.diagnosis-cause')).toHaveCount(0)
-  await page.evaluate((key) => (location.hash = '/content/' + key), baseline)
+  await page.evaluate((key) => (location.hash = '/operations/content/' + key), baseline)
   await expect(page.getByRole('heading', { name: '未参与匹配', exact: true })).toBeVisible()
   release()
   await done
@@ -206,7 +206,7 @@ test('failed detail reads offer retry without inventing a reason', async ({ page
     (route) => route.fulfill({ status: 503, json: { detail: '合成判定读取失败' } }),
     { times: 1 },
   )
-  await page.goto('/#/content/' + id)
+  await page.goto('/#/operations/content/' + id)
   await expect(page.getByRole('alert')).toContainText('合成判定读取失败')
   await expect(page.locator('.diagnosis-cause')).toHaveCount(0)
   await page.getByRole('button', { name: '重新加载', exact: true }).click()

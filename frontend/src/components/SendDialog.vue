@@ -123,7 +123,7 @@ onMounted(() => {
           @click="
             emit(
               'complete',
-              '/notifications/' + (action === 'test' ? 'tests' : 'manual') + '/' + result.id,
+              '/operations/' + (action === 'test' ? 'tests' : 'manual') + '/' + result.id,
             )
           "
         >

@@ -124,7 +124,7 @@ test('service discovers and delivers after browser closure, without rebuilding b
         String(snapshot.window.delivered) + '次',
       )
       await reopened.screenshot({ path: info.outputPath('runtime-overview.png'), fullPage: true })
-      await reopened.goto('/#/notifications/deliveries/' + delivery.id)
+      await reopened.goto('/#/operations/deliveries/' + delivery.id)
       await expect(reopened.getByRole('heading', { name: '投递详情', exact: true })).toBeVisible()
       await expect(reopened.locator('.delivery-timeline')).toContainText('渠道已接受')
       await reopened.screenshot({ path: info.outputPath('automatic-delivery.png'), fullPage: true })

@@ -90,6 +90,7 @@ class HistoryRetention:
             raise ValueError("Invalid cleanup limits")
         self.engine, self.clock, self.tick = engine, clock, tick
         self.batch_size, self.interval = batch_size, interval
+        self.last_loop_at = None
 
     def run_once(self, *, at=None):
         at = self.clock() if at is None else at
@@ -284,5 +285,6 @@ class HistoryRetention:
     async def run(self, stop: asyncio.Event):
         while not stop.is_set():
             await database_call(self.run_once)
+            self.last_loop_at = self.clock()
             with suppress(TimeoutError):
                 await asyncio.wait_for(stop.wait(), timeout=self.tick)

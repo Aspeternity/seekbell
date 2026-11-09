@@ -46,11 +46,11 @@ test('cold entry keeps the heading and all filter geometry stable while options 
     await listing.promise
     await route.fulfill({ response })
   })
-  await navigate(page, '/content')
+  await navigate(page, '/operations/content')
   const input = page.getByLabel('搜索内容', { exact: true })
   await expect(input).toBeVisible()
   const start = await input.boundingBox()
-  await expect(page.locator('.page-heading > .small-badge')).toHaveCount(1)
+  await expect(page.locator('.page-heading h1')).toHaveText('运行中心')
   options.release()
   await expect.poll(async () => (await readChoices(page.getByLabel('关联任务'))).length).toBe(2)
   let box = (await input.boundingBox())!
@@ -68,7 +68,7 @@ test('filtering retains one inert result snapshot and commits counts and rows to
   page,
 }, info) => {
   await login(page)
-  await navigate(page, '/content')
+  await navigate(page, '/operations/content')
   await expect(page.locator('.content-row')).toHaveCount(20)
   const metrics = await page.locator('.metric-strip strong').allTextContents()
   const input = page.getByLabel('搜索内容')
@@ -147,7 +147,7 @@ test('post rows label publication time separately and fall back honestly when RS
     data.items[1].published_at = null
     await route.fulfill({ json: data })
   })
-  await navigate(page, '/content')
+  await navigate(page, '/operations/content')
   await expect(page.locator('.content-row')).toHaveCount(20)
   const first = page.locator('.content-row').first().locator('time')
   await expect(first).toContainText('发布')
@@ -164,7 +164,7 @@ test('complete result labels fit and every noninteractive part of a post opens i
   page,
 }, info) => {
   await login(page)
-  await navigate(page, '/content')
+  await navigate(page, '/operations/content')
   await expect(page.locator('.content-row')).toHaveCount(20)
   await expect(page.locator('.metric-strip')).not.toContainText('时间显示')
   await expect(page.locator('.metric-strip button, .metric-strip a')).toHaveCount(0)
@@ -216,11 +216,11 @@ test('complete result labels fit and every noninteractive part of a post opens i
     window.getSelection()!.addRange(range)
   })
   await row.locator('.content-excerpt').dispatchEvent('click', { button: 0 })
-  await expect(page.locator('h1')).toHaveText('内容与命中')
+  await expect(page.locator('h1')).toHaveText('运行中心')
   await page.evaluate(() => window.getSelection()?.removeAllRanges())
   await row.locator('.content-excerpt').dispatchEvent('click', { button: 0, ctrlKey: true })
   await row.locator('.content-excerpt').dispatchEvent('click', { button: 2 })
-  await expect(page.locator('h1')).toHaveText('内容与命中')
+  await expect(page.locator('h1')).toHaveText('运行中心')
   await row.locator('.content-title').focus()
   await row.locator('.content-title').press('Enter')
   await expect(page.locator('h1.article-heading')).toBeVisible()
