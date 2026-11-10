@@ -52,10 +52,14 @@ def restore(client, body):
     )
 
 
-def discard(client, password=ADMIN_PASSWORD):
+def discard(client, password=ADMIN_PASSWORD, name=backups.CANDIDATE):
     return client.request(
-        "DELETE", "/api/manage/backups/candidate", json={"current_password": password}
+        "DELETE", "/api/manage/backups/leftovers/" + name, json={"current_password": password}
     )
+
+
+def leftover_ids(client):
+    return [row["id"] for row in client.get("/api/manage/backups").json()["leftovers"]]
 
 
 def assert_clean(settings):
@@ -103,7 +107,7 @@ def test_web_round_trip_preserves_all_data_key_queue_and_revokes_only_copy_sessi
     assert destination.stat().st_mode & 0o777 == 0o700
     assert (destination / "seekbell.sqlite3").stat().st_mode & 0o777 == 0o600
     assert client.get("/api/auth/status").json()["authenticated"]
-    assert client.get("/api/manage/backups").json()["candidate_available"]
+    assert leftover_ids(client) == [backups.CANDIDATE]
     copy_before = table_data(destination / "seekbell.sqlite3")
     assert restore(client, upload(response.content)).status_code == 409
     assert table_data(destination / "seekbell.sqlite3") == copy_before
@@ -312,10 +316,10 @@ def test_candidate_can_be_discarded_then_restored_again(web):
     assert destination.is_dir()
     result = discard(client)
     assert result.status_code == 200, result.text
-    assert result.json() == {"candidate_available": False}
+    assert result.json() == {"leftovers": []}
     assert not os.path.lexists(destination)
     status = client.get("/api/manage/backups").json()
-    assert not status["candidate_available"]
+    assert status["leftovers"] == []
     assert (status["records"][0]["kind"], status["records"][0]["result"]) == (
         "discard",
         "deleted",
@@ -539,7 +543,10 @@ def test_fresh_installation_can_restore_instead_of_creating_an_administrator(web
 
 def age_session(settings, seconds):
     with closing(sqlite3.connect(settings.database_path)) as connection:
-        connection.execute("UPDATE login_sessions SET expires_at=expires_at-?", (seconds,))
+        connection.execute(
+            "UPDATE login_sessions SET expires_at=expires_at-?, created_at=created_at-?",
+            (seconds, seconds),
+        )
         connection.commit()
 
 
@@ -553,7 +560,7 @@ def test_password_may_be_omitted_shortly_after_it_was_entered(web):
     assert client.get("/api/manage/backups").json()["confirm_seconds"] == 0
     for result in (
         client.post("/api/manage/backups/download", json=without),
-        client.request("DELETE", "/api/manage/backups/candidate", json={}),
+        client.request("DELETE", "/api/manage/backups/leftovers/web-restore", json={}),
         apply(client, json.dumps(without).encode() + b"\ninvalid"),
     ):
         assert result.status_code == 403

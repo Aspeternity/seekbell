@@ -45,9 +45,16 @@ test('encrypted download and in-place restore from settings and the first-run pa
   await expect(exportForm.getByLabel('备份口令', { exact: true })).toHaveValue('')
   // Change the live workspace after the backup, then restore it in place.
   const csrf = (await (await page.request.get('/api/auth/status')).json()).csrf
-  await page.request.put('/api/manage/workspace', {
+  const general = await (await page.request.get('/api/manage/preferences')).json()
+  await page.request.put('/api/manage/preferences', {
     headers: { 'X-CSRF-Token': csrf },
-    data: { name: '恢复前修改', description: '' },
+    data: {
+      name: '恢复前修改',
+      description: '',
+      timezone: general.timezone,
+      workspace_revision: general.workspace_revision,
+      display_revision: general.display_revision,
+    },
   })
   await page.reload()
   await expect(page.locator('.workspace-label')).toContainText('恢复前修改')
@@ -78,6 +85,24 @@ test('encrypted download and in-place restore from settings and the first-run pa
   await expect(page.locator('.sidebar')).toBeAttached()
   await page.goto('/#/settings/backup')
   await expect(page.locator('.backup-records li').first()).toContainText('已恢复')
+  // The replaced workspace stays on the server until the administrator removes it: the
+  // data page counts it and links to the backup page, where it is removed.
+  await page.goto('/#/settings/data')
+  await expect(page.locator('.settings-metrics')).toContainText('1 份')
+  await page.getByRole('link', { name: '到备份页管理', exact: true }).click()
+  await expect(page).toHaveURL(/\/settings\/backup\?section=leftovers$/)
+  const leftovers = page.getByRole('region', { name: '恢复残留', exact: true })
+  await expect(leftovers.getByRole('listitem')).toHaveCount(1)
+  await expect(leftovers).toContainText('恢复前的旧数据')
+  await expect(leftovers).toBeInViewport()
+  await leftovers.getByRole('button', { name: '删除', exact: true }).click()
+  const removal = page.getByRole('form', { name: '删除恢复残留', exact: true })
+  // The restore just signed this session in, so the password is not asked again.
+  await expect(removal.getByLabel('当前管理员密码', { exact: true })).toHaveCount(0)
+  await removal.getByRole('button', { name: '确认删除', exact: true }).click()
+  await expect(page.getByRole('status').filter({ hasText: '恢复残留已删除' })).toBeVisible()
+  await expect(leftovers).toHaveCount(0)
+  expect((await (await page.request.get('/api/manage/backups')).json()).leftovers).toEqual([])
 
   // A fresh installation restores the same file from its first-run page.
   const fresh = 'http://127.0.0.1:' + (info.project.name === 'desktop' ? 8020 : 8021)

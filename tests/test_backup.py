@@ -399,13 +399,13 @@ def older_archive(archive, tmp_path):
         path = tmp_path / "older.sqlite3"
         path.write_bytes(database)
         with closing(sqlite3.connect(path)) as connection:
-            connection.execute("DROP TABLE backup_records")
-            connection.execute("ALTER TABLE workspace_preferences DROP COLUMN workspace_revision")
-            connection.execute("UPDATE alembic_version SET version_num='0017_hotlist_settings'")
+            connection.execute("ALTER TABLE alert_settings DROP COLUMN delay_seconds")
+            connection.execute("ALTER TABLE login_sessions DROP COLUMN created_at")
+            connection.execute("UPDATE alembic_version SET version_num='0018_settings_maintenance'")
             connection.commit()
         database = path.read_bytes()
         path.unlink()
-        manifest["database_revision"] = "0017_hotlist_settings"
+        manifest["database_revision"] = "0018_settings_maintenance"
         manifest["database_bytes"] = len(database)
         manifest["database_sha256"] = hashlib.sha256(database).hexdigest()
         return manifest, key, database
@@ -417,7 +417,7 @@ def test_older_backup_is_upgraded_inside_the_restored_copy(source, archive, tmp_
     older_archive(archive, tmp_path)
     destination = tmp_path / "restored"
     manifest = restore(source, archive, destination)
-    assert manifest["database_revision"] == "0017_hotlist_settings"
+    assert manifest["database_revision"] == "0018_settings_maintenance"
     backup.validate_database(destination / "seekbell.sqlite3")
     backup.validate_credentials(destination)
     expected = table_data(source.database_path)

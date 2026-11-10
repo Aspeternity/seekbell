@@ -14,7 +14,7 @@ from sqlalchemy import text
 
 from tests.history_helpers import seed_history
 from tests.runtime_helpers import PassiveRuntime
-from tests.test_management import authenticate
+from tests.test_management import authenticate, save_general
 
 
 @pytest.fixture
@@ -40,13 +40,8 @@ def test_general_save_is_atomic_and_conflicts_with_both_editors(web):
     assert result.json()["display_revision"] == original["display_revision"] + 1
     assert client.put("/api/manage/preferences", json=changed).status_code == 409
     assert client.get("/api/manage/preferences").json() == result.json()
-    display = client.get("/api/manage/display").json()
-    assert (
-        client.put(
-            "/api/manage/display", json={"timezone": "UTC", "revision": display["revision"]}
-        ).status_code
-        == 200
-    )
+    # Another editor changes only the timezone.
+    assert save_general(client, timezone="UTC").status_code == 200
     stale = {key: result.json()[key] for key in changed}
     stale.update(name="Must not save")
     assert client.put("/api/manage/preferences", json=stale).status_code == 409
@@ -56,12 +51,8 @@ def test_general_save_is_atomic_and_conflicts_with_both_editors(web):
     invalid.update(timezone="Invalid/Zone", name="Must not save")
     assert client.put("/api/manage/preferences", json=invalid).status_code == 422
     assert client.get("/api/manage/preferences").json() == latest
-    assert (
-        client.put(
-            "/api/manage/workspace", json={"name": "Legacy change", "description": ""}
-        ).status_code
-        == 200
-    )
+    # Another editor changes only the name.
+    assert save_general(client, name="Other change").status_code == 200
     assert (
         client.put("/api/manage/preferences", json={**invalid, "timezone": "UTC"}).status_code
         == 409
@@ -179,7 +170,7 @@ def test_upgrade_preserves_preferences_and_uses_expected_head(tmp_path):
             )
         )
     migrate(engine)
-    assert schema_revision(engine) == "0018_settings_maintenance"
+    assert schema_revision(engine) == "0019_settings_reorganization"
     with engine.connect() as connection:
         assert connection.execute(
             text(

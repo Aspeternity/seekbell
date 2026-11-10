@@ -14,6 +14,8 @@ from seekbell.db.models import Administrator, LoginSession
 from seekbell.db.transactions import write_session
 
 SESSION_SECONDS = 12 * 60 * 60
+# Chosen on the sign-in page; the session is otherwise identical and equally revocable.
+REMEMBER_SECONDS = 30 * 24 * 60 * 60
 # Backup operations skip the password prompt this long after it was last entered.
 CONFIRM_SECONDS = 15 * 60
 
@@ -74,21 +76,27 @@ class Confirmations:
                 del self.at[key]
             self.at[token_hash(token)] = now
 
-    def remaining(self, token: str, expires_at: float) -> float:
+    def remaining(self, token: str, started: float) -> float:
         # Signing in (or changing the account) entered the password when the session began.
-        started = expires_at - SESSION_SECONDS
         with self.lock:
             last = max(started, self.at.get(token_hash(token), 0))
         return max(0.0, last + CONFIRM_SECONDS - time.time())
 
 
-def new_session(session, *, at: float) -> tuple[str, str]:
+def new_session(session, *, at: float, lifetime: float = SESSION_SECONDS) -> tuple[str, str]:
     token, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
     session.execute(delete(LoginSession).where(LoginSession.expires_at <= at))
     session.add(
-        LoginSession(token_hash=token_hash(token), csrf=csrf, expires_at=at + SESSION_SECONDS)
+        LoginSession(
+            token_hash=token_hash(token), csrf=csrf, expires_at=at + lifetime, created_at=at
+        )
     )
     return token, csrf
+
+
+def started_at(record) -> float:
+    # Sessions from before the start time was stored all had the fixed lifetime.
+    return record.created_at or record.expires_at - SESSION_SECONDS
 
 
 def initialize(engine, username: str, password: str, *, timezone: str = "UTC") -> tuple[str, str]:
@@ -105,7 +113,9 @@ def initialize(engine, username: str, password: str, *, timezone: str = "UTC") -
         return new_session(session, at=time.time())
 
 
-def login(engine, username: str, password: str, previous: str = "") -> tuple[str, str] | None:
+def login(
+    engine, username: str, password: str, previous: str = "", *, remember: bool = False
+) -> tuple[str, str] | None:
     with Session(engine) as session:
         admin = session.get(Administrator, 1)
         if admin:
@@ -131,7 +141,9 @@ def login(engine, username: str, password: str, previous: str = "") -> tuple[str
             session.execute(
                 delete(LoginSession).where(LoginSession.token_hash == token_hash(previous))
             )
-        return new_session(session, at=time.time())
+        return new_session(
+            session, at=time.time(), lifetime=REMEMBER_SECONDS if remember else SESSION_SECONDS
+        )
 
 
 def session_info(engine, token: str):
@@ -140,7 +152,12 @@ def session_info(engine, token: str):
         admin = session.get(Administrator, 1)
         if record is None or record.expires_at <= time.time() or admin is None:
             return None
-        return {"username": admin.username, "csrf": record.csrf, "expires_at": record.expires_at}
+        return {
+            "username": admin.username,
+            "csrf": record.csrf,
+            "expires_at": record.expires_at,
+            "started_at": started_at(record),
+        }
 
 
 def initialized(engine) -> bool:
@@ -184,5 +201,7 @@ def update_administrator(engine, token, csrf, username, current_password, new_pa
             raise InvalidSession
         admin.username = username
         admin.password_hash = encoded
+        # The replacement session keeps the lifetime chosen at sign-in.
+        lifetime = record.expires_at - started_at(record)
         session.execute(delete(LoginSession))
-        return new_session(session, at=time.time())
+        return new_session(session, at=time.time(), lifetime=lifetime)

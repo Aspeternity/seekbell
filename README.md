@@ -161,7 +161,7 @@ uv run --frozen python -m seekbell.services.backup_demo
 
 ### 概览模块与社区热榜验证
 
-概览模块显隐/顺序在系统设置→界面与概览保存；首接NodeSeek第三方热榜，生产无需额外服务。热榜不参与规则或通知，隐藏后不再专用刷新。
+概览模块显隐/顺序在系统设置→通用保存；首接NodeSeek第三方热榜，生产无需额外服务。热榜不参与规则或通知，隐藏后不再专用刷新。
 
     uv run --frozen pytest -q tests/test_hotlists.py tests/test_release.py tests/test_backup.py
     pnpm --dir frontend build
@@ -198,10 +198,10 @@ pnpm --dir frontend test:linuxdo
 
 ### 系统设置与维护验证
 
-系统设置按通用、界面与概览、系统告警、历史与存储、备份与恢复、账户与安全、关于分组。通用与概览各自保存，修改失败保留草稿；数据占用及清理预览只读。备份下载与恢复验证有独立表单，操作记录区分已生成、已验证和副本未启用；账户页可退出其他会话；诊断页查看服务状态并可复制脱敏诊断摘要，关于页显示版本、运行环境、存储概况和项目链接。
+系统设置分通用、告警、数据、备份、账户、关于六类。通用设置与概览布局各自保存，修改失败保留草稿；告警可设通知延迟并发送测试告警；数据页管理历史保留和存储占用；备份页下载、恢复加密备份并删除恢复残留；账户页分别修改用户名和密码，并管理登录会话；登录页可选保持登录30天。磁盘可用空间低于500 MiB时在运行中心提示并发系统告警。
 
 ```bash
-uv run --frozen pytest tests/test_settings_maintenance.py tests/test_web_backups.py -q
+uv run --frozen pytest tests/test_settings_maintenance.py tests/test_settings_reorganization.py tests/test_web_backups.py -q
 pnpm --dir frontend build
 pnpm --dir frontend test:system
 pnpm --dir frontend test:retention
@@ -211,4 +211,4 @@ pnpm --dir frontend test:hotlist
 pnpm --dir frontend test:live
 ```
 
-本轮数据库迁移为0018_settings_maintenance，新增工作空间版本保护与备份操作元数据。升级前完整备份；回退应使用0017对应镜像/原卷或匹配备份，不能让旧镜像读取新schema。定时加密备份仍属于独立后续阶段。
+当前数据库迁移为0019_settings_reorganization，新增告警延迟与会话起始时间两列（0018新增工作空间版本保护与备份操作元数据）。升级前完整备份；回退应使用0018对应镜像/原卷或匹配备份，不能让旧镜像读取新schema。定时加密备份仍属于独立后续阶段。

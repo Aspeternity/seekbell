@@ -62,6 +62,13 @@ def telegram_post_time(payload):
     return "发布时间：" + (published or "来源未提供")
 
 
+ALERT_PHASES = {
+    "fault": ("故障", "SeekBell 系统故障："),
+    "recovery": ("恢复", "SeekBell 系统恢复："),
+    "test": ("测试", "SeekBell 告警测试："),
+}
+
+
 def render(payload: dict, config: dict, *, limit: int = 4000, show_timezone=True) -> str:
     if payload.get("type") == "system_alert":
         alert = payload["alert"]
@@ -69,7 +76,7 @@ def render(payload: dict, config: dict, *, limit: int = 4000, show_timezone=True
             "\n".join(
                 [
                     message_title(payload),
-                    "状态：" + ("故障" if alert["phase"] == "fault" else "恢复"),
+                    "状态：" + ALERT_PHASES.get(alert["phase"], ("恢复", ""))[0],
                     "时间："
                     + (
                         format_timestamp(
@@ -135,9 +142,8 @@ def telegram_message(payload: dict, config: dict) -> dict:
 
 def message_title(payload):
     if payload.get("type") == "system_alert":
-        return (
-            "SeekBell 系统故障：" if payload["alert"]["phase"] == "fault" else "SeekBell 系统恢复："
-        ) + line(payload["alert"]["label"])
+        phase = ALERT_PHASES.get(payload["alert"]["phase"], ALERT_PHASES["recovery"])
+        return phase[1] + line(payload["alert"]["label"])
     return payload["post"]["title"]
 
 

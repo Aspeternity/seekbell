@@ -310,6 +310,7 @@ class LoginSession(Base):
     token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     csrf: Mapped[str] = mapped_column(String(80))
     expires_at: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[float | None] = mapped_column(Float)
 
 
 class WebsiteInstallation(Base):
@@ -399,6 +400,7 @@ class AlertSettings(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     target_ids: Mapped[list] = mapped_column(JSON, default=list)
     revision: Mapped[int] = mapped_column(Integer, default=1)
+    delay_seconds: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
 class SystemState(Base):

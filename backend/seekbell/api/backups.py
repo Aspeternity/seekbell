@@ -31,14 +31,19 @@ from seekbell.services.authentication import (
     session_info,
     verify_password,
 )
-from seekbell.services.maintenance import backup_records, record_backup
+from seekbell.services.maintenance import (
+    CANDIDATE,
+    backup_records,
+    leftover_path,
+    leftovers,
+    record_backup,
+)
 
 router = APIRouter(prefix="/api/manage/backups", dependencies=[Depends(require_admin)])
 # A fresh installation may restore a backup instead of creating its first administrator.
 setup_router = APIRouter(prefix="/api/auth/setup", dependencies=[Depends(preauth)])
 MAX_METADATA = 8192
 MAX_ARCHIVE = backup.HEADER_SIZE + backup.MAX_PAYLOAD + 16
-CANDIDATE = "web-restore"
 DATA_FILES = ("seekbell.sqlite3", "seekbell.sqlite3-wal", "seekbell.sqlite3-shm", "credentials.key")
 QUIESCE_SECONDS = 15
 
@@ -80,7 +85,7 @@ def reauthenticate(request, password=None):
             info["csrf"].encode(), request.headers.get("x-csrf-token", "").encode()
         ):
             raise HTTPException(401, "会话已过期，请重新登录。")
-        if request.app.state.confirmations.remaining(token, info["expires_at"]) <= 0:
+        if request.app.state.confirmations.remaining(token, info["started_at"]) <= 0:
             raise HTTPException(403, "请输入当前管理员密码。")
         request.state.backup_authenticated = True
         return
@@ -116,10 +121,11 @@ def record_failure(request):
     if getattr(request.state, "backup_authenticated", False):
         # Keep the fixed original failure response if receipt storage also fails.
         with suppress(SQLAlchemyError):
-            kind = {"restore": "restore", "apply": "restore", "candidate": "discard"}
+            kind = {"restore": "restore", "apply": "restore"}
+            path = request.url.path
             record_backup(
                 request.app.state.engine,
-                kind.get(request.url.path.rsplit("/", 1)[-1], "export"),
+                "discard" if "/leftovers/" in path else kind.get(path.rsplit("/", 1)[-1], "export"),
                 "failed",
             )
 
@@ -175,9 +181,9 @@ def status(request: Request):
     return {
         # Seconds the current password may still be omitted; 0 means it must be entered.
         "confirm_seconds": int(
-            request.app.state.confirmations.remaining(token, info["expires_at"]) if info else 0
+            request.app.state.confirmations.remaining(token, info["started_at"]) if info else 0
         ),
-        "candidate_available": os.path.lexists(candidate(request)),
+        "leftovers": leftovers(request.app.state.settings.data_dir.resolve()),
         "max_archive_bytes": MAX_ARCHIVE,
         "records": backup_records(request.app.state.engine),
     }
@@ -284,8 +290,8 @@ async def restore(request: Request):
         return {"candidate_available": True, "activated": False}
 
 
-def remove_candidate(path):
-    """Delete only the fixed candidate: never follow a link, refuse one an instance holds."""
+def remove_leftover(path):
+    """Delete one fixed-name leftover: never follow a link, refuse one an instance holds."""
     if path.is_symlink() or not path.is_dir():
         path.unlink()
         return
@@ -295,24 +301,26 @@ def remove_candidate(path):
             try:
                 fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
-                raise backup.BackupError("恢复副本正在被其他实例使用，不能删除。") from None
+                raise backup.BackupError("这份数据正在被其他实例使用，不能删除。") from None
             fcntl.flock(handle, fcntl.LOCK_UN)
-    # Move aside first so a failed removal never leaves a half-deleted candidate in place.
+    # Move aside first so a failed removal never leaves a half-deleted copy in place.
     discarded = Path(tempfile.mkdtemp(prefix=".seekbell-discard-", dir=path.parent)) / "copy"
     os.rename(path, discarded)
     shutil.rmtree(discarded.parent)
 
 
-@router.delete("/candidate", dependencies=[Depends(rate_limit)])
-async def discard(values: DiscardValues, request: Request):
+@router.delete("/leftovers/{name}", dependencies=[Depends(rate_limit)])
+async def discard(name: str, values: DiscardValues, request: Request):
+    """Remove the workspace a restore replaced, or a verification-only copy."""
+    root = request.app.state.settings.data_dir.resolve()
     async with operation(request):
         await database_call(reauthenticate, request, values.current_password)
-        path = candidate(request)
-        if not os.path.lexists(path):
-            raise HTTPException(404, "没有可删除的恢复副本。")
-        await database_call(remove_candidate, path)
+        path = leftover_path(root, name)
+        if path is None:
+            raise HTTPException(404, "这份数据不存在或已删除。")
+        await database_call(remove_leftover, path)
         await database_call(record_backup, request.app.state.engine, "discard", "deleted")
-    return {"candidate_available": False}
+    return {"leftovers": leftovers(root)}
 
 
 def swap_in(data_dir, restored):

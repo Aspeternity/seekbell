@@ -41,6 +41,16 @@ def authenticate(client, setup=True):
     return response
 
 
+def save_general(client, **changes):
+    """Save the general settings the way the settings page does."""
+    current = client.get("/api/manage/preferences").json()
+    values = {
+        key: current[key]
+        for key in ("name", "description", "timezone", "workspace_revision", "display_revision")
+    }
+    return client.put("/api/manage/preferences", json={**values, **changes})
+
+
 def target(client, **overrides):
     values = {
         "name": "Synthetic webhook",
@@ -93,10 +103,7 @@ def test_real_configuration_survives_restart_login_and_preserves_notes(app):
         assert response.status_code == 201, response.text
         task_id = response.json()["id"]
         assert (
-            client.put(
-                "/api/manage/workspace", json={"name": "真实信息空间", "description": "配置持久化"}
-            ).status_code
-            == 200
+            save_general(client, name="真实信息空间", description="配置持久化").status_code == 200
         )
         assert (
             client.put(
@@ -158,7 +165,7 @@ def test_access_control_csrf_origin_and_safe_validation_errors(app):
             ).status_code
             == 201
         )
-        assert client.put("/api/manage/workspace", json={"name": " "}).status_code == 422
+        assert save_general(client, name=" ").status_code == 422
         assert (
             client.post(
                 "/api/manage/targets",
@@ -350,7 +357,7 @@ def test_failed_management_upgrade_rolls_back_and_can_retry(tmp_path):
         with Session(engine) as session:
             assert session.get(Source, "nodeseek-rss")
         migrate(engine)
-        assert schema_revision(engine) == "0018_settings_maintenance"
+        assert schema_revision(engine) == "0019_settings_reorganization"
         with Session(engine) as session:
             assert session.get(WebsiteInstallation, "nodeseek")
     finally:

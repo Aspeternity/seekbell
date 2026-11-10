@@ -1,8 +1,11 @@
 """Read-only maintenance views and bounded non-secret backup receipts."""
 
+import os
+import re
 import shutil
 import time
 import uuid
+from datetime import UTC, datetime
 from importlib.metadata import version
 
 from sqlalchemy import delete, exists, func, or_, select
@@ -71,19 +74,68 @@ def regular_size(path):
         return 0
 
 
+CANDIDATE = "web-restore"
+# `tempfile.mkdtemp` suffix after the UTC stamp written by a web restore.
+PREVIOUS = re.compile(r"before-restore-(\d{8}T\d{6})Z-[A-Za-z0-9_]{8}")
+LEFTOVER_FILES = (
+    "seekbell.sqlite3",
+    "seekbell.sqlite3-wal",
+    "seekbell.sqlite3-shm",
+    "credentials.key",
+)
+
+
+def leftover_path(root, name):
+    """The directory a restore left behind under this fixed name, or None for anything else."""
+    if name != CANDIDATE and not PREVIOUS.fullmatch(name):
+        return None
+    path = root / name
+    return path if os.path.lexists(path) else None
+
+
+def leftovers(root):
+    """Data a restore set aside: the replaced workspace, or a verification-only copy."""
+    rows = []
+    try:
+        names = sorted(entry.name for entry in os.scandir(root))
+    except OSError:
+        return rows
+    for name in names:
+        path = leftover_path(root, name)
+        if path is None:
+            continue
+        stamp = PREVIOUS.fullmatch(name)
+        try:
+            at = (
+                datetime.strptime(stamp[1], "%Y%m%dT%H%M%S").replace(tzinfo=UTC).timestamp()
+                if stamp
+                else path.lstat().st_mtime
+            )
+        except (OSError, ValueError):
+            continue
+        rows.append(
+            {
+                "id": name,
+                "kind": "previous" if stamp else "candidate",
+                "at": at,
+                "bytes": 0
+                if path.is_symlink()
+                else sum(regular_size(path / file) for file in LEFTOVER_FILES),
+            }
+        )
+    return sorted(rows, key=lambda row: -row["at"])
+
+
 def storage_view(settings):
     root = settings.data_dir.resolve()
     usage = shutil.disk_usage(root)
-    candidate = root / "web-restore"
+    kept = leftovers(root)
     return {
-        "database_bytes": regular_size(settings.database_path),
-        "wal_bytes": regular_size(root / "seekbell.sqlite3-wal"),
-        "restore_bytes": sum(
-            regular_size(candidate / name)
-            for name in ("seekbell.sqlite3", "seekbell.sqlite3-wal", "credentials.key")
-        )
-        if not candidate.is_symlink()
-        else 0,
+        # The write-ahead log is part of the live database.
+        "database_bytes": regular_size(settings.database_path)
+        + regular_size(root / "seekbell.sqlite3-wal"),
+        "leftover_bytes": sum(row["bytes"] for row in kept),
+        "leftover_count": len(kept),
         "filesystem_total_bytes": usage.total,
         "filesystem_free_bytes": usage.free,
         "checked_at": time.time(),

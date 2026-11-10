@@ -11,7 +11,7 @@ from seekbell.services import authentication as auth
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from tests.test_management import CREDENTIALS, PASSWORD, authenticate
+from tests.test_management import CREDENTIALS, PASSWORD, authenticate, save_general
 
 NEW_PASSWORD = "Synthetic-New-Password-2026"
 
@@ -37,12 +37,7 @@ def test_password_change_rotates_all_sessions_and_survives_restart(app):
         assert client.cookies.get("seekbell_session") != old_cookie
         client.headers["X-CSRF-Token"] = response.json()["csrf"]
         assert client.get("/api/auth/status").json()["username"] == "renamed_admin"
-        assert (
-            client.put(
-                "/api/manage/workspace", json={"name": "保留的工作空间", "description": ""}
-            ).status_code
-            == 200
-        )
+        assert save_general(client, name="保留的工作空间", description="").status_code == 200
         assert auth.session_info(app.state.engine, old_cookie) is None
         assert auth.session_info(app.state.engine, other) is None
         assert auth.login(app.state.engine, **CREDENTIALS) is None

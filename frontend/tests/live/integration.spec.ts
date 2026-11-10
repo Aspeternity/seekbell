@@ -18,11 +18,16 @@ test('real setup, login, website, task, workspace and a fresh browser retain ser
     await expect(page.getByRole('heading', { name: '欢迎来到 SeekBell' })).toBeVisible()
     await page.getByLabel('管理员用户名').fill(credentials.username)
     await page.getByLabel('设置密码', { exact: true }).fill(credentials.password)
-    await page.getByLabel('确认密码', { exact: true }).fill(credentials.password)
+    // The reveal button stays out of the Tab order: Tab goes on to the confirmation.
+    await page.keyboard.press('Tab')
+    await expect(page.getByLabel('确认密码', { exact: true })).toBeFocused()
+    await page.keyboard.type(credentials.password)
     await page.getByRole('button', { name: '创建管理员并进入' }).click()
   } else {
     await page.getByLabel('管理员用户名').fill(credentials.username)
     await page.getByLabel('密码', { exact: true }).fill(credentials.password)
+    await page.keyboard.press('Tab')
+    await expect(page.getByRole('checkbox', { name: /保持登录/ })).toBeFocused()
     await page.getByRole('button', { name: '登录工作空间' }).click()
   }
   await expect(page.locator('.sidebar')).toBeAttached()

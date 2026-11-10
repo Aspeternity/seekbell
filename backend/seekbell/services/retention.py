@@ -85,11 +85,15 @@ def remove(session, model, *conditions):
 
 
 class HistoryRetention:
-    def __init__(self, engine, *, clock=time.time, tick=1, batch_size=100, interval=3600):
+    def __init__(
+        self, engine, *, clock=time.time, tick=1, batch_size=100, interval=3600, disk=None
+    ):
         if not 1 <= batch_size <= 100 or interval <= 0 or tick <= 0:
             raise ValueError("Invalid cleanup limits")
         self.engine, self.clock, self.tick = engine, clock, tick
         self.batch_size, self.interval = batch_size, interval
+        # Storage upkeep shares this actor: an optional watch on free disk space.
+        self.disk = disk
         self.last_loop_at = None
 
     def run_once(self, *, at=None):
@@ -285,6 +289,8 @@ class HistoryRetention:
     async def run(self, stop: asyncio.Event):
         while not stop.is_set():
             await database_call(self.run_once)
+            if self.disk is not None:
+                await database_call(self.disk.run_once)
             self.last_loop_at = self.clock()
             with suppress(TimeoutError):
                 await asyncio.wait_for(stop.wait(), timeout=self.tick)

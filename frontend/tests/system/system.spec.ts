@@ -114,7 +114,7 @@ test('confirmed independent alerts record a single fault and recovery even when 
     (
       await page.request.put('/api/manage/alerts', {
         headers,
-        data: { enabled: false, target_ids: [], revision: settings.revision },
+        data: { enabled: false, target_ids: [], delay_seconds: 0, revision: settings.revision },
       })
     ).ok(),
   ).toBe(true)
@@ -138,12 +138,9 @@ test('confirmed independent alerts record a single fault and recovery even when 
   await page.goto('/#/settings/alerts')
   await page.getByLabel('启用故障与恢复告警').click()
   for (const name of names) await page.getByRole('checkbox', { name: new RegExp(name) }).check()
+  // Turning alerts on is an ordinary save; only turning them off asks first.
   await page.getByRole('button', { name: '保存告警设置', exact: true }).click()
-  await expect(page.getByRole('dialog')).toContainText('不会补发过去事件')
-  await page.getByRole('button', { name: '取消', exact: true }).click()
-  expect((await (await page.request.get('/api/manage/alerts')).json()).enabled).toBe(false)
-  await page.getByRole('button', { name: '保存告警设置', exact: true }).click()
-  await page.getByRole('button', { name: '确认保存告警', exact: true }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(page.getByRole('status').filter({ hasText: '系统告警设置已保存' })).toBeVisible()
   expect((await page.request.delete('/api/manage/targets/' + ids[0], { headers })).status()).toBe(
     409,

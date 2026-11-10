@@ -20,9 +20,6 @@ const empty = (): WorkspaceState => ({
     workspaceName: '个人工作空间',
     workspaceDescription: 'Administrator',
     timezone: 'Asia/Shanghai',
-    retention: 30,
-    alertTargets: [],
-    recoveryAlerts: false,
     overviewModules: defaultOverviewModules(),
   },
 })
@@ -90,7 +87,11 @@ export async function sendRequest(
       Object.assign(state, empty())
       window.dispatchEvent(new Event('seekbell-session-expired'))
     }
-    throw new Error(typeof data.detail === 'string' ? data.detail : '操作失败，请检查配置后重试。')
+    // The status lets a form tell a version conflict from an ordinary failure.
+    throw Object.assign(
+      new Error(typeof data.detail === 'string' ? data.detail : '操作失败，请检查配置后重试。'),
+      { status: response.status },
+    )
   }
   const readOnlyTrial =
     path === 'manage/rules/evaluate' ||
@@ -117,7 +118,12 @@ export async function initialize() {
   applyAuth(await request('auth/status'))
   if (signedIn.value) await refresh()
 }
-export async function authenticate(setup: boolean, username: string, password: string) {
+export async function authenticate(
+  setup: boolean,
+  username: string,
+  password: string,
+  remember = false,
+) {
   applyAuth(await request('auth/status'))
   if (signedIn.value) {
     await refresh()
@@ -126,7 +132,9 @@ export async function authenticate(setup: boolean, username: string, password: s
   const info = await request(setup ? 'auth/setup' : 'auth/login', 'POST', {
     username,
     password,
-    ...(setup ? { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' } : {}),
+    ...(setup
+      ? { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' }
+      : { remember }),
   })
   applyAuth(info)
   await refresh()
@@ -378,13 +386,6 @@ function matchResult(data: any) {
       ...(data.warnings?.includes('all_new_posts') ? ['未设置筛选条件，匹配全部帖子。'] : []),
     ] as string[],
   }
-}
-export async function savePreferences(settings: WorkspaceState['settings']) {
-  await request('manage/workspace', 'PUT', {
-    name: settings.workspaceName,
-    description: settings.workspaceDescription,
-  })
-  await refresh()
 }
 export async function evaluateTask(task: Task, sample: Sample) {
   const { websiteId, ...fields } = sample

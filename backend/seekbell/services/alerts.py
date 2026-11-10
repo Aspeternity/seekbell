@@ -5,7 +5,7 @@ import re
 import time
 from contextlib import suppress
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from seekbell.db.models import (
@@ -21,6 +21,9 @@ from seekbell.domain.delivery import SendResult
 from seekbell.services.configuration import identifier, target_snapshot
 from seekbell.services.display import notification_context
 from seekbell.services.history import read_session
+
+DELAYS = (0, 60, 300)
+RECOVERED_EARLY = "recovered_within_delay"
 
 
 class AlertConflict(ValueError):
@@ -59,8 +62,11 @@ def observe(session, component, fault, *, label, code=None, at):
     session.add(event)
     session.flush()
     settings = session.get(AlertSettings, 1)
+    quiet = set() if fault else _withdraw_brief_fault(session, state, settings, at)
     if settings.enabled:
         for key in settings.target_ids:
+            if key in quiet:
+                continue
             target = session.get(NotificationTarget, key)
             ready = (
                 target and target.deleted_at is None and target.enabled and target.config_ciphertext
@@ -81,23 +87,56 @@ def observe(session, component, fault, *, label, code=None, at):
     return event.id
 
 
+def _withdraw_brief_fault(session, state, settings, at):
+    """A fault that clears inside the delay was never announced, so its recovery is not either."""
+    if not settings.delay_seconds:
+        return set()
+    fault = session.scalar(
+        select(SystemEvent).where(
+            SystemEvent.component == state.component,
+            SystemEvent.generation == state.generation,
+            SystemEvent.phase == "fault",
+        )
+    )
+    if fault is None or at - fault.at >= settings.delay_seconds:
+        return set()
+    quiet = set()
+    for delivery in session.scalars(
+        select(AlertDelivery).where(
+            AlertDelivery.event_id == fault.id, AlertDelivery.result == "pending"
+        )
+    ):
+        delivery.result, delivery.error_code = "cancelled", RECOVERED_EARLY
+        delivery.finished_at = at
+        quiet.add(delivery.target_id)
+    return quiet
+
+
+def settings_view(settings):
+    return {
+        "enabled": settings.enabled,
+        "target_ids": settings.target_ids,
+        "delay_seconds": settings.delay_seconds,
+        "revision": settings.revision,
+    }
+
+
 def get_settings(engine):
     with Session(engine) as session:
-        settings = session.get(AlertSettings, 1)
-        return {
-            "enabled": settings.enabled,
-            "target_ids": settings.target_ids,
-            "revision": settings.revision,
-        }
+        return settings_view(session.get(AlertSettings, 1))
 
 
-def update_settings(engine, enabled, target_ids, revision, *, at=None):
+def update_settings(engine, enabled, target_ids, revision, *, delay_seconds=None, at=None):
     at = time.time() if at is None else at
     target_ids = list(dict.fromkeys(target_ids))
     with write_session(engine) as session:
         settings = session.get(AlertSettings, 1)
         if settings.revision != revision:
             raise AlertConflict("告警设置已在其他页面改变，请重新读取后保存。")
+        if delay_seconds is None:
+            delay_seconds = settings.delay_seconds
+        if delay_seconds not in DELAYS:
+            raise ValueError("Unsupported alert delay")
         if len(target_ids) > 64 or (enabled and not target_ids):
             raise ValueError("Select configured alert targets")
         for key in target_ids:
@@ -109,8 +148,13 @@ def update_settings(engine, enabled, target_ids, revision, *, at=None):
                 or not target.config_ciphertext
             ):
                 raise ValueError("Unknown configured alert target")
-        if settings.enabled != enabled or settings.target_ids != target_ids:
+        if (settings.enabled, settings.target_ids, settings.delay_seconds) != (
+            enabled,
+            target_ids,
+            delay_seconds,
+        ):
             settings.enabled, settings.target_ids = enabled, target_ids
+            settings.delay_seconds = delay_seconds
             settings.revision += 1
             for delivery in session.scalars(
                 select(AlertDelivery).where(AlertDelivery.result == "pending")
@@ -118,11 +162,7 @@ def update_settings(engine, enabled, target_ids, revision, *, at=None):
                 if not enabled or delivery.target_id not in target_ids:
                     delivery.result, delivery.error_code = "cancelled", "alerts_disabled"
                     delivery.finished_at = at
-        return {
-            "enabled": settings.enabled,
-            "target_ids": settings.target_ids,
-            "revision": settings.revision,
-        }
+        return settings_view(settings)
 
 
 def event_view(event):
@@ -251,10 +291,19 @@ class AlertWorker:
             settings = session.get(AlertSettings, 1)
             # Select one candidate at a time, so a disabled backlog does not
             # create an unbounded loop/transaction.
+            due = [AlertDelivery.result == "pending"]
+            if settings.delay_seconds:
+                # A fault waits out the delay; `observe` withdraws it if it clears first.
+                due.append(
+                    or_(
+                        SystemEvent.phase != "fault",
+                        SystemEvent.at <= self.clock() - settings.delay_seconds,
+                    )
+                )
             item = session.scalar(
                 select(AlertDelivery)
                 .join(SystemEvent)
-                .where(AlertDelivery.result == "pending")
+                .where(*due)
                 .order_by(
                     SystemEvent.at, SystemEvent.generation, SystemEvent.phase, AlertDelivery.id
                 )
@@ -322,3 +371,70 @@ class AlertWorker:
             self.last_loop_at = self.clock()
             with suppress(TimeoutError):
                 await asyncio.wait_for(stop.wait(), self.tick)
+
+
+async def send_test(engine, notifiers, target_ids, *, at=None, timeout=10):
+    """Send one clearly marked message to each chosen target; nothing is queued or recorded."""
+    at = time.time() if at is None else at
+    key = identifier()
+
+    def prepare():
+        with Session(engine) as session:
+            message = notification_context(
+                session,
+                {
+                    "schema_version": 2,
+                    "event_id": key,
+                    "type": "system_alert",
+                    "alert": {
+                        "id": key,
+                        "component": "test",
+                        "phase": "test",
+                        "label": "通知目标可以接收系统告警",
+                        "code": "test_alert",
+                        "at": at,
+                    },
+                },
+            )
+            rows = []
+            for target_id in dict.fromkeys(target_ids):
+                target = session.get(NotificationTarget, target_id)
+                if (
+                    target is None
+                    or target.deleted_at is not None
+                    or target.kind == "mock"
+                    or not target.config_ciphertext
+                ):
+                    raise ValueError("Unknown configured alert target")
+                rows.append((target.enabled, target_snapshot(target)))
+            return message, rows
+
+    message, rows = await database_call(prepare)
+
+    async def send(enabled, snapshot):
+        if not enabled:
+            return "cancelled", "target_unavailable"
+        notifier = notifiers.get(snapshot["kind"])
+        if notifier is None:
+            return "permanent_error", "unsupported_notifier"
+        try:
+            result = await asyncio.wait_for(notifier.send(snapshot, dict(message)), timeout)
+        except TimeoutError:
+            return "unknown", "send_timeout"
+        except Exception:
+            return "unknown", "notifier_exception"
+        if not isinstance(result, SendResult):
+            return "unknown", "invalid_notifier_result"
+        return result.status, result.code
+
+    results = await asyncio.gather(*(send(enabled, snapshot) for enabled, snapshot in rows))
+    return [
+        {
+            "target_id": snapshot["id"],
+            "target_name": snapshot.get("name", ""),
+            "kind": snapshot.get("kind"),
+            "result": status,
+            "error_code": code,
+        }
+        for (_, snapshot), (status, code) in zip(rows, results, strict=True)
+    ]

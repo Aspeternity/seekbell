@@ -124,7 +124,7 @@ src/websites.ts声明已实现适配器及能力，服务端WebsiteInstallation�
 
 0004_management增加单例Administrator、LoginSession、WebsiteInstallation、WorkspacePreferences；TaskVersion增加最多160字符description。SQLite迁移入口持BEGIN IMMEDIATE后识别空库/既有迁移版本：空库安装实例表为空，从既有M0/M1/M2升级保留原网站实例。适配器身份行不是用户已安装实例；移除实例仅删除安装关系、禁用来源并重建后续基线，保留历史身份。活跃任务依赖阻止移除；创建任务在同一配置写事务检查安装关系。旧单站约束已由0014的版本化网站集合替代，备注仍随规则版本留证。
 
-初始化的管理员和会话同事务创建，管理员主键限制id=1，不使用初始化令牌。密码为独立随机盐scrypt(N=2^17,r=8,p=1)。不透明随机会话令牌仅以SHA-256摘要存入服务端，12小时过期，退出删除。Cookie为HttpOnly/SameSite=Strict，可信HTTPS请求标Secure。登录/初始化使用进程密钥签名的预会话CSRF，管理写入验证会话CSRF及Origin；不信任未配置的代理。API no-store，验证错误不包含输入，SQL日志隐藏参数。认证来源每分钟10次/全局30次，内存限速且哈希串行；重启重置限速，不是多副本方案。参考[OWASP密码存储](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)及[CSRF](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)。
+初始化的管理员和会话同事务创建，管理员主键限制id=1，不使用初始化令牌。密码为独立随机盐scrypt(N=2^17,r=8,p=1)。不透明随机会话令牌仅以SHA-256摘要存入服务端，12小时过期，退出删除。Cookie为HttpOnly/SameSite=Strict，可信HTTPS请求标Secure。登录/初始化使用进程密钥签名的预会话CSRF，管理写入验证会话CSRF及Origin；不信任未配置的代理。API no-store；页面（`/`与`*.html`）no-cache，每次加载凭ETag重新确认（未变返回304），升级后立即换成新构建，带哈希的资源不加缓存头（2026-11-10用户确认）；验证错误不包含输入，SQL日志隐藏参数。认证来源每分钟10次/全局30次，内存限速且哈希串行；重启重置限速，不是多副本方案。参考[OWASP密码存储](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)及[CSRF](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)。
 
 M3配置API复用Configuration及CredentialVault，启动创建/加载私有密钥；已有密文缺钥/错钥直接停止。目标新增/编辑/启停和配置读写已接入，留空敏感字段保留，不回显值；目标更新与停用取消在同一事务。为满足任务至少一个已配置目标的规格，首闭环支持四渠道配置，但不启用测试发送或采集/投递生命周期。规则试算使用原RuleEngine。工作空间名称/说明单例存储，不扩展多用户或多工作空间。
 
@@ -425,3 +425,20 @@ HotlistSource新增retention（周期→秒），snapshot_max_age(period)默认8
 错误码的阶段、说明、可能原因、下一步和验证方式集中在`services/fault_guide.py`，测试扫描源码中的固定错误码防止遗漏。
 
 后台崩溃只能靠重启恢复，崩溃原因写入数据目录`runtime-crashes.json`（最近20条，原子替换，只含服务名、时间、版本、异常类型和脱敏代码位置；不进备份，不依赖数据库）。各后台循环记录`last_loop_at`，超过120秒只陈述“循环未完成”。本轮不增加数据库迁移。
+
+## 系统设置重组（2026-11-10）
+
+产品契约见SPEC 6.5.2。0019_settings_reorganization给`alert_settings`加`delay_seconds`（默认0），给`login_sessions`加可空`created_at`；旧会话为空时按`expires_at−SESSION_SECONDS`推算起点，保持原12小时。
+
+设置接口从`api/management.py`移到`api/settings.py`（路径不变）：preferences、display、alerts（含只读state/history/detail，供容器检查与端到端测试）、alerts/test、retention及preview、storage、about。删除无调用的`PUT /manage/workspace`；`GET /manage/workspace`的settings不再带retention/alertTargets/recoveryAlerts。
+
+告警延迟：`AlertWorker._claim`对fault事件要求`at ≤ now−delay`；`observe`写recovery时若对应fault未满延迟，把其pending投递改为cancelled/`recovered_within_delay`，并对这些目标不再生成recovery投递。`update_settings`省略delay时保留原值。测试告警`alerts.send_test`在请求内并发直发、共用`sending_gate`，不建SystemEvent/AlertDelivery；渲染层按`ALERT_PHASES`处理test。
+
+磁盘：`services/disk.DiskWatch`挂在`HistoryRetention`循环内，每60秒`shutil.disk_usage`数据目录，低于500 MiB经`observe("runtime:disk", …, code="disk_space_low")`记故障，回升到600 MiB以上恢复；写入失败只记日志，下轮重试。运行中心`_disk_problems`在后台停止时也列出（可能就是原因），阶段为storage。
+
+恢复残留：`maintenance.leftovers(root)`只枚举`web-restore`与`before-restore-YYYYMMDDTHHMMSSZ-xxxxxxxx`，大小只计固定数据文件、符号链接计0；`GET /manage/backups`以`leftovers`取代`candidate_available`，`DELETE /manage/backups/leftovers/{name}`沿用原删除副本的认证、实例锁检查与先移开再删除，`/manage/backups/restore`（验证副本）保留给维护工具。`storage_view`返回database_bytes（含WAL）、leftover_bytes/count与磁盘容量。
+
+会话：`POST /auth/login`可带`remember`，生命周期`REMEMBER_SECONDS`=30天；Cookie Max-Age按会话剩余时间；修改管理员沿用原生命周期；`Confirmations.remaining`改按会话`started_at`计算15分钟免确认；`GET /auth/sessions`多返回remembered。
+
+前端：`settings.ts`集中标签定义（App路由共用）、`useSettingsForm`（读取/草稿/放弃/保存/校验/保存前确认/409可重读）与格式化函数；`SettingsSaveBar`统一保存栏；`BackupSettings`（备份标签）持有备份状态与免确认计时，供备份卡与`RestoreLeftovers`残留卡共用；`DataSettings`只含保留与存储卡；请求错误附带HTTP状态码。验证：`uv run --frozen pytest -q`；`pnpm --dir frontend build`；test:system、test:backup、test:retention、test:history、test:approved-ui、test:ui、test:hotlist、test:live。
+

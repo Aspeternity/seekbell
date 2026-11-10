@@ -269,7 +269,7 @@ def test_retention_policy_auth_revision_validation_persistence_and_no_cleanup_on
             client.put("/api/manage/retention", json={"days": 90, "revision": revision}).status_code
             == 200
         )
-        assert client.get("/api/manage/workspace").json()["settings"]["retention"] == 90
+        assert client.get("/api/manage/retention").json()["days"] == 90
         assert (
             client.put("/api/manage/retention", json={"days": 1, "revision": revision}).status_code
             == 409

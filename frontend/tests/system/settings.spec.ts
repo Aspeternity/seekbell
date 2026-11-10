@@ -27,17 +27,16 @@ async function category(page: Page, value: string, label: string) {
     .click()
   await expect(page).toHaveURL(new RegExp('/settings/' + value + '$'))
 }
-test('all seven categories remain reachable across phone tablet and desktop', async ({
+test('all six categories remain reachable across phone tablet and desktop', async ({
   page,
 }, info) => {
   await page.goto('/#/settings/preferences')
   const rows = [
     ['preferences', '通用', '通用设置'],
-    ['overview', '概览', '概览显示模块'],
-    ['alerts', '系统告警', '系统故障与恢复告警'],
-    ['retention', '历史与存储', '历史保留策略'],
-    ['backup', '备份与恢复', '备份与恢复'],
-    ['account', '账户与安全', '管理员资料'],
+    ['alerts', '告警', '系统告警'],
+    ['data', '数据', '历史保留'],
+    ['backup', '备份', '备份与恢复'],
+    ['account', '账户', '管理员用户名'],
     ['about', '关于', 'SeekBell.'],
   ]
   for (const width of [320, 390, 768, 900, 1100, 1280, 1440, 1920]) {
@@ -52,6 +51,11 @@ test('all seven categories remain reachable across phone tablet and desktop', as
       const navigation = page.getByRole('navigation', { name: '设置分类', exact: true })
       await expect(navigation).toBeVisible()
       // Keep the user-approved horizontal navigation above the content.
+      // Six short labels fit every width without scrolling the tab bar.
+      expect(
+        await navigation.evaluate((nav) => nav.scrollWidth <= nav.clientWidth),
+        label + ' tabs fit at ' + width,
+      ).toBe(true)
       const geometry = await navigation.evaluate((nav) => {
         const bounds = nav.getBoundingClientRect()
         const buttons = [...nav.querySelectorAll('button')].map((button) =>
@@ -89,8 +93,17 @@ test('all seven categories remain reachable across phone tablet and desktop', as
     }
   }
   await page.setViewportSize({ width: 1440, height: 1000 })
-  await page.goto('/#/settings/preferences?section=overview-modules')
-  await expect(page.getByRole('heading', { name: '概览显示模块', exact: true })).toBeVisible()
+  // Addresses of the former seven categories land on the section that replaced them;
+  // the backup address is a category again.
+  for (const [old, current, heading] of [
+    ['overview', 'preferences?section=overview-modules', '概览显示模块'],
+    ['retention', 'data?section=retention', '历史保留'],
+    ['backup', 'backup', '备份与恢复'],
+  ]) {
+    await page.goto('/#/settings/' + old)
+    await expect(page).toHaveURL(new RegExp('/settings/' + current!.replace('?', '\\?') + '$'))
+    await expect(page.getByRole('heading', { name: heading!, exact: true })).toBeInViewport()
+  }
   await page.goto('/#/settings/display')
   await expect(page.getByRole('heading', { name: '通用设置', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: '保存通用设置', exact: true })).toBeDisabled()
@@ -126,6 +139,8 @@ test('a failed unrelated section cannot disable general settings and validation 
   await page.getByRole('button', { name: '保存通用设置', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('工作空间名称应为')
   await expect(input).toBeFocused()
+  // Reading again cannot fix a validation error, so no reload is offered.
+  await expect(page.getByRole('alert').getByRole('button')).toHaveCount(0)
   expect(
     await input.evaluate(
       (el) =>
@@ -135,7 +150,7 @@ test('a failed unrelated section cannot disable general settings and validation 
   expect(unrelated).toBe(0)
 })
 for (const tab of ['preferences', 'retention', 'alerts']) {
-  test(tab + ' error retry asks before discarding its draft', async ({ page }) => {
+  test(tab + ' conflict reload asks before discarding its draft', async ({ page }) => {
     if (tab === 'alerts') {
       const auth = await (await page.request.get('/api/auth/status')).json()
       await page.request.post('/api/manage/targets', {
@@ -148,7 +163,7 @@ for (const tab of ['preferences', 'retention', 'alerts']) {
         },
       })
     }
-    await page.goto('/#/settings/' + tab)
+    await page.goto('/#/settings/' + (tab === 'retention' ? 'data' : tab))
     let input = page.getByLabel('工作空间名称', { exact: true })
     let value = '',
       old = ''
@@ -158,7 +173,7 @@ for (const tab of ['preferences', 'retention', 'alerts']) {
       await input.fill(value)
     }
     if (tab === 'retention') {
-      input = page.getByLabel('普通历史保留天数', { exact: true })
+      input = page.getByLabel('历史保留天数', { exact: true })
       old = await input.inputValue()
       value = String(Number(old) > 1 ? Number(old) - 1 : 2)
       await input.fill(value)
@@ -173,20 +188,21 @@ for (const tab of ['preferences', 'retention', 'alerts']) {
     }
     await page.route('**/api/manage/' + tab, (route) =>
       route.request().method() === 'PUT'
-        ? route.fulfill({ status: 503, json: { detail: '合成保存失败' } })
+        ? route.fulfill({ status: 409, json: { detail: '合成保存冲突' } })
         : route.continue(),
     )
     const saveLabel =
       tab === 'preferences' ? '保存通用设置' : tab === 'retention' ? '保存保留策略' : '保存告警设置'
     await page.getByRole('button', { name: saveLabel, exact: true }).click()
-    if (tab === 'alerts' || (tab === 'retention' && Number(value) < Number(old)))
+    // Only turning alerts off or shortening retention asks first.
+    if (tab === 'alerts' ? value === 'false' : tab === 'retention' && Number(value) < Number(old))
       await page
         .getByRole('button', {
-          name: tab === 'alerts' ? '确认保存告警' : '确认保存策略',
+          name: tab === 'alerts' ? '关闭告警' : '确认保存策略',
           exact: true,
         })
         .click()
-    await expect(page.getByRole('alert')).toContainText('合成保存失败')
+    await expect(page.getByRole('alert')).toContainText('合成保存冲突')
     await page.getByRole('alert').getByRole('button', { name: '重新加载', exact: true }).click()
     await expect(page.getByRole('dialog')).toContainText('尚未保存')
     await page.getByRole('button', { name: '取消', exact: true }).click()
@@ -198,10 +214,8 @@ for (const tab of ['preferences', 'retention', 'alerts']) {
     else await expect(input).toHaveValue(old)
   })
 }
-test('maintenance preview is read only and diagnostics provide a copy fallback', async ({
-  page,
-}) => {
-  await page.goto('/#/settings/retention')
+test('maintenance preview is read only', async ({ page }) => {
+  await page.goto('/#/settings/data')
   await expect(page.getByRole('heading', { name: '存储占用', exact: true })).toBeVisible()
   const before = await (await page.request.get('/api/manage/retention')).json()
   await page.getByRole('button', { name: '预览清理影响', exact: true }).click()
@@ -238,20 +252,97 @@ test('timezone picker groups common zones and previews the offset without a sear
   await expect(menu.getByRole('option').first()).toHaveAttribute('data-value', 'Asia/Shanghai')
   await select.press('Escape')
 })
-test('storage status refresh keeps an unsaved retention draft', async ({ page }) => {
-  await page.goto('/#/settings/retention')
-  const input = page.getByLabel('普通历史保留天数', { exact: true })
+test('storage refresh keeps an unsaved retention draft', async ({ page }) => {
+  await page.goto('/#/settings/data')
+  const input = page.getByLabel('历史保留天数', { exact: true })
   const old = Number(await input.inputValue())
   const value = String(old < 365 ? old + 1 : old - 1)
   await input.fill(value)
   await Promise.all([
-    page.waitForResponse(
-      (response) =>
-        response.url().endsWith('/api/manage/retention') && response.request().method() === 'GET',
-    ),
-    page.getByRole('button', { name: '刷新状态', exact: true }).click(),
+    page.waitForResponse((response) => response.url().endsWith('/api/manage/storage')),
+    page.getByRole('button', { name: '刷新', exact: true }).click(),
   ])
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(input).toHaveValue(value)
   await expect(page.getByRole('status').filter({ hasText: '有未保存的修改' })).toBeVisible()
+})
+test('alert delay is saved and a test alert reports each chosen target', async ({ page }, info) => {
+  const name = '合成测试告警目标 ' + info.project.name
+  const auth = await (await page.request.get('/api/auth/status')).json()
+  const headers = { 'X-CSRF-Token': auth.csrf }
+  const created = await page.request.post('/api/manage/targets', {
+    headers,
+    data: {
+      name,
+      kind: 'webhook',
+      enabled: true,
+      config: { url: 'https://receiver.example.test/synthetic-alert-test' },
+    },
+  })
+  expect(created.ok()).toBe(true)
+  const before = await (await page.request.get('/api/manage/alerts')).json()
+  await page.goto('/#/settings/alerts')
+  const test = page.getByRole('button', { name: '发送测试告警', exact: true })
+  await page.getByRole('radio', { name: '持续 5 分钟', exact: true }).check()
+  await expect(page.getByText('5 分钟内自行恢复的故障不通知')).toBeVisible()
+  await page.getByRole('checkbox', { name: new RegExp(name) }).check()
+  // The draft selection can be tested before anything is saved.
+  await test.click()
+  await expect(page.getByRole('dialog')).toContainText('真实发送')
+  await page.getByRole('button', { name: '发送测试', exact: true }).click()
+  const results = page.getByRole('list', { name: '测试结果', exact: true }).getByRole('listitem')
+  // Targets saved by other checks are tested too; this one must be among them, once.
+  await expect(results.filter({ hasText: name })).toHaveCount(1)
+  expect((await (await page.request.get('/api/manage/alerts')).json()).revision).toBe(
+    before.revision,
+  )
+  // Saving without turning alerts off needs no confirmation.
+  await page.getByRole('button', { name: '保存告警设置', exact: true }).click()
+  await expect(page.getByRole('status').filter({ hasText: '系统告警设置已保存' })).toBeVisible()
+  const saved = await (await page.request.get('/api/manage/alerts')).json()
+  expect(saved.delay_seconds).toBe(300)
+  expect(saved.enabled).toBe(before.enabled)
+  await page.getByRole('radio', { name: '立即', exact: true }).check()
+  await page.getByRole('checkbox', { name: new RegExp(name) }).uncheck()
+  await page.getByRole('button', { name: '保存告警设置', exact: true }).click()
+  await expect(page.getByRole('status').filter({ hasText: '系统告警设置已保存' })).toBeVisible()
+})
+test('account page separates the username from the password and keeps both sign-out actions', async ({
+  page,
+}) => {
+  await page.goto('/#/settings/account')
+  const rename = page.getByRole('form', { name: '修改用户名', exact: true })
+  const secret = page.getByRole('form', { name: '修改密码', exact: true })
+  await expect(rename.getByRole('button', { name: '更新用户名', exact: true })).toBeDisabled()
+  await expect(secret.getByRole('button', { name: '更新密码', exact: true })).toBeDisabled()
+  await secret.getByLabel('当前密码', { exact: true }).fill(credentials.password)
+  await secret.getByLabel('新密码', { exact: true }).fill('Synthetic-Mismatch-1')
+  await secret.getByLabel('确认新密码', { exact: true }).fill('Synthetic-Mismatch-2')
+  await secret.getByRole('button', { name: '更新密码', exact: true }).click()
+  const alert = page.getByRole('alert')
+  await expect(alert).toContainText('两次输入的新密码不一致')
+  await expect(alert.getByRole('button')).toHaveCount(0)
+  const main = page.locator('#main-content')
+  await expect(main.getByRole('button', { name: '退出其他会话', exact: true })).toBeVisible()
+  await expect(main.getByRole('button', { name: '退出登录', exact: true })).toHaveCount(1)
+  await expect(main.getByText('当前会话到期')).toBeVisible()
+})
+test('the sign-in page offers to stay signed in', async ({ browser }) => {
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  // The request is inspected and dropped, so the shared sign-in rate limit is left alone.
+  let sent: { remember?: boolean } | undefined
+  await page.route('**/api/auth/login', (route) => {
+    sent = route.request().postDataJSON()
+    return route.abort()
+  })
+  await page.goto('/#/login')
+  const remember = page.getByRole('checkbox', { name: /保持登录 30 天/ })
+  await expect(remember).not.toBeChecked()
+  await page.getByLabel('管理员用户名').fill(credentials.username)
+  await page.getByLabel('密码', { exact: true }).fill(credentials.password)
+  await remember.check()
+  await page.getByRole('button', { name: '登录工作空间' }).click()
+  await expect.poll(() => sent?.remember).toBe(true)
+  await context.close()
 })

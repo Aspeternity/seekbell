@@ -110,7 +110,9 @@ def status(request: Request, response: Response):
 
 def session_response(request, response, username, tokens):
     token, csrf = tokens
-    set_cookie(request, response, COOKIE, token, auth.SESSION_SECONDS)
+    info = auth.session_info(request.app.state.engine, token)
+    age = round(info["expires_at"] - time.time()) if info else auth.SESSION_SECONDS
+    set_cookie(request, response, COOKIE, token, age)
     response.delete_cookie(PREAUTH, path="/")
     return {
         "initialized": True,
@@ -135,14 +137,19 @@ def setup(credentials: SetupCredentials, request: Request, response: Response):
     return session_response(request, response, credentials.username, tokens)
 
 
+class LoginCredentials(Credentials):
+    remember: bool = False
+
+
 @router.post("/login", dependencies=[Depends(preauth)])
-def login(credentials: Credentials, request: Request, response: Response):
+def login(credentials: LoginCredentials, request: Request, response: Response):
     with request.app.state.login_limiter.hash_lock:
         tokens = auth.login(
             request.app.state.engine,
             credentials.username,
             credentials.password,
             request.cookies.get(COOKIE, ""),
+            remember=credentials.remember,
         )
     if tokens is None:
         raise HTTPException(401, "用户名或密码不正确。")
@@ -196,6 +203,7 @@ def sessions(request: Request):
             raise HTTPException(401, "会话已过期，请重新登录。")
         return {
             "expires_at": row.expires_at,
+            "remembered": row.expires_at - auth.started_at(row) > auth.SESSION_SECONDS,
             "other_sessions": session.scalar(
                 select(func.count())
                 .select_from(LoginSession)

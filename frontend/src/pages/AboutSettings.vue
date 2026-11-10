@@ -2,7 +2,8 @@
 import { computed, ref } from 'vue'
 import Icon from '../components/Icon.vue'
 import ReadRegion from '../components/ReadRegion.vue'
-import { formatTime, request } from '../store'
+import { request } from '../store'
+import { byteSize as size, stamp } from '../settings'
 import { useRemote } from '../history'
 interface About {
   version: string
@@ -46,11 +47,6 @@ const links = [
     href: repository + '/issues',
   },
 ]
-const stamp = (seconds: number) => formatTime(new Date(seconds * 1000).toISOString())
-const size = (bytes: number) =>
-  bytes >= 1024 ** 3
-    ? (bytes / 1024 ** 3).toFixed(2) + ' GiB'
-    : (bytes / 1024 ** 2).toFixed(2) + ' MiB'
 function duration(seconds: number) {
   const minutes = Math.floor(Math.max(0, seconds) / 60)
   const days = Math.floor(minutes / 1440),

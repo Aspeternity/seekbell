@@ -43,7 +43,7 @@ test('retention confirms changes, handles stale revisions and cleans with the br
   await page.goto('/#/settings/retention')
   await expect(page.getByRole('alert')).toContainText('合成策略读取失败')
   await page.getByRole('alert').getByRole('button', { name: '重新加载', exact: true }).click()
-  const input = page.getByLabel('普通历史保留天数')
+  const input = page.getByLabel('历史保留天数')
   await expect(input).toBeVisible()
   await input.fill(String(days))
   // Leaving a policy draft uses the existing unsaved-edit guard.
@@ -73,7 +73,7 @@ test('retention confirms changes, handles stale revisions and cleans with the br
   await expect(page.getByRole('alert')).toContainText('其他页面改变')
   await expect(input).toHaveValue(String(days))
   await page.getByRole('alert').getByRole('button', { name: '重新加载', exact: true }).click()
-  await expect(page.getByRole('dialog')).toContainText('尚未保存的保留天数将丢失')
+  await expect(page.getByRole('dialog')).toContainText('尚未保存的修改将丢失')
   await page.getByRole('button', { name: '放弃修改并读取', exact: true }).click()
   await expect(input).toHaveValue('365')
   await input.fill(String(days))
@@ -118,10 +118,9 @@ test('retention confirms changes, handles stale revisions and cleans with the br
       0,
     )
     await reopened.goto('/#/settings/retention')
-    await expect(reopened.getByLabel('普通历史保留天数')).toHaveValue(String(days))
-    await reopened.getByText(/^最近一批共清理 \d+ 条记录$/).click()
+    await expect(reopened.getByLabel('历史保留天数')).toHaveValue(String(days))
+    await reopened.getByText(/最近一次清理于 .+，共 \d+ 条记录/).click()
     await expect(reopened.getByLabel('最近一批清理数量')).toBeVisible()
-    await expect(reopened.getByText('运行中', { exact: true })).toBeVisible()
     for (const width of [320, 390, 768, 1440]) {
       await reopened.setViewportSize({ width, height: 900 })
       expect(

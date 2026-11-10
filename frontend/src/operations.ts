@@ -144,6 +144,7 @@ export const stageLabels: Record<string, string> = {
   send: '发送',
   config: '配置',
   service: '后台',
+  storage: '存储',
   unknown: '未知阶段',
 }
 export const attemptLabels: Record<string, string> = {

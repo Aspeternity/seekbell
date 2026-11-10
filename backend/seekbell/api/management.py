@@ -9,11 +9,9 @@ from sqlalchemy.orm import Session
 from seekbell.api.auth import require_admin
 from seekbell.api.history import Paging
 from seekbell.db.models import (
-    AlertSettings,
     NotificationTarget,
     OverviewPreferences,
     Post,
-    RetentionPolicy,
     Source,
     SourceState,
     Task,
@@ -25,15 +23,11 @@ from seekbell.db.models import (
 from seekbell.db.transactions import database_call, write_session
 from seekbell.domain.posts import PostFields
 from seekbell.domain.rules import Rule, evaluate
-from seekbell.services import alerts, operations
-from seekbell.services.about import about_view
+from seekbell.services import operations
 from seekbell.services.configuration import Configuration, TargetDeleteChanged, TargetInUse
-from seekbell.services.display import DisplayConflict, get_display, timezone_name, update_display
 from seekbell.services.hotlist_settings import configuration as hotlist_configuration
 from seekbell.services.hotlist_settings import validate_settings as validate_hotlist_settings
-from seekbell.services.maintenance import retention_preview, storage_view
 from seekbell.services.request_budget import request_state
-from seekbell.services.retention import PolicyConflict, get_policy, update_policy
 from seekbell.services.rule_trial import trial_history
 from seekbell.services.rule_values import normalized_rule
 from seekbell.services.runtime import status as runtime_status
@@ -66,12 +60,6 @@ class WebsiteUpdate(Input):
     enabled: bool
     interval: int = Field(ge=10, le=3600)
     hotlist: HotlistSettingsInput | None = None
-
-
-class WorkspaceInput(Input):
-    name: str = Field(min_length=1, max_length=24)
-    description: str = Field(default="", max_length=40)
-    revision: int | None = Field(default=None, ge=1)
 
 
 class WebsiteSelection(Input):
@@ -195,10 +183,7 @@ def workspace(request: Request):
             "settings": {
                 "workspaceName": preferences.name,
                 "workspaceDescription": preferences.description,
-                "retention": session.get(RetentionPolicy, 1).days,
                 "timezone": preferences.timezone,
-                "alertTargets": session.get(AlertSettings, 1).target_ids,
-                "recoveryAlerts": session.get(AlertSettings, 1).enabled,
                 "overviewModules": session.get(OverviewPreferences, 1).modules,
             },
         }
@@ -206,21 +191,6 @@ def workspace(request: Request):
     result["runtime"] = runtime_status(request)
     result["runtime_active"] = result["runtime"]["active"]
     return result
-
-
-@router.put("/workspace")
-def update_workspace(values: WorkspaceInput, request: Request):
-    name = values.name.strip()
-    if not name:
-        raise HTTPException(422, "工作空间名称不能为空。")
-    with write_session(request.app.state.engine) as session:
-        preferences = session.get(WorkspacePreferences, 1)
-        if values.revision is not None and preferences.workspace_revision != values.revision:
-            raise HTTPException(409, "工作空间已在其他页面改变，请重新读取后保存。")
-        if (preferences.name, preferences.description) != (name, values.description.strip()):
-            preferences.name, preferences.description = name, values.description.strip()
-            preferences.workspace_revision += 1
-    return {"ok": True}
 
 
 @router.post("/websites", status_code=201)
@@ -467,63 +437,6 @@ async def connection_test(key: WebsiteId, values: ConnectionInput, request: Requ
         ) from None
 
 
-class RetentionInput(Input):
-    days: int = Field(ge=1, le=365)
-    revision: int = Field(ge=1)
-
-
-@router.get("/retention")
-def retention_policy(request: Request):
-    return get_policy(request.app.state.engine)
-
-
-@router.put("/retention")
-def save_retention(values: RetentionInput, request: Request):
-    try:
-        return update_policy(request.app.state.engine, values.days, values.revision)
-    except PolicyConflict as error:
-        raise HTTPException(409, str(error)) from None
-
-
-class DisplayInput(Input):
-    timezone: str = Field(min_length=1, max_length=80)
-    revision: int = Field(ge=1)
-
-
-@router.get("/display")
-def display_settings(request: Request):
-    return get_display(request.app.state.engine)
-
-
-@router.put("/display")
-def save_display(values: DisplayInput, request: Request):
-    try:
-        return update_display(request.app.state.engine, values.timezone, values.revision)
-    except DisplayConflict as error:
-        raise HTTPException(409, str(error)) from None
-
-
-class AlertInput(Input):
-    enabled: bool
-    target_ids: list[str] = Field(max_length=64)
-    revision: int = Field(ge=1)
-
-
-@router.get("/alerts")
-def alert_settings(request: Request):
-    return alerts.get_settings(request.app.state.engine)
-
-
-@router.put("/alerts")
-def save_alerts(values: AlertInput, request: Request):
-    try:
-        return alerts.update_settings(
-            request.app.state.engine, values.enabled, values.target_ids, values.revision
-        )
-    except alerts.AlertConflict as error:
-        raise HTTPException(409, str(error)) from None
-
-
 @router.get("/operations/status")
 async def operations_status(request: Request):
     state = request.app.state
@@ -559,90 +472,3 @@ def operations_problem(key: str, request: Request):
         )
     except operations.MissingProblem as error:
         raise HTTPException(404, str(error)) from None
-
-
-@router.get("/alerts/state")
-def alert_states(request: Request, params: Paging):
-    return alerts.states(request.app.state.engine, **params)
-
-
-@router.get("/alerts/history")
-def alert_history(request: Request, params: Paging):
-    return alerts.history(request.app.state.engine, **params)
-
-
-@router.get("/alerts/history/{key}")
-def alert_detail(key: str, request: Request, params: Paging):
-    try:
-        return alerts.detail(request.app.state.engine, key, **params)
-    except LookupError as error:
-        raise HTTPException(404, str(error)) from None
-
-
-class GeneralInput(Input):
-    name: str = Field(min_length=1, max_length=24)
-    description: str = Field(default="", max_length=40)
-    timezone: str = Field(max_length=80)
-    workspace_revision: int = Field(ge=1)
-    display_revision: int = Field(ge=1)
-
-
-def general_view(preferences):
-    from seekbell.services.display import TIMEZONES
-
-    return {
-        "name": preferences.name,
-        "description": preferences.description,
-        "timezone": preferences.timezone,
-        "available": TIMEZONES,
-        "workspace_revision": preferences.workspace_revision,
-        "display_revision": preferences.display_revision,
-    }
-
-
-@router.get("/preferences")
-def general_preferences(request: Request):
-    with Session(request.app.state.engine) as session:
-        return general_view(session.get(WorkspacePreferences, 1))
-
-
-@router.put("/preferences")
-def save_general_preferences(values: GeneralInput, request: Request):
-    name, description = values.name.strip(), values.description.strip()
-    if not name:
-        raise HTTPException(422, "工作空间名称不能为空。")
-    try:
-        timezone_name(values.timezone)
-    except ValueError:
-        raise HTTPException(422, "请选择有效的显示时区。") from None
-    with write_session(request.app.state.engine) as session:
-        row = session.get(WorkspacePreferences, 1)
-        if (row.workspace_revision, row.display_revision) != (
-            values.workspace_revision,
-            values.display_revision,
-        ):
-            raise HTTPException(409, "通用设置已在其他页面改变，请重新读取后保存。")
-        if (row.name, row.description) != (name, description):
-            row.name, row.description = name, description
-            row.workspace_revision += 1
-        if row.timezone != values.timezone:
-            row.timezone = values.timezone
-            row.display_revision += 1
-        return general_view(row)
-
-
-@router.get("/storage")
-def storage(request: Request):
-    return storage_view(request.app.state.settings)
-
-
-@router.get("/retention/preview")
-def preview_retention(request: Request, days: int):
-    if not 1 <= days <= 365:
-        raise HTTPException(422, "保留天数应为1–365天。")
-    return retention_preview(request.app.state.engine, days)
-
-
-@router.get("/about")
-def about(request: Request):
-    return about_view(request.app.state)

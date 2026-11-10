@@ -14,6 +14,7 @@ from seekbell.services.alerts import AlertWorker, observe
 from seekbell.services.collection import SourceRunner
 from seekbell.services.crash_records import describe
 from seekbell.services.delivery import DeliveryWorker
+from seekbell.services.disk import DiskWatch
 from seekbell.services.request_budget import WebsiteRequestBudget
 from seekbell.services.retention import HistoryRetention
 from seekbell.services.source_probe import ProbeConflict, check
@@ -58,7 +59,7 @@ class Runtime:
         }
         self.source = self.sources["nodeseek"]
         self.worker = DeliveryWorker(engine, notifiers, managed=True, tick=tick)
-        self.retention = HistoryRetention(engine, tick=tick)
+        self.retention = HistoryRetention(engine, tick=tick, disk=DiskWatch(engine))
         self.alerts = AlertWorker(engine, notifiers, tick=tick)
         self.engine = engine
         self.alert_stop = asyncio.Event()

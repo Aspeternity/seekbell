@@ -2422,9 +2422,7 @@ h1[tabindex='-1']:focus-visible {
   text-align: left;
 }
 .workspace-label .workspace-icon,
-.workspace-label .workspace-dot,
-.workspace-preview .workspace-icon,
-.workspace-preview .workspace-dot {
+.workspace-label .workspace-dot {
   flex-shrink: 0;
 }
 .workspace-copy {
@@ -2449,17 +2447,6 @@ h1[tabindex='-1']:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
   margin-top: 2px;
-}
-.workspace-preview {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  width: min(100%, 310px);
-  padding: 17px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: #fafbfc;
-  margin-top: 8px;
 }
 @media (max-width: 760px) {
   .website-catalog-modal {
@@ -2641,7 +2628,6 @@ h1[tabindex='-1']:focus-visible {
 }
 .settings-content,
 .settings-content .text-input,
-.settings-content .workspace-preview,
 .settings-section > *,
 .settings-stack > * {
   min-width: 0;
@@ -2709,24 +2695,12 @@ h1[tabindex='-1']:focus-visible {
 .settings-fields-grid.three {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
-.settings-content .settings-fields-grid .small-note,
-.workspace-preview-row > .small-note {
+.settings-content .settings-fields-grid .small-note {
   margin-top: 0;
 }
 .settings-content .general-fields-grid > .form-stack > label + .text-input,
 .settings-content .settings-fields-grid > .form-stack > label + .text-input {
   margin-top: 0;
-}
-.workspace-preview-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px 20px;
-}
-.workspace-preview-row .workspace-preview {
-  margin: 0;
-  padding: 14px 16px;
-  background: #fafbfc;
 }
 .timezone-preview-label {
   font-size: 12px;
@@ -3111,27 +3085,97 @@ h1[tabindex='-1']:focus-visible {
 .settings-content .settings-card > .panel-heading:last-child {
   border-bottom: 0;
 }
-.settings-content .backup-candidate {
-  flex-direction: column;
-  align-items: stretch;
-  margin: 20px 26px 0;
-}
-.backup-candidate-row,
 .backup-discard {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 10px 14px;
+  padding-top: 12px;
 }
-.backup-candidate-row {
-  justify-content: space-between;
+.storage-leftovers {
+  display: grid;
+  gap: 12px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
 }
-.backup-candidate-row > p {
+.storage-leftovers > .small-note {
   margin: 0;
 }
-.backup-discard {
-  padding-top: 12px;
-  border-top: 1px solid #e3e9ed;
+.storage-leftover-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.storage-leftover-list > li {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.storage-leftover-list > li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.storage-leftover-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content max-content max-content;
+  align-items: center;
+  gap: 6px 18px;
+  font-size: 12px;
+  color: #5d6671;
+  font-variant-numeric: tabular-nums;
+}
+.storage-leftover-row strong {
+  color: #2f343b;
+  font-weight: 550;
+}
+.alert-delay-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 24px;
+}
+.alert-test {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+.alert-test .small-note {
+  margin: 0;
+}
+.alert-test-results {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 14px 16px;
+  list-style: none;
+  border-radius: 8px;
+  background: #f7f8fa;
+  font-size: 12px;
+}
+.alert-test-results li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 16px;
+}
+.alert-test-results li.success span {
+  color: #4f8466;
+}
+.alert-test-results li.permanent_error span,
+.alert-test-results li.transient_error span,
+.alert-test-results li.unknown span {
+  color: #a4552c;
+}
+.settings-content .backup-history {
+  margin: 0 26px 26px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.auth-remember {
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #4f5966;
 }
 .backup-discard label {
   color: #4f5966;
@@ -3318,10 +3362,6 @@ h1[tabindex='-1']:focus-visible {
   .settings-content .settings-section + .settings-section {
     padding-top: 22px;
   }
-  .workspace-preview-row {
-    display: grid;
-    gap: 8px;
-  }
   .settings-savebar > .inline-actions {
     width: 100%;
   }
@@ -3331,8 +3371,14 @@ h1[tabindex='-1']:focus-visible {
   .settings-error {
     margin: 14px 18px;
   }
-  .settings-content .backup-candidate {
-    margin: 16px 18px 0;
+  .settings-content .backup-history {
+    margin: 0 18px 18px;
+  }
+  .storage-leftover-row {
+    grid-template-columns: minmax(0, 1fr) max-content;
+  }
+  .storage-leftover-row > strong {
+    grid-column: 1 / -1;
   }
   .settings-content .backup-discard .text-input {
     width: 100%;

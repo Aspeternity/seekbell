@@ -24,6 +24,7 @@ from seekbell.api.management import router as management_router
 from seekbell.api.overview import router as overview_router
 from seekbell.api.sending import install_errors
 from seekbell.api.sending import router as sending_router
+from seekbell.api.settings import router as settings_router
 from seekbell.api.system import router
 from seekbell.config import Settings
 from seekbell.db.models import (
@@ -143,6 +144,7 @@ def create_app(
             stack.push_async_callback(app.state.hotlists.aclose)
             app.state.target_testing = ConfiguredTargetTesting(engine, registry.notifiers)
             app.state.manual_sending = ManualSending(engine, registry.notifiers)
+            app.state.alert_notifiers = registry.notifiers
             app.state.sending_gate = asyncio.Semaphore(2)
             app.state.runtime = runtime
             stack.push_async_callback(runtime.aclose)
@@ -218,6 +220,10 @@ def create_app(
         response = await call_next(request)
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
+        elif request.url.path == "/" or request.url.path.endswith(".html"):
+            # The page names the hashed assets of its build, so browsers revalidate it
+            # (a 304 when unchanged) and an upgrade shows the new interface at once.
+            response.headers["Cache-Control"] = "no-cache"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "same-origin"
         response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
@@ -233,6 +239,7 @@ def create_app(
     app.include_router(router)
     app.include_router(auth_router)
     app.include_router(management_router)
+    app.include_router(settings_router)
     app.include_router(hotlists_router)
     app.include_router(backups_router)
     app.include_router(backup_setup_router)
