@@ -20,6 +20,7 @@ from seekbell.db.models import (
     Website,
     WebsiteInstallation,
 )
+from seekbell.services.backup_schedule import COMPONENT as BACKUP_COMPONENT
 from seekbell.services.disk import COMPONENT as DISK_COMPONENT
 from seekbell.services.fault_guide import (
     ACTION,
@@ -457,33 +458,43 @@ def _runtime_problems(session, observed, at):
     ]
 
 
-def _disk_problems(session):
-    state = session.get(SystemState, DISK_COMPONENT)
-    if state is None or not state.fault:
-        return []
-    guide = runtime_guide(state.code)
-    return [
-        {
-            "key": state.component,
-            "kind": "runtime",
-            "event_id": _fault_event_id(session, state.component, state.generation),
-            "label": state.label,
-            "code": state.code,
-            "stage": guide.stage,
-            "summary": guide.summary,
-            "since": state.updated_at,
-            "status": ACTION,
-            "hint": "释放磁盘空间后自动恢复",
-            "next_attempt_at": None,
-            "failures": None,
-            "guide": guide_view(guide),
-        }
-    ]
+# Storage faults raised outside the background actors, with how each one clears.
+STORAGE_HINTS = {
+    DISK_COMPONENT: "释放磁盘空间后自动恢复",
+    BACKUP_COMPONENT: "下次备份成功后自动恢复",
+}
+
+
+def _storage_problems(session):
+    problems = []
+    for component, hint in STORAGE_HINTS.items():
+        state = session.get(SystemState, component)
+        if state is None or not state.fault:
+            continue
+        guide = runtime_guide(state.code)
+        problems.append(
+            {
+                "key": state.component,
+                "kind": "runtime",
+                "event_id": _fault_event_id(session, state.component, state.generation),
+                "label": state.label,
+                "code": state.code,
+                "stage": guide.stage,
+                "summary": guide.summary,
+                "since": state.updated_at,
+                "status": ACTION,
+                "hint": hint,
+                "next_attempt_at": None,
+                "failures": None,
+                "guide": guide_view(guide),
+            }
+        )
+    return problems
 
 
 def _problems(session, observed, at):
-    # Low disk space is reported even when the background has stopped: it may be the cause.
-    problems = _runtime_problems(session, observed, at) + _disk_problems(session)
+    # Storage faults are reported even when the background has stopped: they may be the cause.
+    problems = _runtime_problems(session, observed, at) + _storage_problems(session)
     # A stopped background is the single root cause; older faults cannot retry meanwhile.
     if observed["active"]:
         for state in session.scalars(select(SystemState).where(SystemState.fault.is_(True))):

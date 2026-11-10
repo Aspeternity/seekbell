@@ -1,4 +1,4 @@
-# SeekBell 0.8.0; schema 0020. Back up the data before upgrading.
+# SeekBell 0.8.0; schema 0021. Back up the data before upgrading.
 # Portainer: update the existing stack to keep its data. Reverse proxy and optional
 # hardening: docs/PROXY_DEPLOYMENT.md, docs/IMAGE_RELEASE.md.
 services:

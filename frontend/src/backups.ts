@@ -20,8 +20,27 @@ export interface BackupEntry {
   database_revision: string | null
   summary: BackupContents | null
 }
+/** Automatic backups: a daily or weekly slot in the display timezone. */
+export interface BackupSchedule {
+  enabled: boolean
+  frequency: 'daily' | 'weekly'
+  /** Monday is 0; only used weekly. */
+  weekday: number
+  /** Minutes after local midnight. */
+  minute: number
+  keep: number
+  revision: number
+  timezone: string
+  next_run_at: number | null
+  last_attempt_at: number | null
+  last_error: string | null
+}
+/** The status card colour: failed and overdue are orange, none is grey. */
+export type BackupHealth = 'protected' | 'overdue' | 'failed' | 'none'
 export interface BackupStatus {
   confirm_seconds: number
+  health: BackupHealth
+  schedule: BackupSchedule
   max_upload_bytes: number
   directory: string
   free_bytes: number
@@ -66,4 +85,12 @@ export function latestBackup(rows: BackupEntry[]) {
   return rows.find((row) => row.valid)
 }
 export const STALE_DAYS = 30
+export const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+export const clockText = (minute: number) =>
+  String(Math.floor(minute / 60)).padStart(2, '0') + ':' + String(minute % 60).padStart(2, '0')
+/** "HH:MM" to minutes after midnight; NaN when it is not a valid time. */
+export function clockMinute(text: string) {
+  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(text)
+  return match ? Number(match[1]) * 60 + Number(match[2]) : NaN
+}
 export const MAX_NAME = 40

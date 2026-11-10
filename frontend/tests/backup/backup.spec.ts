@@ -38,6 +38,42 @@ test('back up on the server, download, inspect, restore and undo from settings a
   await expect(page.locator('.backup-health')).toContainText('还没有备份')
   await expect(page.locator('.backup-directory')).toContainText('/backups')
 
+  // Automatic backups are on by default: daily at 03:00 in the display timezone, keep 7.
+  await expect(page.locator('.backup-next')).toContainText('每天 03:00 · 下次')
+  const automatic = page.locator('#backup-schedule')
+  await expect(automatic.getByRole('switch', { name: '启用自动备份' })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  )
+  await expect(automatic.getByLabel('备份时间')).toHaveValue('03:00')
+  await expect(automatic.getByLabel('自动备份保留份数')).toHaveValue('7')
+  await automatic.getByLabel('频率').click()
+  await page.getByRole('option', { name: '每周', exact: true }).click()
+  await automatic.getByLabel('星期').click()
+  await page.getByRole('option', { name: '周日', exact: true }).click()
+  await automatic.getByLabel('备份时间').fill('04:30')
+  await automatic.getByLabel('自动备份保留份数').fill('3')
+  // An unsaved schedule is a draft: leaving asks first.
+  await page.evaluate(() => (location.hash = '/settings/account'))
+  await expect(page.getByRole('dialog').filter({ hasText: '尚未保存' })).toBeVisible()
+  await page.getByRole('button', { name: '继续编辑', exact: true }).click()
+  await automatic.getByRole('button', { name: '保存自动备份', exact: true }).click()
+  await expect(automatic.getByRole('status')).toContainText('自动备份设置已保存')
+  await expect(page.locator('.backup-next')).toContainText('每周日 04:30 · 下次')
+  const saved = (await (await page.request.get('/api/manage/backups/schedule')).json()) as {
+    frequency: string
+    weekday: number
+    minute: number
+    keep: number
+  }
+  expect([saved.frequency, saved.weekday, saved.minute, saved.keep]).toEqual(['weekly', 6, 270, 3])
+  await automatic.getByRole('switch', { name: '启用自动备份' }).click()
+  await automatic.getByRole('button', { name: '保存自动备份', exact: true }).click()
+  await expect(page.locator('.backup-next')).toHaveText('自动备份已关闭')
+  await automatic.getByRole('switch', { name: '启用自动备份' }).click()
+  await automatic.getByRole('button', { name: '保存自动备份', exact: true }).click()
+  await expect(page.locator('.backup-next')).toContainText('每周日 04:30 · 下次')
+
   // Back up now: the archive stays on the server and appears in the list.
   // Back up now asks for an optional name first.
   await page

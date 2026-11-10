@@ -180,6 +180,27 @@ RUNTIME_GUIDES["disk_space_low"] = Guide(
     None,
 )
 
+RUNTIME_GUIDES["backup_failed"] = Guide(
+    "storage",
+    "自动备份失败",
+    ("磁盘可用空间不足", "备份目录不可写", "数据库或凭据密钥校验失败"),
+    (
+        "到系统设置的“备份”页查看失败原因",
+        "释放磁盘空间或删除旧备份后，点“立即备份”确认可以备份",
+        "之后每小时自动重试，成功后自动恢复",
+    ),
+    ACTION,
+    None,
+)
+RUNTIME_GUIDES["backup_overdue"] = Guide(
+    "storage",
+    "超过两个备份周期没有成功备份",
+    ("容器长时间停机", "自动备份一直未能运行"),
+    ("到系统设置的“备份”页点“立即备份”", "完成一次备份后自动恢复"),
+    ACTION,
+    None,
+)
+
 UNKNOWN = Guide(
     "unknown",
     "未收录的错误",

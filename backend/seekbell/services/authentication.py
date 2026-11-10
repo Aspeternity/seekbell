@@ -100,7 +100,7 @@ def started_at(record) -> float:
 
 
 def initialize(engine, username: str, password: str, *, timezone: str = "UTC") -> tuple[str, str]:
-    from seekbell.db.models import WorkspacePreferences
+    from seekbell.db.models import BackupSchedule, WorkspacePreferences
     from seekbell.services.display import timezone_name
 
     timezone_name(timezone)
@@ -110,7 +110,11 @@ def initialize(engine, username: str, password: str, *, timezone: str = "UTC") -
             raise ValueError("管理员已创建，请登录。")
         session.add(Administrator(id=1, username=username, password_hash=encoded))
         session.get(WorkspacePreferences, 1).timezone = timezone
-        return new_session(session, at=time.time())
+        now = time.time()
+        # Automatic backups count from the first administrator, not from the install.
+        schedule = session.get(BackupSchedule, 1)
+        schedule.since, schedule.next_run_at = now, None
+        return new_session(session, at=now)
 
 
 def login(

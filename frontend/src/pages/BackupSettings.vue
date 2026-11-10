@@ -4,6 +4,8 @@ import { confirmAction, notify, request } from '../store'
 import { byteSize, scrollToSection, stamp } from '../settings'
 import {
   STALE_DAYS,
+  WEEKDAYS,
+  clockText,
   contentsText,
   kindLabels,
   latestBackup,
@@ -14,6 +16,7 @@ import FormFeedback from '../components/FormFeedback.vue'
 import Icon from '../components/Icon.vue'
 import BackupNameDialog from '../components/BackupNameDialog.vue'
 import BackupRestoreWizard from '../components/BackupRestoreWizard.vue'
+import BackupScheduleSettings from '../components/BackupScheduleSettings.vue'
 const emit = defineEmits<{ dirty: [value: boolean] }>()
 const status = ref<BackupStatus>(),
   loading = ref(false),
@@ -32,18 +35,27 @@ const restoring = ref<BackupEntry | null>(),
   wizardDirty = ref(false),
   wizardBusy = ref(false),
   restoreDialog = ref<HTMLDialogElement>()
+const scheduleDirty = ref(false)
 let confirmTimer: ReturnType<typeof setTimeout> | undefined
 let freshTimer: ReturnType<typeof setTimeout> | undefined
 let active = true
 watch(
-  () => rowBusy.value || nameBusy.value || wizardDirty.value || wizardBusy.value,
+  () =>
+    rowBusy.value || nameBusy.value || wizardDirty.value || wizardBusy.value || scheduleDirty.value,
   (value) => emit('dirty', value),
   { immediate: true },
 )
 const latest = computed(() => latestBackup(status.value?.backups ?? []))
-const health = computed(() => {
-  if (!latest.value) return 'none'
-  return Date.now() / 1000 - latest.value.at > STALE_DAYS * 86400 ? 'stale' : 'protected'
+const health = computed(() => status.value?.health ?? 'none')
+const schedule = computed(() => status.value?.schedule)
+const scheduleText = computed(() => {
+  const value = schedule.value
+  if (!value?.enabled) return '自动备份已关闭'
+  const when =
+    (value.frequency === 'weekly' ? '每' + WEEKDAYS[value.weekday] : '每天') +
+    ' ' +
+    clockText(value.minute)
+  return value.next_run_at ? when + ' · 下次 ' + stamp(value.next_run_at) : when
 })
 const total = computed(() => (status.value?.backups ?? []).reduce((sum, row) => sum + row.bytes, 0))
 const diskUsed = computed(() => {
@@ -221,11 +233,18 @@ onBeforeUnmount(() => {
               >
               <small v-if="latest"
                 >{{ stamp(latest.at) }} · {{ kindLabels[latest.kind!]
-                }}<template v-if="health === 'stale'">
-                  · 已超过 {{ STALE_DAYS }} 天</template
+                }}<template v-if="health === 'overdue'">
+                  ·
+                  {{
+                    schedule?.enabled ? '已超过两个周期' : '已超过 ' + STALE_DAYS + ' 天'
+                  }}</template
                 ></small
               >
               <small v-else>建议现在备份一次</small>
+              <small v-if="health === 'failed'" class="backup-failure" role="alert"
+                >自动备份失败：{{ schedule?.last_error }}</small
+              >
+              <small class="backup-next">{{ scheduleText }}</small>
             </dd>
           </div>
           <div>
@@ -355,6 +374,8 @@ onBeforeUnmount(() => {
         </ul>
       </div>
     </section>
+
+    <BackupScheduleSettings @dirty="scheduleDirty = $event" @saved="load" />
 
     <BackupNameDialog
       v-if="naming"

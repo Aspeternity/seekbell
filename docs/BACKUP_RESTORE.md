@@ -34,11 +34,12 @@ docker compose -p seekbell-test ps
 
 ## 网页备份库
 
-系统设置“备份”页：状态卡显示上次备份时间与类型、存放目录、份数/占用和磁盘可用（超过30天未备份显示橙色）；列表每份可命名（立即备份时选填或之后重命名，名称存于`backups/labels.json`，恢复不影响）、下载、恢复、删除。不再记录操作历史（迁移0020删除`backup_records`）。
+系统设置“备份”页：状态卡显示上次备份时间与类型、自动备份计划与下次时间、存放目录、份数/占用和磁盘可用（自动备份失败或超过2个周期未备份显示橙色，关闭自动备份时为超过30天）；列表每份可命名（立即备份时选填或之后重命名，名称存于`backups/labels.json`，恢复不影响）、下载、恢复、删除。不再记录操作历史（迁移0020删除`backup_records`）。
 
 - **立即备份**：在服务器生成一份手动备份，不需输入密码；同一时间只运行一个备份或恢复。可用空间不足数据库2倍时直接拒绝。
 - **下载**：先换一张一次性、60秒有效、绑定当前会话的票据，再由浏览器直接流式保存（不占内存，原生进度）。下载和删除只需登录会话（2026-11-10用户确认）；恢复要当前管理员密码，登录或上次输入后15分钟内免输。
-- **保留**：恢复前、升级前备份保留30天，每种最新一份不删；手动备份不自动删除。备份文件0600、目录0700，计入“数据”页存储占用。
+- **自动备份**：默认开启，每天03:00（显示时区）生成一份“自动”备份，保留最新7份；可在“自动备份”卡改为每周某天、任意时刻、保留1–60份或关闭。容器停机错过时，启动后补做一次；失败每小时重试，并在运行中心和系统告警提示“自动备份”故障，成功后恢复；超过2个周期没有手动或自动备份也会提示。恢复后的数据从恢复时刻重新计时。
+- **保留**：自动备份超出份数的，在下一份自动备份成功后删除最旧的；恢复前、升级前备份保留30天，每种最新一份不删；手动备份不自动删除。备份文件0600、目录0700，计入“数据”页存储占用。
 - 目录中手动放入的`*.tar.gz`也会列出，无法识别的只能删除；符号链接和其他文件不列出、不可访问。启动时删除旧版本留下的`before-restore-*`、`web-restore`目录和中断的临时文件（被其他实例占用的保留）。
 
 ## 网页恢复
@@ -91,7 +92,7 @@ docker compose -p seekbell-test -f compose.yaml -f compose.maintenance.yaml \
 ## 验证
 
 ~~~bash
-uv run --frozen pytest -q tests/test_backup.py tests/test_web_backups.py
+uv run --frozen pytest -q tests/test_backup.py tests/test_web_backups.py tests/test_backup_schedule.py
 uv run --frozen python -m seekbell.services.backup_demo
 pnpm --dir frontend build && pnpm --dir frontend test:backup
 python3 scripts/check_backup_container.py "$SEEKBELL_IMAGE" --revision "$SEEKBELL_REVISION"

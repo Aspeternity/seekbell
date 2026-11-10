@@ -3191,11 +3191,25 @@ h1[tabindex='-1']:focus-visible {
 .backup-health.protected .status-dot {
   color: #4e876b;
 }
-.backup-health.stale .status-dot {
+.backup-health.overdue .status-dot,
+.backup-health.failed .status-dot {
   color: #d0703f;
 }
-.backup-health.stale small {
+.backup-health.overdue small:first-of-type,
+.backup-health .backup-failure {
   color: #a4552c;
+}
+#backup-schedule fieldset:disabled {
+  opacity: 0.6;
+}
+.backup-schedule-when {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.backup-schedule-when > * {
+  width: auto;
+  min-width: 110px;
 }
 .backup-directory {
   display: flex;

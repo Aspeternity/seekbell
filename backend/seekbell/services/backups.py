@@ -156,8 +156,11 @@ def ensure_space(settings):
         raise backup.BackupError("磁盘可用空间不足，无法生成备份；请先清理空间或删除旧备份。")
 
 
-def create(settings, kind, *, at=None, label=None):
-    """Write one archive into the library; the caller owns the backup operation slot."""
+def create(settings, kind, *, at=None, label=None, keep=None):
+    """Write one archive into the library; the caller owns the backup operation slot.
+
+    `keep` (automatic backups) removes all but that many newest automatic backups, and
+    only after the new one is safely written."""
     label = normalize_label(label)  # Reject a bad name before any work.
     ensure_space(settings)
     at = time.time() if at is None else at
@@ -171,7 +174,7 @@ def create(settings, kind, *, at=None, label=None):
     manifest = backup.snapshot_backup(settings, folder / name, kind=kind, at=at)
     if label:
         set_label(settings, name, label)
-    prune(settings, at=at)
+    prune(settings, at=at, keep=keep)
     return name, manifest
 
 
@@ -186,12 +189,19 @@ def remove(settings, name):
     return True
 
 
-def prune(settings, *, at=None):
-    """Safety copies expire after 30 days, except the newest of each kind."""
+def prune(settings, *, at=None, keep=None):
+    """Safety copies expire after 30 days, except the newest of each kind; automatic
+    backups beyond `keep` go when given. Manual backups are never removed."""
     at = time.time() if at is None else at
     cutoff = at - PROTECTED_DAYS * 86400
     newest = set()
+    automatic = 0
     for row in entries(settings):
+        if row["kind"] == "auto" and keep is not None:
+            automatic += 1
+            if automatic > keep:
+                remove(settings, row["id"])
+            continue
         if row["kind"] not in AUTOMATIC_SAFETY:
             continue
         if row["kind"] not in newest:

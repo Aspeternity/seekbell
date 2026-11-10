@@ -503,6 +503,7 @@ def older_archive(archive, tmp_path):
                 "VARCHAR(80) NOT NULL)"
             )
             connection.execute("CREATE INDEX ix_backup_records_at ON backup_records (at)")
+            connection.execute("DROP TABLE backup_schedule")
             connection.execute("UPDATE alembic_version SET version_num='0018_settings_maintenance'")
             connection.commit()
         files["seekbell.sqlite3"] = path.read_bytes()

@@ -38,6 +38,7 @@ from seekbell.db.runtime import create_database_engine, instance_lock, migrate
 from seekbell.notifiers.credentials import CredentialError, CredentialVault
 from seekbell.notifiers.registry import NotifierRegistry
 from seekbell.services.authentication import Confirmations, LoginLimiter
+from seekbell.services.backup_schedule import BackupScheduler
 from seekbell.services.backups import remove_leftovers
 from seekbell.services.crash_records import CrashRecords
 from seekbell.services.hotlists import HotlistService
@@ -150,6 +151,10 @@ def create_app(
             app.state.runtime = runtime
             stack.push_async_callback(runtime.aclose)
             await runtime.start()
+            # Outside Runtime: a failing backup must never stop collection or delivery.
+            scheduler = BackupScheduler(engine, settings, app.state.backup_gate)
+            stack.push_async_callback(scheduler.aclose)
+            scheduler.start()
         except BaseException:
             await stack.aclose()
             raise

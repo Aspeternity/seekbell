@@ -12,6 +12,7 @@ import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import FileResponse
@@ -24,7 +25,7 @@ from seekbell import backup
 from seekbell.api.auth import COOKIE, preauth, rate_limit, require_admin, session_response
 from seekbell.db.models import Administrator
 from seekbell.db.transactions import database_call, write_session
-from seekbell.services import backups
+from seekbell.services import backup_schedule, backups
 from seekbell.services.authentication import (
     initialized,
     new_session,
@@ -162,13 +163,15 @@ async def operation(request):
         gate.release()
 
 
-def library_status(settings):
+def library_status(settings, engine):
     rows = backups.entries(settings)
     disk = shutil.disk_usage(backups.directory(settings))
     return {
         "directory": str(settings.backup_dir),
         "free_bytes": disk.free,
         "total_bytes": disk.total,
+        "health": backup_schedule.health(engine, rows),
+        "schedule": backup_schedule.get_schedule(engine),
         "backups": rows,
     }
 
@@ -183,8 +186,36 @@ async def status(request: Request):
             request.app.state.confirmations.remaining(token, info["started_at"]) if info else 0
         ),
         "max_upload_bytes": backup.MAX_ARCHIVE,
-        **await database_call(library_status, request.app.state.settings),
+        **await database_call(library_status, request.app.state.settings, request.app.state.engine),
     }
+
+
+class ScheduleValues(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool
+    frequency: Literal["daily", "weekly"]
+    weekday: int = Field(ge=0, le=6)
+    minute: int = Field(ge=0, le=1439)
+    keep: int = Field(ge=1, le=60)
+    revision: int = Field(ge=1)
+
+
+@router.get("/schedule")
+async def schedule(request: Request):
+    return await database_call(backup_schedule.get_schedule, request.app.state.engine)
+
+
+@router.put("/schedule")
+async def save_schedule(values: ScheduleValues, request: Request):
+    try:
+        return await database_call(
+            backup_schedule.update_schedule,
+            request.app.state.engine,
+            values.model_dump(exclude={"revision"}),
+            values.revision,
+        )
+    except backup_schedule.ScheduleConflict as error:
+        raise HTTPException(409, str(error)) from None
 
 
 class NameValues(BaseModel):

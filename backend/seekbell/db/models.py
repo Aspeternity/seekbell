@@ -393,6 +393,32 @@ class RetentionPolicy(Base):
     last_counts: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
+class BackupSchedule(Base):
+    """Automatic backups; run state is reset whenever a backup is restored."""
+
+    __tablename__ = "backup_schedule"
+    __table_args__ = (
+        CheckConstraint("id = 1", name="ck_backup_schedule_singleton"),
+        CheckConstraint("frequency IN ('daily','weekly')", name="ck_backup_frequency"),
+        CheckConstraint("weekday BETWEEN 0 AND 6", name="ck_backup_weekday"),
+        CheckConstraint("minute BETWEEN 0 AND 1439", name="ck_backup_minute"),
+        CheckConstraint("keep BETWEEN 1 AND 60", name="ck_backup_keep"),
+    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    frequency: Mapped[str] = mapped_column(String(8), default="daily")
+    # Monday is 0; only used weekly. Minutes after local midnight in the display timezone.
+    weekday: Mapped[int] = mapped_column(Integer, default=0)
+    minute: Mapped[int] = mapped_column(Integer, default=180)
+    keep: Mapped[int] = mapped_column(Integer, default=7)
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    # When the schedule last started counting: the first run is the next slot after it.
+    since: Mapped[float] = mapped_column(Float)
+    next_run_at: Mapped[float | None] = mapped_column(Float)
+    last_attempt_at: Mapped[float | None] = mapped_column(Float)
+    last_error: Mapped[str | None] = mapped_column(String(200))
+
+
 class AlertSettings(Base):
     __tablename__ = "alert_settings"
     __table_args__ = (CheckConstraint("id = 1", name="ck_alert_settings_singleton"),)

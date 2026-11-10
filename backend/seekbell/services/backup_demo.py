@@ -120,6 +120,9 @@ def exercise(root):
     assert [row[1] for row in after.pop("administrators")] == ["backup_admin"]
     before.pop("login_sessions")
     before.pop("administrators")
+    # The restored schedule keeps its settings (columns up to revision) but counts anew.
+    schedule_before, schedule_after = before.pop("backup_schedule"), after.pop("backup_schedule")
+    assert [row[:7] for row in schedule_after] == [row[:7] for row in schedule_before]
     assert after == before
     engine = create_database_engine(Settings(data_dir=restored))
     try:

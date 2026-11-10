@@ -148,7 +148,7 @@ def test_upgrade_preserves_preferences_and_uses_expected_head(tmp_path):
             )
         )
     migrate(engine)
-    assert schema_revision(engine) == "0020_drop_backup_records"
+    assert schema_revision(engine) == "0021_backup_schedule"
     with engine.connect() as connection:
         assert connection.execute(
             text(

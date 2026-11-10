@@ -519,6 +519,12 @@ def restore_backup(settings, archive, destination, *, administrator, pause=False
                 "INSERT INTO administrators (id, username, password_hash) VALUES (1, ?, ?)",
                 administrator,
             )
+            # Restored data counts its automatic backups from now: no immediate catch-up.
+            connection.execute(
+                "UPDATE backup_schedule SET next_run_at=NULL, since=?, last_attempt_at=NULL, "
+                "last_error=NULL",
+                (time.time(),),
+            )
             connection.commit()
             connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
             connection.execute("PRAGMA journal_mode=DELETE")
