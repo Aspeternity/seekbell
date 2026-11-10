@@ -1,6 +1,6 @@
-# 本地 Compose 与加密备份恢复（M4 分阶段）
+# 本地 Compose 与备份恢复
 
-仅支持 Linux 本地文件系统。已提供停服维护命令、网页加密下载和网页直接恢复（系统设置或新安装的初始化页），网页恢复在服务不中断的情况下替换当前数据，原数据保留在数据目录的before-restore-*文件夹；较旧迁移版本的备份在私有暂存副本中自动升级，较新版本拒绝。宿主机[发布维护工具](RELEASES.md)仍可用于大库和保留原卷的切换。实机部署尚未交付。使用已验证的完整代码 SHA 对应镜像，不能用新镜像直接覆盖旧数据尝试回退。阶段证据与构建基准见 PROJECT_STATE。
+仅支持 Linux 本地文件系统。备份保存在服务器上的备份库（数据目录下`backups/`），可在网页立即备份、下载、检查后恢复，也可用停服命令生成和恢复。恢复前自动备份当前数据，可从列表回退；较旧迁移版本的备份在私有暂存副本中自动升级，较新版本拒绝。宿主机[发布维护工具](RELEASES.md)仍用于镜像升级与回退。使用已验证的完整代码 SHA 对应镜像，不能用新镜像直接覆盖旧数据尝试回退。2026-11-10起采用本格式（[方案](plans/2026-11-10-备份重构方案.md)），此前的`.sbbackup`加密备份与网页验证副本已不再支持。
 
 ## Compose
 
@@ -18,49 +18,38 @@ docker compose -p seekbell-test ps
 
 新库没有已添加网站，来源关闭、没有通知目标。启用网站/目标后会实际运行；本阶段验证只用独立项目、临时卷及禁外网覆盖，不运行日常已启用配置。测试和日常必须使用不同项目名、端口和数据卷。新验收还须先核对项目名是否已有卷：up -d会复用同项目旧数据，不保证空库；如遇不识别的迁移号，停止并保留旧卷，使用经确认未占用的新项目名创建独立验收库，不能手改迁移号或删卷绕过。不要用 `down --volumes` 停日常服务；这会删除数据卷。保留数据使用 `stop` 或不带 volumes 的 `down`。
 
-## 网页加密下载与独立恢复副本（第二子阶段）
+## 备份文件
 
-系统设置 → 备份恢复。需已登录管理员；下载和上传均校验同源、CSRF、限速，并重新验证当前管理员密码（登录或上次输入后15分钟内免输入，进程内记录，重启后重新要求）。下载设置独立的12–1024字符备份口令并确认；使用与CLI相同的.sbbackup v1，包含完整数据库和原凭据密钥。网页/CLI生成的加密格式互通。演示原型的普通JSON备份不适用。
+标准`tar.gz`，只含按顺序排列的三个普通文件：
 
-网页下载由持有实例锁的单进程应用执行SQLite一致性快照，不释放实例锁、不调用停服CLI，也不暂停后台。原钥在本次进程生命周期不轮换；校验的是快照数据库及全部当前/历史密文。快照后的修改和投递回执不在备份中，恢复仍可能重复发送。CLI继续要求停服，不能从另一个进程绕锁制作快照。未初始化管理员时拒绝。
+| 文件 | 内容 |
+| --- | --- |
+| `manifest.json` | 格式版本2、类型（manual/auto/pre-restore/pre-upgrade）、应用/数据库结构/构建版本、创建时间、另两个文件的大小与SHA-256、内容摘要（工作空间名、网站/任务/目标/内容条数） |
+| `seekbell.sqlite3` | SQLite备份机制取得的一致快照（含已提交WAL），已删除管理员和登录会话并VACUUM，不留可离线破解的密码哈希 |
+| `credentials.key` | 原凭据密钥，恢复后通知渠道凭据可直接使用 |
 
-上传时输入备份口令（及按需的当前管理员密码）；明确勾选只生成独立副本。先完成加密认证，再复用版本/结构/完整性/原钥验证，副本管理员替换为当前管理员并撤销副本旧会话。只原子发布到当前数据目录下固定的web-restore（容器为/data/web-restore），不接受客户端路径；不覆盖原库或已有副本，不自动迁移、不启动副本，不修改当前启停或队列。网页成功仅表示副本生成，**不等于当前工作空间已恢复**。恢复失败原库不变；响应丢失可刷新读取副本存在状态，不能盲目重复覆盖。
+**不加密**（用户2026-11-10决定）：服务器上的数据本身未加密，本地备份加密不增加安全性；离开服务器的文件包含通知渠道凭据（TG Bot Token、SMTP密码、Bark密钥、Webhook地址），请像保管密码一样保管，不要放到公开位置。万一泄露，到各平台重置Token/密码，再在SeekBell里更新通知目标。
 
-### 网页直接恢复（2026-10-29）
+读取时只接受这三个固定名称的普通USTAR成员，拒绝扩展头、链接、目录、多余成员和尾部数据；解压大小按成员上限（数据库2 GiB）截断，逐个核对SHA-256，再做完整性、外键、结构版本和全部历史密文校验。`tar -xzf`可手工解开，出问题时也能不依赖界面恢复。
 
-系统设置“恢复备份”只需备份口令（及按需的当前管理员密码），恢复后保留当前管理员账号；新安装尚无管理员时，初始化页“从备份恢复”输入备份口令并设置管理员用户名/密码（创建管理员后该入口关闭，返回409）。不需要备份中的管理员凭据：能解密备份即已可读取其中全部数据，旧密码不提供额外保护，反而让久远备份因遗忘密码而无法使用。上传格式与上文相同，先在数据目录私有暂存区完成解密、版本/结构/完整性/原钥验证，写入保留或新设的管理员并撤销旧会话；较旧版本在暂存副本中迁移。默认勾选“恢复后暂停采集和通知”：所有网站和通知目标置为暂停，备份中待发送消息随后取消而不发出。验证通过后服务拒绝新请求（503并提示稍候）并等待其他请求结束（最长15秒，否则409不恢复），关闭后台、凭据与数据库，把当前数据库/WAL/SHM/密钥移入before-restore-时间-随机（0700），再移入恢复数据并重新打开全部服务；重新打开失败则放回原文件并以原数据重开，返回“已回到原数据”。成功后旧会话全部失效，发起恢复的浏览器获得新会话直接进入，记录“恢复备份·已恢复”。before-restore目录不自动删除，确认无需回退后可在宿主机删除。旧实例若仍在运行且未勾选暂停，会重复采集和通知。
+## 网页备份库
 
-旧的“恢复验证”独立副本流程（下文）保留给维护工具使用，网页不再生成；已有副本可在网页删除。
+系统设置“备份”页：状态卡显示上次备份时间与类型、存放目录、份数/占用和磁盘可用（超过30天未备份显示橙色）；列表每份可命名（立即备份时选填或之后重命名，名称存于`backups/labels.json`，恢复不影响）、下载、恢复、删除。不再记录操作历史（迁移0020删除`backup_records`）。
 
-当前仅保留一个独立副本，无网页覆盖或启用操作。不再需要的副本可在网页输入当前管理员密码删除（`DELETE /api/manage/backups/candidate`），删除后可重新上传；副本被实例锁占用时拒绝，符号链接只删除链接本身。未删除的副本保留待后续维护核对；不得与原服务并行启动同一套真实采集/通知。正式切换、升级与显式回退通过[发布维护工具](RELEASES.md)执行，Web不直接操作Docker。停服后可用下文维护容器检查候选（不启动服务、不联网）：
+- **立即备份**：在服务器生成一份手动备份，不需输入密码；同一时间只运行一个备份或恢复。可用空间不足数据库2倍时直接拒绝。
+- **下载**：先换一张一次性、60秒有效、绑定当前会话的票据，再由浏览器直接流式保存（不占内存，原生进度）。下载和删除只需登录会话（2026-11-10用户确认）；恢复要当前管理员密码，登录或上次输入后15分钟内免输。
+- **保留**：恢复前、升级前备份保留30天，每种最新一份不删；手动备份不自动删除。备份文件0600、目录0700，计入“数据”页存储占用。
+- 目录中手动放入的`*.tar.gz`也会列出，无法识别的只能删除；符号链接和其他文件不列出、不可访问。启动时删除旧版本留下的`before-restore-*`、`web-restore`目录和中断的临时文件（被其他实例占用的保留）。
 
-~~~bash
-docker compose -p seekbell-test stop
-docker compose -p seekbell-test -f compose.yaml -f compose.maintenance.yaml \
-  run --rm --no-deps -T -e SEEKBELL_DATA_DIR=/data/web-restore \
-  seekbell python -m seekbell.db check
-~~~
+## 网页恢复
 
-数据库上限2GiB、上传清单行8KiB、上传最长300秒；根据实际流量累计限制，不能只信Content-Length。一次仅一个备份/恢复，下载传输结束或中断后释放门禁。文件操作/验证在线程中执行，取消请求会等待已有数据库线程结束再清理；已完成发布后即使响应丢失副本也会保留。网页下载在浏览器中形成Blob，会占用备份体积相应内存，大库建议使用停服CLI。服务器在可信数据盘预留约数据库3倍的暂存空间及额外候选空间；0700临时目录、0600文件，完成/异常/断开清理，强杀残留不承诺安全擦除。口令只在请求体和内存中使用，无URL/日志/浏览器持久化，不提供免认证下载URL。API和下载均no-store。
+三步：选择（列表中的一份或上传文件）→ 检查（不需要任何口令；服务器校验后显示备份时间、类型、版本、工作空间，以及网站/任务/目标/内容条数与当前对比，内容条数从数据库重新统计而非取自清单；不改任何数据）→ 确认（默认勾选“恢复后暂停采集和通知”，按需输入当前管理员密码）。上传暂存在数据目录私有目录，30分钟未确认或取消即删除，确认时不必重新上传。
 
-接口：GET /api/manage/backups返回候选存在状态和大小上限；POST /download接收JSON current_password/password，返回加密附件；POST /restore使用application/octet-stream，请求体第一行为有界UTF-8 JSON（current_password/password/username/admin_password），一个换行后跟加密文件原始字节。只接收白名单字段，不接受路径。无需multipart依赖，后台不读取浏览器演示存储。
+确认后先在暂存区恢复并升级、校验，再生成一份“恢复前”备份（此份不做完整性校验，损坏的当前数据也不会阻止恢复；只有写入失败如磁盘满才中止），然后拒绝新请求（503）、等待在途请求（最长15秒，否则409不恢复）、关闭服务、整份换入并重开；重开失败则换回原文件并提示“已回到原数据”。成功后换下的文件删除，旧会话全部失效，管理员保持当前账号，发起恢复的浏览器直接获得新会话。撤销恢复：在列表中恢复那份“恢复前”备份。
 
-复验仅用临时数据/合成密码/模拟网络：
+新安装尚无管理员时，初始化页“已有备份？从备份恢复”走同一向导，最后一步设置管理员用户名和密码（创建管理员后该入口关闭，返回409），不生成恢复前备份。旧实例若仍在运行且未勾选暂停，会重复采集和通知。
 
-~~~bash
-uv run --frozen pytest -q tests/test_backup.py tests/test_web_backups.py
-pnpm --dir frontend build
-pnpm --dir frontend test:backup
-python3 scripts/check_backup_container.py "$SEEKBELL_IMAGE" --revision "$SEEKBELL_REVISION"
-~~~
-
-浏览器专项为桌面/手机分别启动8018/8019一次性服务，不读取当前验收实例。Compose脚本新增运行中网页往返，仍保持禁外网、旧CLI运行中拒绝、停服CLI恢复和恢复实例重新登录检查。
-
-## 加密备份
-
-备份包含整个一致性数据库（管理员密码哈希、配置/历史、独立身份/回执账本、队列、会话等）和原 credentials.key，不是普通配置导出。独立备份口令与管理员密码分别输入，口令 12–1024 字符；丢失口令不能解密。口令不接受命令行参数、环境变量或管道，getpass 输入不回显。
-
-备份用 SQLite Connection.backup 生成快照，原库只读访问；与服务/迁移使用同一个实例锁，必须先停服务。snapshot 包含已提交 WAL，不能用裸复制单个 sqlite 文件代替。检查当前迁移、表/列/索引结构、完整性/关联、管理员哈希格式以及当前和历史加密快照的原钥解密，再发布备份。只支持当前迁移版本；无管理员/缺钥/错钥/结构异常时拒绝。
+## 停服命令
 
 首次为容器准备**新的空** Linux 备份/恢复父目录：
 
@@ -72,7 +61,7 @@ chmod 700 "$SEEKBELL_BACKUP_DIR" "$SEEKBELL_RESTORE_DIR"
 docker compose -p seekbell-test stop
 ~~~
 
-`compose.maintenance.yaml` 叠加后禁用网络/端口，将上述两个已存在目录挂载至 /backup、/restore，不会自动创建错误的宿主路径。要求 Compose 支持 !reset（本机 v5.6.0 已验证）。首次用同一 Rootless/rootful Docker 上下文准备容器 UID 10001 的目录所有权；不要对已有日常目录使用此初始化命令：
+`compose.maintenance.yaml`叠加后禁用网络/端口，将上述两个已存在目录挂载至/backup、/restore，不会自动创建错误的宿主路径（Compose需支持!reset）。
 
 ~~~bash
 docker compose -p seekbell-test -f compose.yaml -f compose.maintenance.yaml \
@@ -80,34 +69,16 @@ docker compose -p seekbell-test -f compose.yaml -f compose.maintenance.yaml \
   "import os; [(os.chmod(p,0o700),os.chown(p,10001,10001)) for p in ('/backup','/restore')]"
 
 docker compose -p seekbell-test -f compose.yaml -f compose.maintenance.yaml \
-  run --rm --no-deps seekbell python -m seekbell.backup create \
-  --output /backup/before-update.sbbackup
+  run --rm --no-deps -T seekbell python -m seekbell.backup create \
+  --output /backup/before-update.tar.gz
 ~~~
 
-在真实交互终端运行最后一条命令，输入并确认备份口令。不要添加 -T，不要把口令写进命令或 shell 历史。输出文件必须不存在；最终文件 0600，原子发布、从不覆盖。数据库上限 2 GiB，流式处理；同一私有文件系统预留约数据库体积 3 倍并留余量的暂存/输出空间。暂存目录 0700、明文文件 0600，正常成功或失败清理；强制终止可能留下私有暂存文件，不承诺文件系统级安全擦除。备份目录也必须放可信私有磁盘。
-
-Rootless 下宿主看到的是映射 UID。需要带走加密文件时，可用容器 UID 读取并在宿主以当前用户另存，避免修改数据卷或密钥权限：
-
-~~~bash
-(
-  umask 077
-  set -C
-  docker compose -p seekbell-test -f compose.yaml -f compose.maintenance.yaml \
-    run --rm --no-deps -T seekbell cat /backup/before-update.sbbackup \
-    > "$HOME/seekbell-before-update.sbbackup"
-)
-~~~
-
-这里只传输加密文件字节，不传口令。备份与独立口令分别保管；不入 Git。
-
-## 独立恢复
-
-目标必须是**尚不存在的新目录**，不能等于当前 SEEKBELL_DATA_DIR；已有文件、空/非空目录和符号链接一律拒绝。首次恢复仅支持备份和程序的迁移版本完全一致。先完成加密认证再解释清单/SQLite；验证数据库版本/结构/摘要/关联、原钥和全部凭据快照。失败不发布目标、不改变原库；并发恢复只能有一个成功。
+create与服务使用同一实例锁，必须先停服；输出文件必须不存在，生成0600并原子发布。恢复到**尚不存在的新目录**（不能等于当前数据目录），在交互终端设置恢复后的管理员：
 
 ~~~bash
 docker compose -p seekbell-test -f compose.yaml -f compose.maintenance.yaml \
   run --rm --no-deps seekbell python -m seekbell.backup restore \
-  --archive /backup/before-update.sbbackup \
+  --archive /backup/before-update.tar.gz \
   --destination /restore/recovered-before-update
 
 docker compose -p seekbell-test -f compose.yaml -f compose.maintenance.yaml \
@@ -115,20 +86,15 @@ docker compose -p seekbell-test -f compose.yaml -f compose.maintenance.yaml \
   seekbell python -m seekbell.db check
 ~~~
 
-交互输入备份口令和恢复后的管理员用户名；直接回车沿用备份中的管理员，填写则再输入两次新密码并替换。校验通过后仅清除恢复副本的旧登录会话（及按需替换管理员），其余表保持原样，再同步并通过 Linux RENAME_NOREPLACE 原子发布新目录；不运行迁移、不启动采集或通知。源数据不变；恢复文件 0600、目录 0700，使用执行命令的 UID（容器中 10001）。后续启动会加载原钥并要求重新登录。
+管理员密码只在交互终端输入，不接受参数、环境变量或管道。恢复保留网站/目标原启停、队列与租约/退避。**启动恢复实例前停止原实例，不能让两份数据同时真实发送。**这是时间点恢复，不包含备份后产生的记录与回执。
 
-恢复保留网站/目标原启停、队列与租约/退避。**启动恢复实例前停止原实例，不能让两份数据同时真实发送。**这是时间点恢复，不包含备份后产生的回执；之后重新运行可能重复发送，不能承诺外部 exactly-once。恢复副本在本阶段只用于禁外网检查，正式切换数据卷、升级/失败回退与 Web 恢复流程留后续阶段，不提供覆盖原卷的快捷命令。
-
-## 格式和离线验证
-
-.sbbackup v1：固定魔数/版本、随机 16 字节 salt、12 字节 nonce；scrypt N=131072/r=8/p=1 派生 256 位密钥，AES-256-GCM 流式加密，完整头部作认证附加数据，末尾 16 字节 tag。内部为有界 JSON 清单、44 字节原密钥和 SQLite 快照，无可控解包路径。清单含格式、应用/构建/迁移版本、UTC时间、数据库大小和 SHA-256；元信息也加密。认证完成前不会解析明文，不执行备份脚本。
-
-设计依据：[Python SQLite backup](https://docs.python.org/3.12/library/sqlite3.html#sqlite3.Connection.backup)、[Cryptography GCM 认证边界](https://cryptography.io/en/latest/hazmat/primitives/symmetric-encryption/#cryptography.hazmat.primitives.ciphers.modes.GCM)、[Compose 环境插值](https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/)。复用已锁定依赖，没有引入新库或改变技术栈。
+## 验证
 
 ~~~bash
-uv run --frozen pytest -q tests/test_backup.py
+uv run --frozen pytest -q tests/test_backup.py tests/test_web_backups.py
 uv run --frozen python -m seekbell.services.backup_demo
+pnpm --dir frontend build && pnpm --dir frontend test:backup
 python3 scripts/check_backup_container.py "$SEEKBELL_IMAGE" --revision "$SEEKBELL_REVISION"
 ~~~
 
-backup_demo 只用临时库、合成账号/目标和模拟通知；验证除撤销会话外所有表一致、原钥/账号可用、待发送/告警队列保留及继续投递。容器脚本创建唯一 Compose 项目和临时卷，所有服务禁外网，验证只读根/本机端口配置、运行中拒绝备份、停服备份、独立恢复后重新启动登录/配置保持，finally 仅清理本轮资源。不能将这些证据当作真实发送、PVE/arm64、反代或用户验收。
+backup_demo只用临时库、合成账号/目标和模拟通知：备份不含管理员和会话，恢复后除管理员与会话外所有表一致、原钥可用、待发送/告警队列保留并继续投递。容器脚本在禁外网的一次性项目中验证运行中网页备份、流式下载、检查、就地恢复与恢复前备份，运行中停服命令被拒，停服create/restore及恢复实例登录。浏览器套件（8018–8021一次性服务）覆盖立即备份、下载文件结构、上传检查、恢复、回退、删除和初始化页恢复。

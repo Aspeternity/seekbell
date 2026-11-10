@@ -6,8 +6,8 @@ import { byteSize, stamp } from '../settings'
 import ReadRegion from './ReadRegion.vue'
 interface Storage {
   database_bytes: number
-  leftover_bytes: number
-  leftover_count: number
+  backup_bytes: number
+  backup_count: number
   filesystem_total_bytes: number
   filesystem_free_bytes: number
   checked_at: number
@@ -46,21 +46,16 @@ const used = computed(() => {
               <dd>{{ byteSize(data.data.value.database_bytes) }}</dd>
             </div>
             <div>
-              <dt>恢复残留</dt>
+              <dt>备份</dt>
               <dd>
                 {{
-                  data.data.value.leftover_count
-                    ? data.data.value.leftover_count +
+                  data.data.value.backup_count
+                    ? data.data.value.backup_count +
                       ' 份 · ' +
-                      byteSize(data.data.value.leftover_bytes)
+                      byteSize(data.data.value.backup_bytes)
                     : '无'
                 }}
-                <a
-                  v-if="data.data.value.leftover_count"
-                  class="text-link"
-                  href="#/settings/backup?section=leftovers"
-                  >到备份页管理</a
-                >
+                <a class="text-link" href="#/settings/backup?section=list">到备份页管理</a>
               </dd>
             </div>
             <div>

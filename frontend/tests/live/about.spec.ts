@@ -102,13 +102,16 @@ test('about and diagnostics stay independent, retry safely and perform no config
   expect(writes).toEqual([])
 
   await page.goto('/#/settings/backup')
-  await expect(page.getByRole('button', { name: '生成并下载加密备份' })).toBeVisible()
-  await page.getByRole('button', { name: '恢复备份', exact: true }).click()
+  await expect(
+    page.locator('.backup-heading-actions').getByRole('button', { name: '立即备份', exact: true }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: '从文件恢复', exact: true }).click()
   await expect(
     page
-      .getByRole('form', { name: '从文件恢复', exact: true })
-      .getByRole('button', { name: '恢复备份', exact: true }),
+      .getByRole('form', { name: '选择备份文件', exact: true })
+      .getByRole('button', { name: '检查备份', exact: true }),
   ).toBeDisabled()
+  await page.getByRole('button', { name: '关闭恢复备份', exact: true }).click()
   await page.goto('/#/settings/unknown')
   await expect(page.getByRole('heading', { name: '这条线索暂时不在这里' })).toBeVisible()
   await page.goto('/#/settings/about')

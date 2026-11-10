@@ -1,4 +1,4 @@
-"""Alert delay and test sends, low disk space, restore leftovers and remembered sign-ins."""
+"""Alert delay and test sends, low disk space and remembered sign-ins."""
 
 import asyncio
 import re
@@ -10,7 +10,6 @@ from seekbell.db.models import AlertDelivery, LoginSession, SystemEvent
 from seekbell.notifiers.rendering import render, telegram_message, webhook_payload
 from seekbell.services import authentication as auth
 from seekbell.services.alerts import RECOVERED_EARLY, AlertWorker, get_settings, update_settings
-from seekbell.services.backup_demo import ADMIN_PASSWORD
 from seekbell.services.disk import CODE, LOW_BYTES, RECOVERED_BYTES, DiskWatch
 from seekbell.services.ingestion import Ingestion
 from sqlalchemy import select
@@ -19,7 +18,6 @@ from sqlalchemy.orm import Session
 from tests.core_helpers import batch
 from tests.test_display_alerts import Probe, app, configured, count, enable_source, fault  # noqa: F401
 from tests.test_management import CREDENTIALS, authenticate, target
-from tests.test_web_backups import apply, apply_body, discard, download, leftover_ids, web  # noqa: F401
 
 
 def deliveries(engine):
@@ -172,54 +170,6 @@ def test_disk_check_survives_a_failing_filesystem(configured):  # noqa: F811
 
     assert DiskWatch(server.state.engine, usage=broken).run_once(at=time.time()) is None
     assert count(server.state.engine, SystemEvent) == 0
-
-
-def test_restore_leftovers_are_listed_counted_and_removed_with_the_password(web):  # noqa: F811
-    client, settings, _ = web
-    archive = download(client).content
-    result = apply(client, apply_body(archive, pause=False))
-    assert result.status_code == 200, result.text
-    client.headers["x-csrf-token"] = result.json()["csrf"]
-    previous = result.json()["previous"]
-    status = client.get("/api/manage/backups").json()
-    assert [(row["id"], row["kind"]) for row in status["leftovers"]] == [(previous, "previous")]
-    assert status["leftovers"][0]["bytes"] > 0
-    assert abs(status["leftovers"][0]["at"] - time.time()) < 120
-    storage = client.get("/api/manage/storage").json()
-    assert storage["leftover_count"] == 1
-    assert storage["leftover_bytes"] == status["leftovers"][0]["bytes"]
-    assert set(storage) == {
-        "database_bytes",
-        "leftover_bytes",
-        "leftover_count",
-        "filesystem_total_bytes",
-        "filesystem_free_bytes",
-        "checked_at",
-    }
-    assert discard(client, "Incorrect-Current-Password", previous).status_code == 400
-    for name in ("credentials.key", "seekbell.sqlite3", "before-restore-x", previous + "x"):
-        assert discard(client, ADMIN_PASSWORD, name).status_code == 404
-    assert (settings.data_dir / "credentials.key").is_file()
-    removed = discard(client, ADMIN_PASSWORD, previous)
-    assert removed.status_code == 200 and removed.json() == {"leftovers": []}
-    assert not (settings.data_dir / previous).exists()
-    assert leftover_ids(client) == []
-    assert client.get("/api/manage/storage").json()["leftover_count"] == 0
-    assert client.get("/api/manage/workspace").status_code == 200
-    assert not list(settings.data_dir.glob(".seekbell-*"))
-
-
-def test_leftover_names_cannot_reach_other_directories(web, tmp_path):  # noqa: F811
-    client, settings, _ = web
-    outside = tmp_path / "outside"
-    outside.mkdir()
-    (outside / "keep.txt").write_text("synthetic")
-    name = "before-restore-20260101T000000Z-abcdefgh"
-    (settings.data_dir / name).symlink_to(outside, target_is_directory=True)
-    assert leftover_ids(client) == [name]
-    assert client.get("/api/manage/backups").json()["leftovers"][0]["bytes"] == 0
-    assert discard(client, ADMIN_PASSWORD, name).status_code == 200
-    assert (outside / "keep.txt").read_text() == "synthetic"
 
 
 def sign_in(client, **extra):

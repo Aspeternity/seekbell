@@ -380,7 +380,7 @@ SourceProbe持久最近手测与冷却，API语义保持。WebsiteConnectionTest
 
 GET /manage/storage仅读取固定数据库/WAL/恢复副本文件大小和数据所在文件系统容量，不接收路径，不返回数据目录或枚举用户文件。GET /manage/retention/preview?days=采用与清理器一致的终态/完成/尝试保护条件，统计候选投递和删除这些投递后可删除的帖子及已完成操作、采集记录；只读事务、不改清理计划，不预估磁盘释放字节。精简账本和受保护依赖继续保留。
 
-BackupRecord仅保留最近50次经当前密码验证的导出/恢复操作，字段为操作、结果、时间、大小、应用与迁移版本。加密快照后写生成记录，验证发布恢复副本后写验证记录；已认证失败仅写固定failed结果。记录不存口令、原文件名、原始错误或凭据，包含在后续整库快照；本次快照生成后的回执不在自身备份中。下载文件名含UTC时间，网页操作记录不等于客户端已落盘。副本发布和宿主机切换边界不变。
+（BackupRecord备份操作记录已由迁移0020删除，备份库本身即历史。）下载文件名含UTC时间。副本发布和宿主机切换边界不变。
 
 GET /auth/sessions只返回本会话到期与其他有效会话数；DELETE /auth/sessions/others在写事务内重查当前会话/CSRF、仅删除其他会话，不修改账号、当前Cookie或延长有效期。所有管理端点继续认证/Origin/CSRF保护。GET /manage/diagnostics只组合版本、后台状态、支持目录、固定故障码和检查时间，无URL/凭据/会话/磁盘路径；前端复制失败时显示可选取文本。
 
@@ -436,9 +436,20 @@ HotlistSource新增retention（周期→秒），snapshot_max_age(period)默认8
 
 磁盘：`services/disk.DiskWatch`挂在`HistoryRetention`循环内，每60秒`shutil.disk_usage`数据目录，低于500 MiB经`observe("runtime:disk", …, code="disk_space_low")`记故障，回升到600 MiB以上恢复；写入失败只记日志，下轮重试。运行中心`_disk_problems`在后台停止时也列出（可能就是原因），阶段为storage。
 
-恢复残留：`maintenance.leftovers(root)`只枚举`web-restore`与`before-restore-YYYYMMDDTHHMMSSZ-xxxxxxxx`，大小只计固定数据文件、符号链接计0；`GET /manage/backups`以`leftovers`取代`candidate_available`，`DELETE /manage/backups/leftovers/{name}`沿用原删除副本的认证、实例锁检查与先移开再删除，`/manage/backups/restore`（验证副本）保留给维护工具。`storage_view`返回database_bytes（含WAL）、leftover_bytes/count与磁盘容量。
+恢复残留：已由“备份重构第一期”的恢复前备份取代（见下节）。
 
 会话：`POST /auth/login`可带`remember`，生命周期`REMEMBER_SECONDS`=30天；Cookie Max-Age按会话剩余时间；修改管理员沿用原生命周期；`Confirmations.remaining`改按会话`started_at`计算15分钟免确认；`GET /auth/sessions`多返回remembered。
 
-前端：`settings.ts`集中标签定义（App路由共用）、`useSettingsForm`（读取/草稿/放弃/保存/校验/保存前确认/409可重读）与格式化函数；`SettingsSaveBar`统一保存栏；`BackupSettings`（备份标签）持有备份状态与免确认计时，供备份卡与`RestoreLeftovers`残留卡共用；`DataSettings`只含保留与存储卡；请求错误附带HTTP状态码。验证：`uv run --frozen pytest -q`；`pnpm --dir frontend build`；test:system、test:backup、test:retention、test:history、test:approved-ui、test:ui、test:hotlist、test:live。
+前端：`settings.ts`集中标签定义（App路由共用）、`useSettingsForm`（读取/草稿/放弃/保存/校验/保存前确认/409可重读）与格式化函数；`SettingsSaveBar`统一保存栏；`BackupSettings`（备份标签，见下节）；`DataSettings`只含保留与存储卡；请求错误附带HTTP状态码。验证：`uv run --frozen pytest -q`；`pnpm --dir frontend build`；test:system、test:backup、test:retention、test:history、test:approved-ui、test:ui、test:hotlist、test:live。
 
+## 备份重构第一期（2026-11-10）
+
+产品契约见SPEC 6.5.3，操作见BACKUP_RESTORE。迁移0020删除`backup_records`表与BackupRecord模型（11-10用户认为操作记录无用）；名称见下“备份库”。
+
+格式：`backup.snapshot_backup`在实例锁内用SQLite backup取快照，严格模式校验库与全部历史密文后`strip_private`（secure_delete删除administrators与login_sessions再VACUUM），用`tarfile` USTAR写出manifest.json、seekbell.sqlite3、credentials.key（0600、mkstemp后`os.link`原子独占发布）。pre-restore类型跳过校验，保证当前库损坏时仍能留底。读取不用`tarfile`：`gzip`流上的最小USTAR解析器只接受三个固定名称的普通成员（校验和、ustar魔数、无prefix、大小上限），拒绝PAX/GNU扩展头，避免通用解析器缓冲无界扩展头；结尾只允许零填充（有界读取）。`read_manifest`只读首成员供列表；`unpack`边写私有文件边算SHA-256；`inspect_backup`解包到临时目录，校验库（不要求管理员）并重新统计摘要。`restore_backup(administrator=…)`必须给定管理员，写入后再按完整规则校验并`renameat2(RENAME_NOREPLACE)`发布。
+
+备份库：`services/backups.py`以`Settings.backup_dir`（数据目录/backups，0700）为准，`path_for`只接受安全文件名的普通文件（不跟随链接），清单按(名称,大小,mtime)缓存，`create`先查可用空间≥2×数据库并按UTC时间命名、`prune`清理30天前的恢复前/升级前备份（每种保留最新）。`remove_leftovers`在lifespan持锁后、打开工作区前删除旧`before-restore-*`/`web-restore`（被他实例flock占用则跳过）与`.seekbell-*`临时文件。存储视图返回backup_count/backup_bytes。名称为同目录`labels.json`（id→名称，0600，mkstemp+fsync+`os.replace`，临时文件前缀`.seekbell-backup-`由启动清理覆盖）；`normalize_label`合并空白、拒绝控制字符与超过40字；`create(label=)`先校验再快照，`remove`同步删名称，写入时丢弃已不存在档案的名称。
+
+接口（`api/backups.py`）：GET状态与列表（含total_bytes）；POST立即备份（可带`{name}`）；PATCH `/{name}`改名；DELETE `/{name}`；POST `/{name}/ticket`返回60秒一次性票据（绑定会话令牌SHA-256），GET `/{name}/file?ticket=`用FileResponse流式下载；POST `/inspect`（原始octet-stream请求体，实际计数限大小，300秒）或`/{name}/inspect`生成Stage（上传暂存`.seekbell-stage-*`，30分钟过期，新检查替换旧的），DELETE `/inspect/{key}`取消；POST `/inspect/{key}/restore`复验密码后在暂存区恢复→`backups.create(pre-restore)`→quiesce→换入（旧文件移入`.seekbell-previous-*`，成功后删除，失败换回）。`/auth/setup/inspect|restore`仅未初始化时可用，Stage带setup标记不可混用。全部经`backup_gate`串行。维护工具删除`--restored`与web-restore锁分支。
+
+前端：`BackupSettings.vue`（三格状态、列表、直接下载、全局`confirmAction`删除确认、居中恢复弹窗`.backup-restore-modal`；弹窗`cancel`只认自身目标，文件选择框取消冒泡的cancel不关闭）、`BackupNameDialog.vue`（立即备份/重命名）、`BackupRestoreWizard.vue`（三步，设置页与初始化页共用；上传用XHR报告进度）、`backups.ts`类型与标签；`byteSize`增加KiB。验证：`tests/test_backup.py`、`tests/test_web_backups.py`、`pnpm test:backup`、`scripts/check_backup_container.py`。

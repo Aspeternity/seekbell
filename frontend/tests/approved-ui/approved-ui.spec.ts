@@ -102,14 +102,13 @@ test('production pages preserve the approved UI while using real persisted data'
   await expect(system).toContainText('LINUX DO')
   await page.screenshot({ path: info.outputPath('approved-about.png'), fullPage: true })
   await page.goto('/#/settings/backup')
-  await expect(page.getByRole('form', { name: '导出备份', exact: true })).toBeVisible()
-  await page.getByRole('button', { name: '恢复备份', exact: true }).first().click()
-  await expect(page.getByRole('form', { name: '从文件恢复', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '备份状态', exact: true })).toBeVisible()
   await expect(
-    page
-      .getByRole('form', { name: '从文件恢复', exact: true })
-      .getByLabel('备份口令', { exact: true }),
-  ).toBeVisible()
+    page.locator('.backup-heading-actions').getByRole('button', { name: '立即备份', exact: true }),
+  ).toBeEnabled()
+  await page.getByRole('button', { name: '从文件恢复', exact: true }).click()
+  await expect(page.getByRole('form', { name: '选择备份文件', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '关闭恢复备份', exact: true }).click()
   await page.screenshot({ path: info.outputPath('approved-backup.png'), fullPage: true })
   for (const path of [
     '/',

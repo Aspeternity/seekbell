@@ -1,14 +1,12 @@
 """Settings preserve drafts through conflicts and maintenance never mutates business data."""
 
-import json
-
 import pytest
 from fastapi.testclient import TestClient
 from seekbell.config import Settings
 from seekbell.db.runtime import create_database_engine, migrate, schema_revision
 from seekbell.main import create_app
 from seekbell.services.backup_demo import table_data
-from seekbell.services.maintenance import backup_records, record_backup, retention_preview
+from seekbell.services.maintenance import retention_preview
 from seekbell.services.retention import HistoryRetention
 from sqlalchemy import text
 
@@ -138,26 +136,6 @@ def test_about_reports_system_facts_without_paths_or_writes(web):
     assert client.get("/api/manage/about").status_code == 401
 
 
-def test_backup_receipts_are_bounded_and_nonsecret(web):
-    _, app, _ = web
-    for index in range(55):
-        record_backup(app.state.engine, "export", "generated", archive_bytes=index)
-    rows = backup_records(app.state.engine)
-    assert len(rows) == 50
-    assert rows[0]["archive_bytes"] == 54
-    assert rows[-1]["archive_bytes"] == 5
-    assert set(rows[0]) == {
-        "id",
-        "kind",
-        "result",
-        "at",
-        "archive_bytes",
-        "application_version",
-        "database_revision",
-    }
-    assert "password" not in json.dumps(rows)
-
-
 def test_upgrade_preserves_preferences_and_uses_expected_head(tmp_path):
     settings = Settings(data_dir=tmp_path)
     engine = create_database_engine(settings)
@@ -170,12 +148,15 @@ def test_upgrade_preserves_preferences_and_uses_expected_head(tmp_path):
             )
         )
     migrate(engine)
-    assert schema_revision(engine) == "0019_settings_reorganization"
+    assert schema_revision(engine) == "0020_drop_backup_records"
     with engine.connect() as connection:
         assert connection.execute(
             text(
                 "SELECT name, description, timezone, workspace_revision FROM workspace_preferences"
             )
         ).one() == ("Existing", "Keep", "Asia/Tokyo", 1)
-        assert connection.execute(text("SELECT COUNT(*) FROM backup_records")).scalar_one() == 0
+        # Backup operation records were dropped in 0020; the library is the history.
+        assert not connection.execute(
+            text("SELECT name FROM sqlite_master WHERE name='backup_records'")
+        ).first()
     engine.dispose()

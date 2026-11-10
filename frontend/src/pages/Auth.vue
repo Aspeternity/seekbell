@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import Icon from '../components/Icon.vue'
 import { account, authenticate, notify } from '../store'
-import BackupRestoreForm from '../components/BackupRestoreForm.vue'
+import BackupRestoreWizard from '../components/BackupRestoreWizard.vue'
 const props = defineProps<{
   setup: boolean
 }>()
@@ -91,8 +91,8 @@ async function submit() {
             前往登录<Icon name="arrow" :size="17" /></button></template
         ><template v-else-if="setup && restoring"
           ><h1 tabindex="-1">从备份恢复</h1>
-          <p class="auth-subtitle">上传之前下载的加密备份，恢复任务、网站、通知目标和历史。</p>
-          <BackupRestoreForm setup @done="restored" />
+          <p class="auth-subtitle">上传之前下载的备份，恢复任务、网站、通知目标和历史。</p>
+          <BackupRestoreWizard setup @done="restored" />
           <button class="text-link auth-mode-link" type="button" @click="restoring = false">
             改为创建新管理员
           </button></template

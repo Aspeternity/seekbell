@@ -7,7 +7,7 @@ import os
 import sqlite3
 import sys
 import tempfile
-from contextlib import ExitStack, closing, contextmanager
+from contextlib import closing, contextmanager
 from pathlib import Path
 
 from alembic.script import ScriptDirectory
@@ -38,16 +38,8 @@ def stopped_source(directory):
             fcntl.flock(handle, fcntl.LOCK_UN)
 
 
-@contextmanager
 def source_locks(source):
-    with ExitStack() as stack:
-        if source.name == "web-restore":
-            stack.enter_context(stopped_source(source.parent))
-            if (source / ".instance.lock").exists():
-                stack.enter_context(stopped_source(source))
-        else:
-            stack.enter_context(stopped_source(source))
-        yield
+    return stopped_source(source)
 
 
 def source_snapshot(settings, destination):

@@ -4,37 +4,37 @@
 
 ## 开局
 
-正式环境为SeekBell-Dev的`/home/dev/projects/seekbell`，先运行`python3 scripts/dev_status.py`。main `85618ba`（PR #37），已发布版本0.8.0。
+正式环境为SeekBell-Dev的`/home/dev/projects/seekbell`，先运行`python3 scripts/dev_status.py`。main `85618ba`（PR #37），已发布版本0.8.0。当前在本地分支`backup-rework`。
 
 ## 计划位置
 
-M0–M4完成；v0.8.0（运行中心）已发布，证据见[v0.8.0记录](history/2026-11-09-v0.8.0运行中心.md)。系统设置重组已在本地实现、未提交，契约见SPEC 6.5.2，方案与取舍见[重组方案](plans/2026-11-10-系统设置重组方案.md)。运行中心阶段三（[方案](plans/2026-11-09-运行中心方案.md)第6节）未开始；M5真实RSS、四渠道和恢复验收未完成。既往证据见[阶段归档](history/2026-11-08-关于页整改前状态.md)。
+M0–M4完成；v0.8.0（运行中心）已发布，证据见[v0.8.0记录](history/2026-11-09-v0.8.0运行中心.md)。系统设置重组已在本地分支`settings-reorganization`提交`01562f0`（未推送），记录见[重组归档](history/2026-11-10-系统设置重组.md)，契约SPEC 6.5.2。备份重构按[方案](plans/2026-11-10-备份重构方案.md)分三期，第一期已在本地分支`backup-rework`提交（未推送），契约SPEC 6.5.3。运行中心阶段三未开始；M5真实RSS、四渠道和恢复验收未完成。
 
 ## 进行中
 
-系统设置重组，main工作区未提交，基于`85618ba`：
-- 后端：迁移`0019_settings_reorganization`；新`api/settings.py`（设置接口迁入）、`services/disk.py`；alerts（延迟、测试发送）、authentication/auth（保持登录30天、按会话起点算免确认）、backups/maintenance（恢复残留列表与删除`/manage/backups/leftovers/{name}`）、operations/fault_guide（磁盘问题）、rendering（test阶段）。
-- 前端：`settings.ts`、`backups.ts`、`SettingsSaveBar.vue`、`DataSettings.vue`、`RestoreLeftovers.vue`、`AccountSettings.vue`；重写设置各页、StorageSummary、Auth“保持登录”、App旧地址重定向。
-- 测试：新增`tests/test_settings_reorganization.py`，调整既有后端与端到端测试；schema头改为0019（含Portainer模板注释与check_release_container）。
-- 用户审阅后调整（11-10）：备份从数据页拆出为独立“备份”标签（六类），恢复残留卡移入备份页，数据页存储占用只显示残留占用并链接`#/settings/backup?section=leftovers`；`/settings/backup`不再重定向；磁盘故障指引文案同步；登录/初始化页显示密码按钮`tabindex=-1`，live测试校验Tab顺序；`main.py`给`/`与`*.html`加`Cache-Control: no-cache`（用户确认，防升级后浏览器沿用旧界面），test_baseline覆盖。
-- 文档：SPEC 6.5.2、UI_DESIGN末节、ARCHITECTURE末节、DECISIONS、README、重组方案已回写（含六类调整）。
-- 其余未提交：v0.8.0发布记录（随下个PR提交）；`assets/brand/`图标（未接入，待审）。
+备份重构第一期，分支`backup-rework`（基于`01562f0`），已提交、未推送：
+- 后端：`backup.py`改为标准tar.gz（不加密、不含管理员与会话、最小USTAR读取器、`inspect_backup`、`restore_backup`必须给管理员）；新`services/backups.py`（备份库、保留、启动清理遗留）；`api/backups.py`重写（立即备份、票据下载、检查/暂存/恢复、初始化页inspect/restore）；`config.backup_dir`；maintenance存储改backup_count/bytes；fault_guide文案；release/manage_release删`--restored`；backup_demo、check_backup_container、check_crypto_compatibility、check_release_container同步。无迁移。
+- 前端：`BackupSettings.vue`重写、新`BackupRestoreWizard.vue`、`backups.ts`、`store.ts`（uploadBackup/restoreBackup）、Auth初始化页向导、StorageSummary、`byteSize`加KiB、workspace.css；删`BackupRestoreForm.vue`、`RestoreLeftovers.vue`。
+- 测试：重写`tests/test_backup.py`、`tests/test_web_backups.py`、`frontend/tests/backup/backup.spec.ts`；调整test_release、test_settings_reorganization、approved-ui、live/about、system/settings。
+- 文档：SPEC 6.5.3、ARCHITECTURE末节、DECISIONS、UI_DESIGN末节、BACKUP_RESTORE重写、RELEASES、README、方案状态已回写。
+- 验收修正（11-10，同一提交）：①下载/删除不要密码（恢复保留）；删除用全局`confirmAction`弹窗，恢复向导居中弹窗。②删除操作记录（前后端、BackupRecord，新迁移`0020_drop_backup_records`，部署注释/README/测试修订号同步）。③备份名称：`services/backups.py` labels.json（POST可带name、PATCH改名）、新`BackupNameDialog.vue`。④状态卡三格信息块+存放位置复制+列表名称标题/空状态。⑤修复：文件选择框取消的冒泡cancel关闭恢复弹窗（`dialogCancel`只认自身，e2e用旧处理验证会失败）。⑥去掉备份页凭据提示条；名称弹窗点外部关闭（按坐标判断，内边距不误关）。⑦存放位置移入“已存备份”块第三行（文件夹图标、省略、复制图标），`byteSize(0)`为“0 KiB”，无备份不显示大小行。证据（未提交工作区）：pytest全量1013 passed；ruff、typecheck、prettier、build；Playwright backup 2、approved-ui 8、live 6、system 26通过（⑥后backup 2、approved-ui 8复跑通过）。
+- 仍未提交：`assets/brand/`图标（待审，未纳入本提交）；v0.8.0发布记录已随`01562f0`提交。
 
-证据（本机，未提交工作区）：六类调整后 build、prettier、ruff通过，pytest相关72项与test_baseline 11项通过，Playwright system 26、backup 2、approved-ui 8、ui 8、live 6（含Tab顺序）、retention 2 通过；此前全量：`uv run --frozen pytest tests -q` 990 passed；前端build、prettier、ruff check/format、check_privacy通过；Playwright system 26、backup 2、retention 2、history 4、approved-ui 8、ui 8、hotlist 50、live 6、operations 8、workspace-stability 8、sending 4、runtime 2、first-entry 8、loading 4、diagnostics 18、content-stability 8、evaluations 8、linuxdo 26、history-ui-fixes 6 全部通过。proxy套件需固定本地镜像（SEEKBELL_IMAGE/REVISION），本机未跑，交CI。
+证据（本机，提交前工作区）：`uv run --frozen pytest tests -q -n auto` 1017 passed；ruff check/format、prettier、前端build通过；Playwright backup 2、approved-ui 8、system 26、live 6、ui 8、retention 2通过；backup_demo通过。`check_backup_container.py`用工作区本地镜像`seekbell:backup-rework-local`（禁外网）全部通过（网页备份/票据下载/检查/就地恢复/恢复前备份、运行中拒绝停服命令、停服create/restore与恢复实例登录、backup_demo）；其网页探针改为只比较配置表（运行时持续写采集记录，整库比较会偶发不等）。`check_release_container.py`与proxy套件未跑，交CI。
 
 ## 下一步
 
-1. 用户审阅界面与改动；确认后获授权建分支、提交、开PR（CI含proxy与容器升级检查）。
-2. 发版时`bump_version.py`，CHANGELOG写明六类重组、新功能、迁移0019（回退需0018备份）；IMAGE_RELEASE“安全升级与历史”补一行。
-3. 备份重构：[方案](plans/2026-11-10-备份重构方案.md)第二稿待用户审批（用户已定：不加密、不兼容旧格式；标准tar.gz不含管理员与会话、服务器端备份库、恢复三步向导、自动备份，分三期）；获批后回写SPEC/ARCHITECTURE/BACKUP_RESTORE再实施。
-4. 运行中心阶段三；程序日志做法待议；热榜真实观察、图标采用与M5实机验收待推进。
+1. 用户复审备份页第二轮（名称、三格状态卡、无操作记录、文件选择框修复）（一次性预览：`pnpm --dir frontend build`后`uv run --frozen python scripts/run_web_smoke.py --system --port 8099`，浏览器Ctrl+Shift+R）；按反馈修改。
+2. 继续在本地累积：备份第二期（自动备份、独立备份目录，注意`SEEKBELL_BACKUP_DIR`命名冲突）与第三期（升级前备份）；运行中心阶段三；程序日志待议；图标采用。
+3. **暂不发版**（用户11-10明确，不按单项改动发版）。发版时机由用户提出；届时`backup-rework`等本地分支合成一个PR，`bump_version.py`一次，CHANGELOG汇总六类重组、迁移0019（回退需0018备份）与备份格式不兼容旧版。
 
 ## 授权
 
-用户确认重组方案并要求实施；无提交、推送、PR、发布、部署或真实发送授权。实例只读命令的既有授权为用户本人执行。
+用户确认重组方案与备份重构方案并要求实施第一期。不推送、不开PR、不发版、不部署、不真实发送，也不主动提议；本地分支与提交为实施所需。实例只读命令的既有授权为用户本人执行。
 
 ## 按需读取
 
-- 设置：SPEC 6.5.2、UI_DESIGN末节、ARCHITECTURE“系统设置重组”、`frontend/src/settings.ts`及`pages/*Settings.vue`、`api/settings.py`。
+- 备份：SPEC 6.5.3、BACKUP_RESTORE、ARCHITECTURE“备份重构第一期”、`backend/seekbell/{backup.py,services/backups.py,api/backups.py}`、`frontend/src/{pages/BackupSettings.vue,components/BackupRestoreWizard.vue,backups.ts}`。
+- 设置：SPEC 6.5.2、UI_DESIGN“系统设置六类”、`frontend/src/settings.ts`、`api/settings.py`。
 - 运行中心：docs/plans/2026-11-09方案、pages/{Operations,OperationsStatus}.vue、services/{operations,fault_guide,alerts,runtime}.py。
 - 发布/实机：IMAGE_RELEASE正式发布段、ROADMAP当前阶段、ACCEPTANCE；图标见assets/brand/README.md。

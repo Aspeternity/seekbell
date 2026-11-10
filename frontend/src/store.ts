@@ -139,23 +139,40 @@ export async function authenticate(
   applyAuth(info)
   await refresh()
 }
-// Restoring replaces the whole workspace, so every old session and cached read is gone afterwards.
-export async function restoreBackup(
-  path: 'manage/backups/apply' | 'auth/setup/restore',
-  metadata: Record<string, unknown>,
-  file: File,
-) {
-  const body = new Blob([JSON.stringify(metadata) + String.fromCharCode(10), file], {
-    type: 'application/octet-stream',
+/** Upload a backup for inspection; XHR because fetch cannot report upload progress. */
+export function uploadBackup<T>(path: string, file: File, progress: (share: number) => void) {
+  return new Promise<T>((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', '/api/' + path)
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream')
+    xhr.setRequestHeader('X-CSRF-Token', csrf)
+    xhr.responseType = 'json'
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) progress(event.loaded / event.total)
+    }
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) return resolve(xhr.response as T)
+      const detail = (xhr.response as { detail?: unknown } | null)?.detail
+      reject(
+        Object.assign(new Error(typeof detail === 'string' ? detail : '上传失败，请稍后重试。'), {
+          status: xhr.status,
+        }),
+      )
+    }
+    xhr.onerror = () => reject(new Error('上传中断，请检查网络后重试。'))
+    xhr.send(file)
   })
-  const result = await sendRequest(path, 'POST', body).then((response) => response.json())
+}
+// Restoring replaces the whole workspace, so every old session and cached read is gone afterwards.
+export async function restoreBackup(path: string, body: Record<string, unknown>) {
+  const result = await request(path, 'POST', body)
   clearReadCache()
   clearNotificationCounts()
   Object.assign(state, empty())
   // The response carries a fresh session for the administrator kept or chosen by the restore.
   applyAuth(result)
   await refresh()
-  return result as { restored: boolean; paused: boolean; previous: string }
+  return result as { restored: boolean; paused: boolean }
 }
 export async function saveAdministrator(
   username: string,

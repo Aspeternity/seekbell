@@ -14,9 +14,13 @@ export const settingsTabs = [
 export const byteSize = (bytes: number | null) =>
   bytes == null
     ? '—'
-    : bytes >= 1024 ** 3
-      ? (bytes / 1024 ** 3).toFixed(2) + ' GiB'
-      : (bytes / 1024 ** 2).toFixed(2) + ' MiB'
+    : bytes === 0
+      ? '0 KiB'
+      : bytes >= 1024 ** 3
+        ? (bytes / 1024 ** 3).toFixed(2) + ' GiB'
+        : bytes >= 1024 ** 2
+          ? (bytes / 1024 ** 2).toFixed(2) + ' MiB'
+          : (bytes / 1024).toFixed(1) + ' KiB'
 export const stamp = (seconds: number) => formatTime(new Date(seconds * 1000).toISOString())
 
 export function scrollToSection(section: string, id: string) {

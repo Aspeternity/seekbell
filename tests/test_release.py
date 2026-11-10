@@ -9,7 +9,7 @@ from seekbell.config import Settings
 from seekbell.db.runtime import create_database_engine, instance_lock, migrate
 from seekbell.notifiers.credentials import CredentialVault
 from seekbell.services.authentication import password_hash
-from seekbell.services.backup_demo import ADMIN_PASSWORD, PASSWORD, prepare, table_data
+from seekbell.services.backup_demo import ADMIN_PASSWORD, prepare, table_data
 from sqlalchemy import event
 
 
@@ -82,7 +82,7 @@ def test_known_old_schema_is_migrated_only_in_candidate(tmp_path):
     result = release.prepare(source, destination)
     assert result == {
         "source_revision": "0008_retention",
-        "database_revision": "0019_settings_reorganization",
+        "database_revision": "0020_drop_backup_records",
     }
     assert table_data(source.database_path) == before
     with closing(backup.readonly(destination / "seekbell.sqlite3")) as connection:
@@ -148,25 +148,6 @@ def test_unknown_revision_fails_closed_without_modifying_source(source, tmp_path
         release.prepare(source, tmp_path / "failed")
     assert table_data(source.database_path) == before
     assert not (tmp_path / "failed").exists()
-
-
-def test_web_restore_candidate_uses_parent_lock_and_preserves_original(source, tmp_path):
-    archive = tmp_path / "backup.sbbackup"
-    backup.create_backup(source, archive, password=PASSWORD)
-    restored = source.data_dir / "web-restore"
-    backup.restore_backup(
-        source,
-        archive,
-        restored,
-        password=PASSWORD,
-    )
-    settings = Settings(data_dir=restored, build_revision=source.build_revision)
-    with instance_lock(source.data_dir), pytest.raises(backup.BackupError):
-        release.prepare(settings, tmp_path / "blocked")
-    target = tmp_path / "restored-release"
-    release.prepare(settings, target)
-    release.check_source(settings, target)
-    assert table_data(restored / "seekbell.sqlite3") == table_data(target / "seekbell.sqlite3")
 
 
 def operator():
@@ -256,7 +237,6 @@ def test_operator_activation_failure_stops_only_candidate_and_never_starts_origi
         "project": "test",
         "previous": old,
         "next": new,
-        "restored": False,
     }
     path = tmp_path / "state.json"
     tool.save(path, state, new=True)

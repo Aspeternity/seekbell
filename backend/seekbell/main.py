@@ -38,6 +38,7 @@ from seekbell.db.runtime import create_database_engine, instance_lock, migrate
 from seekbell.notifiers.credentials import CredentialError, CredentialVault
 from seekbell.notifiers.registry import NotifierRegistry
 from seekbell.services.authentication import Confirmations, LoginLimiter
+from seekbell.services.backups import remove_leftovers
 from seekbell.services.crash_records import CrashRecords
 from seekbell.services.hotlists import HotlistService
 from seekbell.services.manual_sending import ConfiguredTargetTesting, ManualSending
@@ -163,12 +164,17 @@ def create_app(
     async def lifespan(app: FastAPI):
         with instance_lock(settings.data_dir.resolve()):
             app.state.backup_gate = asyncio.Lock()
+            app.state.backup_stages, app.state.backup_tickets = {}, {}
+            # Earlier restore directories and interrupted temporary files are removed.
+            await run_in_threadpool(remove_leftovers, settings.data_dir.resolve())
             await open_workspace(app)
             restore_signals = answer_long_polls_on_stop(app)
             try:
                 yield
             finally:
                 restore_signals()
+                for stage in app.state.backup_stages.values():
+                    stage.discard()
                 await close_workspace(app)
 
     app = FastAPI(title="SeekBell", lifespan=lifespan, docs_url=None, redoc_url=None)

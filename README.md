@@ -149,7 +149,7 @@ uv run --frozen python -m seekbell.backup --help
 uv run --frozen python -m seekbell.services.backup_demo
 ~~~
 
-实际备份使用create --output、恢复使用restore --archive/--destination，口令在交互终端输入；禁止覆盖原目录。含原凭据密钥的整库备份加密，恢复只需备份口令，可沿用备份中的管理员或设置新管理员，并撤销旧会话，保留队列/去重。使用前按[备份恢复说明](docs/BACKUP_RESTORE.md)停止服务、准备私有目录并选匹配镜像；Compose与禁外网演练命令均在该文档。普通演示备份不能恢复生产数据。
+实际备份使用create --output、恢复使用restore --archive/--destination（在交互终端设置恢复后的管理员）；禁止覆盖原目录。备份是含原凭据密钥的标准tar.gz，不加密、不含管理员和登录会话，请像保管密码一样保管；恢复保留队列/去重。使用前按[备份恢复说明](docs/BACKUP_RESTORE.md)停止服务、准备私有目录并选匹配镜像；Compose与禁外网演练命令均在该文档。普通演示备份不能恢复生产数据。
 
 ## 开发与交接
 
@@ -198,7 +198,7 @@ pnpm --dir frontend test:linuxdo
 
 ### 系统设置与维护验证
 
-系统设置分通用、告警、数据、备份、账户、关于六类。通用设置与概览布局各自保存，修改失败保留草稿；告警可设通知延迟并发送测试告警；数据页管理历史保留和存储占用；备份页下载、恢复加密备份并删除恢复残留；账户页分别修改用户名和密码，并管理登录会话；登录页可选保持登录30天。磁盘可用空间低于500 MiB时在运行中心提示并发系统告警。
+系统设置分通用、告警、数据、备份、账户、关于六类。通用设置与概览布局各自保存，修改失败保留草稿；告警可设通知延迟并发送测试告警；数据页管理历史保留和存储占用；备份页在服务器上立即备份、下载、检查后恢复（恢复前自动备份当前数据，可从列表回退）并删除旧备份；账户页分别修改用户名和密码，并管理登录会话；登录页可选保持登录30天。磁盘可用空间低于500 MiB时在运行中心提示并发系统告警。
 
 ```bash
 uv run --frozen pytest tests/test_settings_maintenance.py tests/test_settings_reorganization.py tests/test_web_backups.py -q
@@ -211,4 +211,4 @@ pnpm --dir frontend test:hotlist
 pnpm --dir frontend test:live
 ```
 
-当前数据库迁移为0019_settings_reorganization，新增告警延迟与会话起始时间两列（0018新增工作空间版本保护与备份操作元数据）。升级前完整备份；回退应使用0018对应镜像/原卷或匹配备份，不能让旧镜像读取新schema。定时加密备份仍属于独立后续阶段。
+当前数据库迁移为0020_drop_backup_records，删除备份操作记录表（0019新增告警延迟与会话起始时间两列）。升级前完整备份；回退应使用0018对应镜像/原卷或匹配备份，不能让旧镜像读取新schema。定时加密备份仍属于独立后续阶段。

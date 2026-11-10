@@ -35,7 +35,7 @@ test('all six categories remain reachable across phone tablet and desktop', asyn
     ['preferences', '通用', '通用设置'],
     ['alerts', '告警', '系统告警'],
     ['data', '数据', '历史保留'],
-    ['backup', '备份', '备份与恢复'],
+    ['backup', '备份', '备份状态'],
     ['account', '账户', '管理员用户名'],
     ['about', '关于', 'SeekBell.'],
   ]
@@ -98,7 +98,7 @@ test('all six categories remain reachable across phone tablet and desktop', asyn
   for (const [old, current, heading] of [
     ['overview', 'preferences?section=overview-modules', '概览显示模块'],
     ['retention', 'data?section=retention', '历史保留'],
-    ['backup', 'backup', '备份与恢复'],
+    ['backup', 'backup', '备份状态'],
   ]) {
     await page.goto('/#/settings/' + old)
     await expect(page).toHaveURL(new RegExp('/settings/' + current!.replace('?', '\\?') + '$'))
