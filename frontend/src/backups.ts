@@ -1,4 +1,5 @@
-export type BackupKind = 'manual' | 'auto' | 'pre-restore' | 'pre-upgrade'
+/** `imported` is a library row brought in from a file; checking it shows its own kind. */
+export type BackupKind = 'manual' | 'auto' | 'pre-restore' | 'pre-upgrade' | 'imported'
 /** What a workspace holds; null when an older backup lacks the table. */
 export interface BackupContents {
   workspace: string | null
@@ -64,6 +65,7 @@ export const kindLabels: Record<BackupKind, string> = {
   auto: '自动',
   'pre-restore': '恢复前',
   'pre-upgrade': '升级前',
+  imported: '导入',
 }
 export const contentRows: { key: keyof BackupContents; label: string }[] = [
   { key: 'websites', label: '网站' },
@@ -81,16 +83,10 @@ export function contentsText(summary: BackupContents | null) {
   ].join(' · ')
 }
 /** The newest readable backup, if any. */
+/** An imported file is not a backup of this workspace, so it never counts as the last one. */
 export function latestBackup(rows: BackupEntry[]) {
-  return rows.find((row) => row.valid)
+  return rows.find((row) => row.valid && row.kind !== 'imported')
 }
 export const STALE_DAYS = 30
 export const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-export const clockText = (minute: number) =>
-  String(Math.floor(minute / 60)).padStart(2, '0') + ':' + String(minute % 60).padStart(2, '0')
-/** "HH:MM" to minutes after midnight; NaN when it is not a valid time. */
-export function clockMinute(text: string) {
-  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(text)
-  return match ? Number(match[1]) * 60 + Number(match[2]) : NaN
-}
 export const MAX_NAME = 40

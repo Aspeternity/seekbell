@@ -1,4 +1,4 @@
-"""The backup library, ticketed downloads and inspect-then-restore of the live workspace."""
+"""The backup library, imports, ticketed downloads and inspect-then-restore of live data."""
 
 import asyncio
 import hashlib
@@ -66,7 +66,7 @@ class SetupRestoreValues(BaseModel):
 
 @dataclass
 class Stage:
-    """An inspected archive waiting for confirmation: an upload, or a library entry."""
+    """An inspected archive waiting for confirmation: a library entry, or a first-run upload."""
 
     archive: Path
     expires: float
@@ -336,27 +336,19 @@ async def inspection(request, stage, key):
     }
 
 
-async def inspect_upload(request, *, setup):
-    temporary = tempfile.TemporaryDirectory(
-        prefix=".seekbell-stage-", dir=request.app.state.settings.data_dir.resolve()
-    )
-    try:
-        archive = Path(temporary.name) / "upload.tar.gz"
-        await receive_upload(request, archive)
-        stage = Stage(archive, time.monotonic() + STAGE_SECONDS, setup, temporary)
-        result = await inspection(request, stage, "")
-    except BaseException:
-        temporary.cleanup()
-        raise
-    result["stage"] = put_stage(request.app, stage)
-    return result
-
-
-@router.post("/inspect", dependencies=[Depends(rate_limit)])
-async def inspect_file(request: Request):
-    """Check an uploaded archive without changing anything; returns a stage to confirm."""
+@router.post("/import", dependencies=[Depends(rate_limit)])
+async def import_file(request: Request):
+    """Keep an uploaded archive in the library after checking it; it is restored from its row."""
+    settings = request.app.state.settings
+    length = request.headers.get("content-length", "")
     async with operation(request):
-        return await inspect_upload(request, setup=False)
+        if length.isdecimal():
+            await database_call(backups.ensure_room, settings, int(length))
+        with await database_call(backups.staging, settings) as temporary:
+            archive = Path(temporary) / "upload.tar.gz"
+            await receive_upload(request, archive)
+            name, added = await database_call(backups.import_archive, settings, archive)
+    return {"id": name, "duplicate": not added}
 
 
 @router.post("/{name}/inspect")
@@ -495,9 +487,22 @@ async def require_uninitialized(request):
 
 @setup_router.post("/inspect", dependencies=[Depends(rate_limit)])
 async def setup_inspect(request: Request):
+    """A fresh installation checks an uploaded archive; nothing changes until confirmed."""
     await require_uninitialized(request)
     async with operation(request):
-        return await inspect_upload(request, setup=True)
+        temporary = tempfile.TemporaryDirectory(
+            prefix=".seekbell-stage-", dir=request.app.state.settings.data_dir.resolve()
+        )
+        try:
+            archive = Path(temporary.name) / "upload.tar.gz"
+            await receive_upload(request, archive)
+            stage = Stage(archive, time.monotonic() + STAGE_SECONDS, True, temporary)
+            result = await inspection(request, stage, "")
+        except BaseException:
+            temporary.cleanup()
+            raise
+        result["stage"] = put_stage(request.app, stage)
+        return result
 
 
 @setup_router.post("/restore", dependencies=[Depends(rate_limit)])

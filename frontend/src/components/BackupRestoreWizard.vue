@@ -4,9 +4,9 @@ import Icon from './Icon.vue'
 import { request, restoreBackup, uploadBackup } from '../store'
 import { byteSize, stamp } from '../settings'
 import { contentRows, count, kindLabels, type BackupEntry, type Inspection } from '../backups'
-// Three steps: choose a file (or start from a library entry), check it without
-// changing anything, then confirm. `setup` restores a fresh installation under a newly
-// chosen administrator; otherwise the current administrator is kept.
+// Three steps: choose a backup, check it without changing anything, then confirm.
+// System settings start from a library entry and keep the current administrator;
+// `setup` uploads a file on a fresh installation and restores it under a newly chosen one.
 const props = defineProps<{
   setup?: boolean
   entry?: BackupEntry
@@ -58,7 +58,7 @@ async function inspectFile() {
   progress.value = 0
   try {
     const result = await uploadBackup<Inspection>(
-      props.setup ? 'auth/setup/inspect' : 'manage/backups/inspect',
+      'auth/setup/inspect',
       file.value,
       (share) => (progress.value = share),
     )
@@ -286,7 +286,7 @@ onBeforeUnmount(() => {
       @submit.prevent="confirm"
     >
       <p v-if="!setup" class="backup-safety">
-        <Icon name="shield" :size="16" />恢复前会先自动备份当前数据，可随时从备份列表恢复回来。
+        <Icon name="shield" :size="16" />恢复前会先自动备份当前数据。
       </p>
       <div v-if="setup || needPassword" class="settings-fields-grid">
         <div v-if="!setup && needPassword" class="form-stack">
@@ -343,11 +343,7 @@ onBeforeUnmount(() => {
         ><input v-model="pause" type="checkbox" :disabled="busy" />恢复后暂停采集和通知</label
       >
       <p class="small-note backup-pause-note">
-        {{
-          pause
-            ? '所有网站和通知目标恢复为暂停，备份中尚未发出的通知不再发送；确认旧实例已停止后再手动开启。'
-            : '恢复后立即按备份中的配置采集和发送；如果旧实例仍在运行，会重复通知。'
-        }}
+        {{ pause ? '网站和通知目标将暂停，需手动重新开启。' : '如果旧实例仍在运行，会重复通知。' }}
       </p>
       <div class="backup-wizard-actions">
         <button type="button" class="button" :disabled="busy" @click="back">上一步</button>

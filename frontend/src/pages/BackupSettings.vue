@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { confirmAction, notify, request } from '../store'
+import { confirmAction, notify, request, uploadBackup } from '../store'
 import { byteSize, scrollToSection, stamp } from '../settings'
 import {
   STALE_DAYS,
-  WEEKDAYS,
-  clockText,
   contentsText,
   kindLabels,
   latestBackup,
@@ -28,10 +26,14 @@ const rowBusy = ref(false)
 const naming = ref<{ id?: string; initial: string }>(),
   nameBusy = ref(false),
   nameError = ref('')
-// The row just created is briefly highlighted.
+// The row just created or imported is briefly highlighted.
 const fresh = ref('')
-// The restore wizard opens for an uploaded file (null) or a library entry.
-const restoring = ref<BackupEntry | null>(),
+// "Import" keeps a checked file in the library; it is then restored from its row.
+const importInput = ref<HTMLInputElement>(),
+  importing = ref(false),
+  importProgress = ref(0)
+// Every restore starts from a library entry.
+const restoring = ref<BackupEntry>(),
   wizardDirty = ref(false),
   wizardBusy = ref(false),
   restoreDialog = ref<HTMLDialogElement>()
@@ -41,22 +43,18 @@ let freshTimer: ReturnType<typeof setTimeout> | undefined
 let active = true
 watch(
   () =>
-    rowBusy.value || nameBusy.value || wizardDirty.value || wizardBusy.value || scheduleDirty.value,
+    rowBusy.value ||
+    nameBusy.value ||
+    importing.value ||
+    wizardDirty.value ||
+    wizardBusy.value ||
+    scheduleDirty.value,
   (value) => emit('dirty', value),
   { immediate: true },
 )
 const latest = computed(() => latestBackup(status.value?.backups ?? []))
 const health = computed(() => status.value?.health ?? 'none')
 const schedule = computed(() => status.value?.schedule)
-const scheduleText = computed(() => {
-  const value = schedule.value
-  if (!value?.enabled) return '自动备份已关闭'
-  const when =
-    (value.frequency === 'weekly' ? '每' + WEEKDAYS[value.weekday] : '每天') +
-    ' ' +
-    clockText(value.minute)
-  return value.next_run_at ? when + ' · 下次 ' + stamp(value.next_run_at) : when
-})
 const total = computed(() => (status.value?.backups ?? []).reduce((sum, row) => sum + row.bytes, 0))
 const diskUsed = computed(() => {
   const value = status.value
@@ -105,9 +103,7 @@ async function submitName(name: string) {
     } else {
       const { id } = await request<{ id: string }>('manage/backups', 'POST', { name })
       notify('备份已生成并保存在服务器。')
-      fresh.value = id
-      clearTimeout(freshTimer)
-      freshTimer = setTimeout(() => (fresh.value = ''), 2400)
+      highlight(id)
     }
     nameBusy.value = false
     naming.value = undefined
@@ -116,6 +112,46 @@ async function submitName(name: string) {
     nameError.value = (e as Error).message
   } finally {
     nameBusy.value = false
+  }
+}
+function highlight(id: string) {
+  fresh.value = id
+  clearTimeout(freshTimer)
+  freshTimer = setTimeout(() => (fresh.value = ''), 2400)
+}
+function chooseImport() {
+  if (importing.value) return
+  importInput.value?.click()
+}
+async function importFile(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  // Cleared at once so choosing the same file again still fires a change.
+  input.value = ''
+  if (!file || importing.value) return
+  if (status.value && file.size > status.value.max_upload_bytes) {
+    notify('备份超过支持上限。')
+    return
+  }
+  importing.value = true
+  importProgress.value = 0
+  try {
+    const { id, duplicate } = await uploadBackup<{ id: string; duplicate: boolean }>(
+      'manage/backups/import',
+      file,
+      (share) => (importProgress.value = share),
+    )
+    notify(duplicate ? '这份备份已在列表中。' : '备份已导入。')
+    highlight(id)
+    if (!active) return
+    await load()
+    await nextTick()
+    // An imported backup is sorted by when it was made, which may be far down the list.
+    document.querySelector('#backup-list li.fresh')?.scrollIntoView({ block: 'nearest' })
+  } catch (e) {
+    notify((e as Error).message)
+  } finally {
+    importing.value = false
   }
 }
 async function download(id: string) {
@@ -162,7 +198,7 @@ async function copyDirectory() {
     notify('复制失败，请手动选取。')
   }
 }
-async function openWizard(entry: BackupEntry | null) {
+async function openWizard(entry: BackupEntry) {
   restoring.value = entry
   await nextTick()
   restoreDialog.value?.showModal()
@@ -177,7 +213,7 @@ function closeWizard() {
   void load()
 }
 function dialogCancel(event: Event) {
-  // Dismissing the file picker inside fires a bubbling "cancel" too; only Escape closes.
+  // Only Escape on the dialog itself closes it, not a "cancel" bubbling from inside.
   if (event.target !== restoreDialog.value) return
   event.preventDefault()
   closeWizard()
@@ -209,15 +245,6 @@ onBeforeUnmount(() => {
       <div class="panel-heading">
         <div>
           <h2 id="backup-title">备份状态</h2>
-          <p>完整备份配置、规则、通知目标与历史</p>
-        </div>
-        <div class="backup-heading-actions">
-          <button class="button" type="button" @click="openWizard(null)">
-            <Icon name="upload" :size="15" />从文件恢复
-          </button>
-          <button class="button primary" type="button" @click="openNaming()">
-            <Icon name="download" :size="15" />立即备份
-          </button>
         </div>
       </div>
       <FormFeedback :error="readError" :retryable="!!readError && !status" @retry="load" />
@@ -240,11 +267,9 @@ onBeforeUnmount(() => {
                   }}</template
                 ></small
               >
-              <small v-else>建议现在备份一次</small>
               <small v-if="health === 'failed'" class="backup-failure" role="alert"
                 >自动备份失败：{{ schedule?.last_error }}</small
               >
-              <small class="backup-next">{{ scheduleText }}</small>
             </dd>
           </div>
           <div>
@@ -290,11 +315,35 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
+    <BackupScheduleSettings @dirty="scheduleDirty = $event" @saved="load" />
     <section id="backup-list" class="panel settings-card" aria-labelledby="backup-list-title">
       <div class="panel-heading">
         <div>
           <h2 id="backup-list-title">备份列表</h2>
-          <p>恢复前会先自动备份当前数据；恢复前的备份保留 30 天</p>
+        </div>
+        <div class="backup-heading-actions">
+          <button
+            class="button"
+            type="button"
+            :disabled="importing"
+            title="导入备份文件"
+            @click="chooseImport"
+          >
+            <Icon name="upload" :size="15" />{{
+              importing ? '导入中 ' + Math.round(importProgress * 100) + '%' : '导入'
+            }}
+          </button>
+          <button class="button primary" type="button" @click="openNaming()">
+            <Icon name="download" :size="15" />立即备份
+          </button>
+          <input
+            ref="importInput"
+            type="file"
+            accept=".gz,.tar.gz,application/gzip"
+            aria-label="选择要导入的备份文件"
+            hidden
+            @change="importFile"
+          />
         </div>
       </div>
       <div class="form-content">
@@ -327,7 +376,7 @@ onBeforeUnmount(() => {
                 <span
                   v-if="row.valid"
                   class="small-badge"
-                  :class="row.kind === 'manual' ? 'neutral' : 'amber'"
+                  :class="row.kind === 'manual' || row.kind === 'imported' ? 'neutral' : 'amber'"
                   >{{ kindLabels[row.kind!] }}</span
                 >
                 <span v-else class="small-badge rose">无法识别</span>
@@ -375,8 +424,6 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <BackupScheduleSettings @dirty="scheduleDirty = $event" @saved="load" />
-
     <BackupNameDialog
       v-if="naming"
       :title="naming.id ? '重命名备份' : '立即备份'"
@@ -404,7 +451,6 @@ onBeforeUnmount(() => {
         <header class="website-drawer-header">
           <div>
             <h2>恢复备份</h2>
-            <p>用备份替换当前的任务、网站、通知目标和历史，服务不中断</p>
           </div>
           <button
             class="icon-button"
@@ -417,10 +463,9 @@ onBeforeUnmount(() => {
         </header>
         <div class="website-drawer-body">
           <BackupRestoreWizard
-            v-if="restoring !== undefined"
-            :entry="restoring ?? undefined"
+            v-if="restoring"
+            :entry="restoring"
             :need-password="needPassword"
-            :max-bytes="status?.max_upload_bytes"
             @busy="wizardBusy = $event"
             @dirty="wizardDirty = $event"
             @cancel="closeWizard"

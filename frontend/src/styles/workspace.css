@@ -3200,16 +3200,39 @@ h1[tabindex='-1']:focus-visible {
   color: #a4552c;
 }
 #backup-schedule fieldset:disabled {
-  opacity: 0.6;
+  opacity: 0.55;
 }
-.backup-schedule-when {
+.backup-schedule-fields {
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 20px 48px;
+}
+.settings-content .backup-schedule-fields > .form-stack {
+  gap: 0;
+}
+.backup-schedule-pair {
+  display: flex;
+  align-items: center;
   gap: 8px;
 }
-.backup-schedule-when > * {
-  width: auto;
-  min-width: 110px;
+.backup-schedule-pair > .app-select {
+  width: 120px;
+}
+.backup-clock > .app-select {
+  width: 76px;
+  min-width: 0;
+}
+.backup-schedule-fields .app-select,
+.backup-schedule-fields .text-input {
+  height: 40px;
+}
+.backup-clock > span {
+  color: #7d8793;
+  font-weight: 600;
+}
+.unit-input.backup-keep .text-input {
+  width: 88px;
 }
 .backup-directory {
   display: flex;

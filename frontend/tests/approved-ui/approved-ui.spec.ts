@@ -106,9 +106,9 @@ test('production pages preserve the approved UI while using real persisted data'
   await expect(
     page.locator('.backup-heading-actions').getByRole('button', { name: '立即备份', exact: true }),
   ).toBeEnabled()
-  await page.getByRole('button', { name: '从文件恢复', exact: true }).click()
-  await expect(page.getByRole('form', { name: '选择备份文件', exact: true })).toBeVisible()
-  await page.getByRole('button', { name: '关闭恢复备份', exact: true }).click()
+  await expect(
+    page.locator('#backup-list .backup-heading-actions').getByRole('button', { name: '导入' }),
+  ).toBeEnabled()
   await page.screenshot({ path: info.outputPath('approved-backup.png'), fullPage: true })
   for (const path of [
     '/',

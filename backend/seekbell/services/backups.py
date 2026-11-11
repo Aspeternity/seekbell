@@ -19,6 +19,9 @@ SAFE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,150}\.tar\.gz")
 PROTECTED_DAYS = 30
 # Kinds a restore or an upgrade writes on its own; the newest of each is always kept.
 AUTOMATIC_SAFETY = ("pre-restore", "pre-upgrade")
+# An archive brought in from a file keeps its own manifest; the library lists it as imported
+# by its file name, so it never counts as this workspace's backup and is never pruned.
+IMPORTED = re.compile(r"seekbell-\d{8}T\d{6}Z-imported(-\d+)?\.tar\.gz")
 # Directories earlier versions left in the data directory; removed on start.
 LEGACY = re.compile(r"web-restore|before-restore-\d{8}T\d{6}Z-[A-Za-z0-9_]{8}")
 STALE = re.compile(
@@ -59,6 +62,12 @@ def manifest_of(path):
         except backup.BackupError:
             _manifests[key] = None
     return _manifests[key]
+
+
+def kind_of(name, manifest):
+    if manifest is None:
+        return None
+    return "imported" if IMPORTED.fullmatch(name) else manifest["kind"]
 
 
 def at_of(manifest, path):
@@ -133,7 +142,7 @@ def entries(settings):
                 "id": name,
                 "name": names_by_id.get(name),
                 "valid": manifest is not None,
-                "kind": manifest["kind"] if manifest else None,
+                "kind": kind_of(name, manifest),
                 "at": at_of(manifest, path),
                 "bytes": size,
                 "application_version": manifest["application_version"] if manifest else None,
@@ -156,6 +165,58 @@ def ensure_space(settings):
         raise backup.BackupError("磁盘可用空间不足，无法生成备份；请先清理空间或删除旧备份。")
 
 
+def new_name(folder, at, kind):
+    stamp = datetime.fromtimestamp(at, UTC).strftime("%Y%m%dT%H%M%SZ")
+    name = "seekbell-" + stamp + "-" + kind + ".tar.gz"
+    suffix = 2
+    while os.path.lexists(folder / name):
+        name = "seekbell-" + stamp + "-" + kind + "-" + str(suffix) + ".tar.gz"
+        suffix += 1
+    return name
+
+
+def staging(settings):
+    """A private directory beside the archives, so an accepted upload is only renamed."""
+    return tempfile.TemporaryDirectory(prefix=".seekbell-stage-", dir=directory(settings))
+
+
+def ensure_room(settings, size):
+    if shutil.disk_usage(directory(settings)).free < size:
+        raise backup.BackupError("磁盘可用空间不足，无法导入备份；请先清理空间或删除旧备份。")
+
+
+def same_archive(settings, path):
+    """The library archive with exactly these bytes, or None."""
+    size = path.stat().st_size
+    digest = None
+    for row in entries(settings):
+        if row["bytes"] != size:
+            continue
+        digest = digest or backup.file_hash(path)
+        if backup.file_hash(settings.backup_dir / row["id"]) == digest:
+            return row["id"]
+    return None
+
+
+def import_archive(settings, upload, *, at=None):
+    """Keep an uploaded archive once it verifies; returns (id, added).
+
+    The whole archive is checked like a restore would, so a damaged or newer-version
+    file is refused here instead of showing up as a row that cannot be restored. An
+    archive already in the library is not stored twice."""
+    backup.inspect_backup(upload, settings.data_dir.resolve())
+    existing = same_archive(settings, upload)
+    if existing:
+        return existing, False
+    with upload.open("rb") as stream:
+        os.fsync(stream.fileno())
+    folder = directory(settings)
+    name = new_name(folder, time.time() if at is None else at, "imported")
+    os.rename(upload, folder / name)
+    backup.sync_directory(folder)
+    return name, True
+
+
 def create(settings, kind, *, at=None, label=None, keep=None):
     """Write one archive into the library; the caller owns the backup operation slot.
 
@@ -164,13 +225,8 @@ def create(settings, kind, *, at=None, label=None, keep=None):
     label = normalize_label(label)  # Reject a bad name before any work.
     ensure_space(settings)
     at = time.time() if at is None else at
-    stamp = datetime.fromtimestamp(at, UTC).strftime("%Y%m%dT%H%M%SZ")
     folder = directory(settings)
-    name = "seekbell-" + stamp + "-" + kind + ".tar.gz"
-    suffix = 2
-    while os.path.lexists(folder / name):
-        name = "seekbell-" + stamp + "-" + kind + "-" + str(suffix) + ".tar.gz"
-        suffix += 1
+    name = new_name(folder, at, kind)
     manifest = backup.snapshot_backup(settings, folder / name, kind=kind, at=at)
     if label:
         set_label(settings, name, label)

@@ -11,6 +11,7 @@ from seekbell import backup
 from seekbell.api import backups
 from seekbell.config import Settings
 from seekbell.main import create_app
+from seekbell.services import backup_schedule
 from seekbell.services import backups as library
 from seekbell.services.backup_demo import ADMIN_PASSWORD, prepare, table_data
 
@@ -53,7 +54,7 @@ def download(client, name):
     return response
 
 
-def upload(client, content, path="/api/manage/backups/inspect", headers=None):
+def upload(client, content, path="/api/manage/backups/import", headers=None):
     return client.post(
         path,
         content=content,
@@ -213,7 +214,7 @@ def test_expired_ticket_is_refused(web, monkeypatch):
     assert client.get(url).status_code == 403
 
 
-@pytest.mark.parametrize("path", ["create", "ticket", "delete", "inspect", "restore"])
+@pytest.mark.parametrize("path", ["create", "ticket", "delete", "import", "restore"])
 @pytest.mark.parametrize("kind", ["anonymous", "csrf", "origin"])
 def test_backup_requires_session_csrf_and_same_origin(web, path, kind):
     client, settings, _ = web
@@ -231,7 +232,7 @@ def test_backup_requires_session_csrf_and_same_origin(web, path, kind):
         result = client.post("/api/manage/backups/" + name + "/ticket")
     elif path == "delete":
         result = remove(client, name)
-    elif path == "inspect":
+    elif path == "import":
         result = upload(client, b"invalid")
     else:
         result = restore(client, stage)
@@ -280,34 +281,81 @@ def test_unreadable_files_are_listed_for_deletion_but_never_restored(web):
     assert remove(client, "copied-in.tar.gz").status_code == 200
 
 
-def test_inspection_shows_backup_and_current_contents_without_changing_data(web):
-    client, settings, _ = web
+def import_elsewhere(client, settings):
+    """A backup file that came from somewhere else: its archive is no longer in the library."""
     name = create(client)
     archive = (settings.backup_dir / name).read_bytes()
+    assert remove(client, name).status_code == 200
+    return archive
+
+
+def test_import_keeps_a_verified_file_as_an_imported_row(web):
+    client, settings, _ = web
+    archive = import_elsewhere(client, settings)
+    before = table_data(settings.database_path)
+    result = upload(client, archive)
+    assert result.status_code == 200, result.text
+    name = result.json()["id"]
+    assert result.json()["duplicate"] is False
+    assert library.IMPORTED.fullmatch(name)
+    path = settings.backup_dir / name
+    assert path.read_bytes() == archive and path.stat().st_mode & 0o777 == 0o600
+    [row] = status(client)["backups"]
+    assert row["id"] == name and row["valid"] and row["kind"] == "imported"
+    assert row["summary"]["workspace"] == "合成恢复空间"
+    # An imported file is not a backup of this workspace and is never pruned.
+    assert backup_schedule.last_backup_at([row]) is None
+    library.prune(settings, keep=1)
+    assert path.exists()
+    # The same bytes again point at the row already there.
+    again = upload(client, archive)
+    assert again.json() == {"id": name, "duplicate": True}
+    assert [row["id"] for row in status(client)["backups"]] == [name]
+    assert_business_unchanged(settings, before)
+    assert_clean(settings)
+
+
+def test_import_is_refused_without_room_for_the_file(web, monkeypatch):
+    client, settings, _ = web
+    archive = import_elsewhere(client, settings)
+    real = library.shutil.disk_usage
+    monkeypatch.setattr(
+        library.shutil, "disk_usage", lambda path: real(path)._replace(free=len(archive) - 1)
+    )
+    result = upload(client, archive)
+    assert result.status_code == 422 and "磁盘可用空间不足" in result.json()["detail"]
+    monkeypatch.undo()
+    assert status(client)["backups"] == []
+    assert_clean(settings)
+
+
+def test_inspection_shows_backup_and_current_contents_without_changing_data(web):
+    client, settings, _ = web
+    name = upload(client, import_elsewhere(client, settings)).json()["id"]
     with closing(sqlite3.connect(settings.database_path)) as connection:
         connection.execute("UPDATE tasks SET deleted_at=1")
         connection.commit()
     before = table_data(settings.database_path)
-    result = upload(client, archive)
+    result = client.post("/api/manage/backups/" + name + "/inspect")
     assert result.status_code == 200, result.text
     found = result.json()
     assert found["backup"]["summary"]["tasks"] == 1 and found["current"]["tasks"] == 0
+    # The archive's own kind is shown when checking it; the list calls it imported.
     assert found["backup"]["kind"] == "manual" and found["backup"]["upgrade"] is False
     assert found["stage"]
     assert_business_unchanged(settings, before)
-    # The upload waits in one private staging directory until confirmed or cancelled.
-    [staged] = settings.data_dir.glob(".seekbell-stage-*")
-    assert staged.stat().st_mode & 0o777 == 0o700
     cancelled = client.delete("/api/manage/backups/inspect/" + found["stage"])
     assert cancelled.json() == {"cancelled": True}
     assert_clean(settings)
     assert restore(client, found["stage"]).status_code == 404
+    assert (settings.backup_dir / name).exists()
 
 
 @pytest.mark.parametrize("kind", ["corrupt", "legacy", "empty"])
-def test_failed_inspection_keeps_live_data_and_cleans_staging(web, kind):
+def test_failed_import_keeps_live_data_and_cleans_staging(web, kind):
     client, settings, _ = web
-    archive = (settings.backup_dir / create(client)).read_bytes()
+    name = create(client)
+    archive = (settings.backup_dir / name).read_bytes()
     before = table_data(settings.database_path)
     if kind == "corrupt":
         archive = archive[: len(archive) // 2]
@@ -319,6 +367,7 @@ def test_failed_inspection_keeps_live_data_and_cleans_staging(web, kind):
     assert result.status_code == 422
     if kind == "legacy":
         assert "旧版加密备份" in result.json()["detail"]
+    assert [row["id"] for row in status(client)["backups"]] == [name]
     assert_business_unchanged(settings, before)
     assert_clean(settings)
 
@@ -329,7 +378,7 @@ def test_upload_bounds_and_type(web, monkeypatch):
     assert upload(client, b"x" * 33).status_code == 413
     chunks = iter([b"x"] * 33)
     assert upload(client, chunks).status_code == 413
-    assert client.post("/api/manage/backups/inspect", json={}).status_code == 415
+    assert client.post("/api/manage/backups/import", json={}).status_code == 415
     assert_clean(settings)
 
 
@@ -413,8 +462,7 @@ def test_restore_pauses_collection_and_targets_by_default(web):
 
 def test_wrong_password_keeps_the_live_workspace_and_the_stage(web):
     client, settings, app = web
-    archive = (settings.backup_dir / create(client)).read_bytes()
-    stage = upload(client, archive).json()["stage"]
+    stage = client.post("/api/manage/backups/" + create(client) + "/inspect").json()["stage"]
     before = table_data(settings.database_path)
     runtime = app.state.runtime
     result = restore(client, stage, password="Incorrect-Synthetic-Value")
@@ -423,7 +471,7 @@ def test_wrong_password_keeps_the_live_workspace_and_the_stage(web):
     assert app.state.runtime is runtime and not app.state.restoring
     assert_business_unchanged(settings, before)
     assert len(status(client)["backups"]) == 1
-    # The same inspected upload can be confirmed again without uploading it twice.
+    # The same inspection can be confirmed again without checking the archive twice.
     assert restore(client, stage).status_code == 200
     assert_clean(settings)
 
@@ -487,8 +535,7 @@ def test_requests_wait_out_a_restore_with_a_clear_503(web):
 def test_expired_stage_is_refused(web, monkeypatch):
     client, settings, _ = web
     monkeypatch.setattr(backups, "STAGE_SECONDS", -1)
-    archive = (settings.backup_dir / create(client)).read_bytes()
-    stage = upload(client, archive).json()["stage"]
+    stage = client.post("/api/manage/backups/" + create(client) + "/inspect").json()["stage"]
     assert restore(client, stage).status_code == 404
     assert_clean(settings)
 
@@ -535,8 +582,7 @@ def test_fresh_installation_can_inspect_then_restore_with_a_new_administrator(we
 
 def test_setup_and_administrator_stages_are_not_interchangeable(web, tmp_path):
     client, settings, app = web
-    archive = (settings.backup_dir / create(client)).read_bytes()
-    admin_stage = upload(client, archive).json()["stage"]
+    admin_stage = client.post("/api/manage/backups/" + create(client) + "/inspect").json()["stage"]
     fresh = Settings(data_dir=tmp_path / "fresh")
     with TestClient(create_app(fresh)) as other:
         csrf = other.get("/api/auth/status").json()["csrf"]
@@ -652,7 +698,7 @@ def test_disconnected_upload_cleans_partial_file_and_keeps_live_data(web, monkey
     original = Request.stream
 
     async def interrupted(request):
-        if request.url.path.endswith("/inspect"):
+        if request.url.path.endswith("/import"):
             yield b"partial"
             raise ClientDisconnect
         async for chunk in original(request):
