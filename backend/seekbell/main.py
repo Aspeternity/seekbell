@@ -34,7 +34,12 @@ from seekbell.db.models import (
     Outbox,
     TargetTestAttempt,
 )
-from seekbell.db.runtime import create_database_engine, instance_lock, migrate
+from seekbell.db.runtime import (
+    create_database_engine,
+    enable_space_reclaim,
+    instance_lock,
+    migrate,
+)
 from seekbell.notifiers.credentials import CredentialError, CredentialVault
 from seekbell.notifiers.registry import NotifierRegistry
 from seekbell.services.authentication import Confirmations, LoginLimiter
@@ -114,6 +119,8 @@ def create_app(
             stack.callback(engine.dispose)
             # Migration/credential validation must complete before actors can start.
             await run_in_threadpool(migrate, engine)
+            # Before any actor writes: a one-time rewrite so cleanups can shrink the file.
+            await run_in_threadpool(enable_space_reclaim, engine)
             app.state.engine = engine
             key_path = settings.data_dir.resolve() / "credentials.key"
             with Session(engine) as session:

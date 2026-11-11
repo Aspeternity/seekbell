@@ -3,18 +3,21 @@
 import shutil
 import time
 
-from sqlalchemy import exists, func, or_, select
+from sqlalchemy import exists, func, or_, select, tuple_
 
 from seekbell.db.models import (
+    AlertDelivery,
     DeliveryAttempt,
     ManualDelivery,
     Outbox,
     Post,
+    RuleHit,
     SourceRun,
+    SystemEvent,
     TargetTestAttempt,
 )
 from seekbell.services.history import read_session
-from seekbell.services.retention import TERMINAL
+from seekbell.services.retention import TERMINAL, excess_posts
 
 
 def regular_size(path):
@@ -43,7 +46,8 @@ def storage_view(settings):
     }
 
 
-def retention_preview(engine, days, *, at=None):
+def retention_preview(engine, days, max_posts=None, *, at=None):
+    """Estimate what the cleaner would remove under a draft policy; reads only."""
     at = time.time() if at is None else at
     cutoff = at - days * 86400
     recent_attempt = exists(
@@ -74,26 +78,61 @@ def retention_preview(engine, days, *, at=None):
             Outbox.id.not_in(eligible_deliveries),
         )
     )
+    expired = Post.first_seen_at < cutoff
+    if max_posts is not None:
+        excess = excess_posts(max_posts)
+        expired = or_(
+            expired,
+            tuple_(Post.website_id, Post.external_post_id).in_(
+                select(excess.c.website_id, excess.c.external_post_id)
+            ),
+        )
+    retained_alert = exists(
+        select(AlertDelivery.id).where(
+            AlertDelivery.event_id == SystemEvent.id,
+            or_(
+                AlertDelivery.result == "pending",
+                AlertDelivery.finished_at.is_(None),
+                AlertDelivery.finished_at >= cutoff,
+            ),
+        )
+    )
     with read_session(engine) as session:
 
         def count(model, *conditions):
             return session.scalar(select(func.count()).select_from(model).where(*conditions))
 
-        old_posts = count(Post, Post.first_seen_at < cutoff)
-        posts = count(Post, Post.first_seen_at < cutoff, ~retained_delivery)
-        counts = {
-            "posts": posts,
+        posts = count(Post, expired, ~retained_delivery)
+        records = {
             "deliveries": session.scalar(
                 select(func.count()).select_from(eligible_deliveries.subquery())
             ),
             "tests": count(TargetTestAttempt, TargetTestAttempt.finished_at < cutoff),
             "manual": count(ManualDelivery, ManualDelivery.finished_at < cutoff),
             "source_runs": count(SourceRun, SourceRun.at < cutoff),
+            "system_events": count(SystemEvent, SystemEvent.at < cutoff, ~retained_alert),
         }
         return {
             "days": days,
-            "cutoff": cutoff,
+            "max_posts": max_posts,
             "checked_at": at,
-            "counts": counts,
-            "protected_posts": old_posts - posts,
+            "posts": posts,
+            "records": sum(records.values()),
+            "counts": {"posts": posts, **records},
+        }
+
+
+def data_overview(engine):
+    """What history is kept right now: the counts a retention change visibly affects."""
+    with read_session(engine) as session:
+
+        def count(statement):
+            return session.scalar(select(func.count()).select_from(statement.subquery()))
+
+        return {
+            "posts": count(select(Post.website_id)),
+            "matched_posts": count(select(RuleHit.website_id, RuleHit.external_post_id).distinct()),
+            "deliveries": count(select(Outbox.id)),
+            "problems": count(select(SystemEvent.id).where(SystemEvent.phase == "fault")),
+            "earliest_at": session.scalar(select(func.min(Post.first_seen_at))),
         }

@@ -495,6 +495,20 @@ def older_archive(archive, tmp_path):
         with closing(sqlite3.connect(path)) as connection:
             connection.execute("ALTER TABLE alert_settings DROP COLUMN delay_seconds")
             connection.execute("ALTER TABLE login_sessions DROP COLUMN created_at")
+            # Before 0022 the policy kept the last-cleanup counts and had no content limit.
+            connection.execute("ALTER TABLE retention_policy RENAME TO retention_new")
+            connection.execute(
+                "CREATE TABLE retention_policy (id INTEGER NOT NULL, days INTEGER NOT NULL, "
+                "revision INTEGER NOT NULL, next_run_at FLOAT NOT NULL, last_run_at FLOAT, "
+                "last_counts JSON NOT NULL, PRIMARY KEY (id), "
+                "CONSTRAINT ck_retention_singleton CHECK (id = 1), "
+                "CONSTRAINT ck_retention_days CHECK (days BETWEEN 1 AND 365))"
+            )
+            connection.execute(
+                "INSERT INTO retention_policy SELECT id,days,revision,next_run_at,NULL,'{}' "
+                "FROM retention_new"
+            )
+            connection.execute("DROP TABLE retention_new")
             # 0018 still had the backup operation records that 0020 drops.
             connection.execute(
                 "CREATE TABLE backup_records (id VARCHAR(36) PRIMARY KEY, kind VARCHAR(16) "

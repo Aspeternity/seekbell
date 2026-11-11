@@ -81,8 +81,8 @@ def test_preview_matches_cleaner_and_preserves_all_ledgers(web):
     preview = retention_preview(app.state.engine, 30, at=at)
     assert table_data(settings.database_path) == before
     assert preview["counts"]["deliveries"] == 3
-    assert preview["counts"]["posts"] == 6
-    assert preview["protected_posts"] > 0
+    assert preview["posts"] == preview["counts"]["posts"] == 6
+    assert preview["records"] == sum(preview["counts"].values()) - 6
     result = HistoryRetention(app.state.engine).run_once(at=at)
     for name in preview["counts"]:
         assert preview["counts"][name] == result["counts"][name]
@@ -91,16 +91,15 @@ def test_preview_matches_cleaner_and_preserves_all_ledgers(web):
         assert after[name] == before[name]
 
 
-def test_storage_and_diagnostics_are_readonly_and_exclude_credentials(web):
+def test_retention_preview_and_overview_are_readonly(web):
     client, _, settings = web
     before = table_data(settings.database_path)
-    storage = client.get("/api/manage/storage")
-    assert storage.status_code == 200
-    assert storage.json()["database_bytes"] > 0
-    assert storage.json()["filesystem_free_bytes"] > 0
     assert client.get("/api/manage/retention/preview?days=0").status_code == 422
     assert client.get("/api/manage/retention/preview?days=1.5").status_code == 422
+    assert client.get("/api/manage/retention/preview?days=30&max_posts=0").status_code == 422
     assert client.get("/api/manage/retention/preview?days=30").status_code == 200
+    assert client.get("/api/manage/retention/preview?days=30&max_posts=100").status_code == 200
+    assert client.get("/api/manage/retention").json()["overview"]["posts"] == 0
     assert table_data(settings.database_path) == before
 
 
@@ -148,7 +147,7 @@ def test_upgrade_preserves_preferences_and_uses_expected_head(tmp_path):
             )
         )
     migrate(engine)
-    assert schema_revision(engine) == "0021_backup_schedule"
+    assert schema_revision(engine) == "0022_content_limit"
     with engine.connect() as connection:
         assert connection.execute(
             text(

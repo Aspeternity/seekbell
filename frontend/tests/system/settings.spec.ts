@@ -173,10 +173,14 @@ for (const tab of ['preferences', 'retention', 'alerts']) {
       await input.fill(value)
     }
     if (tab === 'retention') {
-      input = page.getByLabel('历史保留天数', { exact: true })
+      input = page.getByLabel('保留天数', { exact: true })
       old = await input.inputValue()
       value = String(Number(old) > 1 ? Number(old) - 1 : 2)
       await input.fill(value)
+      // A shortening always asks here, whatever the synthetic data holds.
+      await page.route('**/api/manage/retention/preview?*', (route) =>
+        route.fulfill({ json: { posts: 1, records: 0 } }),
+      )
     }
     if (tab === 'alerts') {
       input = page.getByRole('switch', { name: '启用故障与恢复告警', exact: true })
@@ -198,7 +202,7 @@ for (const tab of ['preferences', 'retention', 'alerts']) {
     if (tab === 'alerts' ? value === 'false' : tab === 'retention' && Number(value) < Number(old))
       await page
         .getByRole('button', {
-          name: tab === 'alerts' ? '关闭告警' : '确认保存策略',
+          name: tab === 'alerts' ? '关闭告警' : '确认保存',
           exact: true,
         })
         .click()
@@ -214,22 +218,43 @@ for (const tab of ['preferences', 'retention', 'alerts']) {
     else await expect(input).toHaveValue(old)
   })
 }
-test('maintenance preview is read only', async ({ page }) => {
+test('a content limit shows the estimate before saving and the overview is read only', async ({
+  page,
+}) => {
   await page.goto('/#/settings/data')
-  await expect(page.getByRole('heading', { name: '存储占用', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '存储占用', exact: true })).toHaveCount(0)
+  await expect(page.getByLabel('现有数据', { exact: true })).toContainText('最早内容')
   const before = await (await page.request.get('/api/manage/retention')).json()
-  await page.getByRole('button', { name: '预览清理影响', exact: true }).click()
-  await expect(page.getByText(/不会删除任何记录/)).toBeVisible()
-  // The same button closes the estimate and a second open reads it again.
-  await page.getByRole('button', { name: '收起预览', exact: true }).click()
-  await expect(page.getByText(/不会删除任何记录/)).toHaveCount(0)
-  await Promise.all([
-    page.waitForResponse((response) => response.url().includes('/api/manage/retention/preview')),
-    page.getByRole('button', { name: '预览清理影响', exact: true }).click(),
-  ])
-  await expect(page.getByText(/不会删除任何记录/)).toBeVisible()
+  const limit = page.getByLabel('内容上限', { exact: true })
+  await expect(limit).toHaveAttribute('placeholder', '不限')
+  await limit.fill('5')
+  let asked = ''
+  await page.route('**/api/manage/retention/preview?*', (route) => {
+    asked = new URL(route.request().url()).search
+    return route.fulfill({ json: { posts: 1234, records: 56 } })
+  })
+  await page.getByRole('button', { name: '保存保留策略', exact: true }).click()
+  await expect(page.getByRole('dialog')).toContainText(
+    '将清理约 1,234 条内容和 56 条通知、采集与问题记录，无法恢复。',
+  )
+  expect(asked).toContain('max_posts=5')
+  await page.getByRole('button', { name: '取消', exact: true }).click()
+  await expect(limit).toHaveValue('5')
+  // A limit that removes nothing saves without asking.
+  await page.unroute('**/api/manage/retention/preview?*')
+  await page.route('**/api/manage/retention/preview?*', (route) =>
+    route.fulfill({ json: { posts: 0, records: 0 } }),
+  )
+  await page.route('**/api/manage/retention', (route) =>
+    route.request().method() === 'PUT'
+      ? route.fulfill({ json: { ...before, max_posts: 5, revision: before.revision + 1 } })
+      : route.continue(),
+  )
+  await page.getByRole('button', { name: '保存保留策略', exact: true }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.getByRole('status').filter({ hasText: '保留策略已保存' })).toBeVisible()
   const after = await (await page.request.get('/api/manage/retention')).json()
-  expect(after.days).toBe(before.days)
+  expect(after.max_posts).toBe(before.max_posts)
   expect(after.revision).toBe(before.revision)
 })
 test('timezone picker groups common zones and previews the offset without a search box', async ({
@@ -251,20 +276,6 @@ test('timezone picker groups common zones and previews the offset without a sear
   await expect(menu.locator('.app-select-group')).toHaveText(['常用时区', '全部时区'])
   await expect(menu.getByRole('option').first()).toHaveAttribute('data-value', 'Asia/Shanghai')
   await select.press('Escape')
-})
-test('storage refresh keeps an unsaved retention draft', async ({ page }) => {
-  await page.goto('/#/settings/data')
-  const input = page.getByLabel('历史保留天数', { exact: true })
-  const old = Number(await input.inputValue())
-  const value = String(old < 365 ? old + 1 : old - 1)
-  await input.fill(value)
-  await Promise.all([
-    page.waitForResponse((response) => response.url().endsWith('/api/manage/storage')),
-    page.getByRole('button', { name: '刷新', exact: true }).click(),
-  ])
-  await expect(page.getByRole('dialog')).toHaveCount(0)
-  await expect(input).toHaveValue(value)
-  await expect(page.getByRole('status').filter({ hasText: '有未保存的修改' })).toBeVisible()
 })
 test('alert delay is saved and a test alert reports each chosen target', async ({ page }, info) => {
   const name = '合成测试告警目标 ' + info.project.name

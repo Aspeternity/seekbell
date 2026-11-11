@@ -28,6 +28,8 @@ export function scrollToSection(section: string, id: string) {
     document.getElementById(id)?.scrollIntoView({ block: 'start' })
 }
 
+type Confirmation = { body: string; label: string }
+
 /** One editable settings resource: read it, edit a draft, save with its revision. */
 export function useSettingsForm<Saved, Draft>(options: {
   /** How the resource is named in confirmations, e.g. “通用设置”. */
@@ -39,8 +41,12 @@ export function useSettingsForm<Saved, Draft>(options: {
   applied?: (saved: Saved) => void
   /** A message blocks the save; nothing is sent. */
   validate?: (draft: Draft) => string
-  /** Asked before saving when it returns text, e.g. for an irreversible change. */
-  confirmSave?: (draft: Draft, saved: Saved) => { body: string; label: string } | undefined
+  /** Asked before saving when it returns text, e.g. for an irreversible change. It may
+   *  first read an estimate; the form stays busy meanwhile. */
+  confirmSave?: (
+    draft: Draft,
+    saved: Saved,
+  ) => Confirmation | undefined | Promise<Confirmation | undefined>
   dirty: (value: boolean) => void
 }) {
   const saved = ref<Saved>() as Ref<Saved | undefined>
@@ -130,7 +136,7 @@ export function useSettingsForm<Saved, Draft>(options: {
       busy.value = false
     }
   }
-  function save() {
+  async function save() {
     if (busy.value || saved.value === undefined || !dirty.value) return
     error.value = ''
     done.value = false
@@ -140,7 +146,17 @@ export function useSettingsForm<Saved, Draft>(options: {
       reloadable.value = false
       return
     }
-    const ask = options.confirmSave?.(draft.value, saved.value)
+    const asking = options.confirmSave?.(draft.value, saved.value)
+    let ask: Confirmation | undefined
+    if (asking instanceof Promise) {
+      busy.value = true
+      try {
+        ask = await asking
+      } finally {
+        busy.value = false
+      }
+      if (!active) return
+    } else ask = asking
     if (ask) confirmAction('保存' + options.name + '？', ask.body, persist, ask.label)
     else void persist()
   }

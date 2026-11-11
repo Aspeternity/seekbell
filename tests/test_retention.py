@@ -33,8 +33,10 @@ from seekbell.services.configuration import Configuration
 from seekbell.services.delivery import DeliveryWorker
 from seekbell.services.history import History
 from seekbell.services.ingestion import Ingestion
+from seekbell.services.maintenance import retention_preview
 from seekbell.services.retention import HistoryRetention
 from sqlalchemy import event, inspect, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from tests.core_helpers import batch
@@ -250,34 +252,62 @@ def test_retention_policy_auth_revision_validation_persistence_and_no_cleanup_on
         authenticate(client)
         initial = client.get("/api/manage/retention")
         assert initial.headers["cache-control"] == "no-store"
-        assert initial.json()["days"] == 30 and initial.json()["last_run_at"] is None
+        assert initial.json()["days"] == 30 and initial.json()["max_posts"] is None
+        assert set(initial.json()["overview"]) == {
+            "posts",
+            "matched_posts",
+            "deliveries",
+            "problems",
+            "earliest_at",
+        }
         revision = initial.json()["revision"]
         for bad in (0, 366, 1.5, True, "30"):
             assert (
                 client.put(
-                    "/api/manage/retention", json={"days": bad, "revision": revision}
+                    "/api/manage/retention",
+                    json={"days": bad, "max_posts": None, "revision": revision},
                 ).status_code
                 == 422
             )
+        for bad in (0, 1_000_001, 1.5, "100"):
+            assert (
+                client.put(
+                    "/api/manage/retention",
+                    json={"days": 30, "max_posts": bad, "revision": revision},
+                ).status_code
+                == 422
+            )
+        # The limit is required: omitting it must not clear a saved one.
+        assert (
+            client.put("/api/manage/retention", json={"days": 30, "revision": revision}).status_code
+            == 422
+        )
         csrf = client.headers.pop("X-CSRF-Token")
         assert (
-            client.put("/api/manage/retention", json={"days": 1, "revision": revision}).status_code
+            client.put(
+                "/api/manage/retention", json={"days": 1, "max_posts": None, "revision": revision}
+            ).status_code
             == 403
         )
         client.headers["X-CSRF-Token"] = csrf
         assert (
-            client.put("/api/manage/retention", json={"days": 90, "revision": revision}).status_code
+            client.put(
+                "/api/manage/retention", json={"days": 90, "max_posts": 500, "revision": revision}
+            ).status_code
             == 200
         )
-        assert client.get("/api/manage/retention").json()["days"] == 90
+        saved = client.get("/api/manage/retention").json()
+        assert (saved["days"], saved["max_posts"]) == (90, 500)
         assert (
-            client.put("/api/manage/retention", json={"days": 1, "revision": revision}).status_code
+            client.put(
+                "/api/manage/retention", json={"days": 1, "max_posts": None, "revision": revision}
+            ).status_code
             == 409
         )
-        assert client.get("/api/manage/retention").json()["last_run_at"] is None
     with TestClient(create_app(settings)) as client:
         authenticate(client, setup=False)
-        assert client.get("/api/manage/retention").json()["days"] == 90
+        saved = client.get("/api/manage/retention").json()
+        assert (saved["days"], saved["max_posts"]) == (90, 500)
 
 
 def test_new_installation_does_not_clean_before_initialization_and_runtime_runs_without_browser(
@@ -301,7 +331,7 @@ def test_new_installation_does_not_clean_before_initialization_and_runtime_runs_
     with TestClient(app) as client:
         time.sleep(0.1)
         with Session(app.state.engine) as session:
-            assert session.get(RetentionPolicy, 1).last_run_at is None
+            assert session.get(RetentionPolicy, 1).next_run_at == 0
         authenticate(client)
         seed_history(app.state.engine, app.state.vault)
         with write_session(app.state.engine) as session:
@@ -358,5 +388,112 @@ def test_retention_migration_preserves_existing_data_and_rolls_back_atomically(t
             assert session.get(RetentionPolicy, 1).days == 30
             assert session.get(Outbox, "sent").completed_at >= before
             assert session.get(Outbox, "pending").completed_at is None
+    finally:
+        engine.dispose()
+
+
+def matched_and_unmatched(engine):
+    with Session(engine) as session:
+        matched = set(session.execute(select(RuleHit.website_id, RuleHit.external_post_id)).all())
+        posts = session.execute(
+            select(Post.website_id, Post.external_post_id).order_by(
+                Post.first_seen_at.desc(), Post.website_id.desc(), Post.external_post_id.desc()
+            )
+        ).all()
+    return matched, [post for post in posts if post not in matched]
+
+
+def test_content_limit_keeps_matched_and_newest_unmatched_and_matches_preview(history):
+    app, _, ids, _ = history
+    engine = app.state.engine
+    matched, unmatched = matched_and_unmatched(engine)
+    assert matched and len(unmatched) > 1
+    with write_session(engine) as session:
+        session.get(RetentionPolicy, 1).max_posts = 1
+    # Well inside the 30 days: only the content limit applies.
+    at = ids["base"] + 86400
+    before = rows(engine, *LEDGERS)
+    preview = retention_preview(engine, 30, 1, at=at)
+    assert preview["posts"] == len(unmatched) - 1
+    removed = 0
+    for i in range(100):
+        result = HistoryRetention(engine, batch_size=2).run_once(at=at + i)
+        removed += result["counts"]["posts"]
+        if not result["more"]:
+            break
+    assert removed == preview["posts"]
+    kept_matched, kept_unmatched = matched_and_unmatched(engine)
+    assert kept_matched == matched
+    assert kept_unmatched == unmatched[:1]
+    assert rows(engine, *LEDGERS) == before
+    # No limit again: nothing more is removed.
+    with write_session(engine) as session:
+        policy = session.get(RetentionPolicy, 1)
+        policy.max_posts, policy.next_run_at = None, 0
+    assert HistoryRetention(engine).run_once(at=at + 200)["counts"]["posts"] == 0
+
+
+def test_cleanup_returns_freed_pages_to_the_filesystem(history):
+    app, _, ids, _ = history
+    engine = app.state.engine
+    with engine.connect() as connection:
+        # Switched once at startup, before any actor wrote.
+        assert connection.exec_driver_sql("PRAGMA auto_vacuum").scalar() == 2
+    with write_session(engine) as session:
+        for i in range(400):
+            key = str(90000 + i)
+            session.add(SeenPost(website_id="nodeseek", external_post_id=key, first_seen_at=1))
+            session.flush()
+            session.add(
+                Post(
+                    website_id="nodeseek",
+                    external_post_id=key,
+                    first_seen_at=1,
+                    title="旧内容",
+                    summary="x" * 2000,
+                    url="https://www.nodeseek.com/post-" + key + "-1",
+                )
+            )
+    with engine.connect() as connection:
+        pages = connection.exec_driver_sql("PRAGMA page_count").scalar()
+    cleaner = HistoryRetention(engine)
+    for i in range(100):
+        if not cleaner.run_once(at=ids["base"] + 86400 + i)["more"]:
+            break
+    with engine.connect() as connection:
+        assert connection.exec_driver_sql("PRAGMA freelist_count").scalar() == 0
+        assert connection.exec_driver_sql("PRAGMA page_count").scalar() < pages - 100
+
+
+def test_space_reclaim_switch_is_skipped_without_room_and_retried(tmp_path, monkeypatch):
+    from seekbell.db import runtime
+
+    engine = create_database_engine(Settings(data_dir=tmp_path))
+    try:
+        migrate(engine)
+        full = type("Usage", (), {"free": 0})()
+        monkeypatch.setattr(runtime.shutil, "disk_usage", lambda _path: full)
+        assert runtime.enable_space_reclaim(engine) is False
+        with engine.connect() as connection:
+            assert connection.exec_driver_sql("PRAGMA auto_vacuum").scalar() == 0
+        monkeypatch.undo()
+        assert runtime.enable_space_reclaim(engine) is True
+        assert runtime.enable_space_reclaim(engine) is True
+    finally:
+        engine.dispose()
+
+
+def test_content_limit_migration_keeps_days_and_defaults_to_no_limit(tmp_path):
+    engine = create_database_engine(Settings(data_dir=tmp_path))
+    try:
+        migrate(engine, "0021_backup_schedule")
+        with engine.begin() as connection:
+            connection.execute(text("UPDATE retention_policy SET days=45, revision=3"))
+        migrate(engine)
+        with Session(engine) as session:
+            policy = session.get(RetentionPolicy, 1)
+            assert (policy.days, policy.max_posts, policy.revision) == (45, None, 3)
+        with pytest.raises(IntegrityError), engine.begin() as connection:
+            connection.execute(text("UPDATE retention_policy SET max_posts=0"))
     finally:
         engine.dispose()

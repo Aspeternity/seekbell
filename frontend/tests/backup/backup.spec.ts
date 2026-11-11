@@ -270,11 +270,6 @@ test('back up on the server, download, import, restore and undo from settings an
   await removal.getByRole('button', { name: '删除', exact: true }).click()
   await expect(page.getByRole('status').filter({ hasText: '备份已删除' })).toBeVisible()
   await expect(rows).toHaveCount(2)
-  await page.goto('/#/settings/data')
-  await expect(page.locator('.settings-metrics')).toContainText('2 份')
-  await page.getByRole('link', { name: '到备份页管理', exact: true }).click()
-  await expect(page).toHaveURL(/\/settings\/backup\?section=list$/)
-  await expect(page.getByRole('heading', { name: '备份列表', exact: true })).toBeInViewport()
 
   // A fresh installation restores the same file from its first-run page.
   const fresh = 'http://127.0.0.1:' + (info.project.name === 'desktop' ? 8020 : 8021)

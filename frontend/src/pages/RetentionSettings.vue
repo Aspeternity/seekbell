@@ -1,71 +1,125 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { request } from '../store'
 import { stamp, useSettingsForm } from '../settings'
-import RetentionPreview from '../components/RetentionPreview.vue'
 import FormFeedback from '../components/FormFeedback.vue'
 import ReadRegion from '../components/ReadRegion.vue'
 import SettingsSaveBar from '../components/SettingsSaveBar.vue'
+interface Overview {
+  posts: number
+  matched_posts: number
+  deliveries: number
+  problems: number
+  earliest_at: number | null
+}
 interface Policy {
   days: number
+  max_posts: number | null
   revision: number
-  next_run_at: number
-  last_run_at: number | null
-  last_counts: Record<string, number>
+  overview: Overview
 }
+interface Preview {
+  posts: number
+  records: number
+}
+// An empty limit field means no limit.
+interface Draft {
+  days: number
+  max_posts: number | ''
+}
+const MAX_POSTS = 1000000
 const emit = defineEmits<{ dirty: [value: boolean] }>()
-const labels: Record<string, string> = {
-  posts: '帖子',
-  evaluations: '规则判定',
-  hits: '命中记录',
-  deliveries: '自动投递',
-  attempts: '投递尝试',
-  tests: '目标测试',
-  manual: '手动重发',
-  source_runs: '采集记录',
-  system_events: '系统事件',
-  alerts: '告警投递',
+const limitOf = (draft: Draft) => (draft.max_posts === '' ? null : draft.max_posts)
+// Whether a draft can only remove history compared with what is saved.
+const shrinks = (draft: Draft, saved: Policy) => {
+  const limit = limitOf(draft)
+  return (
+    draft.days < saved.days ||
+    (limit !== null && (saved.max_posts === null || limit < saved.max_posts))
+  )
 }
-const form = useSettingsForm<Policy, { days: number }>({
+const count = (value: number) => value.toLocaleString('zh-CN')
+const cleaning = ref(false)
+const form = useSettingsForm<Policy, Draft>({
   name: '保留策略',
   read: () => request<Policy>('manage/retention'),
-  write: (draft, saved) =>
-    request<Policy>('manage/retention', 'PUT', { days: draft.days, revision: saved.revision }),
-  draftOf: ({ days }) => ({ days }),
-  validate: ({ days }) =>
-    Number.isInteger(days) && days >= 1 && days <= 365 ? '' : '保留天数应为1–365之间的整数。',
-  confirmSave: (draft, saved) =>
-    draft.days < saved.days
-      ? {
-          body: '缩短为' + draft.days + '天后，超过期限的历史将被清理，已清理的数据无法恢复。',
-          label: '确认保存策略',
-        }
-      : undefined,
+  write: (draft, saved) => {
+    cleaning.value = shrinks(draft, saved)
+    return request<Policy>('manage/retention', 'PUT', {
+      days: draft.days,
+      max_posts: limitOf(draft),
+      revision: saved.revision,
+    })
+  },
+  draftOf: ({ days, max_posts }) => ({ days, max_posts: max_posts ?? '' }),
+  validate: (draft) => {
+    if (!Number.isInteger(draft.days) || draft.days < 1 || draft.days > 365)
+      return '保留天数应为 1–365 之间的整数。'
+    const limit = limitOf(draft)
+    if (limit !== null && (!Number.isInteger(limit) || limit < 1 || limit > MAX_POSTS))
+      return '内容上限应为 1–1000000 之间的整数，留空表示不限。'
+    return ''
+  },
+  confirmSave: async (draft, saved) => {
+    if (!shrinks(draft, saved)) return undefined
+    const query = new URLSearchParams({ days: String(draft.days) })
+    const limit = limitOf(draft)
+    if (limit !== null) query.set('max_posts', String(limit))
+    let body = '超出范围的历史将被清理，无法恢复。'
+    try {
+      const preview = await request<Preview>('manage/retention/preview?' + query)
+      if (!preview.posts && !preview.records) return undefined
+      const parts = [
+        preview.posts ? count(preview.posts) + ' 条内容' : '',
+        preview.records ? count(preview.records) + ' 条通知、采集与问题记录' : '',
+      ].filter(Boolean)
+      body = '将清理约 ' + parts.join('和 ') + '，无法恢复。'
+    } catch {
+      // Without an estimate the general warning still protects the change.
+    }
+    return { body, label: '确认保存' }
+  },
   dirty: (value) => emit('dirty', value),
 })
 const { saved, draft, busy, error, reloadable, done, dirty } = form
-const cleaned = computed(() =>
-  Object.values(saved.value?.last_counts || {}).reduce((sum, count) => sum + count, 0),
+const doneText = computed(() =>
+  cleaning.value ? '保留策略已保存，超出部分正在后台清理' : '保留策略已保存',
 )
 onMounted(form.load)
 </script>
 <template>
-  <section id="retention-settings" class="panel settings-card">
+  <section id="retention-settings" class="panel settings-card" aria-labelledby="retention-title">
     <div class="panel-heading">
-      <div>
-        <h2>历史保留</h2>
-        <p>超过期限的历史记录由后台每小时自动清理</p>
-      </div>
+      <h2 id="retention-title">历史保留</h2>
     </div>
     <FormFeedback :error="error" :retryable="reloadable" @retry="form.reload" />
-    <ReadRegion :loading="busy && !saved" error="" :has-data="!!saved" :min-height="260">
+    <ReadRegion :loading="busy && !saved" error="" :has-data="!!saved" :min-height="200">
       <form v-if="saved" class="form-content form-stack" @submit.prevent="form.save">
-        <section class="settings-section" aria-labelledby="retention-days-title">
-          <div class="settings-section-heading">
-            <h3 id="retention-days-title">保留期限</h3>
+        <dl class="detail-grid settings-metrics retention-overview" aria-label="现有数据">
+          <div>
+            <dt>内容</dt>
+            <dd>{{ count(saved.overview.posts) }} 条</dd>
           </div>
+          <div>
+            <dt>命中</dt>
+            <dd>{{ count(saved.overview.matched_posts) }} 条</dd>
+          </div>
+          <div>
+            <dt>通知</dt>
+            <dd>{{ count(saved.overview.deliveries) }} 条</dd>
+          </div>
+          <div>
+            <dt>问题</dt>
+            <dd>{{ count(saved.overview.problems) }} 条</dd>
+          </div>
+          <div class="retention-earliest">
+            <dt>最早内容</dt>
+            <dd>{{ saved.overview.earliest_at ? stamp(saved.overview.earliest_at) : '—' }}</dd>
+          </div>
+        </dl>
+        <div class="retention-fields">
           <div class="form-stack">
-            <label for="retention-days">历史保留天数</label>
+            <label class="field-label" for="retention-days">保留天数</label>
             <div class="unit-input">
               <input
                 id="retention-days"
@@ -79,37 +133,32 @@ onMounted(form.load)
                 :disabled="busy"
               /><span>天</span>
             </div>
-            <p class="small-note">1–365 天，默认 30 天。去重记录始终保留，旧帖不会重复推送。</p>
-            <details class="settings-details">
-              <summary>清理哪些记录</summary>
-              <p class="small-note">
-                帖子、判定、命中、已完成的投递与测试、采集记录和系统事件。待发送、重试中和未完成的操作及其依赖暂不清理，投递从完成时开始计算保留期。
-              </p>
-            </details>
-            <RetentionPreview :days="draft.days" />
-            <p v-if="!saved.last_run_at" class="small-note">尚未执行过清理。</p>
-            <p v-else-if="!cleaned" class="small-note">
-              最近一次清理于 {{ stamp(saved.last_run_at) }}，没有需要清理的记录。
-            </p>
-            <details v-else class="settings-details">
-              <summary>
-                最近一次清理于 {{ stamp(saved.last_run_at) }}，共 {{ cleaned }} 条记录
-              </summary>
-              <dl class="detail-grid retention-counts" aria-label="最近一批清理数量">
-                <div v-for="(label, key) in labels" :key="key">
-                  <dt>{{ label }}</dt>
-                  <dd>{{ saved.last_counts[key] || 0 }}</dd>
-                </div>
-              </dl>
-            </details>
           </div>
-        </section>
+          <div class="form-stack">
+            <label class="field-label" for="retention-limit">内容上限</label>
+            <div class="unit-input">
+              <input
+                id="retention-limit"
+                v-model.number="draft.max_posts"
+                type="number"
+                class="text-input"
+                min="1"
+                :max="MAX_POSTS"
+                step="1"
+                placeholder="不限"
+                aria-describedby="retention-limit-note"
+                :disabled="busy"
+              /><span>条</span>
+            </div>
+            <p id="retention-limit-note" class="small-note">命中的内容不计入</p>
+          </div>
+        </div>
         <SettingsSaveBar
           :dirty="dirty"
           :busy="busy"
           :done="done"
           label="保存保留策略"
-          done-text="保留策略已保存"
+          :done-text="doneText"
           @discard="form.discard"
         />
       </form>

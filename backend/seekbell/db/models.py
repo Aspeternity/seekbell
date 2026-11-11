@@ -384,13 +384,16 @@ class RetentionPolicy(Base):
     __table_args__ = (
         CheckConstraint("id = 1", name="ck_retention_singleton"),
         CheckConstraint("days BETWEEN 1 AND 365", name="ck_retention_days"),
+        CheckConstraint(
+            "max_posts IS NULL OR max_posts BETWEEN 1 AND 1000000", name="ck_retention_max_posts"
+        ),
     )
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     days: Mapped[int] = mapped_column(Integer, default=30)
+    # Unmatched content kept at most; matched content follows the days only. None: no limit.
+    max_posts: Mapped[int | None] = mapped_column(Integer)
     revision: Mapped[int] = mapped_column(Integer, default=1)
     next_run_at: Mapped[float] = mapped_column(Float, default=0)
-    last_run_at: Mapped[float | None] = mapped_column(Float)
-    last_counts: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
 class BackupSchedule(Base):

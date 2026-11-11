@@ -378,7 +378,7 @@ SourceProbe持久最近手测与冷却，API语义保持。WebsiteConnectionTest
 
 0018_settings_maintenance为WorkspacePreferences增加workspace_revision默认1，并新增BackupRecord元数据表，保留既有配置/业务数据。通用GET/PUT /api/manage/preferences以workspace_revision+display_revision双版本在同一短写事务内保存名称/说明/时区；既有workspace和display接口分别推进对应版本，兼容旧调用。错误保留草稿，不将编辑器放进只读缓存。旧时区及概览深链接在Hash路由归一到唯一编辑器，七分类按视口切换导航形式。
 
-GET /manage/storage仅读取固定数据库/WAL/恢复副本文件大小和数据所在文件系统容量，不接收路径，不返回数据目录或枚举用户文件。GET /manage/retention/preview?days=采用与清理器一致的终态/完成/尝试保护条件，统计候选投递和删除这些投递后可删除的帖子及已完成操作、采集记录；只读事务、不改清理计划，不预估磁盘释放字节。精简账本和受保护依赖继续保留。
+（GET /manage/storage已于2026-11-11删除，见“内容上限与自动回收”；关于页仍在服务端读取同一统计。）GET /manage/retention/preview?days=采用与清理器一致的终态/完成/尝试保护条件，统计候选投递和删除这些投递后可删除的帖子及已完成操作、采集记录；只读事务、不改清理计划，不预估磁盘释放字节。精简账本和受保护依赖继续保留。
 
 （BackupRecord备份操作记录已由迁移0020删除，备份库本身即历史。）下载文件名含UTC时间。副本发布和宿主机切换边界不变。
 
@@ -453,6 +453,12 @@ HotlistSource新增retention（周期→秒），snapshot_max_age(period)默认8
 接口（`api/backups.py`）：GET状态与列表（含total_bytes）；POST立即备份（可带`{name}`）；PATCH `/{name}`改名；DELETE `/{name}`；POST `/{name}/ticket`返回60秒一次性票据（绑定会话令牌SHA-256），GET `/{name}/file?ticket=`用FileResponse流式下载；POST `/inspect`（原始octet-stream请求体，实际计数限大小，300秒）或`/{name}/inspect`生成Stage（上传暂存`.seekbell-stage-*`，30分钟过期，新检查替换旧的），DELETE `/inspect/{key}`取消；POST `/inspect/{key}/restore`复验密码后在暂存区恢复→`backups.create(pre-restore)`→quiesce→换入（旧文件移入`.seekbell-previous-*`，成功后删除，失败换回）。`/auth/setup/inspect|restore`仅未初始化时可用，Stage带setup标记不可混用。全部经`backup_gate`串行。维护工具删除`--restored`与web-restore锁分支。
 
 前端：`BackupSettings.vue`（三格状态、列表、直接下载、全局`confirmAction`删除确认、居中恢复弹窗`.backup-restore-modal`；弹窗`cancel`只认自身目标，文件选择框取消冒泡的cancel不关闭）、`BackupNameDialog.vue`（立即备份/重命名）、`BackupRestoreWizard.vue`（三步，设置页与初始化页共用；上传用XHR报告进度）、`backups.ts`类型与标签；`byteSize`增加KiB。验证：`tests/test_backup.py`、`tests/test_web_backups.py`、`pnpm test:backup`、`scripts/check_backup_container.py`。
+
+## 内容上限与自动回收（2026-11-11）
+
+迁移0022为`retention_policy`增加可空`max_posts`（1–1000000，CHECK约束，NULL为不限），删除只用于展示的`last_run_at`/`last_counts`。清理器在按天删除帖子之后再按上限删除：`excess_posts`选出没有RuleHit的帖子中按`first_seen_at`倒序排在第N条之后的部分，排除仍有Outbox的，与按天删除共用`remove_posts`（帖子连同判定、命中）。预览`GET /manage/retention/preview?days=&max_posts=`用同一`excess_posts`只读估算，返回`posts`与`records`（投递、目标测试、手动重发、采集记录、系统事件）。`GET/PUT /manage/retention`附带`overview`（帖子数、有命中的帖子数、Outbox数、故障事件数、最早帖子时间）；PUT的`max_posts`为必填可空字段，省略不会清除已存上限。
+
+自动回收：`open_workspace`在迁移后、任何后台任务启动前调用`enable_space_reclaim`；`auto_vacuum`不是INCREMENTAL时，若可用空间不少于数据库（含WAL）2倍，则在AUTOCOMMIT连接上设置后VACUUM，失败或空间不足只记警告、下次启动再试。清理器每轮未满批结束时先只读检查`freelist_count`，非零才在写事务里执行`PRAGMA incremental_vacuum`；Python sqlite3每步只释放一页，故用原始游标`fetchall()`走完。WAL模式下文件在检查点后变小。备份快照与恢复保持该模式；旧备份恢复后由下次打开工作区切换。
 
 ## 备份导入（2026-11-11）
 

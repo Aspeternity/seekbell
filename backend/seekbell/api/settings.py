@@ -1,4 +1,4 @@
-"""System settings: general preferences, alerts, retention, storage and the About facts."""
+"""System settings: general preferences, alerts, retention and the About facts."""
 
 import asyncio
 from typing import Literal
@@ -21,8 +21,8 @@ from seekbell.services.display import (
     timezone_name,
     update_display,
 )
-from seekbell.services.maintenance import retention_preview, storage_view
-from seekbell.services.retention import PolicyConflict, get_policy, update_policy
+from seekbell.services.maintenance import data_overview, retention_preview
+from seekbell.services.retention import MAX_POSTS, PolicyConflict, get_policy, update_policy
 
 router = APIRouter(prefix="/api/manage", dependencies=[Depends(require_admin)])
 
@@ -162,32 +162,38 @@ async def test_alerts(values: AlertTestInput, request: Request):
 
 class RetentionInput(Input):
     days: int = Field(ge=1, le=365)
+    # Required and nullable: an omitted limit must never silently clear a saved one.
+    max_posts: int | None = Field(ge=1, le=MAX_POSTS)
     revision: int = Field(ge=1)
+
+
+def retention_view(engine, policy):
+    return {**policy, "overview": data_overview(engine)}
 
 
 @router.get("/retention")
 def retention_policy(request: Request):
-    return get_policy(request.app.state.engine)
+    engine = request.app.state.engine
+    return retention_view(engine, get_policy(engine))
 
 
 @router.put("/retention")
 def save_retention(values: RetentionInput, request: Request):
+    engine = request.app.state.engine
     try:
-        return update_policy(request.app.state.engine, values.days, values.revision)
+        policy = update_policy(engine, values.days, values.max_posts, values.revision)
     except PolicyConflict as error:
         raise HTTPException(409, str(error)) from None
+    return retention_view(engine, policy)
 
 
 @router.get("/retention/preview")
-def preview_retention(request: Request, days: int):
+def preview_retention(request: Request, days: int, max_posts: int | None = None):
     if not 1 <= days <= 365:
         raise HTTPException(422, "保留天数应为1–365天。")
-    return retention_preview(request.app.state.engine, days)
-
-
-@router.get("/storage")
-def storage(request: Request):
-    return storage_view(request.app.state.settings)
+    if max_posts is not None and not 1 <= max_posts <= MAX_POSTS:
+        raise HTTPException(422, "内容上限应为1–1000000条。")
+    return retention_preview(request.app.state.engine, days, max_posts)
 
 
 @router.get("/about")

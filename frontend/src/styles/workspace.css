@@ -2818,21 +2818,33 @@ h1[tabindex='-1']:focus-visible {
   font-size: 14px;
   font-variant-numeric: tabular-nums;
 }
-.settings-content .retention-counts {
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  margin: 0;
-  gap: 12px 24px;
+/* Five short facts in one row; on a phone two per row with the date across both. */
+.settings-content .retention-overview {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
-.retention-counts > div {
+@media (max-width: 760px) {
+  .settings-content .retention-overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .retention-overview > .retention-earliest {
+    grid-column: 1 / -1;
+  }
+}
+.retention-fields {
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 8px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 20px 48px;
 }
-.retention-counts dt {
-  margin: 0;
+.settings-content .retention-fields > .form-stack {
+  gap: 0;
+}
+.retention-fields .text-input {
+  width: 120px;
+  height: 40px;
+}
+.retention-fields .small-note {
+  margin: 6px 0 0;
 }
 .settings-content .about-card {
   display: grid;

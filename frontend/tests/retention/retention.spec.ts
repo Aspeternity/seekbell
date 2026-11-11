@@ -43,7 +43,7 @@ test('retention confirms changes, handles stale revisions and cleans with the br
   await page.goto('/#/settings/retention')
   await expect(page.getByRole('alert')).toContainText('合成策略读取失败')
   await page.getByRole('alert').getByRole('button', { name: '重新加载', exact: true }).click()
-  const input = page.getByLabel('历史保留天数')
+  const input = page.getByLabel('保留天数', { exact: true })
   await expect(input).toBeVisible()
   await input.fill(String(days))
   // Leaving a policy draft uses the existing unsaved-edit guard.
@@ -53,7 +53,7 @@ test('retention confirms changes, handles stale revisions and cleans with the br
   await expect(input).toHaveValue(String(days))
   const initial = await (await page.request.get('/api/manage/retention')).json()
   await page.getByRole('button', { name: '保存保留策略', exact: true }).click()
-  await expect(page.getByRole('dialog')).toContainText('已清理的数据无法恢复')
+  await expect(page.getByRole('dialog')).toContainText(/将清理约 \d+ 条内容.*无法恢复/)
   await page.getByRole('button', { name: '取消', exact: true }).click()
   expect((await (await page.request.get('/api/manage/retention')).json()).days).toBe(initial.days)
   // Another browser saves while this editor still has an older revision.
@@ -63,13 +63,14 @@ test('retention confirms changes, handles stale revisions and cleans with the br
         headers,
         data: {
           days: 365,
+          max_posts: null,
           revision: initial.revision,
         },
       })
     ).ok(),
   ).toBe(true)
   await page.getByRole('button', { name: '保存保留策略', exact: true }).click()
-  await page.getByRole('button', { name: '确认保存策略', exact: true }).click()
+  await page.getByRole('button', { name: '确认保存', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('其他页面改变')
   await expect(input).toHaveValue(String(days))
   await page.getByRole('alert').getByRole('button', { name: '重新加载', exact: true }).click()
@@ -90,11 +91,11 @@ test('retention confirms changes, handles stale revisions and cleans with the br
     { times: 1 },
   )
   await page.getByRole('button', { name: '保存保留策略', exact: true }).click()
-  await page.getByRole('button', { name: '确认保存策略', exact: true }).click()
+  await page.getByRole('button', { name: '确认保存', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('合成策略保存失败')
   await expect(input).toHaveValue(String(days))
   await page.getByRole('button', { name: '保存保留策略', exact: true }).click()
-  await page.getByRole('button', { name: '确认保存策略', exact: true }).click()
+  await page.getByRole('button', { name: '确认保存', exact: true }).click()
   await expect(page.getByRole('status').filter({ hasText: '保留策略已保存' })).toBeVisible()
   expect(errors).toEqual([])
   await page.context().close()
@@ -118,9 +119,11 @@ test('retention confirms changes, handles stale revisions and cleans with the br
       0,
     )
     await reopened.goto('/#/settings/retention')
-    await expect(reopened.getByLabel('历史保留天数')).toHaveValue(String(days))
-    await reopened.getByText(/最近一次清理于 .+，共 \d+ 条记录/).click()
-    await expect(reopened.getByLabel('最近一批清理数量')).toBeVisible()
+    await expect(reopened.getByLabel('保留天数', { exact: true })).toHaveValue(String(days))
+    // The overview shows what is kept now, after the cleanup.
+    await expect(reopened.getByLabel('现有数据', { exact: true })).toContainText(
+      new RegExp('内容\\s*' + after.total + ' 条'),
+    )
     for (const width of [320, 390, 768, 1440]) {
       await reopened.setViewportSize({ width, height: 900 })
       expect(

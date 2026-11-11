@@ -113,7 +113,7 @@ def age_session(settings, seconds):
         connection.commit()
 
 
-def test_back_up_now_lists_a_private_archive_and_counts_it_in_storage(web):
+def test_back_up_now_lists_a_private_archive(web):
     client, settings, _ = web
     before = table_data(settings.database_path)
     name = create(client)
@@ -131,16 +131,6 @@ def test_back_up_now_lists_a_private_archive_and_counts_it_in_storage(web):
     assert listing["free_bytes"] > 0
     assert entry["name"] is None
     assert "records" not in listing
-    storage = client.get("/api/manage/storage").json()
-    assert (storage["backup_count"], storage["backup_bytes"]) == (1, entry["bytes"])
-    assert set(storage) == {
-        "database_bytes",
-        "backup_bytes",
-        "backup_count",
-        "filesystem_total_bytes",
-        "filesystem_free_bytes",
-        "checked_at",
-    }
     assert_business_unchanged(settings, before)
     # The running instance still owns the lock: an offline backup is refused meanwhile.
     with pytest.raises(RuntimeError):

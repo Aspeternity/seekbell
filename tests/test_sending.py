@@ -311,7 +311,7 @@ def test_manual_migration_preserves_existing_data_and_rolls_back(tmp_path):
         assert "manual_deliveries" not in inspect(engine).get_table_names()
         migrate(engine)
         migrate(engine)
-        assert schema_revision(engine) == "0021_backup_schedule"
+        assert schema_revision(engine) == "0022_content_limit"
         with engine.connect() as connection:
             assert (
                 list(
