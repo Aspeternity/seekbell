@@ -266,15 +266,21 @@ await untilShown(() => options.ready() && listing.ready() && detail.ready() && d
           <div>
             <p class="eyebrow">A SIGNAL WORTH KEEPING</p>
             <h1 tabindex="-1" class="article-heading">{{ detail.data.value.title }}</h1>
-            <p class="subtitle">
-              {{ websiteName(detail.data.value.website_id) }} ·
-              {{ detail.data.value.author || detail.data.value.author_display_name || '作者缺失' }}
-              · {{ detail.data.value.category_label || detail.data.value.category || '版块缺失' }}
+            <p class="subtitle post-subtitle">
+              <span class="result-pill" :class="resultClass(detail.data.value.status)">{{
+                postLabels[detail.data.value.status]
+              }}</span>
+              <span>{{ websiteName(detail.data.value.website_id) }}</span>
+              <span
+                ><Icon name="user" :size="13" />{{
+                  detail.data.value.author || detail.data.value.author_display_name || '作者缺失'
+                }}</span
+              >
+              <span>{{
+                detail.data.value.category_label || detail.data.value.category || '版块缺失'
+              }}</span>
             </p>
           </div>
-          <span class="result-pill" :class="resultClass(detail.data.value.status)">{{
-            postLabels[detail.data.value.status]
-          }}</span>
         </section>
         <section class="panel post-flow-panel" aria-label="处理过程">
           <ol class="post-flow">
@@ -313,7 +319,7 @@ await untilShown(() => options.ready() && listing.ready() && detail.ready() && d
               >
               <p v-else class="small-note">没有可核验的原帖链接。</p>
             </section>
-            <section class="panel">
+            <section class="panel delivery-panel">
               <div class="panel-heading">
                 <h2>投递记录</h2>
                 <span v-if="deliveries.data.value" class="count-badge">{{
@@ -357,6 +363,7 @@ await untilShown(() => options.ready() && listing.ready() && detail.ready() && d
                     此帖子没有投递记录。
                   </p>
                   <Pagination
+                    v-if="deliveries.data.value.total > deliveries.data.value.page_size"
                     :page="deliveryPage"
                     :total="deliveries.data.value.total"
                     :page-size="deliveries.data.value.page_size"
@@ -534,25 +541,23 @@ await untilShown(() => options.ready() && listing.ready() && detail.ready() && d
               }
             "
           >
-            <div class="content-row-top">
-              <span class="result-pill" :class="resultClass(post.status)">{{
-                postLabels[post.status]
-              }}</span>
-              <button class="content-title" @click="openPost(post.id)">
-                {{ post.title }}
-              </button>
-              <time
-                class="muted"
-                :datetime="new Date((post.published_at ?? post.first_seen_at) * 1000).toISOString()"
-                :title="
-                  '首次发现：' +
-                  time(post.first_seen_at) +
-                  (post.published_at === null ? '；来源未提供发布时间' : '')
-                "
-                >{{ post.published_at === null ? '发现' : '发布' }}
-                {{ time(post.published_at ?? post.first_seen_at) }}</time
-              >
-            </div>
+            <span class="result-pill" :class="resultClass(post.status)">{{
+              postLabels[post.status]
+            }}</span>
+            <button class="content-title" @click="openPost(post.id)">
+              {{ post.title }}
+            </button>
+            <time
+              class="muted"
+              :datetime="new Date((post.published_at ?? post.first_seen_at) * 1000).toISOString()"
+              :title="
+                '首次发现：' +
+                time(post.first_seen_at) +
+                (post.published_at === null ? '；来源未提供发布时间' : '')
+              "
+              >{{ post.published_at === null ? '发现' : '发布' }}
+              {{ time(post.published_at ?? post.first_seen_at) }}</time
+            >
             <p class="content-excerpt">
               {{ post.summary === null ? '来源未提供摘要' : post.summary || '摘要为空' }}
             </p>
@@ -563,10 +568,21 @@ await untilShown(() => options.ready() && listing.ready() && detail.ready() && d
                 }}</span
               ><span>{{ post.category_label || post.category || '版块缺失' }}</span>
               <span
-                v-for="hit in post.hits"
+                v-for="hit in post.hits.slice(0, 2)"
                 :key="hit.task_id + ':' + hit.version"
                 class="plain-chip"
                 >{{ hit.name }} · v{{ hit.version }}{{ hit.deleted ? ' · 已删除' : '' }}</span
+              >
+              <span
+                v-if="post.hits.length > 2"
+                class="plain-chip"
+                :title="
+                  post.hits
+                    .slice(2)
+                    .map((hit) => hit.name + ' · v' + hit.version)
+                    .join('、')
+                "
+                >+{{ post.hits.length - 2 }}</span
               >
             </div>
           </article>
@@ -591,37 +607,78 @@ await untilShown(() => options.ready() && listing.ready() && detail.ready() && d
 </template>
 
 <style scoped>
+/* Two lines per post: result · title · time, then summary · author/section/tasks. */
 .content-row {
-  padding: 16px 22px;
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 14px;
+  row-gap: 3px;
+  padding: 13px 22px;
   cursor: pointer;
   transition: background 0.15s;
 }
-.content-row-top {
-  gap: 10px;
-  margin-bottom: 4px;
-}
-.content-row-top > .result-pill {
-  flex: none;
+.content-row > .result-pill {
+  grid-area: 1 / 1;
+  justify-content: center;
 }
 .content-title {
+  grid-area: 1 / 2;
   display: block;
-  flex: 1;
   width: auto;
   min-width: 0;
   overflow: hidden;
   font-size: 14px;
+  line-height: 1.6;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.content-row-top > time {
-  flex: none;
-  margin-left: 0;
+.content-row > time {
+  grid-area: 1 / 3;
+  justify-self: end;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .content-excerpt {
-  margin: 0 0 8px;
-  line-height: 1.7;
+  grid-area: 2 / 2;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
   -webkit-line-clamp: 1;
+}
+.content-row-meta {
+  grid-area: 2 / 3;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 10px;
+  min-width: 0;
+  max-width: 380px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.content-row-meta > .plain-chip {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.content-row:hover,
+.content-row:focus-within {
+  background: #fafbfc;
+}
+@media (min-width: 761px) and (max-width: 1600px) {
+  /* Search has its own line here, so the filters share the next one evenly. */
+  .content-filter-toolbar > .app-select,
+  .content-filter-toolbar > .history-date-filter {
+    flex-grow: 1;
+    max-width: none;
+  }
+}
+.content-filter-note {
+  margin: 0;
+  padding: 12px 22px;
+  border-bottom: 1px solid var(--border);
 }
 .metric-strip {
   display: grid;
@@ -634,6 +691,22 @@ await untilShown(() => options.ready() && listing.ready() && detail.ready() && d
 }
 .metric-strip > div:last-child {
   border-right: 0;
+}
+.post-subtitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.post-subtitle > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.post-subtitle > span + span + span::before {
+  content: '·';
+  margin-right: 6px;
+  color: #b4bbc4;
 }
 .post-flow-panel {
   margin-bottom: 20px;
@@ -703,6 +776,9 @@ await untilShown(() => options.ready() && listing.ready() && detail.ready() && d
 .post-flow .is-none strong {
   color: #6f7885;
 }
+.original-post-link {
+  margin-top: 16px;
+}
 @media (prefers-reduced-motion: reduce) {
   .content-row {
     transition: none;
@@ -717,40 +793,70 @@ await untilShown(() => options.ready() && listing.ready() && detail.ready() && d
     display: none;
   }
 }
-.content-row:hover,
-.content-row:focus-within {
-  background: #fafbfc;
-}
-.original-post-link {
-  margin-top: 16px;
-}
-.content-filter-note {
-  margin: 0;
-  padding: 12px 22px;
-}
 @media (max-width: 760px) {
   .content-filter-note {
     padding: 12px 16px;
   }
+  /* Phone: result + title (two lines at most), summary, then meta with the time. */
   .content-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: start;
+    column-gap: 10px;
+    row-gap: 4px;
     padding: 14px 16px;
   }
-  .content-row-top {
-    flex-wrap: wrap;
+  .content-row > .result-pill {
+    min-width: 40px;
+    margin-top: 1px;
   }
   .content-title {
-    flex-basis: 100%;
-    order: 3;
+    grid-area: 1 / 2 / 2 / 4;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
     white-space: normal;
+    overflow-wrap: anywhere;
   }
-  .content-row-top > time {
-    margin-left: auto;
+  .content-excerpt {
+    grid-area: 2 / 1 / 3 / 4;
+  }
+  .content-row-meta {
+    grid-area: 3 / 1 / 4 / 3;
+    justify-content: flex-start;
+    max-width: none;
+  }
+  .content-row > time {
+    grid-area: 3 / 3;
+    align-self: center;
   }
   .metric-strip {
     padding: 14px 0;
   }
   .metric-strip > div {
     padding: 0 14px;
+  }
+  /* Phone reads top to bottom: snapshot, why it matched, then where it was sent. */
+  .detail-layout > .side-stack {
+    display: contents;
+  }
+  .reading-panel {
+    order: 0;
+  }
+  .support-panel {
+    order: 1;
+  }
+  .delivery-panel {
+    order: 2;
+  }
+  .delivery-panel .compact-record {
+    flex-wrap: nowrap;
+  }
+  .delivery-panel .compact-record > div {
+    min-width: 0;
+  }
+  .delivery-panel .compact-record > .result-pill {
+    flex: none;
+    margin-left: auto;
   }
 }
 </style>

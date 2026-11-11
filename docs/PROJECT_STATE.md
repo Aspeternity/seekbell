@@ -20,13 +20,17 @@ M0–M4完成；v0.8.0（运行中心）已发布，见[v0.8.0记录](history/20
 
 告警页美化重构（11-11用户要求，三轮复审后已本地提交，待再审）：只留一张“系统告警”卡，卡头只有大号开关（设置卡卡头开关统一44×24，自动备份卡同）；目标选择卡、测试同行；延迟改为0–1440整数分钟自填（后端`MAX_DELAY_SECONDS`，API `multiple_of=60`），提醒仍三档；删除状态卡、后端只读`recent`、“查看问题历史”链接与规则提示块；修复校验提示残留（`settings.ts`草稿变化即清除校验错误）。见UI_DESIGN“告警页（…定稿）”。证据（本机）：后端告警相关43项、浏览器system 28项（含卡片间距、校验提示随草稿消失回归测试）、approved-ui 8项、ui 8项、backup 2项通过；桌面/手机截图检查。
 
-运行中心审查与美化（11-11用户要求，三轮复审中）：运行状态定为三卡——状态卡（结论+当前问题列在卡内+告警提示；全部暂停显示“未在监控”）、链路卡（采集/通知/热榜/后台服务四格即标签，下方显示所选组明细，默认第一个异常组）、问题历史；时间相对观测时间；修复返回页面重复读取、刷新按钮禁用丢焦点、暂停站点空行；后端调度节点去掉“已启用”，热榜“未在预热”改“无人查看，暂停刷新”。“内容与命中”改名“内容记录”（建议，待确认），列表行压缩约一半，详情加“处理过程”四格。见UI_DESIGN“运行中心美化”。改动：`frontend/src/pages/{OperationsStatus,Content,Operations,Overview}.vue`、`operations.ts`、`services/operations.py`、`tests/operations/operations-center.spec.ts`。
+运行中心审查与美化（11-11用户要求，三轮复审中）：运行状态定为三卡——状态卡（结论+当前问题列在卡内+告警提示；全部暂停显示“未在监控”）、链路卡（采集/通知/热榜/后台服务四格即标签，下方显示所选组明细，默认第一个异常组）、问题历史；时间相对观测时间；修复返回页面重复读取、刷新按钮禁用丢焦点、暂停站点空行；后端调度节点去掉“已启用”，热榜“未在预热”改“无人查看，暂停刷新”。“内容与命中”改名“内容记录”（建议，待确认），列表行压缩约一半，详情加“处理过程”四格。见UI_DESIGN“运行中心美化”。
+
+内容记录页UI优化（11-11用户要求，本地提交，待复审）：列表行桌面两行对齐（行高约120→80px，手机约137→100px），命中任务最多显示两个+“+N”；筛选控件铺满行；详情结果徽标移到副标题行首；投递单页不显示分页；手机端命中依据排在投递记录前、投递状态留在行右侧。只改`frontend/src/pages/Content.vue`与UI_DESIGN。证据（本机）：content-stability 8、history 4、loading 4、history-ui-fixes 6、evaluations 8、diagnostics 18、operations 8项通过，typecheck/prettier通过，桌面/手机截图检查。
+
+运行中心改动：`frontend/src/pages/{OperationsStatus,Content,Operations,Overview}.vue`、`operations.ts`、`services/operations.py`、`tests/operations/operations-center.spec.ts`。
 
 未提交：`assets/brand/`图标（待审）。
 
 ## 下一步
 
-1. 用户复审运行中心（运行状态、内容记录改名与列表/详情）；之后可做阶段三其余两项：搜索粘贴帖子链接/ID、查不到时说明原因（[方案](plans/2026-11-09-运行中心方案.md)第6节）。用户复审告警页（新两卡布局）、换页不闪与数据页、备份页（预览：`pnpm --dir frontend build`后`uv run --frozen python scripts/run_web_smoke.py --system --port 8099`，浏览器Ctrl+Shift+R；8099上旧进程需先停掉才能加载新后端）。
+1. 用户复审运行中心（运行状态、内容记录改名与列表/详情及本轮UI优化）；之后可做阶段三其余两项：搜索粘贴帖子链接/ID、查不到时说明原因（[方案](plans/2026-11-09-运行中心方案.md)第6节）。用户复审告警页（新两卡布局）、换页不闪与数据页、备份页（预览：`pnpm --dir frontend build`后`uv run --frozen python scripts/run_web_smoke.py --system --port 8099`，浏览器Ctrl+Shift+R；8099上旧进程需先停掉才能加载新后端）。
 2. WebDAV远程副本（11-11用户：先不做，暂缓）：以后先出简短方案请用户确认细则（上传是否加密、配置位置与字段、NAS保留份数、哪些类型上传、失败故障、从NAS恢复、测试连接），再实现；CI用模拟WebDAV服务，不连真实NAS。
 3. 之后第三期升级前备份；运行中心阶段三；程序日志待议；图标采用。
 4. **暂不发版**（用户11-10明确）。发版时机由用户提出；届时本地分支合成一个PR，`bump_version.py`一次，CHANGELOG汇总六类重组、数据页内容上限与自动回收、迁移0019–0023（回退需0018备份）、告警审查（新装默认延迟1分钟且可自填0–1440分钟、仍未恢复提醒、Webhook alert新增字段）与备份格式不兼容旧版。
