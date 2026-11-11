@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch } from 'vue'
 import { request, state } from '../store'
+import type { OverviewPreferences } from '../overviewPreferences'
 import { scrollToSection, useSettingsForm } from '../settings'
+import { untilShown } from '../viewReady'
 import ReadRegion from '../components/ReadRegion.vue'
 import FormFeedback from '../components/FormFeedback.vue'
 import SettingsSaveBar from '../components/SettingsSaveBar.vue'
@@ -49,11 +51,16 @@ const form = useSettingsForm<General, { name: string; description: string; timez
   dirty: (value) => (generalDirty.value = value),
 })
 const { saved, draft, busy, error, reloadable, done, dirty } = form
+// The layout card's read starts now instead of after this page's own read.
+const overviewRead = request<OverviewPreferences>('manage/overview-preferences')
+overviewRead.catch(() => {})
+const loaded = form.load()
 onMounted(async () => {
-  await form.load()
+  await loaded
   await nextTick()
   scrollToSection('timezone', 'timezone-settings')
 })
+await untilShown(loaded)
 </script>
 <template>
   <div class="settings-stack">
@@ -120,6 +127,6 @@ onMounted(async () => {
         </form>
       </ReadRegion>
     </section>
-    <OverviewSettings @dirty="overviewDirty = $event" />
+    <OverviewSettings :first-read="overviewRead" @dirty="overviewDirty = $event" />
   </div>
 </template>

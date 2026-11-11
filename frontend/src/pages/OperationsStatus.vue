@@ -7,6 +7,7 @@ import ProblemDrawer from '../components/ProblemDrawer.vue'
 import ReadRegion from '../components/ReadRegion.vue'
 import { request } from '../store'
 import { useRemote } from '../history'
+import { untilShown } from '../viewReady'
 import {
   alertSummary,
   attemptLabels,
@@ -211,6 +212,7 @@ const dayOptions = [
   { value: 7, label: '近 7 天' },
   { value: 30, label: '近 30 天' },
 ]
+await untilShown(() => status.ready() && history.ready())
 </script>
 <template>
   <div class="ops-toolbar">

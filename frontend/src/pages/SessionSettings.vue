@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 import { confirmAction, request } from '../store'
 import { stamp } from '../settings'
 import FormFeedback from '../components/FormFeedback.vue'
 import ReadRegion from '../components/ReadRegion.vue'
+import { untilShown } from '../viewReady'
 interface Sessions {
   expires_at: number
   remembered: boolean
   other_sessions: number
 }
+// Raised after the administrator changes, which signs every other session out.
+const props = defineProps<{ generation: number }>()
 const emit = defineEmits<{ dirty: [value: boolean]; logout: [] }>()
 const data = ref<Sessions>(),
   busy = ref(false),
@@ -56,7 +59,14 @@ function revoke() {
     '退出其他会话',
   )
 }
-onMounted(load)
+watch(
+  () => props.generation,
+  () => {
+    done.value = ''
+    void load()
+  },
+)
+await untilShown(load())
 </script>
 <template>
   <section class="panel settings-card">

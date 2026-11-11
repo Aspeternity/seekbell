@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { request } from '../store'
 import { ago, stamp, useSettingsForm } from '../settings'
 import Icon from '../components/Icon.vue'
 import FormFeedback from '../components/FormFeedback.vue'
 import ReadRegion from '../components/ReadRegion.vue'
+import { untilShown } from '../viewReady'
 import SettingsSaveBar from '../components/SettingsSaveBar.vue'
 interface Overview {
   posts: number
@@ -85,7 +86,7 @@ const { saved, draft, busy, error, reloadable, done, dirty } = form
 const doneText = computed(() =>
   cleaning.value ? '保留策略已保存，超出部分正在后台清理' : '保留策略已保存',
 )
-onMounted(form.load)
+await untilShown(form.load())
 </script>
 <template>
   <section class="panel settings-card" aria-labelledby="retention-data-title">
@@ -161,11 +162,9 @@ onMounted(form.load)
                 :max="MAX_POSTS"
                 step="1"
                 placeholder="不限"
-                aria-describedby="retention-limit-note"
                 :disabled="busy"
               /><span>条</span>
             </div>
-            <p id="retention-limit-note" class="small-note">命中的内容不计入</p>
           </div>
         </div>
         <SettingsSaveBar

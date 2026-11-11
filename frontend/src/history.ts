@@ -264,5 +264,7 @@ export function useRemote<T>(
     ++generation
     clearTimeout(timer)
   })
-  return { data, loading, error, stale, reload: () => reload() }
+  // Something to show: a snapshot, or the first read has finished (possibly with an error).
+  const ready = () => data.value !== undefined || !loading.value
+  return { data, loading, error, stale, ready, reload: () => reload() }
 }

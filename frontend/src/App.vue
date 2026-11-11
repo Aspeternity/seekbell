@@ -137,10 +137,27 @@ function applyRoute(next: string, push = true) {
   saveError.value = ''
   dirty.value = false
   mobileMenu.value = false
-  if (!internalTab) {
-    window.scrollTo(0, 0)
-    nextTick(() => document.querySelector<HTMLElement>('h1')?.focus())
-  }
+  arriving = !internalTab
+  // Signing in again mounts a fresh workspace, which shows nothing until its first page.
+  if (authPage.value) shownPage.value = undefined
+  nextTick(() => switching || arrived())
+}
+// A different page component stays offscreen until its first data is ready (viewReady.ts).
+// What belongs to the page on screen (its footer, scroll position and focused heading)
+// follows only once it is shown.
+const shownPage = ref<string>()
+let arriving = false,
+  switching = false
+function pagePending() {
+  switching = true
+}
+function arrived() {
+  switching = false
+  shownPage.value = page.value
+  if (!arriving) return
+  arriving = false
+  window.scrollTo(0, 0)
+  document.querySelector<HTMLElement>('h1')?.focus()
 }
 function navigate(next: string) {
   next = normalize(next)
@@ -377,63 +394,65 @@ function showInfo() {
         </div>
       </header>
       <main id="main-content" tabindex="-1">
-        <Overview v-if="page === 'overview'" @navigate="navigate" />
-        <Operations
-          v-else-if="page === 'operations' && validPage"
-          :section="parts[1]!"
-          :record-id="parts[2]"
-          :initial-target="recordTarget"
-          @navigate="navigate"
-        />
-        <Targets v-else-if="page === 'notifications' && validPage" @navigate="navigate" />
-        <TaskList v-else-if="page === 'tasks'" @navigate="navigate" />
-        <section v-else-if="page === 'task' && !state.websites.length" class="panel empty-state">
-          <Icon name="globe" :size="36" />
-          <h1 tabindex="-1">先添加一个监控网站</h1>
-          <p>每个任务关联一个已添加的网站，添加后即可设置监控规则。</p>
-          <button class="button primary" @click="navigate('/websites')">前往添加网站</button>
-        </section>
-        <TaskEditor
-          v-else-if="page === 'task' && editing"
-          :key="path"
-          :task="editing"
-          :saving="saving"
-          :save-error="saveError"
-          :return-label="taskReturn === '/tasks' ? '返回任务列表' : '返回概览'"
-          @dirty="(value: boolean) => (dirty = value)"
-          @save="save"
-          @navigate="navigate"
-          @cancel="navigate(taskReturn)"
-        />
-        <Websites
-          v-else-if="page === 'websites'"
-          :open-id="parts[1]"
-          @navigate="navigate"
-          @dirty="(value: boolean) => (dirty = value)"
-        />
-        <TargetEditor
-          v-else-if="page === 'target' && targetEditing"
-          :key="path"
-          :target="targetEditing"
-          @dirty="(value: boolean) => (dirty = value)"
-          @navigate="navigate"
-        />
-        <Settings
-          v-else-if="page === 'settings' && validPage"
-          :tab="parts[1]"
-          @dirty="(value: boolean) => (dirty = value)"
-          @navigate="navigate"
-        />
-        <section v-else class="panel not-found">
-          <span class="not-found-number">404</span>
-          <h1 tabindex="-1">这条线索暂时不在这里</h1>
-          <p>页面可能不存在，或记录已被删除。</p>
-          <button class="button primary" @click="navigate('/')">
-            返回概览<Icon name="arrow" :size="16" />
-          </button>
-        </section>
+        <Suspense @pending="pagePending" @resolve="arrived">
+          <Overview v-if="page === 'overview'" @navigate="navigate" />
+          <Operations
+            v-else-if="page === 'operations' && validPage"
+            :section="parts[1]!"
+            :record-id="parts[2]"
+            :initial-target="recordTarget"
+            @navigate="navigate"
+          />
+          <Targets v-else-if="page === 'notifications' && validPage" @navigate="navigate" />
+          <TaskList v-else-if="page === 'tasks'" @navigate="navigate" />
+          <section v-else-if="page === 'task' && !state.websites.length" class="panel empty-state">
+            <Icon name="globe" :size="36" />
+            <h1 tabindex="-1">先添加一个监控网站</h1>
+            <p>每个任务关联一个已添加的网站，添加后即可设置监控规则。</p>
+            <button class="button primary" @click="navigate('/websites')">前往添加网站</button>
+          </section>
+          <TaskEditor
+            v-else-if="page === 'task' && editing"
+            :key="path"
+            :task="editing"
+            :saving="saving"
+            :save-error="saveError"
+            :return-label="taskReturn === '/tasks' ? '返回任务列表' : '返回概览'"
+            @dirty="(value: boolean) => (dirty = value)"
+            @save="save"
+            @navigate="navigate"
+            @cancel="navigate(taskReturn)"
+          />
+          <Websites
+            v-else-if="page === 'websites'"
+            :open-id="parts[1]"
+            @navigate="navigate"
+            @dirty="(value: boolean) => (dirty = value)"
+          />
+          <TargetEditor
+            v-else-if="page === 'target' && targetEditing"
+            :key="path"
+            :target="targetEditing"
+            @dirty="(value: boolean) => (dirty = value)"
+            @navigate="navigate"
+          />
+          <Settings
+            v-else-if="page === 'settings' && validPage"
+            :tab="parts[1]"
+            @dirty="(value: boolean) => (dirty = value)"
+            @navigate="navigate"
+          />
+          <section v-else class="panel not-found">
+            <span class="not-found-number">404</span>
+            <h1 tabindex="-1">这条线索暂时不在这里</h1>
+            <p>页面可能不存在，或记录已被删除。</p>
+            <button class="button primary" @click="navigate('/')">
+              返回概览<Icon name="arrow" :size="16" />
+            </button>
+          </section>
+        </Suspense>
         <footer
-          v-if="page !== 'overview' && page !== 'task' && page !== 'target'"
+          v-if="shownPage && !['overview', 'task', 'target'].includes(shownPage)"
           class="page-footer"
         >
           <span><Icon name="bell" :size="14" />SeekBell · 留意你关心的</span

@@ -3,6 +3,7 @@ import { nextTick, onMounted } from 'vue'
 import { request, state } from '../store'
 import { clone } from '../shared'
 import { scrollToSection, useSettingsForm } from '../settings'
+import { untilShown } from '../viewReady'
 import {
   defaultOverviewModules,
   type OverviewModule,
@@ -12,10 +13,17 @@ import OverviewModuleSettings from '../components/OverviewModuleSettings.vue'
 import FormFeedback from '../components/FormFeedback.vue'
 import ReadRegion from '../components/ReadRegion.vue'
 import SettingsSaveBar from '../components/SettingsSaveBar.vue'
+// The page may start the first read alongside its own, rather than after it.
+const props = defineProps<{ firstRead?: Promise<OverviewPreferences> }>()
 const emit = defineEmits<{ dirty: [value: boolean] }>()
+let firstRead = props.firstRead
 const form = useSettingsForm<OverviewPreferences, OverviewModule[]>({
   name: '概览布局',
-  read: () => request<OverviewPreferences>('manage/overview-preferences'),
+  read: () => {
+    const started = firstRead
+    firstRead = undefined
+    return started ?? request<OverviewPreferences>('manage/overview-preferences')
+  },
   write: (modules, saved) =>
     request<OverviewPreferences>('manage/overview-preferences', 'PUT', {
       modules,
@@ -26,11 +34,13 @@ const form = useSettingsForm<OverviewPreferences, OverviewModule[]>({
   dirty: (value) => emit('dirty', value),
 })
 const { saved, draft, busy, error, reloadable, done, dirty } = form
+const loaded = form.load()
 onMounted(async () => {
-  await form.load()
+  await loaded
   await nextTick()
   scrollToSection('overview-modules', 'overview-modules')
 })
+await untilShown(loaded)
 </script>
 <template>
   <section

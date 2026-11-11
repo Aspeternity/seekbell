@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { confirmAction, request, state } from '../store'
 import { useSettingsForm } from '../settings'
 import FormFeedback from '../components/FormFeedback.vue'
 import ReadRegion from '../components/ReadRegion.vue'
+import { untilShown } from '../viewReady'
 import SettingsSaveBar from '../components/SettingsSaveBar.vue'
 import Toggle from '../components/Toggle.vue'
 interface Settings {
@@ -92,7 +93,7 @@ function test() {
     '发送测试',
   )
 }
-onMounted(form.load)
+await untilShown(form.load())
 </script>
 <template>
   <section class="panel settings-card">

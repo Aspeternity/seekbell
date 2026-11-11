@@ -227,6 +227,7 @@ test('a content limit shows the estimate before saving and the overview is read 
   const before = await (await page.request.get('/api/manage/retention')).json()
   const limit = page.getByLabel('内容上限', { exact: true })
   await expect(limit).toHaveAttribute('placeholder', '不限')
+  await expect(page.getByText('命中的内容不计入')).toHaveCount(0)
   await limit.fill('5')
   let asked = ''
   await page.route('**/api/manage/retention/preview?*', (route) => {
@@ -257,6 +258,46 @@ test('a content limit shows the estimate before saving and the overview is read 
   expect(after.max_posts).toBe(before.max_posts)
   expect(after.revision).toBe(before.revision)
 })
+test('entering settings and switching pages never paints an empty card first', async ({ page }) => {
+  // A real server answers later than this disposable one, so every page read is slowed.
+  await page.route('**/api/manage/**', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 120))
+    return route.fallback()
+  })
+  await page.goto('/#/')
+  await expect(page.locator('main .read-region:not(:has(.read-snapshot))')).toHaveCount(0)
+  await page.evaluate(() => {
+    const sampled = ((window as unknown as { emptyFrames: string[] }).emptyFrames = [])
+    const tick = () => {
+      if (document.querySelector('main .read-region:not(:has(.read-snapshot))'))
+        sampled.push(location.hash)
+      requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  })
+  const visits = [
+    ['/settings/preferences', '通用设置'],
+    ['/settings/alerts', '系统告警'],
+    ['/settings/data', '保留策略'],
+    ['/settings/backup', '备份状态'],
+    ['/settings/account', '登录会话'],
+    ['/settings/about', 'SeekBell.'],
+    ['/settings/backup', '自动备份'],
+    ['/operations/status', '运行中心'],
+    ['/operations/content', '运行中心'],
+    ['/settings/data', '现有数据'],
+    ['/', '社区热榜'],
+  ]
+  for (const [path, heading] of visits) {
+    await page.evaluate((path) => (location.hash = path), path!)
+    await expect(page.getByRole('heading', { name: heading!, exact: true }).first()).toBeVisible()
+    await expect(page.locator('main .read-region:not(:has(.read-snapshot))')).toHaveCount(0)
+  }
+  expect(
+    await page.evaluate(() => (window as unknown as { emptyFrames: string[] }).emptyFrames),
+  ).toEqual([])
+})
+
 test('timezone picker groups common zones and previews the offset without a search box', async ({
   page,
 }) => {

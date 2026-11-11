@@ -14,11 +14,11 @@ M0–M4完成；v0.8.0（运行中心）已发布，见[v0.8.0记录](history/20
 
 无进行中的改动。最近完成：数据页重构（11-11用户确认，已本地提交）——数据页为“现有数据”三格状态卡（内容/命中、通知、最早内容；复审后去掉“问题”格）+“保留策略”卡：保留天数、内容上限（只限未命中内容，默认不限）、收紧时确认框给预估；删除数据页存储占用、预览按钮和“最近一次清理”；数据库启动时一次性切换自动增量回收，清理后文件变小。迁移`0022_content_limit`。细节与证据见[归档](history/2026-11-11-数据页内容上限.md)。
 
-未提交：`assets/brand/`图标（待审）。
+未提交（11-11用户要求）：①数据页去掉“命中的内容不计入”提示；②换页不闪：根因是各页挂载后先画空卡片、首读返回后再填充跳动（模拟120ms延迟实测设置六类、运行状态、内容与命中、概览均有空帧）。App主区/设置分类/运行中心分区加`<Suspense>`，读数据页面setup末尾`await untilShown(...)`（新`frontend/src/viewReady.ts`），旧页最多保留400ms；父子卡并行首读；会话卡改generation重读；页脚、滚顶、聚焦跟随实际显示的页。新增`tests/system/settings.spec.ts`“never paints an empty card”逐帧检测；`tests/loading`与`history-ui-fixes`首读提示时间改为400ms。证据（本机，基于`c5f6393`未提交改动）：system/loading/operations/retention/backup/first-entry/workspace-stability/content-stability/ui/approved-ui/history/history-ui-fixes/hotlist全部通过；把保留时间临时改0时新测试捕获96个空帧失败，已还原。说明见ARCHITECTURE“换页不闪”、UI_DESIGN加载规则。`assets/brand/`图标（待审）。
 
 ## 下一步
 
-1. 用户复审数据页与备份页（预览：`pnpm --dir frontend build`后`uv run --frozen python scripts/run_web_smoke.py --system --port 8099`，浏览器Ctrl+Shift+R；8099上旧进程需先停掉才能加载新后端）。
+1. 用户复审换页不闪与数据页、备份页（预览：`pnpm --dir frontend build`后`uv run --frozen python scripts/run_web_smoke.py --system --port 8099`，浏览器Ctrl+Shift+R；8099上旧进程需先停掉才能加载新后端）。
 2. WebDAV远程副本（11-11用户：先不做，暂缓）：以后先出简短方案请用户确认细则（上传是否加密、配置位置与字段、NAS保留份数、哪些类型上传、失败故障、从NAS恢复、测试连接），再实现；CI用模拟WebDAV服务，不连真实NAS。
 3. 之后第三期升级前备份；运行中心阶段三；程序日志待议；图标采用。
 4. **暂不发版**（用户11-10明确）。发版时机由用户提出；届时本地分支合成一个PR，`bump_version.py`一次，CHANGELOG汇总六类重组、数据页内容上限与自动回收、迁移0019–0022（回退需0018备份）与备份格式不兼容旧版。

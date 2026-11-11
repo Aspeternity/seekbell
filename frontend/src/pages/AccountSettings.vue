@@ -183,6 +183,10 @@ function logout() {
         </div>
       </form>
     </section>
-    <SessionSettings :key="sessionGeneration" @dirty="sessionBusy = $event" @logout="logout" />
+    <SessionSettings
+      :generation="sessionGeneration"
+      @dirty="sessionBusy = $event"
+      @logout="logout"
+    />
   </div>
 </template>

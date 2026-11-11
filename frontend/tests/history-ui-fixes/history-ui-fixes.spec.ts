@@ -111,9 +111,13 @@ test('content filters preserve geometry, task notes are inset and post details a
   await page.locator('.content-title').first().click()
   await expect.poll(() => detailStarted).toBe(true)
   await expect(page.getByText('正在读取服务端记录…', { exact: true })).toHaveCount(0)
-  await page.clock.runFor(199)
+  // The list stays in place for at most 400ms; the detail shown after that wait has its
+  // indicator at once, never an empty page first.
+  await page.clock.runFor(399)
   await expect(page.locator('.remote-feedback')).toHaveCount(0)
+  await expect(page.locator('.content-row')).toHaveCount(20)
   await page.clock.runFor(1)
+  await expect(page.locator('.content-row')).toHaveCount(0)
   await expect(page.locator('.remote-feedback')).toContainText('加载中…')
   detail.release()
   await expect(page.getByRole('heading', { name: '命中依据' })).toBeVisible()

@@ -52,8 +52,11 @@ test('content requests start immediately, share one delayed indicator and isolat
   // With browser time paused, reaching both requests proves there is no initial 180ms delay.
   await expect.poll(() => started).toBe(2)
   await expect(page.locator('.remote-feedback')).toHaveCount(0)
-  await page.clock.runFor(199)
+  // The previous page stays for at most 400ms; a page shown after that wait shows its
+  // indicator at once rather than after another delay.
+  await page.clock.runFor(399)
   await expect(page.locator('.remote-feedback')).toHaveCount(0)
+  await expect(page.getByTestId('overview-matches')).toBeVisible()
   await page.clock.runFor(1)
   await expect(page.locator('.remote-feedback')).toHaveCount(1)
   await expect(page.locator('.remote-feedback')).toHaveText('加载中…')

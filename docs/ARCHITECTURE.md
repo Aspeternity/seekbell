@@ -112,6 +112,8 @@ useRemote初读/非搜索立即请求，仅明确的搜索字段变化防抖180m
 
 usePopup把按钮和portalled面板作为单一边界，统一外部/焦点离开关闭；DateFilter与AppSelect复用，不叠加库捕获阶段clickoutside。AppSelect归并15处原生选择与旧WebsiteSelect，以preventScroll聚焦、仅滚动菜单选项，保留不同场景尺寸和类型；Bootstrap的abstract NConfigProvider禁用组件库全局preflight，防止首次挂载改写body字体。Notifications外壳持有标题与NotificationTabs，内容按菜单/记录键隔离；Settings内部换分类保留外壳并清空获准放弃的草稿，避免跨页面KeepAlive敏感表单。
 
+2026-11-11换页不闪：App主区、设置分类与运行中心分区各包一层`<Suspense>`（后两者`suspensible`），读数据的页面在setup末尾`await untilShown(...)`（viewReady.ts）等首读完成，最多400ms；期间旧页面留在原位，导航/分类高亮已切换，新页面一次完整替换，不再出现空卡片再填充的跳动，超时后新页面立即显示占位与读取提示（untilShown经provide告知ReadRegion/Feedback首次不再延迟）。页面滚到顶、聚焦标题和页脚跟随实际显示的页面。父卡与子卡并行首读（子卡收`firstRead`）。已解析分支内按key重挂的异步组件会短暂变为空占位，因此会话卡改为generation属性触发重读。仅state数据的页面和已有准备逻辑的通知记录不变。
+
 2026-10-23补修：recordQueries集中通知记录的默认/筛选参数、缓存键及加载器，预读与Records使用同一契约。readCache.fetchRead按会话/数据revision/查询键合并在途读取；所有useRemote读取共用它，清会话时清在途索引并拒绝旧请求回填。Notifications区分请求目的地与实际展示对象，只在目标列表/选项完成后整体提交；从冷预读交接的首次useRemote消费已完成快照，后续筛选/重试仍正常请求。只读区域占位和反馈同时延迟200ms，原有身份/写后失效规则保留。
 
 ## 网站库与实例

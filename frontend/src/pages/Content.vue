@@ -12,6 +12,7 @@ import Pagination from '../components/Pagination.vue'
 import DateFilter from '../components/DateFilter.vue'
 import { dateRangeParams, type HistoryDateRange } from '../dateRange'
 import ReadRegion from '../components/ReadRegion.vue'
+import { untilShown } from '../viewReady'
 import { shouldOpenContentRow } from '../contentRow'
 const props = defineProps<{ selectedId?: string }>()
 const emit = defineEmits<{ navigate: [path: string] }>()
@@ -165,6 +166,7 @@ function clear() {
   dateRange.value = null
   website.value = ''
 }
+await untilShown(() => options.ready() && listing.ready() && detail.ready() && deliveries.ready())
 </script>
 <template>
   <template v-if="selectedId">

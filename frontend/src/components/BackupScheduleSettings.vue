@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed } from 'vue'
 import { request } from '../store'
 import { stamp, useSettingsForm } from '../settings'
 import { WEEKDAYS, type BackupSchedule } from '../backups'
 import AppSelect from './AppSelect.vue'
 import FormFeedback from './FormFeedback.vue'
 import ReadRegion from './ReadRegion.vue'
+import { untilShown } from '../viewReady'
 import SettingsSaveBar from './SettingsSaveBar.vue'
 import Toggle from './Toggle.vue'
 interface Draft {
@@ -16,7 +17,10 @@ interface Draft {
   minute: number
   keep: number
 }
+// The page may start the first read alongside its own, rather than after it.
+const props = defineProps<{ firstRead?: Promise<BackupSchedule> }>()
 const emit = defineEmits<{ dirty: [value: boolean]; saved: [] }>()
+let firstRead = props.firstRead
 // One list for how often: daily, or weekly on a given day ("w0" is Monday). A single
 // control keeps its width, so nothing beside it moves when switching.
 const repeats = [
@@ -27,7 +31,11 @@ const two = (value: number) => String(value).padStart(2, '0')
 const hours = Array.from({ length: 24 }, (_, value) => ({ value, label: two(value) }))
 const form = useSettingsForm<BackupSchedule, Draft>({
   name: '自动备份设置',
-  read: () => request<BackupSchedule>('manage/backups/schedule'),
+  read: () => {
+    const started = firstRead
+    firstRead = undefined
+    return started ?? request<BackupSchedule>('manage/backups/schedule')
+  },
   write: async (draft, saved) => {
     const value = await request<BackupSchedule>('manage/backups/schedule', 'PUT', {
       enabled: draft.enabled,
@@ -77,7 +85,7 @@ const nextText = computed(() => {
   if (!value.enabled) return '已关闭'
   return value.next_run_at ? '下次 ' + stamp(value.next_run_at) : ''
 })
-onMounted(form.load)
+await untilShown(form.load())
 </script>
 <template>
   <section id="backup-schedule" class="panel settings-card" aria-labelledby="backup-schedule-title">

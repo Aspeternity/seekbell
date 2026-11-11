@@ -5,6 +5,7 @@ import ReadRegion from '../components/ReadRegion.vue'
 import { request } from '../store'
 import { byteSize as size, stamp } from '../settings'
 import { useRemote } from '../history'
+import { untilShown } from '../viewReady'
 interface About {
   version: string
   build_revision: string
@@ -84,6 +85,7 @@ async function copyRevision() {
     copied.value = '复制失败，请手动选取'
   }
 }
+await untilShown(about.ready)
 </script>
 <template>
   <div class="settings-stack">

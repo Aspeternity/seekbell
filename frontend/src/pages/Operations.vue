@@ -40,18 +40,21 @@ onMounted(() => {
       </button>
     </nav>
   </template>
-  <OperationsStatus v-if="section === 'status'" @navigate="(path) => emit('navigate', path)" />
-  <Content
-    v-else-if="section === 'content'"
-    :key="recordId || 'list'"
-    :selected-id="recordId"
-    @navigate="(path) => emit('navigate', path)"
-  />
-  <NotificationRecords
-    v-else
-    :tab="section"
-    :record-id="recordId"
-    :initial-target="initialTarget"
-    @navigate="(path) => emit('navigate', path)"
-  />
+  <!-- The previous section stays until the next one has its data (viewReady.ts). -->
+  <Suspense suspensible>
+    <OperationsStatus v-if="section === 'status'" @navigate="(path) => emit('navigate', path)" />
+    <Content
+      v-else-if="section === 'content'"
+      :key="recordId || 'list'"
+      :selected-id="recordId"
+      @navigate="(path) => emit('navigate', path)"
+    />
+    <NotificationRecords
+      v-else
+      :tab="section"
+      :record-id="recordId"
+      :initial-target="initialTarget"
+      @navigate="(path) => emit('navigate', path)"
+    />
+  </Suspense>
 </template>

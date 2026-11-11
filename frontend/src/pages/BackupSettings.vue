@@ -8,6 +8,7 @@ import {
   kindLabels,
   latestBackup,
   type BackupEntry,
+  type BackupSchedule,
   type BackupStatus,
 } from '../backups'
 import FormFeedback from '../components/FormFeedback.vue'
@@ -15,6 +16,7 @@ import Icon from '../components/Icon.vue'
 import BackupNameDialog from '../components/BackupNameDialog.vue'
 import BackupRestoreWizard from '../components/BackupRestoreWizard.vue'
 import BackupScheduleSettings from '../components/BackupScheduleSettings.vue'
+import { untilShown } from '../viewReady'
 const emit = defineEmits<{ dirty: [value: boolean] }>()
 const status = ref<BackupStatus>(),
   loading = ref(false),
@@ -221,8 +223,12 @@ async function restored(result: { paused: boolean }) {
   await nextTick()
   location.hash = '/'
 }
+// The schedule card's read starts now instead of after this page's own read.
+const scheduleRead = request<BackupSchedule>('manage/backups/schedule')
+scheduleRead.catch(() => {})
+const loaded = load()
 onMounted(async () => {
-  await load()
+  await loaded
   await nextTick()
   scrollToSection('list', 'backup-list')
 })
@@ -232,6 +238,7 @@ onBeforeUnmount(() => {
   clearTimeout(freshTimer)
   document.body.classList.remove('website-panel-open')
 })
+await untilShown(loaded)
 </script>
 <template>
   <div class="settings-stack">
@@ -309,7 +316,11 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <BackupScheduleSettings @dirty="scheduleDirty = $event" @saved="load" />
+    <BackupScheduleSettings
+      :first-read="scheduleRead"
+      @dirty="scheduleDirty = $event"
+      @saved="load"
+    />
     <section id="backup-list" class="panel settings-card" aria-labelledby="backup-list-title">
       <div class="panel-heading">
         <div>

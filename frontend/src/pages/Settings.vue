@@ -47,16 +47,19 @@ onBeforeUnmount(() => tabResize?.disconnect())
       </button>
     </nav>
     <div class="settings-content">
-      <Preferences v-if="selectedTab === 'preferences'" @dirty="emit('dirty', $event)" />
-      <AlertsSettings v-else-if="selectedTab === 'alerts'" @dirty="emit('dirty', $event)" />
-      <DataSettings v-else-if="selectedTab === 'data'" @dirty="emit('dirty', $event)" />
-      <BackupSettings v-else-if="selectedTab === 'backup'" @dirty="emit('dirty', $event)" />
-      <AccountSettings
-        v-else-if="selectedTab === 'account'"
-        @dirty="emit('dirty', $event)"
-        @navigate="emit('navigate', $event)"
-      />
-      <AboutSettings v-else-if="selectedTab === 'about'" />
+      <!-- The previous category stays until the next one has its data (viewReady.ts). -->
+      <Suspense suspensible>
+        <Preferences v-if="selectedTab === 'preferences'" @dirty="emit('dirty', $event)" />
+        <AlertsSettings v-else-if="selectedTab === 'alerts'" @dirty="emit('dirty', $event)" />
+        <DataSettings v-else-if="selectedTab === 'data'" @dirty="emit('dirty', $event)" />
+        <BackupSettings v-else-if="selectedTab === 'backup'" @dirty="emit('dirty', $event)" />
+        <AccountSettings
+          v-else-if="selectedTab === 'account'"
+          @dirty="emit('dirty', $event)"
+          @navigate="emit('navigate', $event)"
+        />
+        <AboutSettings v-else-if="selectedTab === 'about'" />
+      </Suspense>
     </div>
   </div>
 </template>
