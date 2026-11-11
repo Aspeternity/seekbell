@@ -100,7 +100,9 @@ class AlertInput(Input):
     enabled: bool
     target_ids: list[str] = Field(max_length=64)
     # Omitted by older callers, which keeps the saved delay.
-    delay_seconds: Literal[0, 60, 300] | None = None
+    delay_seconds: int | None = Field(
+        default=None, ge=0, le=alerts.MAX_DELAY_SECONDS, multiple_of=60
+    )
     remind_seconds: Literal[0, 21600, 86400] | None = None
     revision: int = Field(ge=1)
 

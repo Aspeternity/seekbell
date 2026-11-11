@@ -24,11 +24,8 @@ interface TestResult {
   summary: string | null
 }
 const emit = defineEmits<{ dirty: [value: boolean] }>()
-const delays = [
-  { value: 0, label: '立即' },
-  { value: 60, label: '持续 1 分钟' },
-  { value: 300, label: '持续 5 分钟' },
-]
+// The delay is edited in whole minutes; 0 announces a fault at once.
+const MAX_DELAY_MINUTES = 1440
 const reminders = [
   { value: 0, label: '不再提醒' },
   { value: 21600, label: '每 6 小时' },
@@ -45,8 +42,12 @@ const form = useSettingsForm<Settings, Draft>({
     delay_seconds,
     remind_seconds,
   }),
-  validate: (draft) =>
-    draft.enabled && !draft.target_ids.length ? '启用告警需至少选择一个通知目标。' : '',
+  validate: (draft) => {
+    const minutes = draft.delay_seconds / 60
+    if (!Number.isInteger(minutes) || minutes < 0 || minutes > MAX_DELAY_MINUTES)
+      return '通知延迟应为 0–' + MAX_DELAY_MINUTES + ' 之间的整数分钟。'
+    return draft.enabled && !draft.target_ids.length ? '启用告警需至少选择一个通知目标。' : ''
+  },
   // Turning alerts off cancels what is still waiting to be sent, which cannot be undone.
   confirmSave: (draft, saved) =>
     saved.enabled && !draft.enabled
@@ -58,6 +59,13 @@ const form = useSettingsForm<Settings, Draft>({
   dirty: (value) => emit('dirty', value),
 })
 const { saved, draft, busy, error, reloadable, done, dirty } = form
+const delayMinutes = computed({
+  get: () => draft.value.delay_seconds / 60,
+  // An empty or partial entry stays invalid until validation reports it.
+  set: (value: number | string) => {
+    draft.value.delay_seconds = value === '' ? NaN : Number(value) * 60
+  },
+})
 const ready = computed(() =>
   state.targets.filter((target) => draft.value.target_ids.includes(target.id) && target.enabled),
 )
@@ -126,15 +134,7 @@ await untilShown(form.load())
           <h2 id="alert-settings-title">系统告警</h2>
           <p>采集、通知渠道、后台服务、磁盘空间或自动备份出问题及恢复时通知你</p>
         </div>
-        <div class="alert-heading-actions">
-          <a class="text-link" href="#/operations/status">查看问题历史</a>
-          <Toggle
-            v-if="saved"
-            v-model="draft.enabled"
-            label="启用故障与恢复告警"
-            :disabled="busy"
-          />
-        </div>
+        <Toggle v-if="saved" v-model="draft.enabled" label="启用故障与恢复告警" :disabled="busy" />
       </div>
       <FormFeedback :error="error" :retryable="reloadable" @retry="form.reload" />
       <ReadRegion :loading="busy && !saved" error="" :has-data="!!saved" :min-height="380">
@@ -212,20 +212,23 @@ await untilShown(form.load())
             </div>
             <div class="form-stack">
               <div class="alert-rule-fields">
-                <fieldset class="plain-fieldset alert-rule" :disabled="busy">
-                  <legend class="field-label">故障持续多久后通知</legend>
-                  <div class="alert-choices">
-                    <label
-                      v-for="item in delays"
-                      :key="item.value"
-                      :class="{ active: draft.delay_seconds === item.value }"
-                    >
-                      <input v-model="draft.delay_seconds" type="radio" :value="item.value" />
-                      {{ item.label }}
-                    </label>
+                <div class="alert-rule">
+                  <label class="field-label" for="alert-delay">故障持续多久后通知</label>
+                  <div class="unit-input alert-delay">
+                    <input
+                      id="alert-delay"
+                      v-model.number="delayMinutes"
+                      type="number"
+                      class="text-input"
+                      min="0"
+                      :max="MAX_DELAY_MINUTES"
+                      step="1"
+                      required
+                      :disabled="busy"
+                    /><span>分钟</span>
                   </div>
-                  <p class="small-note">在这段时间内自行恢复的故障，故障和恢复都不通知。</p>
-                </fieldset>
+                  <p class="small-note">填 0 立即通知；这段时间内自行恢复的故障不通知。</p>
+                </div>
                 <fieldset class="plain-fieldset alert-rule" :disabled="busy">
                   <legend class="field-label">故障一直未恢复时</legend>
                   <div class="alert-choices">
@@ -241,12 +244,6 @@ await untilShown(form.load())
                   <p class="small-note">提醒和恢复通知只发给收到过这次故障通知的目标。</p>
                 </fieldset>
               </div>
-              <p class="alert-rule-note">
-                <Icon
-                  name="help"
-                  :size="14"
-                />每条告警对每个目标只发一次，失败或结果未知都不重发；开启告警前已经存在的故障不补发。
-              </p>
             </div>
           </section>
           <SettingsSaveBar

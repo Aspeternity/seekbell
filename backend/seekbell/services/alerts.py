@@ -26,7 +26,8 @@ from seekbell.services.display import notification_context
 from seekbell.services.fault_guide import delivery_guide, guide_for
 from seekbell.services.history import read_session
 
-DELAYS = (0, 60, 300)
+# A fault is announced once it has lasted this long: whole minutes, at most a day.
+MAX_DELAY_SECONDS = 86400
 # Repeat an unresolved fault to those who were told about it: never, every 6 h or every day.
 REMINDERS = (0, 21600, 86400)
 REMIND_CHECK_SECONDS = 60
@@ -221,7 +222,7 @@ def update_settings(
             raise AlertConflict("告警设置已在其他页面改变，请重新读取后保存。")
         if delay_seconds is None:
             delay_seconds = settings.delay_seconds
-        if delay_seconds not in DELAYS:
+        if not 0 <= delay_seconds <= MAX_DELAY_SECONDS or delay_seconds % 60:
             raise ValueError("Unsupported alert delay")
         if remind_seconds is None:
             remind_seconds = settings.remind_seconds

@@ -5,6 +5,7 @@ import re
 import time
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 from seekbell.db.models import AlertDelivery, LoginSession, SystemEvent
 from seekbell.notifiers.rendering import render, telegram_message, webhook_payload
@@ -49,7 +50,16 @@ def test_alert_delay_is_saved_validated_and_kept_when_omitted(configured):  # no
     saved = client.get("/api/manage/alerts").json()
     assert saved["delay_seconds"] == 0
     body = {"enabled": True, "target_ids": [key], "revision": saved["revision"]}
-    assert client.put("/api/manage/alerts", json={**body, "delay_seconds": 45}).status_code == 422
+    # Any whole number of minutes up to a day.
+    for bad in (45, -60, 86460):
+        assert (
+            client.put("/api/manage/alerts", json={**body, "delay_seconds": bad}).status_code == 422
+        )
+    with pytest.raises(ValueError):
+        update_settings(server.state.engine, True, [key], saved["revision"], delay_seconds=90)
+    result = client.put("/api/manage/alerts", json={**body, "delay_seconds": 1800})
+    assert result.status_code == 200 and result.json()["delay_seconds"] == 1800
+    body["revision"] = result.json()["revision"]
     result = client.put("/api/manage/alerts", json={**body, "delay_seconds": 300})
     assert result.status_code == 200 and result.json()["delay_seconds"] == 300
     body["revision"] = result.json()["revision"]

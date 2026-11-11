@@ -351,7 +351,8 @@ test('alert delay and reminder are saved and a test alert reports each chosen ta
   const before = await (await page.request.get('/api/manage/alerts')).json()
   await page.goto('/#/settings/alerts')
   const test = page.getByRole('button', { name: '发送测试告警', exact: true })
-  await page.getByRole('radio', { name: '持续 5 分钟', exact: true }).check()
+  // Any whole number of minutes, not only the old presets.
+  await page.getByLabel('故障持续多久后通知', { exact: true }).fill('30')
   await page.getByRole('radio', { name: '每 6 小时', exact: true }).check()
   await page.getByRole('checkbox', { name: new RegExp(name) }).check()
   // The draft selection can be tested before anything is saved.
@@ -368,10 +369,10 @@ test('alert delay and reminder are saved and a test alert reports each chosen ta
   await page.getByRole('button', { name: '保存告警设置', exact: true }).click()
   await expect(page.getByRole('status').filter({ hasText: '系统告警设置已保存' })).toBeVisible()
   const saved = await (await page.request.get('/api/manage/alerts')).json()
-  expect(saved.delay_seconds).toBe(300)
+  expect(saved.delay_seconds).toBe(1800)
   expect(saved.remind_seconds).toBe(21600)
   expect(saved.enabled).toBe(before.enabled)
-  await page.getByRole('radio', { name: '立即', exact: true }).check()
+  await page.getByLabel('故障持续多久后通知', { exact: true }).fill('0')
   await page.getByRole('radio', { name: '不再提醒', exact: true }).check()
   await page.getByRole('checkbox', { name: new RegExp(name) }).uncheck()
   await page.getByRole('button', { name: '保存告警设置', exact: true }).click()

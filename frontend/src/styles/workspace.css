@@ -3127,12 +3127,22 @@ h1[tabindex='-1']:focus-visible {
   flex-wrap: nowrap;
   align-items: flex-start;
 }
-.alert-heading-actions {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 18px;
+/* A card's own on/off switch is its main control, so it is larger than the ones in lists. */
+.settings-content .settings-card > .panel-heading > .toggle {
+  width: 44px;
+  height: 24px;
   margin-top: 2px;
+}
+.settings-content .settings-card > .panel-heading > .toggle span {
+  width: 20px;
+  height: 20px;
+}
+.settings-content .settings-card > .panel-heading > .toggle.on span {
+  transform: translateX(20px);
+}
+.alert-delay .text-input {
+  width: 120px;
+  height: 42px;
 }
 .alert-no-targets {
   margin: 0;
@@ -3320,22 +3330,6 @@ h1[tabindex='-1']:focus-visible {
 }
 .alert-rule:disabled .alert-choices {
   opacity: 0.55;
-}
-.alert-rule-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 0;
-  padding: 12px 14px;
-  border-radius: 10px;
-  background: #f8f9fb;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.7;
-}
-.alert-rule-note svg {
-  flex-shrink: 0;
-  margin-top: 3px;
 }
 @media (max-width: 1100px) {
   .alert-rule-fields {
