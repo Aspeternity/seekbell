@@ -18,11 +18,13 @@ M0–M4完成；v0.8.0（运行中心）已发布，见[v0.8.0记录](history/20
 
 告警审查（11-11用户“全都做吧”，已本地提交，待复审）：告警设置留在设置页；服务卡住（循环超120秒）记录并告警；恢复/提醒只发给收到过该故障的目标；可选“仍未恢复提醒”6/24小时；消息附中文原因与持续时长；新装默认延迟1分钟；页面两区+最近一次告警+单渠道提示；迁移`0023_alert_reminders`。证据（本机）：后端全量1038项、浏览器system/operations/approved-ui/ui/runtime全部通过，见[归档](history/2026-11-11-告警审查.md)。
 
+告警页美化重构（11-11用户要求，已本地提交，待复审）：改为“系统告警”状态卡（告警状态/最近一次告警/内容与结果三格）+“告警设置”卡（卡头启用开关、目标选择卡网格、测试按钮同行、两组分段单选并排、规则提示块），规则、接口与文案不变，见UI_DESIGN“告警页两卡”。证据（本机）：`pnpm build`、prettier，浏览器system 26项、approved-ui 8项、ui 8项通过；桌面与手机截图人工检查。
+
 未提交：`assets/brand/`图标（待审）。
 
 ## 下一步
 
-1. 用户复审告警页、换页不闪与数据页、备份页（预览：`pnpm --dir frontend build`后`uv run --frozen python scripts/run_web_smoke.py --system --port 8099`，浏览器Ctrl+Shift+R；8099上旧进程需先停掉才能加载新后端）。
+1. 用户复审告警页（新两卡布局）、换页不闪与数据页、备份页（预览：`pnpm --dir frontend build`后`uv run --frozen python scripts/run_web_smoke.py --system --port 8099`，浏览器Ctrl+Shift+R；8099上旧进程需先停掉才能加载新后端）。
 2. WebDAV远程副本（11-11用户：先不做，暂缓）：以后先出简短方案请用户确认细则（上传是否加密、配置位置与字段、NAS保留份数、哪些类型上传、失败故障、从NAS恢复、测试连接），再实现；CI用模拟WebDAV服务，不连真实NAS。
 3. 之后第三期升级前备份；运行中心阶段三；程序日志待议；图标采用。
 4. **暂不发版**（用户11-10明确）。发版时机由用户提出；届时本地分支合成一个PR，`bump_version.py`一次，CHANGELOG汇总六类重组、数据页内容上限与自动回收、迁移0019–0023（回退需0018备份）、告警审查（新装默认延迟1分钟、仍未恢复提醒、Webhook alert新增字段）与备份格式不兼容旧版。
@@ -36,6 +38,6 @@ M0–M4完成；v0.8.0（运行中心）已发布，见[v0.8.0记录](history/20
 - 备份：SPEC 6.5.3–6.5.5、BACKUP_RESTORE、ARCHITECTURE“备份重构第一期/第二期”“备份导入”、`backend/seekbell/{backup.py,services/backups.py,services/backup_schedule.py,api/backups.py}`、`frontend/src/{pages/BackupSettings.vue,components/BackupScheduleSettings.vue,components/BackupRestoreWizard.vue,backups.ts}`。
 - 设置：SPEC 6.5.2、UI_DESIGN“系统设置六类”、`frontend/src/settings.ts`、`api/settings.py`。
 - 数据页：SPEC 6.5.6、UI_DESIGN“数据页”、ARCHITECTURE“内容上限与自动回收”、`services/{retention,maintenance}.py`、`db/runtime.py`、`pages/RetentionSettings.vue`。
-- 告警：SPEC 6.5.7、ARCHITECTURE“告警审查”、UI_DESIGN“告警页”、`services/{alerts,stalls}.py`、`pages/AlertsSettings.vue`。
+- 告警：SPEC 6.5.7、ARCHITECTURE“告警审查”、UI_DESIGN“告警页”“告警页两卡”、`services/{alerts,stalls}.py`、`pages/AlertsSettings.vue`。
 - 运行中心：docs/plans/2026-11-09方案、pages/{Operations,OperationsStatus}.vue、services/{operations,fault_guide,alerts,runtime}.py。
 - 发布/实机：IMAGE_RELEASE正式发布段、ROADMAP当前阶段、ACCEPTANCE；图标见assets/brand/README.md。

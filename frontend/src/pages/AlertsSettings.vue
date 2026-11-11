@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
-import { confirmAction, request, state } from '../store'
-import { useSettingsForm } from '../settings'
-import { stamp } from '../operations'
+import { channelMeta, confirmAction, request, state } from '../store'
+import { ago, stamp, useSettingsForm } from '../settings'
+import Icon from '../components/Icon.vue'
 import FormFeedback from '../components/FormFeedback.vue'
 import ReadRegion from '../components/ReadRegion.vue'
 import { untilShown } from '../viewReady'
@@ -80,6 +80,15 @@ const phases: Record<Recent['phase'], string> = {
   recovery: '恢复',
   reminder: '仍未恢复提醒',
 }
+// The status card describes what is saved, not the draft being edited.
+const status = computed(() => {
+  const value = saved.value
+  if (!value) return null
+  const receiving = state.targets.filter(
+    (target) => value.target_ids.includes(target.id) && target.enabled,
+  ).length
+  return { enabled: value.enabled, receiving, idle: value.enabled && !receiving }
+})
 const recent = computed(() => {
   const row = saved.value?.recent
   if (!row) return null
@@ -91,12 +100,16 @@ const recent = computed(() => {
   const parts = [sent ? '已送达 ' + sent : '', failed ? '失败或未知 ' + failed : '']
   if (waiting) parts.push('等待发送 ' + waiting)
   return {
-    text: [stamp(row.at), phases[row.phase] + '：' + row.label, ...parts.filter(Boolean)].join(
-      ' · ',
-    ),
+    at: row.at,
+    phase: row.phase,
+    title: phases[row.phase],
+    label: row.label,
+    results: parts.filter(Boolean).join(' · ') || '没有发送目标',
     failed: failed > 0,
   }
 })
+const meta = (channel: string) =>
+  channelMeta[channel as keyof typeof channelMeta] || { icon: 'send', color: 'blue' }
 const testing = ref(false),
   testError = ref(''),
   results = ref<TestResult[]>()
@@ -146,74 +159,135 @@ function test() {
 await untilShown(form.load())
 </script>
 <template>
-  <section class="panel settings-card">
+  <section class="panel settings-card" aria-labelledby="alert-status-title">
     <div class="panel-heading">
-      <div>
-        <h2>系统告警</h2>
-        <p>采集、通知渠道、后台服务、磁盘空间或自动备份出问题及恢复时通知你</p>
-      </div>
+      <h2 id="alert-status-title">系统告警</h2>
       <a class="text-link" href="#/operations/status">查看问题历史</a>
     </div>
-    <FormFeedback :error="error" :retryable="reloadable" @retry="form.reload" />
+    <FormFeedback v-if="!saved" :error="error" :retryable="reloadable" @retry="form.reload" />
+    <ReadRegion :loading="busy && !saved" error="" :has-data="!!saved" :min-height="110">
+      <div v-if="saved && status" class="form-content">
+        <dl class="about-tiles alert-tiles">
+          <div
+            class="alert-state"
+            :class="status.idle ? 'warn' : status.enabled ? 'on' : 'off'"
+            data-alert-state
+          >
+            <dt>
+              <span class="about-tile-icon"><Icon name="bell" :size="16" /></span>告警
+            </dt>
+            <dd>
+              <span class="alert-state-value"
+                ><span class="status-dot" />{{ status.enabled ? '已开启' : '已关闭' }}</span
+              >
+              <small v-if="status.idle">没有可接收的目标</small>
+              <small v-else-if="status.enabled">{{ status.receiving }} 个目标接收</small>
+              <small v-else>出现故障时不会通知</small>
+            </dd>
+          </div>
+          <div data-alert-recent>
+            <dt>
+              <span class="about-tile-icon"><Icon name="clock" :size="16" /></span>最近一次告警
+            </dt>
+            <dd v-if="recent">
+              {{ ago(recent.at) }}
+              <small>{{ stamp(recent.at) }}</small>
+            </dd>
+            <dd v-else class="alert-empty">还没有发出过告警</dd>
+          </div>
+          <div :class="{ failed: recent?.failed }" data-alert-result>
+            <dt>
+              <span class="about-tile-icon"><Icon name="send" :size="16" /></span>内容与结果
+            </dt>
+            <dd v-if="recent">
+              <span class="alert-recent-label"
+                ><span class="alert-phase" :class="recent.phase">{{ recent.title }}</span
+                >{{ recent.label }}</span
+              >
+              <small>{{ recent.results }}</small>
+            </dd>
+            <dd v-else class="alert-empty">—</dd>
+          </div>
+        </dl>
+      </div>
+    </ReadRegion>
+  </section>
+  <section class="panel settings-card" aria-labelledby="alert-settings-title">
+    <div class="panel-heading alert-settings-heading">
+      <div>
+        <h2 id="alert-settings-title">告警设置</h2>
+        <p>采集、通知渠道、后台服务、磁盘空间或自动备份出问题及恢复时通知你</p>
+      </div>
+      <Toggle v-if="saved" v-model="draft.enabled" label="启用故障与恢复告警" :disabled="busy" />
+    </div>
+    <FormFeedback v-if="saved" :error="error" :retryable="reloadable" @retry="form.reload" />
     <ReadRegion :loading="busy && !saved" error="" :has-data="!!saved" :min-height="380">
       <form v-if="saved" class="form-content form-stack" @submit.prevent="form.save">
         <section class="settings-section" aria-labelledby="alert-receive-title">
           <div class="settings-section-heading">
-            <h3 id="alert-receive-title">接收</h3>
+            <h3 id="alert-receive-title">接收目标</h3>
           </div>
           <div class="form-stack">
-            <div class="setting-row alert-switch">
-              <div><strong>故障与恢复通知</strong><small>每次状态变化只通知一次</small></div>
-              <Toggle v-model="draft.enabled" label="启用故障与恢复告警" :disabled="busy" />
-            </div>
-            <fieldset class="plain-fieldset alert-target-list">
-              <legend class="field-label">接收目标</legend>
-              <p v-if="!state.targets.length">
-                还没有通知目标。<a class="text-link" href="#/notifications/targets">去添加</a>
-              </p>
-              <label v-for="target in state.targets" :key="target.id" class="check-label">
-                <input
-                  v-model="draft.target_ids"
-                  type="checkbox"
-                  :value="target.id"
-                  :disabled="busy"
-                />
-                {{ target.name }} · {{ target.type
-                }}{{ target.enabled ? '' : '（已暂停，不发送）' }}
-              </label>
+            <p v-if="!state.targets.length" class="alert-no-targets">
+              还没有通知目标。<a class="text-link" href="#/notifications/targets">去添加</a>
+            </p>
+            <fieldset v-else class="plain-fieldset" :disabled="busy">
+              <legend class="sr-only">接收目标</legend>
+              <div class="alert-targets">
+                <label
+                  v-for="target in state.targets"
+                  :key="target.id"
+                  class="alert-target"
+                  :class="{
+                    selected: draft.target_ids.includes(target.id),
+                    paused: !target.enabled,
+                  }"
+                >
+                  <span class="target-icon" :class="meta(target.channel).color"
+                    ><Icon :name="meta(target.channel).icon" :size="15"
+                  /></span>
+                  <span class="alert-target-text">
+                    <strong>{{ target.name }}</strong>
+                    <small
+                      >{{ target.type
+                      }}<span v-if="!target.enabled" class="alert-target-paused"
+                        >已暂停，不发送</span
+                      ></small
+                    >
+                  </span>
+                  <input v-model="draft.target_ids" type="checkbox" :value="target.id" />
+                </label>
+              </div>
             </fieldset>
-            <p class="small-note" role="status">
-              已选择 {{ draft.target_ids.length }} 个目标 · 当前可接收 {{ receivers }} 个
-            </p>
-            <p v-if="draft.enabled && !receivers" class="warning-note">
-              当前没有可接收告警的目标，已暂停的目标不会发送。
-            </p>
-            <p v-else-if="oneChannel" class="small-note alert-channel-hint">
-              所选目标都走
-              {{ oneChannel }}，这个渠道本身出故障时告警也发不出去，建议再选一个其他渠道的目标。
-            </p>
-            <div class="alert-test">
+            <div v-if="state.targets.length" class="alert-target-foot">
+              <p class="small-note" role="status">
+                已选择 {{ draft.target_ids.length }} 个 · 可接收 {{ receivers }} 个
+              </p>
               <button
                 class="button"
                 type="button"
+                title="按当前勾选发送，无需先保存"
                 :disabled="busy || testing || !receivers"
                 @click="test"
               >
-                {{ testing ? '正在发送…' : '发送测试告警' }}
+                <Icon name="send" :size="14" />{{ testing ? '正在发送…' : '发送测试告警' }}
               </button>
-              <span class="small-note">按当前勾选发送，无需先保存</span>
             </div>
+            <p v-if="draft.enabled && !receivers" class="warning-note">
+              当前没有可接收告警的目标，已暂停的目标不会发送。
+            </p>
+            <p v-else-if="oneChannel" class="warning-note alert-channel-hint">
+              所选目标都走
+              {{ oneChannel }}，这个渠道本身出故障时告警也发不出去，建议再选一个其他渠道的目标。
+            </p>
             <p v-if="testError" class="warning-note" role="alert">{{ testError }}</p>
             <ul v-if="results" class="alert-test-results" aria-label="测试结果">
               <li v-for="row in results" :key="row.target_id" :class="row.result">
+                <Icon :name="row.result === 'success' ? 'check' : 'alert'" :size="14" />
                 <strong>{{ row.target_name }}</strong>
                 <span>{{ outcome(row) }}</span>
               </li>
             </ul>
-            <p class="alert-recent" :class="{ failed: recent?.failed }" data-alert-recent>
-              <span>最近一次告警</span>
-              {{ recent ? recent.text : '还没有发出过告警' }}
-            </p>
           </div>
         </section>
         <section class="settings-section" aria-labelledby="alert-rules-title">
@@ -221,28 +295,41 @@ await untilShown(form.load())
             <h3 id="alert-rules-title">通知规则</h3>
           </div>
           <div class="form-stack">
-            <fieldset class="plain-fieldset form-stack" :disabled="busy">
-              <legend class="field-label">故障持续多久后通知</legend>
-              <div class="alert-delay-options">
-                <label v-for="item in delays" :key="item.value" class="check-label">
-                  <input v-model="draft.delay_seconds" type="radio" :value="item.value" />
-                  {{ item.label }}
-                </label>
-              </div>
-              <p class="small-note">在这段时间内自行恢复的故障，故障和恢复都不通知。</p>
-            </fieldset>
-            <fieldset class="plain-fieldset form-stack" :disabled="busy">
-              <legend class="field-label">故障一直未恢复时</legend>
-              <div class="alert-delay-options">
-                <label v-for="item in reminders" :key="item.value" class="check-label">
-                  <input v-model="draft.remind_seconds" type="radio" :value="item.value" />
-                  {{ item.label }}
-                </label>
-              </div>
-              <p class="small-note">提醒只发给收到过这次故障通知的目标，恢复通知同样如此。</p>
-            </fieldset>
-            <p class="small-note">
-              每条告警对每个目标只发一次，失败或结果未知都不重发；开启告警前已经存在的故障不补发。
+            <div class="alert-rule-fields">
+              <fieldset class="plain-fieldset alert-rule" :disabled="busy">
+                <legend class="field-label">故障持续多久后通知</legend>
+                <div class="alert-choices">
+                  <label
+                    v-for="item in delays"
+                    :key="item.value"
+                    :class="{ active: draft.delay_seconds === item.value }"
+                  >
+                    <input v-model="draft.delay_seconds" type="radio" :value="item.value" />
+                    {{ item.label }}
+                  </label>
+                </div>
+                <p class="small-note">在这段时间内自行恢复的故障，故障和恢复都不通知。</p>
+              </fieldset>
+              <fieldset class="plain-fieldset alert-rule" :disabled="busy">
+                <legend class="field-label">故障一直未恢复时</legend>
+                <div class="alert-choices">
+                  <label
+                    v-for="item in reminders"
+                    :key="item.value"
+                    :class="{ active: draft.remind_seconds === item.value }"
+                  >
+                    <input v-model="draft.remind_seconds" type="radio" :value="item.value" />
+                    {{ item.label }}
+                  </label>
+                </div>
+                <p class="small-note">提醒和恢复通知只发给收到过这次故障通知的目标。</p>
+              </fieldset>
+            </div>
+            <p class="alert-rule-note">
+              <Icon
+                name="help"
+                :size="14"
+              />每条告警对每个目标只发一次，失败或结果未知都不重发；开启告警前已经存在的故障不补发。
             </p>
           </div>
         </section>
