@@ -277,7 +277,7 @@ def test_history_migration_failure_rolls_back_columns_and_revision(tmp_path):
         assert schema_revision(engine) == "0004_management"
         assert "baseline" not in {c["name"] for c in inspect(engine).get_columns("posts")}
         migrate(engine)
-        assert schema_revision(engine) == "0022_content_limit"
+        assert schema_revision(engine) == "0023_alert_reminders"
     finally:
         engine.dispose()
 

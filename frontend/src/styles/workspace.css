@@ -3128,6 +3128,27 @@ h1[tabindex='-1']:focus-visible {
   flex-wrap: wrap;
   gap: 10px 24px;
 }
+.setting-row.alert-switch {
+  padding-top: 0;
+  border-top: 0;
+}
+.alert-recent {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #f7f8fa;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.alert-recent > span {
+  color: var(--muted);
+}
+.alert-recent.failed {
+  color: #a4552c;
+}
 .alert-test {
   display: flex;
   flex-wrap: wrap;

@@ -52,7 +52,8 @@ def configured(app):
         authenticate(client)
         key = target(client, enabled=True)
         settings = get_settings(app.state.engine)
-        update_settings(app.state.engine, True, [key], settings["revision"])
+        # Immediate alerts: the tests below follow single transitions, not the new-install delay.
+        update_settings(app.state.engine, True, [key], settings["revision"], delay_seconds=0)
         yield app, client, key
 
 
@@ -185,14 +186,15 @@ def test_enabling_alerts_never_backfills_previous_fault_and_repeated_fault_is_su
             count(app.state.engine, SystemEvent) == 1
             and count(app.state.engine, AlertDelivery) == 0
         )
-        update_settings(app.state.engine, True, [key], 1)
+        update_settings(app.state.engine, True, [key], 1, delay_seconds=0)
         fault(app.state.engine, at=101)
         assert count(app.state.engine, AlertDelivery) == 0
         enable_source(app.state.engine)
         Ingestion(app.state.engine).ingest("nodeseek-rss", batch(9001), at=102)
+        # The target never heard of this fault, so it is not told that it cleared either.
         assert (
             count(app.state.engine, SystemEvent) == 2
-            and count(app.state.engine, AlertDelivery) == 1
+            and count(app.state.engine, AlertDelivery) == 0
         )
 
 
@@ -247,6 +249,7 @@ def test_disable_deselect_and_target_dependency_cancel_waiting_but_keep_evidence
     fault(engine)
     assert client.delete("/api/manage/targets/" + key).status_code == 409
     old = get_settings(engine)
+    old.pop("recent")
     updated = update_settings(engine, False, [key], old["revision"], at=110)
     assert client.put("/api/manage/alerts", json={**old, "enabled": False}).status_code == 409
     assert client.delete("/api/manage/targets/" + key).status_code == 409
@@ -322,7 +325,12 @@ def test_runtime_fault_still_sends_alert_and_restart_records_one_recovery(tmp_pa
         assert (
             client.put(
                 "/api/manage/alerts",
-                json={"enabled": True, "target_ids": [key], "revision": data["revision"]},
+                json={
+                    "enabled": True,
+                    "target_ids": [key],
+                    "delay_seconds": 0,
+                    "revision": data["revision"],
+                },
             ).status_code
             == 200
         )

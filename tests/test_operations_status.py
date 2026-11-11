@@ -32,12 +32,12 @@ from seekbell.services.fault_guide import (
     source_guide,
 )
 from seekbell.services.operations import (
-    LOOP_STALL_SECONDS,
     _hotlist_node,
     problem_detail,
     problem_history,
     status,
 )
+from seekbell.services.stalls import LOOP_STALL_SECONDS
 from seekbell.sites.hotlists import HOTLIST_SOURCES
 
 from tests.hotlist_helpers import synthetic_hotlists

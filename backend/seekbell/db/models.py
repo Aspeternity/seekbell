@@ -14,6 +14,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -430,6 +431,7 @@ class AlertSettings(Base):
     target_ids: Mapped[list] = mapped_column(JSON, default=list)
     revision: Mapped[int] = mapped_column(Integer, default=1)
     delay_seconds: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    remind_seconds: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
 class SystemState(Base):
@@ -447,8 +449,16 @@ class SystemState(Base):
 class SystemEvent(Base):
     __tablename__ = "system_events"
     __table_args__ = (
-        UniqueConstraint("component", "generation", "phase", name="uq_system_transition"),
-        CheckConstraint("phase IN ('fault','recovery')", name="ck_system_phase"),
+        # One fault and one recovery per generation; reminders repeat while the fault lasts.
+        Index(
+            "uq_system_transition",
+            "component",
+            "generation",
+            "phase",
+            unique=True,
+            sqlite_where=text("phase != 'reminder'"),
+        ),
+        CheckConstraint("phase IN ('fault','recovery','reminder')", name="ck_system_phase"),
         Index("ix_system_events_at", "at", "id"),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True)

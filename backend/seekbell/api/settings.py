@@ -101,6 +101,7 @@ class AlertInput(Input):
     target_ids: list[str] = Field(max_length=64)
     # Omitted by older callers, which keeps the saved delay.
     delay_seconds: Literal[0, 60, 300] | None = None
+    remind_seconds: Literal[0, 21600, 86400] | None = None
     revision: int = Field(ge=1)
 
 
@@ -118,6 +119,7 @@ def save_alerts(values: AlertInput, request: Request):
             values.target_ids,
             values.revision,
             delay_seconds=values.delay_seconds,
+            remind_seconds=values.remind_seconds,
         )
     except alerts.AlertConflict as error:
         raise HTTPException(409, str(error)) from None

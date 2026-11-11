@@ -82,7 +82,7 @@ def prepare(settings):
     claim = worker.claim(at=20)
     worker.finish(claim, SendResult(status="success"), at=21)
     ingestion.ingest("nodeseek-rss", batch(9001, 9002, 9003), at=30)
-    update_settings(engine, True, [target], 1)
+    update_settings(engine, True, [target], 1, delay_seconds=0)
     with write_session(engine) as session:
         observe(
             session,

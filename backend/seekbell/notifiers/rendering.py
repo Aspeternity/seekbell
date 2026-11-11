@@ -64,31 +64,52 @@ def telegram_post_time(payload):
 
 ALERT_PHASES = {
     "fault": ("故障", "SeekBell 系统故障："),
-    "recovery": ("恢复", "SeekBell 系统恢复："),
+    "recovery": ("已恢复", "SeekBell 系统恢复："),
+    "reminder": ("仍未恢复", "SeekBell 故障仍未恢复："),
     "test": ("测试", "SeekBell 告警测试："),
 }
 
 
+def format_duration(seconds) -> str:
+    minutes = int(seconds // 60)
+    if minutes < 1:
+        return "不到 1 分钟"
+    days, rest = divmod(minutes, 1440)
+    hours, minutes = divmod(rest, 60)
+    if days:
+        return f"{days} 天" + (f" {hours} 小时" if hours else "")
+    if hours:
+        return f"{hours} 小时" + (f" {minutes} 分钟" if minutes else "")
+    return f"{minutes} 分钟"
+
+
+def alert_lines(payload: dict, *, show_timezone=True) -> list[str]:
+    alert = payload["alert"]
+    phase = alert["phase"]
+    zone = payload.get("display_timezone", "UTC")
+
+    def stamp(value):
+        return format_timestamp(value, zone, show_timezone=show_timezone) or "未知"
+
+    lines = ["状态：" + ALERT_PHASES.get(phase, ALERT_PHASES["recovery"])[0]]
+    if phase in ("fault", "reminder") and alert.get("summary"):
+        lines.append("原因：" + line(alert["summary"]))
+    duration = alert.get("duration_seconds")
+    if phase in ("recovery", "reminder") and isinstance(duration, int | float):
+        lines.append(("持续：" if phase == "recovery" else "已持续：") + format_duration(duration))
+    if phase == "reminder" and alert.get("started_at") is not None:
+        lines.append("开始时间：" + stamp(alert["started_at"]))
+    else:
+        lines.append("时间：" + stamp(alert["at"]))
+    if phase in ("fault", "reminder") and alert.get("code"):
+        lines.append("诊断代码：" + line(alert["code"]))
+    return lines
+
+
 def render(payload: dict, config: dict, *, limit: int = 4000, show_timezone=True) -> str:
     if payload.get("type") == "system_alert":
-        alert = payload["alert"]
         return clip(
-            "\n".join(
-                [
-                    message_title(payload),
-                    "状态：" + ALERT_PHASES.get(alert["phase"], ("恢复", ""))[0],
-                    "时间："
-                    + (
-                        format_timestamp(
-                            alert["at"],
-                            payload.get("display_timezone", "UTC"),
-                            show_timezone=show_timezone,
-                        )
-                        or "未知"
-                    ),
-                    "诊断代码：" + line(alert.get("code") or "recovered"),
-                ]
-            ),
+            "\n".join([message_title(payload), *alert_lines(payload, show_timezone=show_timezone)]),
             limit,
         )
     post = payload["post"]
@@ -110,7 +131,7 @@ def telegram_message(payload: dict, config: dict) -> dict:
     """Structured entities style trusted spans; external text stays literal."""
     title = clip(line(message_title(payload)), 600)
     if payload.get("type") == "system_alert":
-        details = render(payload, config, show_timezone=False).split("\n")[1:]
+        details = alert_lines(payload, show_timezone=False)
     else:
         post = payload["post"]
         details = [

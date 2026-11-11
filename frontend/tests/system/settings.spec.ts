@@ -318,7 +318,9 @@ test('timezone picker groups common zones and previews the offset without a sear
   await expect(menu.getByRole('option').first()).toHaveAttribute('data-value', 'Asia/Shanghai')
   await select.press('Escape')
 })
-test('alert delay is saved and a test alert reports each chosen target', async ({ page }, info) => {
+test('alert delay and reminder are saved and a test alert reports each chosen target', async ({
+  page,
+}, info) => {
   const name = '合成测试告警目标 ' + info.project.name
   const auth = await (await page.request.get('/api/auth/status')).json()
   const headers = { 'X-CSRF-Token': auth.csrf }
@@ -336,7 +338,8 @@ test('alert delay is saved and a test alert reports each chosen target', async (
   await page.goto('/#/settings/alerts')
   const test = page.getByRole('button', { name: '发送测试告警', exact: true })
   await page.getByRole('radio', { name: '持续 5 分钟', exact: true }).check()
-  await expect(page.getByText('5 分钟内自行恢复的故障不通知')).toBeVisible()
+  await page.getByRole('radio', { name: '每 6 小时', exact: true }).check()
+  await expect(page.locator('[data-alert-recent]')).toContainText('最近一次告警')
   await page.getByRole('checkbox', { name: new RegExp(name) }).check()
   // The draft selection can be tested before anything is saved.
   await test.click()
@@ -353,8 +356,10 @@ test('alert delay is saved and a test alert reports each chosen target', async (
   await expect(page.getByRole('status').filter({ hasText: '系统告警设置已保存' })).toBeVisible()
   const saved = await (await page.request.get('/api/manage/alerts')).json()
   expect(saved.delay_seconds).toBe(300)
+  expect(saved.remind_seconds).toBe(21600)
   expect(saved.enabled).toBe(before.enabled)
   await page.getByRole('radio', { name: '立即', exact: true }).check()
+  await page.getByRole('radio', { name: '不再提醒', exact: true }).check()
   await page.getByRole('checkbox', { name: new RegExp(name) }).uncheck()
   await page.getByRole('button', { name: '保存告警设置', exact: true }).click()
   await expect(page.getByRole('status').filter({ hasText: '系统告警设置已保存' })).toBeVisible()

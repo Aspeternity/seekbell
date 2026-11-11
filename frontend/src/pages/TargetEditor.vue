@@ -447,7 +447,8 @@ async function save() {
             /></label>
             <p class="small-note">
               固定 JSON 消息结构，包含 schema_version 与稳定
-              event_id。不执行脚本，不自定义消息代码。
+              event_id。不执行脚本，不自定义消息代码。用于系统告警时，消息为 schema_version 2、type
+              为 system_alert，alert.phase 为 fault、reminder、recovery 或 test。
             </p></template
           >
         </div>

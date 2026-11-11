@@ -113,7 +113,7 @@ export interface ProblemDetail {
   guide: Guide
   recent: { at: number; tone: Tone; label: string; text: string }[]
   alerts: {
-    phase: 'fault' | 'recovery'
+    phase: 'fault' | 'reminder' | 'recovery'
     target_name: string
     kind: string | null
     result: string

@@ -147,7 +147,7 @@ def test_upgrade_preserves_preferences_and_uses_expected_head(tmp_path):
             )
         )
     migrate(engine)
-    assert schema_revision(engine) == "0022_content_limit"
+    assert schema_revision(engine) == "0023_alert_reminders"
     with engine.connect() as connection:
         assert connection.execute(
             text(

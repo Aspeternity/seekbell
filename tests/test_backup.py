@@ -518,6 +518,20 @@ def older_archive(archive, tmp_path):
             )
             connection.execute("CREATE INDEX ix_backup_records_at ON backup_records (at)")
             connection.execute("DROP TABLE backup_schedule")
+            # Before 0023 there were no reminders: a plain unique transition per phase.
+            connection.execute("ALTER TABLE alert_settings DROP COLUMN remind_seconds")
+            connection.execute(
+                "CREATE TABLE system_events_old (id VARCHAR(36) NOT NULL, component VARCHAR(120) "
+                "NOT NULL, generation INTEGER NOT NULL, phase VARCHAR(16) NOT NULL, label "
+                "VARCHAR(200) NOT NULL, code VARCHAR(80), at FLOAT NOT NULL, PRIMARY KEY (id), "
+                "FOREIGN KEY(component) REFERENCES system_states (component), "
+                "CONSTRAINT uq_system_transition UNIQUE (component, generation, phase), "
+                "CONSTRAINT ck_system_phase CHECK (phase IN ('fault','recovery')))"
+            )
+            connection.execute("INSERT INTO system_events_old SELECT * FROM system_events")
+            connection.execute("DROP TABLE system_events")
+            connection.execute("ALTER TABLE system_events_old RENAME TO system_events")
+            connection.execute("CREATE INDEX ix_system_events_at ON system_events (at, id)")
             connection.execute("UPDATE alembic_version SET version_num='0018_settings_maintenance'")
             connection.commit()
         files["seekbell.sqlite3"] = path.read_bytes()
