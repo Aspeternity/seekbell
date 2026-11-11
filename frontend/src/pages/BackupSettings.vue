@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { confirmAction, notify, request, uploadBackup } from '../store'
-import { byteSize, scrollToSection, stamp } from '../settings'
+import { ago, byteSize, scrollToSection, stamp } from '../settings'
 import {
   STALE_DAYS,
   contentsText,
@@ -61,12 +61,6 @@ const diskUsed = computed(() => {
   if (!value?.total_bytes) return 0
   return Math.min(100, Math.max(0, Math.round((1 - value.free_bytes / value.total_bytes) * 100)))
 })
-function ago(seconds: number) {
-  const elapsed = Math.max(0, Date.now() / 1000 - seconds)
-  if (elapsed < 3600) return Math.max(1, Math.round(elapsed / 60)) + ' 分钟前'
-  if (elapsed < 86400) return Math.round(elapsed / 3600) + ' 小时前'
-  return Math.round(elapsed / 86400) + ' 天前'
-}
 async function load() {
   loading.value = true
   readError.value = ''

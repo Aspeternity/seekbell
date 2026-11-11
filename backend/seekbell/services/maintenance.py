@@ -133,6 +133,5 @@ def data_overview(engine):
             "posts": count(select(Post.website_id)),
             "matched_posts": count(select(RuleHit.website_id, RuleHit.external_post_id).distinct()),
             "deliveries": count(select(Outbox.id)),
-            "problems": count(select(SystemEvent.id).where(SystemEvent.phase == "fault")),
             "earliest_at": session.scalar(select(func.min(Post.first_seen_at))),
         }

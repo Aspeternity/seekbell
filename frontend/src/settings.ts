@@ -22,6 +22,12 @@ export const byteSize = (bytes: number | null) =>
           ? (bytes / 1024 ** 2).toFixed(2) + ' MiB'
           : (bytes / 1024).toFixed(1) + ' KiB'
 export const stamp = (seconds: number) => formatTime(new Date(seconds * 1000).toISOString())
+export function ago(seconds: number) {
+  const elapsed = Math.max(0, Date.now() / 1000 - seconds)
+  if (elapsed < 3600) return Math.max(1, Math.round(elapsed / 60)) + ' 分钟前'
+  if (elapsed < 86400) return Math.round(elapsed / 3600) + ' 小时前'
+  return Math.round(elapsed / 86400) + ' 天前'
+}
 
 export function scrollToSection(section: string, id: string) {
   if (location.hash.includes('section=' + section))

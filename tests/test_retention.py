@@ -257,7 +257,6 @@ def test_retention_policy_auth_revision_validation_persistence_and_no_cleanup_on
             "posts",
             "matched_posts",
             "deliveries",
-            "problems",
             "earliest_at",
         }
         revision = initial.json()["revision"]

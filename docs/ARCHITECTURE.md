@@ -456,7 +456,7 @@ HotlistSource新增retention（周期→秒），snapshot_max_age(period)默认8
 
 ## 内容上限与自动回收（2026-11-11）
 
-迁移0022为`retention_policy`增加可空`max_posts`（1–1000000，CHECK约束，NULL为不限），删除只用于展示的`last_run_at`/`last_counts`。清理器在按天删除帖子之后再按上限删除：`excess_posts`选出没有RuleHit的帖子中按`first_seen_at`倒序排在第N条之后的部分，排除仍有Outbox的，与按天删除共用`remove_posts`（帖子连同判定、命中）。预览`GET /manage/retention/preview?days=&max_posts=`用同一`excess_posts`只读估算，返回`posts`与`records`（投递、目标测试、手动重发、采集记录、系统事件）。`GET/PUT /manage/retention`附带`overview`（帖子数、有命中的帖子数、Outbox数、故障事件数、最早帖子时间）；PUT的`max_posts`为必填可空字段，省略不会清除已存上限。
+迁移0022为`retention_policy`增加可空`max_posts`（1–1000000，CHECK约束，NULL为不限），删除只用于展示的`last_run_at`/`last_counts`。清理器在按天删除帖子之后再按上限删除：`excess_posts`选出没有RuleHit的帖子中按`first_seen_at`倒序排在第N条之后的部分，排除仍有Outbox的，与按天删除共用`remove_posts`（帖子连同判定、命中）。预览`GET /manage/retention/preview?days=&max_posts=`用同一`excess_posts`只读估算，返回`posts`与`records`（投递、目标测试、手动重发、采集记录、系统事件）。`GET/PUT /manage/retention`附带`overview`（帖子数、有命中的帖子数、Outbox数、最早帖子时间）；PUT的`max_posts`为必填可空字段，省略不会清除已存上限。
 
 自动回收：`open_workspace`在迁移后、任何后台任务启动前调用`enable_space_reclaim`；`auto_vacuum`不是INCREMENTAL时，若可用空间不少于数据库（含WAL）2倍，则在AUTOCOMMIT连接上设置后VACUUM，失败或空间不足只记警告、下次启动再试。清理器每轮未满批结束时先只读检查`freelist_count`，非零才在写事务里执行`PRAGMA incremental_vacuum`；Python sqlite3每步只释放一页，故用原始游标`fetchall()`走完。WAL模式下文件在检查点后变小。备份快照与恢复保持该模式；旧备份恢复后由下次打开工作区切换。
 

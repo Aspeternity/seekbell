@@ -34,7 +34,7 @@ test('all six categories remain reachable across phone tablet and desktop', asyn
   const rows = [
     ['preferences', '通用', '通用设置'],
     ['alerts', '告警', '系统告警'],
-    ['data', '数据', '历史保留'],
+    ['data', '数据', '保留策略'],
     ['backup', '备份', '备份状态'],
     ['account', '账户', '管理员用户名'],
     ['about', '关于', 'SeekBell.'],
@@ -97,7 +97,7 @@ test('all six categories remain reachable across phone tablet and desktop', asyn
   // the backup address is a category again.
   for (const [old, current, heading] of [
     ['overview', 'preferences?section=overview-modules', '概览显示模块'],
-    ['retention', 'data?section=retention', '历史保留'],
+    ['retention', 'data?section=retention', '保留策略'],
     ['backup', 'backup', '备份状态'],
   ]) {
     await page.goto('/#/settings/' + old)

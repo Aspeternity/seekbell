@@ -2818,17 +2818,9 @@ h1[tabindex='-1']:focus-visible {
   font-size: 14px;
   font-variant-numeric: tabular-nums;
 }
-/* Five short facts in one row; on a phone two per row with the date across both. */
-.settings-content .retention-overview {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-}
-@media (max-width: 760px) {
-  .settings-content .retention-overview {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .retention-overview > .retention-earliest {
-    grid-column: 1 / -1;
-  }
+/* Read-only facts above the policy, in the same tiles as the backup status. */
+.retention-tiles dd {
+  font-variant-numeric: tabular-nums;
 }
 .retention-fields {
   display: flex;
@@ -3642,7 +3634,8 @@ h1[tabindex='-1']:focus-visible {
   .settings-error {
     margin: 14px 18px;
   }
-  .about-tiles.backup-tiles {
+  .about-tiles.backup-tiles,
+  .about-tiles.retention-tiles {
     grid-template-columns: minmax(0, 1fr);
   }
 }

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { request } from '../store'
-import { stamp, useSettingsForm } from '../settings'
+import { ago, stamp, useSettingsForm } from '../settings'
+import Icon from '../components/Icon.vue'
 import FormFeedback from '../components/FormFeedback.vue'
 import ReadRegion from '../components/ReadRegion.vue'
 import SettingsSaveBar from '../components/SettingsSaveBar.vue'
@@ -9,7 +10,6 @@ interface Overview {
   posts: number
   matched_posts: number
   deliveries: number
-  problems: number
   earliest_at: number | null
 }
 interface Policy {
@@ -88,35 +88,50 @@ const doneText = computed(() =>
 onMounted(form.load)
 </script>
 <template>
-  <section id="retention-settings" class="panel settings-card" aria-labelledby="retention-title">
+  <section class="panel settings-card" aria-labelledby="retention-data-title">
     <div class="panel-heading">
-      <h2 id="retention-title">历史保留</h2>
+      <h2 id="retention-data-title">现有数据</h2>
     </div>
-    <FormFeedback :error="error" :retryable="reloadable" @retry="form.reload" />
-    <ReadRegion :loading="busy && !saved" error="" :has-data="!!saved" :min-height="200">
-      <form v-if="saved" class="form-content form-stack" @submit.prevent="form.save">
-        <dl class="detail-grid settings-metrics retention-overview" aria-label="现有数据">
+    <FormFeedback v-if="!saved" :error="error" :retryable="reloadable" @retry="form.reload" />
+    <ReadRegion :loading="busy && !saved" error="" :has-data="!!saved" :min-height="110">
+      <div v-if="saved" class="form-content">
+        <dl class="about-tiles retention-tiles">
           <div>
-            <dt>内容</dt>
-            <dd>{{ count(saved.overview.posts) }} 条</dd>
+            <dt>
+              <span class="about-tile-icon"><Icon name="inbox" :size="16" /></span>内容
+            </dt>
+            <dd>
+              {{ count(saved.overview.posts) }} 条
+              <small>命中 {{ count(saved.overview.matched_posts) }} 条</small>
+            </dd>
           </div>
           <div>
-            <dt>命中</dt>
-            <dd>{{ count(saved.overview.matched_posts) }} 条</dd>
-          </div>
-          <div>
-            <dt>通知</dt>
+            <dt>
+              <span class="about-tile-icon"><Icon name="send" :size="16" /></span>通知
+            </dt>
             <dd>{{ count(saved.overview.deliveries) }} 条</dd>
           </div>
           <div>
-            <dt>问题</dt>
-            <dd>{{ count(saved.overview.problems) }} 条</dd>
-          </div>
-          <div class="retention-earliest">
-            <dt>最早内容</dt>
-            <dd>{{ saved.overview.earliest_at ? stamp(saved.overview.earliest_at) : '—' }}</dd>
+            <dt>
+              <span class="about-tile-icon"><Icon name="clock" :size="16" /></span>最早内容
+            </dt>
+            <dd v-if="saved.overview.earliest_at">
+              {{ ago(saved.overview.earliest_at) }}
+              <small>{{ stamp(saved.overview.earliest_at) }}</small>
+            </dd>
+            <dd v-else>暂无内容</dd>
           </div>
         </dl>
+      </div>
+    </ReadRegion>
+  </section>
+  <section id="retention-settings" class="panel settings-card" aria-labelledby="retention-title">
+    <div class="panel-heading">
+      <h2 id="retention-title">保留策略</h2>
+    </div>
+    <FormFeedback v-if="saved" :error="error" :retryable="reloadable" @retry="form.reload" />
+    <ReadRegion :loading="busy && !saved" error="" :has-data="!!saved" :min-height="120">
+      <form v-if="saved" class="form-content form-stack" @submit.prevent="form.save">
         <div class="retention-fields">
           <div class="form-stack">
             <label class="field-label" for="retention-days">保留天数</label>
