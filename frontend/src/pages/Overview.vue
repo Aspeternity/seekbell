@@ -433,7 +433,7 @@ await untilShown(remote.ready)
               <p>从信息流中，找到与你有关的内容</p>
             </div>
             <button class="text-link" @click="emit('navigate', '/operations/content')">
-              查看内容与命中
+              查看内容记录
             </button>
           </div>
           <component

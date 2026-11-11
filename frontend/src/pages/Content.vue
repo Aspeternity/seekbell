@@ -149,6 +149,86 @@ const emptyMatchMessage = computed(() => {
       return '暂无可展示的命中依据，请刷新后重试。'
   }
 })
+// The four stages a post goes through, read from what was saved at the time.
+const flow = computed(() => {
+  const record = detail.data.value
+  const sent = deliveries.data.value
+  if (!record) return []
+  const judged: Record<string, string> = {
+    match: '命中 ' + record.hits.length + ' 个任务',
+    no_match: '没有任务命中',
+    insufficient_data: '信息不足，无法判定',
+    not_evaluated: '未执行规则匹配',
+    unrecorded: '旧版本未记录结果',
+  }
+  const total = sent?.total ?? 0
+  const items = sent && total <= sent.page_size ? sent.items : null
+  const count = (...states: string[]) =>
+    items?.filter((item) => states.includes(item.status)).length ?? 0
+  const delivered = count('sent'),
+    failed = count('failed'),
+    waiting = count('pending', 'retry', 'leased')
+  return [
+    {
+      key: 'collect',
+      icon: 'rss',
+      label: '采集',
+      tone: 'ok',
+      value: time(record.first_seen_at),
+      note: '来源发布 ' + (record.published_at === null ? '未记录' : time(record.published_at)),
+    },
+    {
+      key: 'judge',
+      icon: 'filter',
+      label: '判定',
+      tone: record.baseline ? 'none' : resultClass(record.status),
+      value: record.baseline ? '基线帖子' : postLabels[record.status],
+      note: record.baseline ? '首次采集时登记，不匹配' : judged[record.status],
+    },
+    {
+      key: 'queue',
+      icon: 'layers',
+      label: '入队',
+      tone: total ? 'yes' : 'neutral',
+      value: !sent ? '—' : total ? total + ' 个目标' : '未入队',
+      note: total
+        ? '每个目标一条投递'
+        : record.baseline
+          ? '基线帖子不发送'
+          : record.status === 'match'
+            ? '没有投递记录'
+            : '未命中，不发送',
+    },
+    {
+      key: 'send',
+      icon: 'send',
+      label: '发送',
+      tone: !total
+        ? 'neutral'
+        : !items
+          ? 'neutral'
+          : failed
+            ? 'no'
+            : waiting
+              ? 'unknown'
+              : delivered === total
+                ? 'yes'
+                : 'neutral',
+      value: !total
+        ? '—'
+        : !items
+          ? '见投递记录'
+          : failed
+            ? '失败 ' + failed
+            : waiting
+              ? '等待发送 ' + waiting
+              : delivered === total
+                ? '全部成功'
+                : '成功 ' + delivered,
+      note: items ? '成功 ' + delivered + ' / ' + total : total ? '共 ' + total + ' 条' : '',
+    },
+  ]
+})
 const time = (at: number | null) =>
   at === null ? '未记录' : formatTime(new Date(at * 1000).toISOString())
 function openPost(id: string) {
@@ -189,14 +269,24 @@ await untilShown(() => options.ready() && listing.ready() && detail.ready() && d
             <p class="subtitle">
               {{ websiteName(detail.data.value.website_id) }} ·
               {{ detail.data.value.author || detail.data.value.author_display_name || '作者缺失' }}
-              · {{ detail.data.value.category_label || detail.data.value.category || '版块缺失' }} ·
-              首次发现
-              {{ time(detail.data.value.first_seen_at) }}
+              · {{ detail.data.value.category_label || detail.data.value.category || '版块缺失' }}
             </p>
           </div>
           <span class="result-pill" :class="resultClass(detail.data.value.status)">{{
             postLabels[detail.data.value.status]
           }}</span>
+        </section>
+        <section class="panel post-flow-panel" aria-label="处理过程">
+          <ol class="post-flow">
+            <li v-for="step in flow" :key="step.key" :class="'is-' + step.tone">
+              <span class="post-flow-label"
+                ><span class="about-tile-icon"><Icon :name="step.icon" :size="15" /></span
+                >{{ step.label }}</span
+              >
+              <strong>{{ step.value }}</strong>
+              <small v-if="step.note">{{ step.note }}</small>
+            </li>
+          </ol>
         </section>
         <div class="detail-layout">
           <div class="side-stack">
@@ -211,11 +301,7 @@ await untilShown(() => options.ready() && listing.ready() && detail.ready() && d
               </p>
               <div class="info-note">
                 <Icon name="help" :size="18" />
-                <p>
-                  RSS 摘要不等同全文。来源发布时间：{{
-                    time(detail.data.value.published_at)
-                  }}。保存首次读取时的内容，原帖后续编辑不会改写此快照。可通过下方入口查看原帖。
-                </p>
+                <p>RSS 摘要不等同全文。这里保存首次读取时的内容，原帖之后的编辑不会改写它。</p>
               </div>
               <a
                 v-if="detail.data.value.original_url"
@@ -451,8 +537,11 @@ await untilShown(() => options.ready() && listing.ready() && detail.ready() && d
             <div class="content-row-top">
               <span class="result-pill" :class="resultClass(post.status)">{{
                 postLabels[post.status]
-              }}</span
-              ><time
+              }}</span>
+              <button class="content-title" @click="openPost(post.id)">
+                {{ post.title }}
+              </button>
+              <time
                 class="muted"
                 :datetime="new Date((post.published_at ?? post.first_seen_at) * 1000).toISOString()"
                 :title="
@@ -464,9 +553,6 @@ await untilShown(() => options.ready() && listing.ready() && detail.ready() && d
                 {{ time(post.published_at ?? post.first_seen_at) }}</time
               >
             </div>
-            <button class="content-title" @click="openPost(post.id)">
-              {{ post.title }}<Icon name="arrow" :size="17" />
-            </button>
             <p class="content-excerpt">
               {{ post.summary === null ? '来源未提供摘要' : post.summary || '摘要为空' }}
             </p>
@@ -506,7 +592,130 @@ await untilShown(() => options.ready() && listing.ready() && detail.ready() && d
 
 <style scoped>
 .content-row {
+  padding: 16px 22px;
   cursor: pointer;
+  transition: background 0.15s;
+}
+.content-row-top {
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.content-row-top > .result-pill {
+  flex: none;
+}
+.content-title {
+  display: block;
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.content-row-top > time {
+  flex: none;
+  margin-left: 0;
+  font-variant-numeric: tabular-nums;
+}
+.content-excerpt {
+  margin: 0 0 8px;
+  line-height: 1.7;
+  -webkit-line-clamp: 1;
+}
+.metric-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 16px;
+  padding: 18px 0;
+}
+.metric-strip > div {
+  min-width: 0;
+}
+.metric-strip > div:last-child {
+  border-right: 0;
+}
+.post-flow-panel {
+  margin-bottom: 20px;
+  padding: 16px;
+}
+.post-flow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 26px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.post-flow li {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f8f9fb;
+}
+.post-flow li + li::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -17px;
+  width: 7px;
+  height: 7px;
+  border-top: 1.5px solid #c3c9d1;
+  border-right: 1.5px solid #c3c9d1;
+  transform: translateY(-50%) rotate(45deg);
+}
+.post-flow-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #808b98;
+  font-size: 12px;
+}
+.post-flow-label .about-tile-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+}
+.post-flow strong {
+  font-size: 14px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.post-flow small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.post-flow .is-yes strong {
+  color: #2f6f4f;
+}
+.post-flow .is-no strong {
+  color: #a8324a;
+}
+.post-flow .is-unknown strong {
+  color: #8a5a0b;
+}
+.post-flow .is-neutral strong,
+.post-flow .is-none strong {
+  color: #6f7885;
+}
+@media (prefers-reduced-motion: reduce) {
+  .content-row {
+    transition: none;
+  }
+}
+@media (max-width: 1100px) {
+  .post-flow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .post-flow li + li::before {
+    display: none;
+  }
 }
 .content-row:hover,
 .content-row:focus-within {
@@ -522,6 +731,26 @@ await untilShown(() => options.ready() && listing.ready() && detail.ready() && d
 @media (max-width: 760px) {
   .content-filter-note {
     padding: 12px 16px;
+  }
+  .content-row {
+    padding: 14px 16px;
+  }
+  .content-row-top {
+    flex-wrap: wrap;
+  }
+  .content-title {
+    flex-basis: 100%;
+    order: 3;
+    white-space: normal;
+  }
+  .content-row-top > time {
+    margin-left: auto;
+  }
+  .metric-strip {
+    padding: 14px 0;
+  }
+  .metric-strip > div {
+    padding: 0 14px;
   }
 }
 </style>

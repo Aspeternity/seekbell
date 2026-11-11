@@ -181,6 +181,17 @@ export function elapsed(seconds: number) {
   return Math.floor(hours / 24) + ' 天' + (hours % 24 ? ' ' + (hours % 24) + ' 小时' : '')
 }
 
+/** "3 分钟前" / "20 秒后" against the snapshot time; a day or more falls back to the date. */
+export function relative(at: number | null | undefined, now: number) {
+  if (!at) return '—'
+  const diff = at - now
+  if (Math.abs(diff) < 60) return diff > 0 ? '1 分钟内' : '刚刚'
+  if (Math.abs(diff) >= 86400) return stamp(at)
+  const minutes = Math.round(Math.abs(diff) / 60)
+  const text = minutes < 60 ? minutes + ' 分钟' : Math.floor(minutes / 60) + ' 小时'
+  return text + (diff > 0 ? '后' : '前')
+}
+
 export function problemReason(problem: { stage: string; summary: string; code: string | null }) {
   const code = problem.code ? '（' + problem.code + '）' : ''
   return (stageLabels[problem.stage] || problem.stage) + '：' + problem.summary + code

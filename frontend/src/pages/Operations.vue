@@ -9,7 +9,7 @@ const props = defineProps<{ section: string; recordId?: string; initialTarget?: 
 const emit = defineEmits<{ navigate: [path: string] }>()
 const tabs = [
   { id: 'status', label: '运行状态', path: '/operations/status' },
-  { id: 'content', label: '内容与命中', path: '/operations/content' },
+  { id: 'content', label: '内容记录', path: '/operations/content' },
   { id: 'records', label: '通知记录', path: '/operations/deliveries' },
 ]
 const isRecords = computed(() => (recordTabs as readonly string[]).includes(props.section))

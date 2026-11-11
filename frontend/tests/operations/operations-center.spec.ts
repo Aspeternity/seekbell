@@ -246,8 +246,14 @@ test('operations center explains problems, stays calm when healthy and keeps old
   await expect(cards.nth(2)).toContainText('等待验证')
 
   const nodeseek = page.locator('.ops-row', { hasText: 'NodeSeek' })
-  await expect(nodeseek.locator('.ops-node.blocked')).toHaveCount(1)
-  await expect(nodeseek.locator('.ops-node.blocked')).toContainText('timeout')
+  await expect(nodeseek.locator('.ops-step.blocked')).toHaveCount(1)
+  await expect(nodeseek.locator('.ops-step.blocked')).toContainText('timeout')
+  // The overview counts what needs attention before any section is read.
+  const overview = page.getByRole('region', { name: '3 个问题待处理' })
+  await expect(overview.locator('.ops-tiles > div')).toHaveCount(4)
+  await expect(overview.locator('.ops-tiles')).toContainText('1 个网站异常')
+  await expect(overview.locator('.ops-tiles')).toContainText('1 个目标异常')
+  await expect(overview.locator('.ops-tiles')).toContainText('1 个异常')
   await expect(page.locator('.ops-row', { hasText: '合成 暂停目标' })).toContainText('已暂停')
   await expect(page.getByText('随采集停止', { exact: true })).toBeVisible()
   await expect(page.getByText('每日：刷新失败，旧数据仍可看 · http_429')).toBeVisible()
@@ -286,7 +292,8 @@ test('operations center explains problems, stays calm when healthy and keeps old
   // Healthy: one calm line, a warning about disabled alerts, and collapsed phone rows.
   show(clear)
   await page.getByRole('button', { name: '刷新', exact: true }).click()
-  await expect(page.getByText('当前没有需要处理的问题', { exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '有需要留意的状态' })).toBeVisible()
+  await expect(page.locator('.ops-overview')).toContainText('当前没有需要处理的问题')
   await expect(page.getByText(/系统告警未启用或没有可用目标/)).toBeVisible()
   await expect(page.locator('.ops-problem')).toHaveCount(0)
   await page.setViewportSize({ width: 390, height: 844 })
@@ -303,7 +310,7 @@ test('operations center explains problems, stays calm when healthy and keeps old
   // Old addresses land in the operations center, and tabs keep their place.
   const tabs = page.getByRole('navigation', { name: '运行中心分类', exact: true })
   for (const [from, to, label] of [
-    ['/content', '/operations/content', '内容与命中'],
+    ['/content', '/operations/content', '内容记录'],
     ['/notifications/manual', '/operations/manual', '通知记录'],
     ['/settings/diagnostics', '/operations/status', '运行状态'],
   ] as const) {

@@ -5,6 +5,7 @@ import Icon from '../components/Icon.vue'
 import Pagination from '../components/Pagination.vue'
 import ProblemDrawer from '../components/ProblemDrawer.vue'
 import ReadRegion from '../components/ReadRegion.vue'
+import { channelMeta } from '../shared'
 import { request } from '../store'
 import { useRemote } from '../history'
 import { untilShown } from '../viewReady'
@@ -15,7 +16,8 @@ import {
   elapsed,
   handlingBadges,
   handlingLabels,
-  problemReason,
+  relative,
+  stageLabels,
   stamp,
   type HotlistSite,
   type OperationsStatus,
@@ -26,6 +28,7 @@ import {
   type SourceRow,
   type StatusNode,
   type TargetRow,
+  type Tone,
 } from '../operations'
 const emit = defineEmits<{ navigate: [path: string] }>()
 
@@ -57,57 +60,66 @@ function refresh() {
   status.reload()
   history.reload()
 }
-function visible() {
-  if (document.visibilityState === 'visible') refresh()
+// Returning to the tab fires both focus and visibilitychange; read once.
+let returnedAt = 0
+function returned() {
+  if (document.visibilityState !== 'visible' || Date.now() - returnedAt < 2000) return
+  returnedAt = Date.now()
+  refresh()
 }
 onMounted(() => {
-  window.addEventListener('focus', refresh)
-  document.addEventListener('visibilitychange', visible)
+  window.addEventListener('focus', returned)
+  document.addEventListener('visibilitychange', returned)
 })
 onBeforeUnmount(() => {
-  window.removeEventListener('focus', refresh)
-  document.removeEventListener('visibilitychange', visible)
+  window.removeEventListener('focus', returned)
+  document.removeEventListener('visibilitychange', returned)
 })
 
-const nowSeconds = () => data.value?.checked_at ?? Date.now() / 1000
+// Every time on this page is read against the snapshot, not the browser clock.
+const now = () => data.value?.checked_at ?? Date.now() / 1000
+const ago = (at: number | null | undefined) => relative(at, now())
+const severe = (tone: Tone) => tone === 'fail' || tone === 'warn'
+
 function problemFacts(problem: Problem) {
   if (problem.kind === 'stall')
-    return ['循环已 ' + elapsed(nowSeconds() - (problem.since ?? nowSeconds())) + '未完成']
+    return ['循环已 ' + elapsed(now() - (problem.since ?? now())) + '未完成']
   const facts = []
-  if (problem.since)
-    facts.push(stamp(problem.since) + ' 开始，已持续 ' + elapsed(nowSeconds() - problem.since))
+  if (problem.since) facts.push('已持续 ' + elapsed(now() - problem.since))
   if (problem.failures) facts.push('连续失败 ' + problem.failures + ' 次')
-  if (problem.next_attempt_at) facts.push('下次重试 ' + stamp(problem.next_attempt_at))
-  if (problem.hint) facts.push(problem.hint)
+  if (problem.next_attempt_at) facts.push(ago(problem.next_attempt_at) + '重试')
   return facts
 }
-
 const selected = ref<{ eventId: string | null; problem?: Problem }>()
 const openProblem = (problem: Problem) => (selected.value = { eventId: problem.event_id, problem })
 const openHistory = (row: ProblemRow) => (selected.value = { eventId: row.id })
 
+// Phones show healthy rows folded and problem rows open; a tap flips either.
 const flipped = reactive(new Set<string>())
-const severe = (tone: string) => tone === 'fail' || tone === 'warn'
 const rowOpen = (key: string, issue: boolean) => issue !== flipped.has(key)
 function toggleRow(key: string) {
   if (flipped.has(key)) flipped.delete(key)
   else flipped.add(key)
 }
-const sourceNodes = (row: SourceRow) => [
+
+const sourceSteps = (row: SourceRow) => [
   { key: 'schedule', label: '调度', node: row.schedule },
   { key: 'fetch', label: '抓取', node: row.fetch },
   { key: 'parse', label: '解析', node: row.parse },
   { key: 'latest', label: '最近一轮', node: row.latest },
 ]
-const sourceIssue = (row: SourceRow) => sourceNodes(row).some((item) => severe(item.node.tone))
-function sourceSummary(row: SourceRow) {
-  const blocked = sourceNodes(row).find((item) => severe(item.node.tone))
-  if (blocked) return blocked.label + blocked.node.label
-  if (row.schedule.tone !== 'ok') return row.schedule.label
-  return '正常 · ' + stamp(row.last_success_at)
+const sourceIssue = (row: SourceRow) => sourceSteps(row).some((step) => severe(step.node.tone))
+// Paused sites and a stopped runtime have nothing to show past scheduling.
+const sourceIdle = (row: SourceRow) => row.fetch.state === 'none'
+function sourceState(row: SourceRow): { tone: Tone; text: string } {
+  const blocked = sourceSteps(row).find((step) => severe(step.node.tone))
+  if (blocked) return { tone: blocked.node.tone, text: blocked.label + blocked.node.label }
+  if (row.schedule.tone !== 'ok') return { tone: row.schedule.tone, text: row.schedule.label }
+  return { tone: 'ok', text: '正常' }
 }
+const codeNode = (node: StatusNode) => node.state === 'failed' || node.state === 'stale'
 const nodeDetail = (node: StatusNode) =>
-  [node.detail, node.at ? stamp(node.at) : ''].filter(Boolean).join(' ')
+  codeNode(node) ? '' : [node.detail, node.at ? ago(node.at) : ''].filter(Boolean).join(' ')
 
 const targetStatus: Record<TargetRow['status'], string> = {
   enabled: '已启用',
@@ -115,25 +127,7 @@ const targetStatus: Record<TargetRow['status'], string> = {
   unconfigured: '未配置',
 }
 const targetActive = (row: TargetRow) => row.status === 'enabled'
-function queueText(row: TargetRow) {
-  if (!targetActive(row)) return '—'
-  const parts = []
-  if (row.queue.pending) parts.push('待发送 ' + row.queue.pending)
-  if (row.queue.retry) parts.push('等待重试 ' + row.queue.retry)
-  if (!parts.length) return '无待发送'
-  return parts.join('，') + ' · 最早 ' + stamp(row.queue.earliest_at)
-}
-function sendingText(row: TargetRow) {
-  if (!targetActive(row)) return '—'
-  if (row.expired_leases) return '租约已过期 ' + row.expired_leases
-  return row.sending ? '发送中 ' + row.sending : '空闲'
-}
-function lastText(row: TargetRow) {
-  if (!row.last) return '尚无记录'
-  const label = attemptLabels[row.last.result] || row.last.result
-  return [label, stamp(row.last.at), row.last.code].filter(Boolean).join(' · ')
-}
-const lastTone = (row: TargetRow) =>
+const lastTone = (row: TargetRow): Tone =>
   !row.last
     ? 'none'
     : row.last.result === 'success'
@@ -141,64 +135,181 @@ const lastTone = (row: TargetRow) =>
       : row.last.result === 'permanent_error'
         ? 'fail'
         : 'warn'
-const targetIssue = (row: TargetRow) =>
-  targetActive(row) && (lastTone(row) === 'fail' || lastTone(row) === 'warn')
+const targetIssue = (row: TargetRow) => targetActive(row) && severe(lastTone(row))
+function targetState(row: TargetRow): { tone: Tone; text: string } {
+  if (!targetActive(row)) return { tone: 'none', text: targetStatus[row.status] }
+  if (!row.last) return { tone: 'none', text: '尚无发送' }
+  return { tone: lastTone(row), text: attemptLabels[row.last.result] || row.last.result }
+}
+function queueText(row: TargetRow) {
+  const waiting = row.queue.pending + row.queue.retry
+  if (!waiting) return '无待发送'
+  return [
+    row.queue.pending ? '待发送 ' + row.queue.pending : '',
+    row.queue.retry ? '等待重试 ' + row.queue.retry : '',
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
+const queueDetail = (row: TargetRow) =>
+  row.queue.pending + row.queue.retry && row.queue.earliest_at
+    ? '最早 ' + ago(row.queue.earliest_at)
+    : ''
+function sendingText(row: TargetRow) {
+  if (row.expired_leases) return '租约已过期 ' + row.expired_leases
+  return row.sending ? '发送中 ' + row.sending : '空闲'
+}
+const channel = (row: TargetRow) => channelMeta[row.kind as keyof typeof channelMeta]
 
 const openHotlists = ref(false)
-function hotlistLine(site: HotlistSite) {
+function hotlistLine(site: HotlistSite): { tone: Tone; text: string } {
   const abnormal = site.lists.find((item) => severe(item.tone))
   if (abnormal)
     return { tone: abnormal.tone, text: abnormal.period_label + '：' + listText(abnormal) }
   if (site.lists.every((item) => item.tone === 'ok'))
-    return { tone: 'ok', text: site.lists.length + ' 个榜单 · 最近刷新正常' }
-  return { tone: site.lists[0]?.tone ?? 'none', text: listText(site.lists[0]!) }
+    return { tone: 'ok', text: site.lists.length + ' 个榜单正常' }
+  const first = site.lists[0]
+  return first ? { tone: first.tone, text: listText(first) } : { tone: 'none', text: '—' }
 }
 function listText(item: HotlistSite['lists'][number]) {
-  return [item.label, nodeDetail(item)].filter(Boolean).join(' · ')
+  return [item.label, codeNode(item) ? item.detail : nodeDetail(item)].filter(Boolean).join(' · ')
 }
 
-function serviceText(row: ServiceRow) {
+function serviceState(row: ServiceRow): { tone: Tone; text: string } {
   switch (row.state) {
     case 'running':
-      return '运行中 · 最近完成循环 ' + stamp(row.last_loop_at)
+      return { tone: 'ok', text: '运行中' }
     case 'stalled':
-      return row.last_loop_at
-        ? '循环已 ' + elapsed(nowSeconds() - row.last_loop_at) + '未完成'
-        : '循环尚未完成'
+      return {
+        tone: 'warn',
+        text: row.last_loop_at
+          ? '循环已 ' + elapsed(now() - row.last_loop_at) + '未完成'
+          : '循环尚未完成',
+      }
     case 'failed':
-      return '已停止'
+      return { tone: 'fail', text: '已停止' }
     case 'stopped_with':
-      return '随' + (row.stopped_with || '其他服务') + '停止'
+      return { tone: 'fail', text: '随' + (row.stopped_with || '其他服务') + '停止' }
     default:
-      return '状态未知'
+      return { tone: 'none', text: '状态未知' }
   }
 }
-const serviceTone = (row: ServiceRow) =>
-  row.state === 'running'
-    ? 'ok'
-    : row.state === 'stalled'
-      ? 'warn'
-      : row.state === 'unknown'
-        ? 'none'
-        : 'fail'
+const serviceDetail = (row: ServiceRow) =>
+  row.state !== 'running'
+    ? ''
+    : row.last_loop_at
+      ? ago(row.last_loop_at) + '完成一轮'
+      : '尚未完成一轮'
+
 const alertsOff = computed(
   () => !!data.value && (!data.value.alerts.enabled || !data.value.alerts.ready_targets),
 )
+
+interface Tile {
+  key: string
+  icon: string
+  label: string
+  tone: Tone
+  value: string
+  note: string
+}
+const tiles = computed<Tile[]>(() => {
+  const value = data.value
+  if (!value) return []
+  const sources = value.sources
+  const sourceIssues = sources.filter(sourceIssue).length
+  const paused = sources.filter((row) => !row.enabled).length
+  const succeeded = Math.max(0, ...sources.map((row) => row.last_success_at ?? 0))
+  const targets = value.targets
+  const targetIssues = targets.filter(targetIssue).length
+  const waiting = targets
+    .filter(targetActive)
+    .reduce((sum, row) => sum + row.queue.pending + row.queue.retry, 0)
+  const lists = value.hotlists.flatMap((site) => site.lists)
+  const listIssues = lists.filter((item) => severe(item.tone)).length
+  const running = value.services.filter((row) => row.state === 'running').length
+  const services = value.services.length
+  return [
+    {
+      key: 'sources',
+      icon: 'rss',
+      label: '采集',
+      ...(!sources.length
+        ? { tone: 'none', value: '未添加网站' }
+        : sourceIssues
+          ? { tone: 'fail', value: sourceIssues + ' 个网站异常' }
+          : paused === sources.length
+            ? { tone: 'none', value: '已全部暂停' }
+            : { tone: 'ok', value: '正常' }),
+      note: !sources.length
+        ? '添加网站后开始采集'
+        : [
+            sources.length + ' 个网站',
+            paused ? paused + ' 个已暂停' : '',
+            succeeded ? '最近成功 ' + ago(succeeded) : '',
+          ]
+            .filter(Boolean)
+            .join(' · '),
+    },
+    {
+      key: 'targets',
+      icon: 'send',
+      label: '通知',
+      ...(!targets.length
+        ? { tone: 'none', value: '未添加目标' }
+        : targetIssues
+          ? { tone: 'fail', value: targetIssues + ' 个目标异常' }
+          : { tone: 'ok', value: '正常' }),
+      note: !targets.length
+        ? '添加目标后才能收到通知'
+        : targets.length + ' 个目标 · ' + (waiting ? '待发送 ' + waiting : '无待发送'),
+    },
+    {
+      key: 'hotlists',
+      icon: 'spark',
+      label: '热榜',
+      ...(!lists.length
+        ? { tone: 'none', value: '未显示' }
+        : listIssues
+          ? { tone: 'warn', value: listIssues + ' 个榜单异常' }
+          : { tone: 'ok', value: '正常' }),
+      note: !lists.length
+        ? '概览未显示热榜，不刷新'
+        : value.hotlists.length + ' 个网站 · ' + lists.length + ' 个榜单',
+    },
+    {
+      key: 'services',
+      icon: 'cpu',
+      label: '后台服务',
+      ...(running === services
+        ? { tone: 'ok', value: '运行中' }
+        : { tone: 'fail', value: services - running + ' 个异常' }),
+      note: running + ' / ' + services + ' 正常',
+    },
+  ] as Tile[]
+})
+const headline = computed(() => {
+  const count = data.value?.problems.length ?? 0
+  if (count) return { tone: 'fail', icon: 'alert', text: count + ' 个问题待处理' }
+  if (tiles.value.some((tile) => severe(tile.tone)))
+    return { tone: 'warn', icon: 'alert', text: '有需要留意的状态' }
+  return { tone: 'ok', icon: 'check', text: '运行正常' }
+})
 
 const statusLabels: Record<ProblemRow['status'], string> = {
   ongoing: '进行中',
   recovered: '已恢复',
   paused: '已暂停',
 }
-const statusTones: Record<ProblemRow['status'], string> = {
-  ongoing: 'fail',
-  recovered: 'ok',
-  paused: 'none',
+const statusBadges: Record<ProblemRow['status'], string> = {
+  ongoing: 'rose',
+  recovered: 'green',
+  paused: 'neutral',
 }
 function lastedText(row: ProblemRow) {
   if (row.ended_at) return elapsed(row.ended_at - row.started_at)
   if (row.status === 'paused') return '暂停时未恢复'
-  if (row.status === 'ongoing') return elapsed(nowSeconds() - row.started_at)
+  if (row.status === 'ongoing') return elapsed(now() - row.started_at)
   return '—'
 }
 const kindOptions = [
@@ -215,12 +326,6 @@ const dayOptions = [
 await untilShown(() => status.ready() && history.ready())
 </script>
 <template>
-  <div class="ops-toolbar">
-    <span v-if="data" class="ops-observed">观测于 {{ clock(data.checked_at) }}</span>
-    <button class="button" :disabled="status.loading.value" @click="refresh">
-      <Icon name="refresh" :size="14" />刷新
-    </button>
-  </div>
   <ReadRegion
     :loading="status.loading.value"
     :error="status.error.value"
@@ -230,11 +335,59 @@ await untilShown(() => status.ready() && history.ready())
     @retry="status.reload"
   >
     <div v-if="data" class="ops-stack">
-      <section v-if="data.problems.length" class="panel" aria-labelledby="ops-problems">
-        <h2 id="ops-problems" class="ops-title">
-          当前问题 <span class="ops-count">{{ data.problems.length }}</span>
-        </h2>
-        <article v-for="problem in data.problems" :key="problem.key" class="ops-problem">
+      <section class="panel ops-overview" aria-labelledby="ops-headline">
+        <div class="ops-overview-head">
+          <span class="ops-health" :class="'is-' + headline.tone"
+            ><Icon :name="headline.icon" :size="20"
+          /></span>
+          <div class="ops-overview-copy">
+            <h2 id="ops-headline">{{ headline.text }}</h2>
+            <p>
+              <template v-if="!data.problems.length">当前没有需要处理的问题 · </template>观测于
+              {{ clock(data.checked_at) }}
+            </p>
+          </div>
+          <button class="button" :disabled="status.loading.value" @click="refresh">
+            <Icon name="refresh" :size="14" />刷新
+          </button>
+        </div>
+        <dl class="about-tiles ops-tiles">
+          <div v-for="tile in tiles" :key="tile.key">
+            <dt>
+              <span class="about-tile-icon"><Icon :name="tile.icon" :size="16" /></span
+              >{{ tile.label }}
+            </dt>
+            <dd>
+              <span class="ops-tile-value" :class="'tone-' + tile.tone"
+                ><i class="ops-dot" />{{ tile.value }}</span
+              >
+              <small>{{ tile.note }}</small>
+            </dd>
+          </div>
+        </dl>
+        <p v-if="alertsOff" class="ops-alert-note">
+          <Icon name="bell" :size="15" />
+          <span>系统告警未启用或没有可用目标，出现故障时不会收到通知。</span>
+          <button class="text-link" @click="emit('navigate', '/settings/alerts')">去设置</button>
+        </p>
+      </section>
+
+      <section
+        v-if="data.problems.length"
+        class="panel ops-problems"
+        aria-labelledby="ops-problems"
+      >
+        <div class="ops-card-head">
+          <h2 id="ops-problems">
+            当前问题 <span class="count-badge">{{ data.problems.length }}</span>
+          </h2>
+        </div>
+        <article
+          v-for="problem in data.problems"
+          :key="problem.key"
+          class="ops-problem"
+          :class="'is-' + problem.status"
+        >
           <div class="ops-problem-copy">
             <div class="ops-problem-head">
               <strong>{{ problem.label }}</strong>
@@ -242,103 +395,119 @@ await untilShown(() => status.ready() && history.ready())
                 handlingLabels[problem.status]
               }}</span>
             </div>
-            <p>{{ problemReason(problem) }}</p>
-            <p class="ops-muted">{{ problemFacts(problem).join(' · ') }}</p>
+            <p class="ops-problem-reason">
+              {{ stageLabels[problem.stage] || problem.stage }}：{{ problem.summary }}
+              <code v-if="problem.code" class="ops-code">{{ problem.code }}</code>
+            </p>
+            <p v-if="problem.hint" class="ops-problem-hint">{{ problem.hint }}</p>
+            <p class="ops-muted">
+              <span v-if="problem.since" :title="stamp(problem.since) + ' 开始'"
+                >{{ stamp(problem.since) }} 开始 · </span
+              >{{ problemFacts(problem).join(' · ') }}
+            </p>
           </div>
-          <button class="button" @click="openProblem(problem)">查看详情</button>
+          <button class="button" @click="openProblem(problem)">
+            查看详情<Icon name="arrow" :size="14" />
+          </button>
         </article>
-        <p v-if="alertsOff" class="ops-note">
-          系统告警未启用或没有可用目标，出现故障时不会收到通知。
-          <button class="text-link" @click="emit('navigate', '/settings/alerts')">去设置</button>
-        </p>
-      </section>
-      <section v-else class="panel ops-clear">
-        <strong class="tone-ok">当前没有需要处理的问题</strong>
-        <span v-if="alertsOff" class="tone-wait">
-          系统告警未启用或没有可用目标，出现故障时不会收到通知
-          <button class="text-link" @click="emit('navigate', '/settings/alerts')">去设置</button>
-        </span>
       </section>
 
-      <section class="panel ops-section" aria-labelledby="ops-sources">
-        <h2 id="ops-sources" class="ops-title-inline">采集链路 <small>按网站</small></h2>
+      <section class="panel" aria-labelledby="ops-sources">
+        <div class="ops-card-head">
+          <h2 id="ops-sources">采集</h2>
+          <span class="ops-card-note">按网站 · 调度 → 抓取 → 解析 → 最近一轮</span>
+        </div>
         <div v-if="!data.sources.length" class="ops-empty">
           <span>还没有添加监控网站。</span>
           <button class="button" @click="emit('navigate', '/websites')">添加网站</button>
         </div>
-        <template v-else>
-          <div class="ops-head ops-source-grid" aria-hidden="true">
-            <span>网站</span><span>调度</span><span>抓取</span><span>解析</span><span>最近一轮</span
-            ><span>最近成功</span><span>下次尝试</span>
-          </div>
-          <article
-            v-for="row in data.sources"
-            :key="row.website_id"
-            class="ops-row ops-source-grid"
-            :class="{ open: rowOpen('s' + row.website_id, sourceIssue(row)) }"
-          >
+        <article
+          v-for="row in data.sources"
+          :key="row.website_id"
+          class="ops-row"
+          :class="{ open: rowOpen('s' + row.website_id, sourceIssue(row)) }"
+        >
+          <div class="ops-row-head">
+            <span class="icon-tile ops-row-icon" :class="row.enabled ? 'orange' : 'gray'"
+              ><Icon name="globe" :size="17"
+            /></span>
             <div class="ops-row-name">
               <button class="text-link" @click="emit('navigate', '/websites/' + row.website_id)">
                 {{ row.name }}
               </button>
-              <small v-if="row.gap_at" class="tone-wait">可能漏帖 {{ stamp(row.gap_at) }}</small>
-              <button
-                class="ops-toggle"
-                :aria-expanded="rowOpen('s' + row.website_id, sourceIssue(row))"
-                :aria-label="row.name + '：' + sourceSummary(row)"
-                @click="toggleRow('s' + row.website_id)"
+              <span class="ops-state" :class="'tone-' + sourceState(row).tone"
+                ><i class="ops-dot" />{{ sourceState(row).text }}</span
               >
-                <span :class="sourceIssue(row) ? 'tone-fail' : 'tone-ok'">{{
-                  sourceSummary(row)
-                }}</span>
-                <Icon name="down" :size="14" />
-              </button>
             </div>
-            <div class="ops-row-body">
-              <div
-                v-for="item in sourceNodes(row)"
-                :key="item.key"
-                class="ops-node"
-                :class="{ blocked: item.node.tone === 'fail' }"
+            <button
+              class="ops-toggle"
+              :aria-expanded="rowOpen('s' + row.website_id, sourceIssue(row))"
+              :aria-label="row.name + '：' + sourceState(row).text"
+              @click="toggleRow('s' + row.website_id)"
+            >
+              <span :class="'tone-' + sourceState(row).tone"
+                ><i class="ops-dot" />{{ sourceState(row).text }}</span
               >
-                <span class="ops-cell-label">{{ item.label }}</span>
-                <div>
-                  <strong :class="'tone-' + item.node.tone"
-                    ><i class="ops-dot" />{{ item.node.label }}</strong
-                  >
-                  <small v-if="nodeDetail(item.node)">{{ nodeDetail(item.node) }}</small>
-                </div>
-              </div>
-              <div class="ops-cell">
-                <span class="ops-cell-label">最近成功</span>{{ stamp(row.last_success_at) }}
-              </div>
-              <div class="ops-cell">
-                <span class="ops-cell-label">下次尝试</span>{{ stamp(row.next_attempt_at) }}
-              </div>
-            </div>
-          </article>
-        </template>
+              <Icon name="down" :size="14" />
+            </button>
+          </div>
+          <div class="ops-row-body">
+            <p v-if="sourceIdle(row)" class="ops-idle" :class="'tone-' + row.schedule.tone">
+              {{ row.enabled ? row.schedule.label + '，暂不采集' : '已暂停，不采集' }}
+            </p>
+            <ol v-else class="ops-steps">
+              <li
+                v-for="step in sourceSteps(row)"
+                :key="step.key"
+                class="ops-step"
+                :class="{ blocked: step.node.tone === 'fail', quiet: step.node.tone === 'none' }"
+              >
+                <span class="ops-step-label">{{ step.label }}</span>
+                <strong :class="'tone-' + step.node.tone"
+                  ><i class="ops-dot" />{{ step.node.label }}</strong
+                >
+                <code v-if="codeNode(step.node) && step.node.detail" class="ops-code">{{
+                  step.node.detail
+                }}</code>
+                <small v-else-if="nodeDetail(step.node)">{{ nodeDetail(step.node) }}</small>
+              </li>
+            </ol>
+            <p class="ops-row-times">
+              <span :title="stamp(row.last_success_at)"
+                >最近成功 {{ ago(row.last_success_at) }}</span
+              >
+              <span v-if="row.enabled && row.next_attempt_at" :title="stamp(row.next_attempt_at)"
+                >下次尝试 {{ ago(row.next_attempt_at) }}</span
+              >
+              <span v-if="row.gap_at" class="tone-warn" :title="stamp(row.gap_at)"
+                >可能漏帖 {{ stamp(row.gap_at) }}</span
+              >
+            </p>
+          </div>
+        </article>
       </section>
 
-      <section class="panel ops-section" aria-labelledby="ops-targets">
-        <h2 id="ops-targets" class="ops-title-inline">
-          通知链路 <small>按目标 · 没有待发不代表渠道已验证可用</small>
-        </h2>
+      <section class="panel" aria-labelledby="ops-targets">
+        <div class="ops-card-head">
+          <h2 id="ops-targets">通知</h2>
+          <span class="ops-card-note">按目标 · 名称进入通知记录</span>
+        </div>
         <div v-if="!data.targets.length" class="ops-empty">
           <span>还没有通知目标。</span>
           <button class="button" @click="emit('navigate', '/target/new')">添加通知目标</button>
         </div>
-        <template v-else>
-          <div class="ops-head ops-target-grid" aria-hidden="true">
-            <span>目标</span><span>状态</span><span>队列</span><span>发送中</span
-            ><span>结果不确定</span><span>最近结果</span>
-          </div>
-          <article
-            v-for="row in data.targets"
-            :key="row.id"
-            class="ops-row ops-target-grid"
-            :class="{ open: rowOpen('t' + row.id, targetIssue(row)) }"
-          >
+        <article
+          v-for="row in data.targets"
+          :key="row.id"
+          class="ops-row"
+          :class="{ open: rowOpen('t' + row.id, targetIssue(row)) }"
+        >
+          <div class="ops-row-head">
+            <span
+              class="icon-tile ops-row-icon"
+              :class="targetActive(row) ? channel(row)?.color || 'blue' : 'gray'"
+              ><Icon :name="channel(row)?.icon || 'send'" :size="17"
+            /></span>
             <div class="ops-row-name">
               <button
                 class="text-link"
@@ -346,44 +515,60 @@ await untilShown(() => status.ready() && history.ready())
               >
                 {{ row.name }}
               </button>
-              <button
-                class="ops-toggle"
-                :aria-expanded="rowOpen('t' + row.id, targetIssue(row))"
-                :aria-label="row.name + '：' + lastText(row)"
-                @click="toggleRow('t' + row.id)"
+              <span class="ops-state" :class="'tone-' + targetState(row).tone"
+                ><i class="ops-dot" />{{ targetState(row).text }}</span
               >
-                <span :class="'tone-' + lastTone(row)">{{
-                  targetActive(row) ? lastText(row) : targetStatus[row.status]
-                }}</span>
-                <Icon name="down" :size="14" />
-              </button>
             </div>
-            <div class="ops-row-body">
-              <div class="ops-cell" :class="targetActive(row) ? 'tone-ok' : 'tone-none'">
-                <span class="ops-cell-label">状态</span>{{ targetStatus[row.status] }}
-              </div>
-              <div class="ops-cell">
-                <span class="ops-cell-label">队列</span>{{ queueText(row) }}
-              </div>
-              <div class="ops-cell">
-                <span class="ops-cell-label">发送中</span>{{ sendingText(row) }}
-              </div>
-              <div class="ops-cell">
-                <span class="ops-cell-label">结果不确定</span
-                >{{ targetActive(row) ? row.uncertain : '—' }}
-              </div>
-              <div class="ops-cell" :class="'tone-' + lastTone(row)">
-                <span class="ops-cell-label">最近结果</span>{{ lastText(row) }}
-              </div>
-            </div>
-          </article>
-        </template>
+            <button
+              class="ops-toggle"
+              :aria-expanded="rowOpen('t' + row.id, targetIssue(row))"
+              :aria-label="row.name + '：' + targetState(row).text"
+              @click="toggleRow('t' + row.id)"
+            >
+              <span :class="'tone-' + targetState(row).tone"
+                ><i class="ops-dot" />{{ targetState(row).text }}</span
+              >
+              <Icon name="down" :size="14" />
+            </button>
+          </div>
+          <div class="ops-row-body">
+            <p v-if="!targetActive(row)" class="ops-idle tone-none">
+              {{ row.status === 'paused' ? '已暂停，不发送' : '未配置，不发送' }}
+            </p>
+            <ol v-else class="ops-steps ops-facts">
+              <li class="ops-step" :class="{ quiet: !(row.queue.pending + row.queue.retry) }">
+                <span class="ops-step-label">队列</span>
+                <strong>{{ queueText(row) }}</strong>
+                <small v-if="queueDetail(row)">{{ queueDetail(row) }}</small>
+              </li>
+              <li class="ops-step" :class="{ quiet: !row.sending && !row.expired_leases }">
+                <span class="ops-step-label">发送中</span>
+                <strong :class="{ 'tone-warn': row.expired_leases }">{{ sendingText(row) }}</strong>
+              </li>
+              <li class="ops-step" :class="{ quiet: !row.uncertain }">
+                <span class="ops-step-label">结果不确定</span>
+                <strong :class="{ 'tone-warn': row.uncertain }">{{ row.uncertain }}</strong>
+              </li>
+              <li class="ops-step" :class="{ blocked: lastTone(row) === 'fail' }">
+                <span class="ops-step-label">最近结果</span>
+                <template v-if="row.last">
+                  <strong :class="'tone-' + lastTone(row)"
+                    ><i class="ops-dot" />{{ attemptLabels[row.last.result] || row.last.result }}
+                    <small :title="stamp(row.last.at)">{{ ago(row.last.at) }}</small></strong
+                  >
+                  <code v-if="row.last.code" class="ops-code">{{ row.last.code }}</code>
+                </template>
+                <strong v-else class="tone-none">尚无记录</strong>
+              </li>
+            </ol>
+          </div>
+        </article>
       </section>
 
       <div class="ops-pair">
-        <section class="panel ops-section" aria-labelledby="ops-hotlists">
+        <section class="panel" aria-labelledby="ops-hotlists">
           <div class="ops-card-head">
-            <h2 id="ops-hotlists" class="ops-title-inline">热榜</h2>
+            <h2 id="ops-hotlists">热榜</h2>
             <button
               v-if="data.hotlists.length"
               class="text-link"
@@ -393,32 +578,45 @@ await untilShown(() => status.ready() && history.ready())
               {{ openHotlists ? '收起各榜' : '展开各榜' }}
             </button>
           </div>
-          <p v-if="!data.hotlists.length" class="ops-muted">热榜模块未显示，当前不刷新。</p>
-          <template v-for="site in data.hotlists" :key="site.website_id">
-            <div class="ops-line">
-              <strong>{{ site.name }}</strong>
-              <span :class="'tone-' + hotlistLine(site).tone">{{ hotlistLine(site).text }}</span>
-            </div>
-            <template v-if="openHotlists">
-              <div v-for="item in site.lists" :key="item.period" class="ops-line ops-subline">
-                <span>{{ item.period_label }}</span>
-                <span :class="'tone-' + item.tone">{{ listText(item) }}</span>
+          <div class="ops-lines">
+            <p v-if="!data.hotlists.length" class="ops-muted">概览未显示热榜，当前不刷新。</p>
+            <template v-for="site in data.hotlists" :key="site.website_id">
+              <div class="ops-line">
+                <strong>{{ site.name }}</strong>
+                <span class="ops-line-value" :class="'tone-' + hotlistLine(site).tone"
+                  ><i class="ops-dot" />{{ hotlistLine(site).text }}</span
+                >
               </div>
+              <template v-if="openHotlists">
+                <div v-for="item in site.lists" :key="item.period" class="ops-line ops-subline">
+                  <span>{{ item.period_label }}</span>
+                  <span :class="'tone-' + item.tone">{{ listText(item) }}</span>
+                </div>
+              </template>
             </template>
-          </template>
+          </div>
         </section>
-        <section class="panel ops-section" aria-labelledby="ops-services">
-          <h2 id="ops-services" class="ops-title-inline">后台服务</h2>
-          <div v-for="row in data.services" :key="row.id" class="ops-line">
-            <strong>{{ row.name }}</strong>
-            <span :class="'tone-' + serviceTone(row)">{{ serviceText(row) }}</span>
+        <section class="panel" aria-labelledby="ops-services">
+          <div class="ops-card-head">
+            <h2 id="ops-services">后台服务</h2>
+          </div>
+          <div class="ops-lines">
+            <div v-for="row in data.services" :key="row.id" class="ops-line">
+              <strong>{{ row.name }}</strong>
+              <span
+                ><small v-if="serviceDetail(row)" class="ops-muted">{{ serviceDetail(row) }}</small
+                ><span :class="'tone-' + serviceState(row).tone"
+                  ><i class="ops-dot" />{{ serviceState(row).text }}</span
+                ></span
+              >
+            </div>
           </div>
         </section>
       </div>
 
-      <section class="panel ops-section" aria-labelledby="ops-history">
+      <section class="panel" aria-labelledby="ops-history">
         <div class="ops-card-head ops-history-head">
-          <h2 id="ops-history" class="ops-title-inline">问题历史</h2>
+          <h2 id="ops-history">问题历史</h2>
           <div class="ops-filters">
             <label class="ops-check"
               ><input v-model="showShort" type="checkbox" />显示 1 分钟内自动恢复的问题</label
@@ -441,7 +639,7 @@ await untilShown(() => status.ready() && history.ready())
               class="ops-head ops-history-grid"
               aria-hidden="true"
             >
-              <span>状态</span><span>对象</span><span>原因</span><span>开始</span><span>持续</span
+              <span>状态</span><span>对象与原因</span><span>开始</span><span>持续</span
               ><span>系统告警</span>
             </div>
             <button
@@ -451,18 +649,26 @@ await untilShown(() => status.ready() && history.ready())
               :aria-label="'查看问题：' + row.label"
               @click="openHistory(row)"
             >
-              <span :class="'tone-' + statusTones[row.status]">{{ statusLabels[row.status] }}</span>
-              <span>{{ row.label }}</span>
               <span
-                >{{ row.summary }}<template v-if="row.code"> · {{ row.code }}</template></span
+                ><span class="small-badge" :class="statusBadges[row.status]">{{
+                  statusLabels[row.status]
+                }}</span></span
               >
-              <span>{{ stamp(row.started_at) }}</span>
-              <span>{{ lastedText(row) }}</span>
+              <span class="ops-history-what">
+                <strong>{{ row.label }}</strong>
+                <span
+                  >{{ row.summary }}
+                  <code v-if="row.code" class="ops-code">{{ row.code }}</code></span
+                >
+              </span>
+              <span class="ops-history-time">{{ stamp(row.started_at) }}</span>
+              <span class="ops-history-time">{{ lastedText(row) }}</span>
               <span class="ops-muted">{{ alertSummary(row.alerts) }}</span>
             </button>
-            <p v-if="!history.data.value.total" class="ops-muted">
-              这段时间没有记录到问题。记录按历史保留策略清理。
-            </p>
+            <div v-if="!history.data.value.total" class="ops-empty-state">
+              <span class="about-tile-icon"><Icon name="check" :size="16" /></span>
+              <p>这段时间没有记录到问题。</p>
+            </div>
             <Pagination
               v-if="history.data.value.total > history.data.value.page_size"
               :page="history.data.value.page"
@@ -486,43 +692,132 @@ await untilShown(() => status.ready() && history.ready())
   />
 </template>
 <style scoped>
-.ops-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
-  color: #5d6673;
-}
 .ops-stack {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
-.ops-title {
+.ops-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--border);
+}
+.ops-card-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0;
-  padding: 14px 20px;
   font-size: 15px;
   font-weight: 600;
 }
-.ops-count {
-  font-weight: 400;
-  color: #5d6673;
+.ops-card-note {
+  color: var(--muted);
+  font-size: 12px;
 }
+
+/* Overview */
+.ops-overview {
+  padding: 20px 22px;
+}
+.ops-overview-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.ops-health {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+}
+.ops-health.is-ok {
+  color: #2f6f4f;
+  background: #ecf6f0;
+}
+.ops-health.is-warn {
+  color: #8a5a0b;
+  background: #fbf3e4;
+}
+.ops-health.is-fail {
+  color: #a8324a;
+  background: #fbeef0;
+}
+.ops-overview-copy {
+  flex: 1;
+  min-width: 0;
+}
+.ops-overview-copy h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+.ops-overview-copy p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.ops-tiles {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.ops-tile-value {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.ops-alert-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 14px 0 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #fdf7ec;
+  color: #8a5a0b;
+  font-size: 12px;
+}
+.ops-alert-note .text-link {
+  margin-left: auto;
+}
+
+/* Current problems */
 .ops-problem {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 10px 24px;
-  padding: 14px 20px;
-  border-top: 1px solid #e9ebee;
+  padding: 16px 22px 16px 19px;
+  border-left: 3px solid transparent;
+}
+.ops-problem + .ops-problem {
+  border-top: 1px solid var(--border);
+}
+.ops-problem.is-action {
+  border-left-color: #d98a98;
+}
+.ops-problem.is-auto_retry {
+  border-left-color: #e2b765;
+}
+.ops-problem.is-verifying {
+  border-left-color: #c3c9d1;
+}
+.ops-problems {
+  overflow: hidden;
 }
 .ops-problem-copy {
   flex: 1 1 420px;
   min-width: 0;
 }
 .ops-problem-copy p {
-  margin: 0;
+  margin: 3px 0 0;
   overflow-wrap: anywhere;
 }
 .ops-problem-head {
@@ -531,120 +826,189 @@ await untilShown(() => status.ready() && history.ready())
   align-items: center;
   gap: 8px;
 }
-.ops-muted,
-.ops-problem-copy .ops-muted {
-  color: #5d6673;
-  font-size: 12px;
-}
-.ops-note {
-  margin: 0;
-  padding: 10px 20px;
-  border-top: 1px solid #e9ebee;
-  color: #8a5a0b;
-}
-.ops-clear {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 6px 16px;
-  padding: 14px 20px;
-}
-.ops-section {
-  padding: 14px 20px 16px;
-}
-.ops-title-inline {
-  margin: 0 0 10px;
-  font-size: 15px;
+.ops-problem-head strong {
+  font-size: 14px;
   font-weight: 600;
 }
-.ops-title-inline small {
-  font-weight: 400;
+.ops-problem-head .small-badge {
+  margin: 0;
+}
+.ops-problem-hint {
+  color: #4b5562;
+}
+.ops-problem .button {
+  gap: 6px;
+}
+.ops-muted {
+  color: var(--muted);
   font-size: 12px;
+}
+.ops-code {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: #f2f4f6;
   color: #5d6673;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
 }
 .ops-empty {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  color: #5d6673;
+  padding: 18px 22px;
+  color: var(--muted);
 }
-.ops-head {
-  color: #5d6673;
-  font-size: 12px;
-  padding-bottom: 6px;
-}
-.ops-source-grid {
-  display: grid;
-  grid-template-columns: 150px repeat(3, minmax(0, 1fr)) minmax(0, 1.7fr) 96px 96px;
-  gap: 8px;
-  align-items: center;
-}
-.ops-target-grid {
-  display: grid;
-  grid-template-columns: 170px 90px minmax(0, 1.4fr) 90px 90px minmax(0, 1.6fr);
-  gap: 8px;
-  align-items: center;
-}
-.ops-history-grid {
-  display: grid;
-  grid-template-columns: 70px minmax(0, 1.2fr) minmax(0, 1.5fr) 96px 110px minmax(0, 0.8fr);
-  gap: 8px;
-}
+
+/* Source and target rows */
 .ops-row {
-  padding: 8px 0;
-  border-top: 1px solid #f0f1f3;
-  overflow-wrap: anywhere;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 12px 20px;
+  align-items: center;
+  padding: 16px 22px;
 }
-.ops-row-name {
+.ops-row + .ops-row {
+  border-top: 1px solid var(--border);
+}
+.ops-row-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   min-width: 0;
 }
-.ops-row-name > small {
-  display: block;
+.ops-row-icon {
+  width: 34px;
+  height: 34px;
 }
-.ops-row-body {
-  display: contents;
+.ops-row-icon.gray {
+  color: #8a939e;
+  background: #f2f4f6;
+}
+.ops-row-name {
+  display: grid;
+  min-width: 0;
+}
+.ops-row-name .text-link {
+  justify-self: start;
+  max-width: 100%;
+  overflow: hidden;
+  font-weight: 600;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ops-state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
 }
 .ops-toggle {
   display: none;
 }
-.ops-node {
-  padding: 6px 10px;
-  border-radius: 7px;
+.ops-row-body {
+  display: grid;
+  gap: 8px;
   min-width: 0;
 }
-.ops-node.blocked {
+.ops-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 22px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ops-step {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: #f8f9fb;
+  overflow-wrap: anywhere;
+}
+/* A chevron between pipeline steps; fact cells for targets stay unlinked. */
+.ops-steps:not(.ops-facts) .ops-step + .ops-step::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -15px;
+  width: 7px;
+  height: 7px;
+  border-top: 1.5px solid #c3c9d1;
+  border-right: 1.5px solid #c3c9d1;
+  transform: translateY(-50%) rotate(45deg);
+}
+.ops-facts {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.5fr);
+  gap: 10px;
+}
+.ops-step.blocked {
+  border-color: #f0cdd4;
   background: #fbeef0;
 }
-.ops-node strong {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 600;
+.ops-step.quiet {
+  background: #fbfbfc;
 }
-.ops-node small {
-  display: block;
+.ops-step.quiet strong {
+  color: #6f7885;
+  font-weight: 450;
+}
+.ops-step-label {
+  color: #808b98;
+  font-size: 11px;
+}
+.ops-step strong {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 6px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+.ops-step strong small {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 11px;
+}
+.ops-step small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.ops-step .ops-code {
+  justify-self: start;
+}
+.ops-row-times {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0;
+  color: var(--muted);
   font-size: 12px;
-  color: #5d6673;
+  font-variant-numeric: tabular-nums;
+}
+.ops-idle {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: #fbfbfc;
 }
 .ops-dot {
   flex: none;
+  display: inline-block;
   width: 7px;
   height: 7px;
   border-radius: 50%;
   background: currentColor;
-  opacity: 0.8;
-}
-.ops-cell {
-  min-width: 0;
-  font-variant-numeric: tabular-nums;
-}
-.ops-cell-label {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
+  opacity: 0.85;
 }
 .tone-ok {
   color: #2f6f4f;
@@ -657,43 +1021,60 @@ await untilShown(() => status.ready() && history.ready())
   color: #a8324a;
 }
 .tone-none {
-  color: #5d6673;
+  color: #6f7885;
 }
+
+/* Hotlists and services */
 .ops-pair {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   gap: 16px;
 }
-.ops-card-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px 16px;
-}
-.ops-card-head .ops-title-inline {
-  margin: 0;
-}
-.ops-history-head {
-  margin-bottom: 10px;
+.ops-lines {
+  display: grid;
+  gap: 2px;
+  padding: 10px 22px 14px;
 }
 .ops-line {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 12px;
-  padding-top: 8px;
+  padding: 6px 0;
 }
 .ops-line > :first-child {
   flex: none;
+  font-weight: 500;
 }
 .ops-line > :last-child {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 2px 10px;
   text-align: right;
   overflow-wrap: anywhere;
 }
+.ops-line > :last-child > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.ops-line > .ops-line-value {
+  display: block;
+}
+.ops-line-value > .ops-dot {
+  margin: 0 6px 1px 0;
+  vertical-align: middle;
+}
 .ops-subline {
   padding-left: 14px;
-  color: #5d6673;
+  color: var(--muted);
+  font-size: 12px;
 }
+
+/* Problem history */
 .ops-filters {
   display: flex;
   flex-wrap: wrap;
@@ -705,81 +1086,224 @@ await untilShown(() => status.ready() && history.ready())
   display: flex;
   align-items: center;
   gap: 6px;
+  font-size: 12px;
+}
+.ops-head {
+  padding: 10px 22px 6px;
+  color: #808b98;
+  font-size: 12px;
+}
+.ops-history-grid {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) 110px 120px 110px;
+  gap: 12px;
+  align-items: center;
 }
 .ops-history-row {
   width: 100%;
-  padding: 9px 0;
+  padding: 11px 22px;
   border: 0;
-  border-top: 1px solid #f0f1f3;
+  border-top: 1px solid var(--border);
   background: transparent;
   text-align: left;
   overflow-wrap: anywhere;
+  transition: background 0.15s;
 }
-.ops-history-row:hover {
+.ops-history-row:hover,
+.ops-history-row:focus-visible {
   background: #fafbfc;
 }
-/* The fixed columns no longer fit beside the sidebar on a medium screen. */
+.ops-history-what {
+  display: grid;
+  min-width: 0;
+}
+.ops-history-what strong {
+  font-weight: 550;
+}
+.ops-history-what > span {
+  color: #5d6673;
+  font-size: 12px;
+}
+.ops-history-time {
+  font-variant-numeric: tabular-nums;
+}
+.small-badge.green {
+  color: #417658;
+  background: #f0f7f2;
+}
+.small-badge.rose {
+  margin-left: 0;
+}
+.ops-empty-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 22px;
+  color: var(--muted);
+}
+.ops-empty-state p {
+  margin: 0;
+}
+.ops-empty-state .about-tile-icon {
+  color: #2f6f4f;
+  background: #ecf6f0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ops-history-row {
+    transition: none;
+  }
+}
 @media (max-width: 1100px) {
-  .ops-source-grid,
-  .ops-target-grid {
-    display: block;
+  .ops-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .ops-head.ops-head {
+  .ops-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ops-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ops-history-grid {
+    grid-template-columns: 72px minmax(0, 1fr) 110px 110px;
+  }
+  .ops-history-grid > :nth-child(5) {
     display: none;
   }
-  .ops-row-body {
-    display: none;
+}
+/* Phones fold healthy rows; the whole row head becomes the toggle. */
+@media (max-width: 760px) {
+  .ops-overview,
+  .ops-card-head,
+  .ops-row,
+  .ops-empty,
+  .ops-lines,
+  .ops-empty-state {
+    padding-left: 16px;
+    padding-right: 16px;
   }
-  .ops-row.open .ops-row-body {
-    display: block;
+  .ops-problem {
+    padding: 14px 16px 14px 13px;
+  }
+  .ops-problem .button {
+    width: 100%;
+    justify-content: center;
+  }
+  .ops-tiles {
+    gap: 8px;
+  }
+  .ops-tiles > div {
+    gap: 8px;
+    padding: 12px 14px;
+  }
+  .ops-tiles dd {
+    font-size: 14px;
+  }
+  .ops-alert-note .text-link {
+    margin-left: 0;
+  }
+  .ops-row {
+    gap: 4px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+  .ops-row-head {
+    min-height: 44px;
+  }
+  .ops-row-name {
+    flex: 1;
+  }
+  .ops-state {
+    display: none;
   }
   .ops-toggle {
     display: flex;
-    justify-content: space-between;
+    flex: none;
     align-items: center;
     gap: 8px;
-    width: 100%;
+    max-width: 55%;
     min-height: 44px;
     padding: 0;
     border: 0;
     background: none;
-    text-align: left;
-  }
-  .ops-cell-label {
-    position: static;
-    width: auto;
-    height: auto;
-    overflow: visible;
-    clip-path: none;
-    color: #5d6673;
-    flex: none;
-  }
-  .ops-node,
-  .ops-cell {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 6px 0;
-    border-radius: 0;
+    font-size: 12px;
     text-align: right;
   }
-  .ops-node.blocked {
-    background: none;
+  .ops-toggle > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
   }
-  .ops-node strong {
-    justify-content: flex-end;
+  .ops-toggle :deep(svg) {
+    flex: none;
+    transition: transform 0.15s;
+  }
+  .ops-row.open .ops-toggle :deep(svg) {
+    transform: rotate(180deg);
+  }
+  .ops-row-body {
+    display: none;
+    padding-bottom: 10px;
+  }
+  .ops-row.open .ops-row-body {
+    display: grid;
+  }
+  .ops-steps,
+  .ops-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .ops-steps:not(.ops-facts) .ops-step + .ops-step::before {
+    display: none;
+  }
+  .ops-head {
+    display: none;
+  }
+  .ops-history-row {
+    padding: 12px 16px;
   }
   .ops-history-grid {
-    grid-template-columns: 56px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 12px;
   }
-  .ops-history-row > :nth-child(n + 3):not(:nth-child(6)) {
+  .ops-history-grid > :nth-child(1) {
     grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
   }
-  .ops-history-row > :nth-child(6) {
+  .ops-history-grid > :nth-child(2) {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+  .ops-history-grid > :nth-child(3),
+  .ops-history-grid > :nth-child(4) {
+    grid-row: 3;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .ops-history-grid > :nth-child(4) {
     grid-column: 2;
+    justify-self: end;
   }
-  .ops-pair {
-    grid-template-columns: minmax(0, 1fr);
+  .ops-history-grid > :nth-child(5) {
+    display: block;
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: end;
+    font-size: 11px;
+  }
+  .ops-filters {
+    width: 100%;
+  }
+  .ops-filters > :deep(*) {
+    flex: 1 1 140px;
+  }
+  .ops-check {
+    flex-basis: 100% !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ops-toggle :deep(svg) {
+    transition: none;
   }
 }
 </style>

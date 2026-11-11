@@ -89,7 +89,7 @@ def _schedule_node(session, website_id, source, state, enabled, active, at):
     probed = probe_backoff(session.get(SourceProbe, source.id))
     if probed > at:
         return node("limited", "wait", "测试后退避", "解除于", probed)
-    return node("scheduled", "ok", "正常", "已启用")
+    return node("scheduled", "ok", "正常")
 
 
 def _parse_detail(run):
