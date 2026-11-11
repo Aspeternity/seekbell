@@ -3132,7 +3132,7 @@ h1[tabindex='-1']:focus-visible {
   margin-top: 2px;
 }
 .about-tiles.alert-tiles {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .alert-tiles dd {
   font-variant-numeric: tabular-nums;
@@ -3154,36 +3154,12 @@ h1[tabindex='-1']:focus-visible {
   color: #d0703f;
 }
 .alert-state.warn small,
-.alert-tiles .failed small {
+.alert-tiles small.alert-failed {
   color: #a4552c;
 }
 .about-tiles dd.alert-empty {
   font-weight: 400;
   color: #9aa3ad;
-}
-.alert-recent-label {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  min-width: 0;
-}
-.alert-phase {
-  flex-shrink: 0;
-  padding: 1px 8px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 500;
-  color: #a4552c;
-  background: #fbefe8;
-}
-.alert-phase.recovery {
-  color: #4d8065;
-  background: #eef6f1;
-}
-.alert-phase.reminder {
-  color: #a46a3e;
-  background: #fbf3e4;
 }
 .alert-no-targets {
   margin: 0;

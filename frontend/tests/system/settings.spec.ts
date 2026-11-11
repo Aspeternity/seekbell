@@ -48,6 +48,20 @@ test('all six categories remain reachable across phone tablet and desktop', asyn
         await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
         label + ' at ' + width,
       ).toBe(true)
+      // Cards on one page never touch: each tab stacks them with the same gap.
+      const gaps = await page.evaluate(() => {
+        const cards = [...document.querySelectorAll('.settings-content .settings-card')]
+        return cards
+          .slice(1)
+          .map(
+            (card, i) =>
+              card.getBoundingClientRect().top - cards[i]!.getBoundingClientRect().bottom,
+          )
+      })
+      expect(
+        gaps.every((gap) => gap >= 16),
+        label + ' card gaps at ' + width,
+      ).toBe(true)
       const navigation = page.getByRole('navigation', { name: '设置分类', exact: true })
       await expect(navigation).toBeVisible()
       // Keep the user-approved horizontal navigation above the content.
