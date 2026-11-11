@@ -43,6 +43,9 @@ assert [row[1] for row in after.pop('administrators')] == ['container_admin']
 assert table_data(settings.database_path) == before
 before.pop('login_sessions')
 before.pop('administrators')
+# The restored schedule keeps its settings (columns up to revision) but counts anew.
+schedule_before, schedule_after = before.pop('backup_schedule'), after.pop('backup_schedule')
+assert [row[:7] for row in schedule_after] == [row[:7] for row in schedule_before]
 assert before == after
 assert archive.stat().st_mode & 0o777 == 0o600
 print(json.dumps({'all_tables_preserved': True, 'source_unchanged': True,

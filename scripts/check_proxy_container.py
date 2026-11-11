@@ -64,24 +64,19 @@ def main():
             assert error.code == 403
         else:
             raise AssertionError("Cross-origin logout must be rejected")
-        with request(
-            "manage/backups/download",
-            {"current_password": credentials["password"], "password": "Synthetic-TLS-Backup-2026"},
-        ) as response:
+        # Back up now, stream the file out through the proxy, then stream it back in as an
+        # import: the server compares bytes, so "duplicate" proves the upload arrived intact.
+        with request("manage/backups", {}) as response:
+            name = json.load(response)["id"]
+        with request("manage/backups/" + name + "/ticket", {}) as response:
+            url = json.load(response)["url"]
+        with request(url.removeprefix("/api/")) as response:
             archive = response.read()
-            assert (
-                archive.startswith(b"SEEKBELL-BACKUP")
-                and response.headers["Cache-Control"] == "no-store"
-            )
-        metadata = {
-            "current_password": credentials["password"],
-            "password": "Synthetic-TLS-Backup-2026",
-        }
-        body = json.dumps(metadata).encode() + b"\n" + archive
+            assert archive[:2] == b"\x1f\x8b" and response.headers["Cache-Control"] == "no-store"
         with opener.open(
             urllib.request.Request(
-                fixture.url + "/api/manage/backups/restore",
-                data=body,
+                fixture.url + "/api/manage/backups/import",
+                data=archive,
                 headers={
                     "Content-Type": "application/octet-stream",
                     "X-CSRF-Token": csrf,
@@ -90,7 +85,7 @@ def main():
             ),
             timeout=30,
         ) as response:
-            assert json.load(response) == {"candidate_available": True, "activated": False}
+            assert json.load(response) == {"id": name, "duplicate": True}
         with request("manage/workspace") as response:
             assert json.load(response) == before
         with request("auth/logout", {}) as response:
@@ -108,7 +103,7 @@ def main():
         for container in (fixture.app, fixture.proxy):
             captured = docker("logs", container)
             logs += captured.stdout + captured.stderr
-        for secret in (credentials["password"], "Synthetic-TLS-Backup-2026", csrf):
+        for secret in (credentials["password"], csrf):
             assert secret not in logs
         report.update(
             {
