@@ -79,6 +79,17 @@ export function useSettingsForm<Saved, Draft>(options: {
     },
     { immediate: true },
   )
+  // A validation message describes the draft it rejected; once that draft changes it is stale.
+  let invalid = false
+  watch(
+    draft,
+    () => {
+      if (!invalid) return
+      invalid = false
+      error.value = ''
+    },
+    { deep: true },
+  )
   function apply(value: Saved) {
     saved.value = value
     draft.value = options.draftOf(value)
@@ -146,10 +157,11 @@ export function useSettingsForm<Saved, Draft>(options: {
     if (busy.value || saved.value === undefined || !dirty.value) return
     error.value = ''
     done.value = false
-    const invalid = options.validate?.(draft.value)
-    if (invalid) {
-      error.value = invalid
+    const message = options.validate?.(draft.value)
+    if (message) {
+      error.value = message
       reloadable.value = false
+      invalid = true
       return
     }
     const asking = options.confirmSave?.(draft.value, saved.value)

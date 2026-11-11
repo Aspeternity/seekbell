@@ -169,9 +169,6 @@ def test_fault_message_explains_the_code_and_test_failures_are_explained(configu
     rendered = render(message, CONFIG)
     assert "原因：" + message["alert"]["summary"] in rendered and "诊断代码：http_503" in rendered
 
-    recent = client.get("/api/manage/alerts").json()["recent"]
-    assert recent["phase"] == "fault" and recent["results"] == {"success": 1}
-
     class Rejecting:
         async def send(self, snapshot, message):
             return SendResult(status="permanent_error", code="target_credentials_invalid")

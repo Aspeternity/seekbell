@@ -1,26 +1,19 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { channelMeta, confirmAction, request, state } from '../store'
-import { ago, stamp, useSettingsForm } from '../settings'
+import { useSettingsForm } from '../settings'
 import Icon from '../components/Icon.vue'
 import FormFeedback from '../components/FormFeedback.vue'
 import ReadRegion from '../components/ReadRegion.vue'
 import { untilShown } from '../viewReady'
 import SettingsSaveBar from '../components/SettingsSaveBar.vue'
 import Toggle from '../components/Toggle.vue'
-interface Recent {
-  at: number
-  phase: 'fault' | 'recovery' | 'reminder'
-  label: string
-  results: Record<string, number>
-}
 interface Settings {
   enabled: boolean
   target_ids: string[]
   delay_seconds: number
   remind_seconds: number
   revision: number
-  recent: Recent | null
 }
 type Draft = Pick<Settings, 'enabled' | 'target_ids' | 'delay_seconds' | 'remind_seconds'>
 interface TestResult {
@@ -75,24 +68,6 @@ const oneChannel = computed(() => {
   const others = state.targets.some((target) => target.enabled && !channels.has(target.channel))
   return channels.size === 1 && others ? ready.value[0].type : ''
 })
-// The status card describes what is saved, not the draft being edited.
-const status = computed(() => {
-  const value = saved.value
-  if (!value) return null
-  const receiving = state.targets.filter(
-    (target) => value.target_ids.includes(target.id) && target.enabled,
-  ).length
-  return { enabled: value.enabled, receiving, idle: value.enabled && !receiving }
-})
-// Only a delivery problem is worth a line here; the details live in the problem history.
-const recent = computed(() => {
-  const row = saved.value?.recent
-  if (!row) return null
-  const failed = Object.entries(row.results)
-    .filter(([result]) => result !== 'success' && result !== 'pending')
-    .reduce((sum, [, value]) => sum + value, 0)
-  return { at: row.at, failed }
-})
 const meta = (channel: string) =>
   channelMeta[channel as keyof typeof channelMeta] || { icon: 'send', color: 'blue' }
 const testing = ref(false),
@@ -145,58 +120,23 @@ await untilShown(form.load())
 </script>
 <template>
   <div class="settings-stack">
-    <section class="panel settings-card" aria-labelledby="alert-status-title">
-      <div class="panel-heading">
-        <h2 id="alert-status-title">系统告警</h2>
-        <a class="text-link" href="#/operations/status">查看问题历史</a>
-      </div>
-      <FormFeedback v-if="!saved" :error="error" :retryable="reloadable" @retry="form.reload" />
-      <ReadRegion :loading="busy && !saved" error="" :has-data="!!saved" :min-height="110">
-        <div v-if="saved && status" class="form-content">
-          <dl class="about-tiles alert-tiles">
-            <div
-              class="alert-state"
-              :class="status.idle ? 'warn' : status.enabled ? 'on' : 'off'"
-              data-alert-state
-            >
-              <dt>
-                <span class="about-tile-icon"><Icon name="bell" :size="16" /></span>告警
-              </dt>
-              <dd>
-                <span class="alert-state-value"
-                  ><span class="status-dot" />{{ status.enabled ? '已开启' : '已关闭' }}</span
-                >
-                <small v-if="status.idle">没有可接收的目标</small>
-                <small v-else-if="status.enabled">{{ status.receiving }} 个目标接收</small>
-                <small v-else>出现故障时不会通知</small>
-              </dd>
-            </div>
-            <div data-alert-recent>
-              <dt>
-                <span class="about-tile-icon"><Icon name="clock" :size="16" /></span>最近一次告警
-              </dt>
-              <dd v-if="recent">
-                {{ ago(recent.at) }}
-                <small>{{ stamp(recent.at) }}</small>
-                <small v-if="recent.failed" class="alert-failed">
-                  {{ recent.failed }} 个目标未送达或结果未知
-                </small>
-              </dd>
-              <dd v-else class="alert-empty">还没有发出过告警</dd>
-            </div>
-          </dl>
-        </div>
-      </ReadRegion>
-    </section>
     <section class="panel settings-card" aria-labelledby="alert-settings-title">
       <div class="panel-heading alert-settings-heading">
         <div>
-          <h2 id="alert-settings-title">告警设置</h2>
+          <h2 id="alert-settings-title">系统告警</h2>
           <p>采集、通知渠道、后台服务、磁盘空间或自动备份出问题及恢复时通知你</p>
         </div>
-        <Toggle v-if="saved" v-model="draft.enabled" label="启用故障与恢复告警" :disabled="busy" />
+        <div class="alert-heading-actions">
+          <a class="text-link" href="#/operations/status">查看问题历史</a>
+          <Toggle
+            v-if="saved"
+            v-model="draft.enabled"
+            label="启用故障与恢复告警"
+            :disabled="busy"
+          />
+        </div>
       </div>
-      <FormFeedback v-if="saved" :error="error" :retryable="reloadable" @retry="form.reload" />
+      <FormFeedback :error="error" :retryable="reloadable" @retry="form.reload" />
       <ReadRegion :loading="busy && !saved" error="" :has-data="!!saved" :min-height="380">
         <form v-if="saved" class="form-content form-stack" @submit.prevent="form.save">
           <section class="settings-section" aria-labelledby="alert-receive-title">
@@ -249,8 +189,8 @@ await untilShown(form.load())
                   <Icon name="send" :size="14" />{{ testing ? '正在发送…' : '发送测试告警' }}
                 </button>
               </div>
-              <p v-if="draft.enabled && !receivers" class="warning-note">
-                当前没有可接收告警的目标，已暂停的目标不会发送。
+              <p v-if="draft.enabled && draft.target_ids.length && !receivers" class="warning-note">
+                所选目标都已暂停，告警不会发出。
               </p>
               <p v-else-if="oneChannel" class="warning-note alert-channel-hint">
                 所选目标都走

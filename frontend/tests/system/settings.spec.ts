@@ -353,7 +353,6 @@ test('alert delay and reminder are saved and a test alert reports each chosen ta
   const test = page.getByRole('button', { name: '发送测试告警', exact: true })
   await page.getByRole('radio', { name: '持续 5 分钟', exact: true }).check()
   await page.getByRole('radio', { name: '每 6 小时', exact: true }).check()
-  await expect(page.locator('[data-alert-recent]')).toContainText('最近一次告警')
   await page.getByRole('checkbox', { name: new RegExp(name) }).check()
   // The draft selection can be tested before anything is saved.
   await test.click()
@@ -377,6 +376,20 @@ test('alert delay and reminder are saved and a test alert reports each chosen ta
   await page.getByRole('checkbox', { name: new RegExp(name) }).uncheck()
   await page.getByRole('button', { name: '保存告警设置', exact: true }).click()
   await expect(page.getByRole('status').filter({ hasText: '系统告警设置已保存' })).toBeVisible()
+})
+test('a rejected alert save stops warning once the draft changes', async ({ page }) => {
+  await page.goto('/#/settings/alerts')
+  const toggle = page.getByRole('switch', { name: '启用故障与恢复告警', exact: true })
+  if ((await toggle.getAttribute('aria-checked')) === 'false') await toggle.click()
+  const checked = page.locator('.settings-card form input[type="checkbox"]:checked')
+  while (await checked.count()) await checked.first().uncheck()
+  await page.getByRole('button', { name: '保存告警设置', exact: true }).click()
+  const warning = page.getByRole('alert').filter({ hasText: '启用告警需至少选择一个通知目标' })
+  await expect(warning).toBeVisible()
+  // Turning alerts off is a different draft; the old rejection no longer applies.
+  await toggle.click()
+  await expect(warning).toHaveCount(0)
+  await page.reload()
 })
 test('account page separates the username from the password and keeps both sign-out actions', async ({
   page,

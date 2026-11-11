@@ -18,7 +18,7 @@ M0–M4完成；v0.8.0（运行中心）已发布，见[v0.8.0记录](history/20
 
 告警审查（11-11用户“全都做吧”，已本地提交，待复审）：告警设置留在设置页；服务卡住（循环超120秒）记录并告警；恢复/提醒只发给收到过该故障的目标；可选“仍未恢复提醒”6/24小时；消息附中文原因与持续时长；新装默认延迟1分钟；页面两区+最近一次告警+单渠道提示；迁移`0023_alert_reminders`。证据（本机）：后端全量1038项、浏览器system/operations/approved-ui/ui/runtime全部通过，见[归档](history/2026-11-11-告警审查.md)。
 
-告警页美化重构（11-11用户要求，已本地提交，待复审）：改为“系统告警”状态卡（告警状态/最近一次告警两格；用户不满后删去“内容与结果”格，并补上两卡间距——根因是漏了settings-stack，`settings.spec.ts`六类测试新增各页卡片间距≥16px检查，去掉包裹时该检查失败）+“告警设置”卡（卡头启用开关、目标选择卡网格、测试按钮同行、两组分段单选并排、规则提示块），规则、接口与文案不变，见UI_DESIGN“告警页两卡”。证据（本机）：`pnpm build`、prettier，浏览器system 26项、approved-ui 8项、ui 8项通过；桌面与手机截图人工检查。
+告警页美化重构（11-11用户要求，两轮复审后已本地提交，待再审）：只留一张“系统告警”卡（卡头“查看问题历史”+开关、目标选择卡、测试同行、分段单选、规则提示块），删除状态卡及后端只读字段`recent`；修复校验提示残留（`settings.ts`草稿变化即清除校验错误，所有设置表单受益）；去掉与校验重复的“没有可接收目标”提示，只在所选目标全暂停时提示。见UI_DESIGN“告警页（…定稿）”。证据（本机）：后端告警相关43项、浏览器system 28项（新增各页卡片间距≥16px、校验提示随草稿消失两项，均已验证去掉修复时失败）、approved-ui 8项、ui 8项通过；桌面/手机截图检查。
 
 未提交：`assets/brand/`图标（待审）。
 
@@ -38,6 +38,6 @@ M0–M4完成；v0.8.0（运行中心）已发布，见[v0.8.0记录](history/20
 - 备份：SPEC 6.5.3–6.5.5、BACKUP_RESTORE、ARCHITECTURE“备份重构第一期/第二期”“备份导入”、`backend/seekbell/{backup.py,services/backups.py,services/backup_schedule.py,api/backups.py}`、`frontend/src/{pages/BackupSettings.vue,components/BackupScheduleSettings.vue,components/BackupRestoreWizard.vue,backups.ts}`。
 - 设置：SPEC 6.5.2、UI_DESIGN“系统设置六类”、`frontend/src/settings.ts`、`api/settings.py`。
 - 数据页：SPEC 6.5.6、UI_DESIGN“数据页”、ARCHITECTURE“内容上限与自动回收”、`services/{retention,maintenance}.py`、`db/runtime.py`、`pages/RetentionSettings.vue`。
-- 告警：SPEC 6.5.7、ARCHITECTURE“告警审查”、UI_DESIGN“告警页”“告警页两卡”、`services/{alerts,stalls}.py`、`pages/AlertsSettings.vue`。
+- 告警：SPEC 6.5.7、ARCHITECTURE“告警审查”、UI_DESIGN“告警页（2026-11-11美化重构）”、`services/{alerts,stalls}.py`、`pages/AlertsSettings.vue`。
 - 运行中心：docs/plans/2026-11-09方案、pages/{Operations,OperationsStatus}.vue、services/{operations,fault_guide,alerts,runtime}.py。
 - 发布/实机：IMAGE_RELEASE正式发布段、ROADMAP当前阶段、ACCEPTANCE；图标见assets/brand/README.md。

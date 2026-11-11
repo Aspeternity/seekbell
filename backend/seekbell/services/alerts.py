@@ -195,41 +195,19 @@ def _withdraw_brief_fault(session, state, settings, at):
     session.flush()
 
 
-def _recent(session):
-    """The last alert that was actually attempted, so the page shows alerts really go out."""
-    event = session.scalars(
-        select(SystemEvent)
-        .join(AlertDelivery)
-        .where(AlertDelivery.result != "cancelled")
-        .order_by(SystemEvent.at.desc(), SystemEvent.id)
-        .limit(1)
-    ).first()
-    if event is None:
-        return None
-    results = dict(
-        session.execute(
-            select(AlertDelivery.result, func.count())
-            .where(AlertDelivery.event_id == event.id, AlertDelivery.result != "cancelled")
-            .group_by(AlertDelivery.result)
-        ).all()
-    )
-    return {"at": event.at, "phase": event.phase, "label": event.label, "results": results}
-
-
-def settings_view(session, settings):
+def settings_view(settings):
     return {
         "enabled": settings.enabled,
         "target_ids": settings.target_ids,
         "delay_seconds": settings.delay_seconds,
         "remind_seconds": settings.remind_seconds,
         "revision": settings.revision,
-        "recent": _recent(session),
     }
 
 
 def get_settings(engine):
     with Session(engine) as session:
-        return settings_view(session, session.get(AlertSettings, 1))
+        return settings_view(session.get(AlertSettings, 1))
 
 
 def update_settings(
@@ -277,7 +255,7 @@ def update_settings(
                     delivery.result, delivery.error_code = "cancelled", "alerts_disabled"
                     delivery.finished_at = at
         session.flush()
-        return settings_view(session, settings)
+        return settings_view(settings)
 
 
 def event_view(event):

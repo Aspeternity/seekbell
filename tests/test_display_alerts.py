@@ -249,7 +249,6 @@ def test_disable_deselect_and_target_dependency_cancel_waiting_but_keep_evidence
     fault(engine)
     assert client.delete("/api/manage/targets/" + key).status_code == 409
     old = get_settings(engine)
-    old.pop("recent")
     updated = update_settings(engine, False, [key], old["revision"], at=110)
     assert client.put("/api/manage/alerts", json={**old, "enabled": False}).status_code == 409
     assert client.delete("/api/manage/targets/" + key).status_code == 409

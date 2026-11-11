@@ -3127,39 +3127,12 @@ h1[tabindex='-1']:focus-visible {
   flex-wrap: nowrap;
   align-items: flex-start;
 }
-.alert-settings-heading .toggle {
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-.about-tiles.alert-tiles {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-.alert-tiles dd {
-  font-variant-numeric: tabular-nums;
-}
-.alert-state-value {
+.alert-heading-actions {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
-  gap: 8px;
-}
-.alert-state .status-dot {
-  width: 8px;
-  height: 8px;
-  color: #9aa3ad;
-}
-.alert-state.on .status-dot {
-  color: #4e876b;
-}
-.alert-state.warn .status-dot {
-  color: #d0703f;
-}
-.alert-state.warn small,
-.alert-tiles small.alert-failed {
-  color: #a4552c;
-}
-.about-tiles dd.alert-empty {
-  font-weight: 400;
-  color: #9aa3ad;
+  gap: 18px;
+  margin-top: 2px;
 }
 .alert-no-targets {
   margin: 0;
@@ -3370,9 +3343,6 @@ h1[tabindex='-1']:focus-visible {
   }
 }
 @media (max-width: 760px) {
-  .about-tiles.alert-tiles {
-    grid-template-columns: minmax(0, 1fr);
-  }
   .alert-targets {
     grid-template-columns: minmax(0, 1fr);
   }
