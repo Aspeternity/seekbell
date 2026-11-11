@@ -330,7 +330,7 @@ def memory(**fields):
     [
         (None, AT, True, "本次启动后尚无记录", "none"),
         (memory(), AT - 5, True, "正常", "ok"),
-        (memory(), AT - 5, False, "未在预热", "none"),
+        (memory(), AT - 5, False, "无人查看，暂停刷新", "none"),
         (memory(refreshing=True), AT - 5, True, "刷新中", "ok"),
         (memory(error_code="collection_priority", deferred=True), AT, True, "采集优先", "wait"),
         (memory(error_code="source_cooldown", deferred=True), AT, True, "共享退避", "wait"),

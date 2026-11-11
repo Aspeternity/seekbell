@@ -161,19 +161,21 @@ function sendingText(row: TargetRow) {
 }
 const channel = (row: TargetRow) => channelMeta[row.kind as keyof typeof channelMeta]
 
-const openHotlists = ref(false)
-function hotlistLine(site: HotlistSite): { tone: Tone; text: string } {
-  const abnormal = site.lists.find((item) => severe(item.tone))
-  if (abnormal)
-    return { tone: abnormal.tone, text: abnormal.period_label + '：' + listText(abnormal) }
-  if (site.lists.every((item) => item.tone === 'ok'))
-    return { tone: 'ok', text: site.lists.length + ' 个榜单正常' }
-  const first = site.lists[0]
-  return first ? { tone: first.tone, text: listText(first) } : { tone: 'none', text: '—' }
+function hotlistState(site: HotlistSite): { tone: Tone; text: string } {
+  const abnormal = site.lists.filter((item) => severe(item.tone))
+  if (abnormal.length)
+    return {
+      tone: abnormal.some((item) => item.tone === 'fail') ? 'fail' : 'warn',
+      text:
+        abnormal.length === 1
+          ? abnormal[0]!.period_label + abnormal[0]!.label
+          : abnormal.length + ' 个榜单异常',
+    }
+  if (site.lists.every((item) => item.tone === 'ok')) return { tone: 'ok', text: '正常' }
+  const first = site.lists.find((item) => item.tone !== 'ok') ?? site.lists[0]
+  return first ? { tone: first.tone, text: first.label } : { tone: 'none', text: '—' }
 }
-function listText(item: HotlistSite['lists'][number]) {
-  return [item.label, codeNode(item) ? item.detail : nodeDetail(item)].filter(Boolean).join(' · ')
-}
+const hotlistIssue = (site: HotlistSite) => site.lists.some((item) => severe(item.tone))
 
 function serviceState(row: ServiceRow): { tone: Tone; text: string } {
   switch (row.state) {
@@ -198,7 +200,7 @@ const serviceDetail = (row: ServiceRow) =>
   row.state !== 'running'
     ? ''
     : row.last_loop_at
-      ? ago(row.last_loop_at) + '完成一轮'
+      ? '最近一轮 ' + ago(row.last_loop_at)
       : '尚未完成一轮'
 
 const alertsOff = computed(
@@ -565,54 +567,80 @@ await untilShown(() => status.ready() && history.ready())
         </article>
       </section>
 
-      <div class="ops-pair">
-        <section class="panel" aria-labelledby="ops-hotlists">
-          <div class="ops-card-head">
-            <h2 id="ops-hotlists">热榜</h2>
-            <button
-              v-if="data.hotlists.length"
-              class="text-link"
-              :aria-expanded="openHotlists"
-              @click="openHotlists = !openHotlists"
-            >
-              {{ openHotlists ? '收起各榜' : '展开各榜' }}
-            </button>
-          </div>
-          <div class="ops-lines">
-            <p v-if="!data.hotlists.length" class="ops-muted">概览未显示热榜，当前不刷新。</p>
-            <template v-for="site in data.hotlists" :key="site.website_id">
-              <div class="ops-line">
-                <strong>{{ site.name }}</strong>
-                <span class="ops-line-value" :class="'tone-' + hotlistLine(site).tone"
-                  ><i class="ops-dot" />{{ hotlistLine(site).text }}</span
-                >
-              </div>
-              <template v-if="openHotlists">
-                <div v-for="item in site.lists" :key="item.period" class="ops-line ops-subline">
-                  <span>{{ item.period_label }}</span>
-                  <span :class="'tone-' + item.tone">{{ listText(item) }}</span>
-                </div>
-              </template>
-            </template>
-          </div>
-        </section>
-        <section class="panel" aria-labelledby="ops-services">
-          <div class="ops-card-head">
-            <h2 id="ops-services">后台服务</h2>
-          </div>
-          <div class="ops-lines">
-            <div v-for="row in data.services" :key="row.id" class="ops-line">
-              <strong>{{ row.name }}</strong>
-              <span
-                ><small v-if="serviceDetail(row)" class="ops-muted">{{ serviceDetail(row) }}</small
-                ><span :class="'tone-' + serviceState(row).tone"
-                  ><i class="ops-dot" />{{ serviceState(row).text }}</span
-                ></span
+      <section class="panel" aria-labelledby="ops-hotlists">
+        <div class="ops-card-head">
+          <h2 id="ops-hotlists">热榜</h2>
+          <span class="ops-card-note">概览显示热榜且有人查看时刷新</span>
+        </div>
+        <div v-if="!data.hotlists.length" class="ops-empty">概览未显示热榜，当前不刷新。</div>
+        <article
+          v-for="site in data.hotlists"
+          :key="site.website_id"
+          class="ops-row"
+          :class="{ open: rowOpen('h' + site.website_id, hotlistIssue(site)) }"
+        >
+          <div class="ops-row-head">
+            <span class="icon-tile ops-row-icon orange"><Icon name="spark" :size="17" /></span>
+            <div class="ops-row-name">
+              <strong>{{ site.name }}</strong>
+              <span class="ops-state" :class="'tone-' + hotlistState(site).tone"
+                ><i class="ops-dot" />{{ hotlistState(site).text }}</span
               >
             </div>
+            <button
+              class="ops-toggle"
+              :aria-expanded="rowOpen('h' + site.website_id, hotlistIssue(site))"
+              :aria-label="site.name + ' 热榜：' + hotlistState(site).text"
+              @click="toggleRow('h' + site.website_id)"
+            >
+              <span :class="'tone-' + hotlistState(site).tone"
+                ><i class="ops-dot" />{{ hotlistState(site).text }}</span
+              >
+              <Icon name="down" :size="14" />
+            </button>
           </div>
-        </section>
-      </div>
+          <div class="ops-row-body">
+            <ol class="ops-steps ops-facts ops-lists">
+              <li
+                v-for="item in site.lists"
+                :key="item.period"
+                class="ops-step"
+                :class="{ blocked: item.tone === 'fail', quiet: item.tone === 'none' }"
+              >
+                <span class="ops-step-label">{{ item.period_label }}</span>
+                <strong :class="'tone-' + item.tone"><i class="ops-dot" />{{ item.label }}</strong>
+                <code v-if="codeNode(item) && item.detail" class="ops-code">{{ item.detail }}</code>
+                <small v-if="item.at" :title="stamp(item.at)">获取于 {{ ago(item.at) }}</small>
+                <small v-else-if="!codeNode(item) && nodeDetail(item)">{{
+                  nodeDetail(item)
+                }}</small>
+              </li>
+            </ol>
+          </div>
+        </article>
+      </section>
+
+      <section class="panel" aria-labelledby="ops-services">
+        <div class="ops-card-head">
+          <h2 id="ops-services">后台服务</h2>
+        </div>
+        <ol class="ops-steps ops-facts ops-services">
+          <li
+            v-for="row in data.services"
+            :key="row.id"
+            class="ops-step"
+            :class="{ blocked: serviceState(row).tone === 'fail' }"
+          >
+            <span class="ops-step-label">{{ row.name }}</span>
+            <strong :class="'tone-' + serviceState(row).tone"
+              ><i class="ops-dot" />{{ serviceState(row).text }}</strong
+            >
+            <small v-if="serviceDetail(row)" :title="stamp(row.last_loop_at)">{{
+              serviceDetail(row)
+            }}</small>
+          </li>
+        </ol>
+      </section>
 
       <section class="panel" aria-labelledby="ops-history">
         <div class="ops-card-head ops-history-head">
@@ -967,12 +995,13 @@ await untilShown(() => status.ready() && history.ready())
   font-size: 11px;
 }
 .ops-step strong {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0 6px;
+  display: block;
   font-weight: 550;
   font-variant-numeric: tabular-nums;
+}
+.ops-step strong > .ops-dot {
+  margin: 0 6px 1px 0;
+  vertical-align: middle;
 }
 .ops-step strong small {
   color: var(--muted);
@@ -1025,53 +1054,16 @@ await untilShown(() => status.ready() && history.ready())
 }
 
 /* Hotlists and services */
-.ops-pair {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
-  gap: 16px;
+.ops-lists {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 22px;
 }
-.ops-lines {
-  display: grid;
-  gap: 2px;
-  padding: 10px 22px 14px;
+.ops-services {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 16px 22px;
 }
-.ops-line {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  padding: 6px 0;
-}
-.ops-line > :first-child {
-  flex: none;
-  font-weight: 500;
-}
-.ops-line > :last-child {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 2px 10px;
-  text-align: right;
-  overflow-wrap: anywhere;
-}
-.ops-line > :last-child > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.ops-line > .ops-line-value {
-  display: block;
-}
-.ops-line-value > .ops-dot {
-  margin: 0 6px 1px 0;
-  vertical-align: middle;
-}
-.ops-subline {
-  padding-left: 14px;
-  color: var(--muted);
-  font-size: 12px;
+.ops-row-name > strong {
+  font-weight: 600;
 }
 
 /* Problem history */
@@ -1160,9 +1152,6 @@ await untilShown(() => status.ready() && history.ready())
   .ops-row {
     grid-template-columns: minmax(0, 1fr);
   }
-  .ops-pair {
-    grid-template-columns: minmax(0, 1fr);
-  }
   .ops-history-grid {
     grid-template-columns: 72px minmax(0, 1fr) 110px 110px;
   }
@@ -1176,7 +1165,7 @@ await untilShown(() => status.ready() && history.ready())
   .ops-card-head,
   .ops-row,
   .ops-empty,
-  .ops-lines,
+  .ops-services,
   .ops-empty-state {
     padding-left: 16px;
     padding-right: 16px;

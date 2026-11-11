@@ -258,7 +258,7 @@ def _hotlist_node(period_id, memory, fetched, interval, viewing, source, at):
             return node("failed", "fail", "刷新失败，暂无数据", code)
         return node("stale", "warn", "刷新失败，旧数据仍可看", code, fetched)
     if not viewing:
-        return node("idle", "none", "未在预热", None, fetched)
+        return node("idle", "none", "无人查看，暂停刷新", None, fetched)
     if fetched is None:
         return node("no_record", "none", "尚无快照")
     if period_id in source.staggered and at >= fetched + interval:
