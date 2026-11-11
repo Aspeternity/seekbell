@@ -3123,15 +3123,14 @@ h1[tabindex='-1']:focus-visible {
 .settings-content .settings-card > .panel-heading:last-child {
   border-bottom: 0;
 }
+/* Keep the switch beside the title on phones too, centred like the other card headers. */
 .settings-content .alert-settings-heading {
   flex-wrap: nowrap;
-  align-items: flex-start;
 }
 /* A card's own on/off switch is its main control, so it is larger than the ones in lists. */
 .settings-content .settings-card > .panel-heading > .toggle {
   width: 44px;
   height: 24px;
-  margin-top: 2px;
 }
 .settings-content .settings-card > .panel-heading > .toggle span {
   width: 20px;
