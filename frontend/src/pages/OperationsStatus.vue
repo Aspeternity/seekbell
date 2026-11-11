@@ -56,7 +56,9 @@ const history = useRemote(
   () => [kind.value, days.value, showShort.value, page.value],
   { keepPrevious: true },
 )
+// The button stays enabled so keyboard focus is not dropped while a read runs.
 function refresh() {
+  if (status.loading.value) return
   status.reload()
   history.reload()
 }
@@ -307,6 +309,33 @@ const headline = computed(() => {
   return { tone: 'ok', icon: 'check', text: '运行正常', note: calm }
 })
 
+// The four tiles are tabs over one detail panel; open on the first group that needs a look.
+const chosen = ref<string>()
+const group = computed(
+  () => chosen.value ?? tiles.value.find((tile) => severe(tile.tone))?.key ?? 'sources',
+)
+function moveTab(event: KeyboardEvent, index: number) {
+  const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key]
+  const count = tiles.value.length
+  const next =
+    event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? count - 1
+        : step
+          ? (index + step + count) % count
+          : -1
+  if (next < 0) return
+  event.preventDefault()
+  chosen.value = tiles.value[next]!.key
+  document.getElementById('ops-tab-' + chosen.value)?.focus()
+}
+// Lists that all read the same (say, never fetched) collapse into one line.
+const hotlistUniform = (site: HotlistSite) =>
+  site.lists.length > 1 &&
+  !hotlistIssue(site) &&
+  site.lists.every((item) => item.label === site.lists[0]!.label && item.tone !== 'ok')
+
 const statusLabels: Record<ProblemRow['status'], string> = {
   ongoing: '进行中',
   recovered: '已恢复',
@@ -358,24 +387,40 @@ await untilShown(() => status.ready() && history.ready())
               {{ clock(data.checked_at) }}
             </p>
           </div>
-          <button class="button" :disabled="status.loading.value" @click="refresh">
+          <button class="button" :aria-busy="status.loading.value" @click="refresh">
             <Icon name="refresh" :size="14" />刷新
           </button>
         </div>
-        <dl class="about-tiles ops-tiles">
-          <div v-for="tile in tiles" :key="tile.key">
-            <dt>
-              <span class="about-tile-icon"><Icon :name="tile.icon" :size="16" /></span
-              >{{ tile.label }}
-            </dt>
-            <dd>
-              <span class="ops-tile-value" :class="'tone-' + tile.tone"
-                ><i class="ops-dot" />{{ tile.value }}</span
-              >
-              <small>{{ tile.note }}</small>
-            </dd>
-          </div>
-        </dl>
+        <div v-if="data.problems.length" class="ops-problems" role="region" aria-label="当前问题">
+          <article
+            v-for="problem in data.problems"
+            :key="problem.key"
+            class="ops-problem"
+            :class="'is-' + problem.status"
+          >
+            <div class="ops-problem-copy">
+              <div class="ops-problem-head">
+                <strong>{{ problem.label }}</strong>
+                <span class="small-badge" :class="handlingBadges[problem.status]">{{
+                  handlingLabels[problem.status]
+                }}</span>
+              </div>
+              <p class="ops-problem-reason">
+                {{ stageLabels[problem.stage] || problem.stage }}：{{ problem.summary }}
+                <code v-if="problem.code" class="ops-code">{{ problem.code }}</code>
+              </p>
+              <p v-if="problem.hint" class="ops-problem-hint">{{ problem.hint }}</p>
+              <p class="ops-muted">
+                <span v-if="problem.since" :title="stamp(problem.since) + ' 开始'"
+                  >{{ stamp(problem.since) }} 开始 · </span
+                >{{ problemFacts(problem).join(' · ') }}
+              </p>
+            </div>
+            <button class="button" @click="openProblem(problem)">
+              查看详情<Icon name="arrow" :size="14" />
+            </button>
+          </article>
+        </div>
         <p v-if="alertsOff" class="ops-alert-note">
           <Icon name="bell" :size="15" />
           <span>系统告警未启用或没有可用目标，出现故障时不会收到通知。</span>
@@ -383,277 +428,276 @@ await untilShown(() => status.ready() && history.ready())
         </p>
       </section>
 
-      <section
-        v-if="data.problems.length"
-        class="panel ops-problems"
-        aria-labelledby="ops-problems"
-      >
-        <div class="ops-card-head">
-          <h2 id="ops-problems">
-            当前问题 <span class="count-badge">{{ data.problems.length }}</span>
-          </h2>
-        </div>
-        <article
-          v-for="problem in data.problems"
-          :key="problem.key"
-          class="ops-problem"
-          :class="'is-' + problem.status"
-        >
-          <div class="ops-problem-copy">
-            <div class="ops-problem-head">
-              <strong>{{ problem.label }}</strong>
-              <span class="small-badge" :class="handlingBadges[problem.status]">{{
-                handlingLabels[problem.status]
-              }}</span>
-            </div>
-            <p class="ops-problem-reason">
-              {{ stageLabels[problem.stage] || problem.stage }}：{{ problem.summary }}
-              <code v-if="problem.code" class="ops-code">{{ problem.code }}</code>
-            </p>
-            <p v-if="problem.hint" class="ops-problem-hint">{{ problem.hint }}</p>
-            <p class="ops-muted">
-              <span v-if="problem.since" :title="stamp(problem.since) + ' 开始'"
-                >{{ stamp(problem.since) }} 开始 · </span
-              >{{ problemFacts(problem).join(' · ') }}
-            </p>
-          </div>
-          <button class="button" @click="openProblem(problem)">
-            查看详情<Icon name="arrow" :size="14" />
+      <section class="panel ops-board" aria-label="运行链路">
+        <div class="ops-tabs" role="tablist" aria-label="运行链路">
+          <button
+            v-for="(tile, index) in tiles"
+            :id="'ops-tab-' + tile.key"
+            :key="tile.key"
+            class="ops-tab"
+            role="tab"
+            :aria-selected="group === tile.key"
+            :aria-controls="'ops-panel-' + tile.key"
+            :tabindex="group === tile.key ? 0 : -1"
+            @click="chosen = tile.key"
+            @keydown="moveTab($event, index)"
+          >
+            <span class="ops-tab-label"
+              ><span class="about-tile-icon"><Icon :name="tile.icon" :size="16" /></span
+              >{{ tile.label }}</span
+            >
+            <strong :class="'tone-' + tile.tone"><i class="ops-dot" />{{ tile.value }}</strong>
+            <small>{{ tile.note }}</small>
           </button>
-        </article>
-      </section>
-
-      <section class="panel" aria-labelledby="ops-sources">
-        <div class="ops-card-head">
-          <h2 id="ops-sources">采集</h2>
         </div>
-        <div v-if="!data.sources.length" class="ops-empty">
-          <span>还没有添加监控网站。</span>
-          <button class="button" @click="emit('navigate', '/websites')">添加网站</button>
-        </div>
-        <article
-          v-for="row in data.sources"
-          :key="row.website_id"
-          class="ops-row"
-          :class="{ open: rowOpen('s' + row.website_id, sourceIssue(row)) }"
+        <div
+          :id="'ops-panel-' + group"
+          class="ops-panel"
+          role="tabpanel"
+          :aria-labelledby="'ops-tab-' + group"
         >
-          <div class="ops-row-head">
-            <span class="icon-tile ops-row-icon" :class="row.enabled ? 'orange' : 'gray'"
-              ><Icon name="globe" :size="17"
-            /></span>
-            <div class="ops-row-name">
-              <button class="text-link" @click="emit('navigate', '/websites/' + row.website_id)">
-                {{ row.name }}
-              </button>
-              <span class="ops-state" :class="'tone-' + sourceState(row).tone"
-                ><i class="ops-dot" />{{ sourceState(row).text }}</span
-              >
+          <template v-if="group === 'sources'">
+            <div v-if="!data.sources.length" class="ops-empty">
+              <span>还没有添加监控网站。</span>
+              <button class="button" @click="emit('navigate', '/websites')">添加网站</button>
             </div>
-            <button
-              class="ops-toggle"
-              :aria-expanded="rowOpen('s' + row.website_id, sourceIssue(row))"
-              :aria-label="row.name + '：' + sourceState(row).text"
-              @click="toggleRow('s' + row.website_id)"
+            <article
+              v-for="row in data.sources"
+              :key="row.website_id"
+              class="ops-row"
+              :class="{ open: rowOpen('s' + row.website_id, sourceIssue(row)) }"
             >
-              <span :class="'tone-' + sourceState(row).tone"
-                ><i class="ops-dot" />{{ sourceState(row).text }}</span
-              >
-              <Icon name="down" :size="14" />
-            </button>
-          </div>
-          <div class="ops-row-body">
-            <p v-if="sourceIdle(row)" class="ops-idle">
-              <span :class="'tone-' + row.schedule.tone">{{
-                row.enabled ? row.schedule.label + '，暂不采集' : '已暂停，不采集'
-              }}</span>
-              <span v-if="row.last_success_at" :title="stamp(row.last_success_at)"
-                >最近成功 {{ ago(row.last_success_at) }}</span
-              >
-            </p>
-            <ol v-else class="ops-steps">
-              <li
-                v-for="step in sourceSteps(row)"
-                :key="step.key"
-                class="ops-step"
-                :class="{ blocked: step.node.tone === 'fail', quiet: step.node.tone === 'none' }"
-              >
-                <span class="ops-step-label">{{ step.label }}</span>
-                <strong :class="'tone-' + step.node.tone"
-                  ><i class="ops-dot" />{{ step.node.label }}</strong
-                >
-                <code v-if="codeNode(step.node) && step.node.detail" class="ops-code">{{
-                  step.node.detail
-                }}</code>
-                <small v-else-if="nodeDetail(step.node)">{{ nodeDetail(step.node) }}</small>
-              </li>
-            </ol>
-            <p v-if="!sourceIdle(row)" class="ops-row-times">
-              <span :title="stamp(row.last_success_at)"
-                >最近成功 {{ ago(row.last_success_at) }}</span
-              >
-              <span v-if="row.enabled && row.next_attempt_at" :title="stamp(row.next_attempt_at)"
-                >下次尝试 {{ ago(row.next_attempt_at) }}</span
-              >
-              <span v-if="row.gap_at" class="tone-warn" :title="stamp(row.gap_at)"
-                >可能漏帖 {{ stamp(row.gap_at) }}</span
-              >
-            </p>
-          </div>
-        </article>
-      </section>
-
-      <section class="panel" aria-labelledby="ops-targets">
-        <div class="ops-card-head">
-          <h2 id="ops-targets">通知</h2>
-        </div>
-        <div v-if="!data.targets.length" class="ops-empty">
-          <span>还没有通知目标。</span>
-          <button class="button" @click="emit('navigate', '/target/new')">添加通知目标</button>
-        </div>
-        <article
-          v-for="row in data.targets"
-          :key="row.id"
-          class="ops-row"
-          :class="{ open: rowOpen('t' + row.id, targetIssue(row)) }"
-        >
-          <div class="ops-row-head">
-            <span
-              class="icon-tile ops-row-icon"
-              :class="targetActive(row) ? channel(row)?.color || 'blue' : 'gray'"
-              ><Icon :name="channel(row)?.icon || 'send'" :size="17"
-            /></span>
-            <div class="ops-row-name">
-              <button
-                class="text-link"
-                @click="emit('navigate', '/operations/deliveries?target=' + row.id)"
-              >
-                {{ row.name }}
-              </button>
-              <span class="ops-state" :class="'tone-' + targetState(row).tone"
-                ><i class="ops-dot" />{{ targetState(row).text }}</span
-              >
-            </div>
-            <button
-              class="ops-toggle"
-              :aria-expanded="rowOpen('t' + row.id, targetIssue(row))"
-              :aria-label="row.name + '：' + targetState(row).text"
-              @click="toggleRow('t' + row.id)"
-            >
-              <span :class="'tone-' + targetState(row).tone"
-                ><i class="ops-dot" />{{ targetState(row).text }}</span
-              >
-              <Icon name="down" :size="14" />
-            </button>
-          </div>
-          <div class="ops-row-body">
-            <p v-if="!targetActive(row)" class="ops-idle tone-none">
-              {{ row.status === 'paused' ? '已暂停，不发送' : '未配置，不发送' }}
-            </p>
-            <ol v-else class="ops-steps ops-facts">
-              <li class="ops-step" :class="{ quiet: !(row.queue.pending + row.queue.retry) }">
-                <span class="ops-step-label">队列</span>
-                <strong>{{ queueText(row) }}</strong>
-                <small v-if="queueDetail(row)">{{ queueDetail(row) }}</small>
-              </li>
-              <li class="ops-step" :class="{ quiet: !row.sending && !row.expired_leases }">
-                <span class="ops-step-label">发送中</span>
-                <strong :class="{ 'tone-warn': row.expired_leases }">{{ sendingText(row) }}</strong>
-              </li>
-              <li class="ops-step" :class="{ quiet: !row.uncertain }">
-                <span class="ops-step-label">结果不确定</span>
-                <strong :class="{ 'tone-warn': row.uncertain }">{{ row.uncertain }}</strong>
-              </li>
-              <li class="ops-step" :class="{ blocked: lastTone(row) === 'fail' }">
-                <span class="ops-step-label">最近结果</span>
-                <template v-if="row.last">
-                  <strong :class="'tone-' + lastTone(row)"
-                    ><i class="ops-dot" />{{ attemptLabels[row.last.result] || row.last.result }}
-                    <small :title="stamp(row.last.at)">{{ ago(row.last.at) }}</small></strong
+              <div class="ops-row-head">
+                <span class="icon-tile ops-row-icon" :class="row.enabled ? 'orange' : 'gray'"
+                  ><Icon name="globe" :size="17"
+                /></span>
+                <div class="ops-row-name">
+                  <button
+                    class="text-link"
+                    @click="emit('navigate', '/websites/' + row.website_id)"
                   >
-                  <code v-if="row.last.code" class="ops-code">{{ row.last.code }}</code>
-                </template>
-                <strong v-else class="tone-none">尚无记录</strong>
-              </li>
-            </ol>
-          </div>
-        </article>
-      </section>
+                    {{ row.name }}
+                  </button>
+                  <span class="ops-state" :class="'tone-' + sourceState(row).tone"
+                    ><i class="ops-dot" />{{ sourceState(row).text }}</span
+                  >
+                </div>
+                <button
+                  class="ops-toggle"
+                  :aria-expanded="rowOpen('s' + row.website_id, sourceIssue(row))"
+                  :aria-label="row.name + '：' + sourceState(row).text"
+                  @click="toggleRow('s' + row.website_id)"
+                >
+                  <span :class="'tone-' + sourceState(row).tone"
+                    ><i class="ops-dot" />{{ sourceState(row).text }}</span
+                  >
+                  <Icon name="down" :size="14" />
+                </button>
+              </div>
+              <div class="ops-row-body">
+                <p v-if="sourceIdle(row)" class="ops-idle">
+                  <span :class="'tone-' + row.schedule.tone">{{
+                    row.enabled ? row.schedule.label + '，暂不采集' : '已暂停，不采集'
+                  }}</span>
+                  <span v-if="row.last_success_at" :title="stamp(row.last_success_at)"
+                    >最近成功 {{ ago(row.last_success_at) }}</span
+                  >
+                </p>
+                <ol v-else class="ops-steps">
+                  <li
+                    v-for="step in sourceSteps(row)"
+                    :key="step.key"
+                    class="ops-step"
+                    :class="{
+                      blocked: step.node.tone === 'fail',
+                      quiet: step.node.tone === 'none',
+                    }"
+                  >
+                    <span class="ops-step-label">{{ step.label }}</span>
+                    <strong :class="'tone-' + step.node.tone"
+                      ><i class="ops-dot" />{{ step.node.label }}</strong
+                    >
+                    <code v-if="codeNode(step.node) && step.node.detail" class="ops-code">{{
+                      step.node.detail
+                    }}</code>
+                    <small v-else-if="nodeDetail(step.node)">{{ nodeDetail(step.node) }}</small>
+                  </li>
+                </ol>
+                <p v-if="!sourceIdle(row)" class="ops-row-times">
+                  <span :title="stamp(row.last_success_at)"
+                    >最近成功 {{ ago(row.last_success_at) }}</span
+                  >
+                  <span
+                    v-if="row.enabled && row.next_attempt_at"
+                    :title="stamp(row.next_attempt_at)"
+                    >下次尝试 {{ ago(row.next_attempt_at) }}</span
+                  >
+                  <span v-if="row.gap_at" class="tone-warn" :title="stamp(row.gap_at)"
+                    >可能漏帖 {{ stamp(row.gap_at) }}</span
+                  >
+                </p>
+              </div>
+            </article>
+          </template>
 
-      <section class="panel" aria-labelledby="ops-hotlists">
-        <div class="ops-card-head">
-          <h2 id="ops-hotlists">热榜</h2>
-        </div>
-        <div v-if="!data.hotlists.length" class="ops-empty">概览未显示热榜，当前不刷新。</div>
-        <article
-          v-for="site in data.hotlists"
-          :key="site.website_id"
-          class="ops-row"
-          :class="{ open: rowOpen('h' + site.website_id, hotlistIssue(site)) }"
-        >
-          <div class="ops-row-head">
-            <span class="icon-tile ops-row-icon orange"><Icon name="spark" :size="17" /></span>
-            <div class="ops-row-name">
-              <strong>{{ site.name }}</strong>
-              <span class="ops-state" :class="'tone-' + hotlistState(site).tone"
-                ><i class="ops-dot" />{{ hotlistState(site).text }}</span
-              >
+          <template v-else-if="group === 'targets'">
+            <div v-if="!data.targets.length" class="ops-empty">
+              <span>还没有通知目标。</span>
+              <button class="button" @click="emit('navigate', '/target/new')">添加通知目标</button>
             </div>
-            <button
-              class="ops-toggle"
-              :aria-expanded="rowOpen('h' + site.website_id, hotlistIssue(site))"
-              :aria-label="site.name + ' 热榜：' + hotlistState(site).text"
-              @click="toggleRow('h' + site.website_id)"
+            <article
+              v-for="row in data.targets"
+              :key="row.id"
+              class="ops-row"
+              :class="{ open: rowOpen('t' + row.id, targetIssue(row)) }"
             >
-              <span :class="'tone-' + hotlistState(site).tone"
-                ><i class="ops-dot" />{{ hotlistState(site).text }}</span
-              >
-              <Icon name="down" :size="14" />
-            </button>
-          </div>
-          <div class="ops-row-body">
-            <ol
-              class="ops-steps ops-facts ops-lists"
-              :style="{ '--lists': Math.min(site.lists.length, 4) }"
+              <div class="ops-row-head">
+                <span
+                  class="icon-tile ops-row-icon"
+                  :class="targetActive(row) ? channel(row)?.color || 'blue' : 'gray'"
+                  ><Icon :name="channel(row)?.icon || 'send'" :size="17"
+                /></span>
+                <div class="ops-row-name">
+                  <button
+                    class="text-link"
+                    @click="emit('navigate', '/operations/deliveries?target=' + row.id)"
+                  >
+                    {{ row.name }}
+                  </button>
+                  <span class="ops-state" :class="'tone-' + targetState(row).tone"
+                    ><i class="ops-dot" />{{ targetState(row).text }}</span
+                  >
+                </div>
+                <button
+                  class="ops-toggle"
+                  :aria-expanded="rowOpen('t' + row.id, targetIssue(row))"
+                  :aria-label="row.name + '：' + targetState(row).text"
+                  @click="toggleRow('t' + row.id)"
+                >
+                  <span :class="'tone-' + targetState(row).tone"
+                    ><i class="ops-dot" />{{ targetState(row).text }}</span
+                  >
+                  <Icon name="down" :size="14" />
+                </button>
+              </div>
+              <div class="ops-row-body">
+                <p v-if="!targetActive(row)" class="ops-idle tone-none">
+                  {{ row.status === 'paused' ? '已暂停，不发送' : '未配置，不发送' }}
+                </p>
+                <ol v-else class="ops-steps ops-facts">
+                  <li class="ops-step" :class="{ quiet: !(row.queue.pending + row.queue.retry) }">
+                    <span class="ops-step-label">队列</span>
+                    <strong>{{ queueText(row) }}</strong>
+                    <small v-if="queueDetail(row)">{{ queueDetail(row) }}</small>
+                  </li>
+                  <li class="ops-step" :class="{ quiet: !row.sending && !row.expired_leases }">
+                    <span class="ops-step-label">发送中</span>
+                    <strong :class="{ 'tone-warn': row.expired_leases }">{{
+                      sendingText(row)
+                    }}</strong>
+                  </li>
+                  <li class="ops-step" :class="{ quiet: !row.uncertain }">
+                    <span class="ops-step-label">结果不确定</span>
+                    <strong :class="{ 'tone-warn': row.uncertain }">{{ row.uncertain }}</strong>
+                  </li>
+                  <li class="ops-step" :class="{ blocked: lastTone(row) === 'fail' }">
+                    <span class="ops-step-label">最近结果</span>
+                    <template v-if="row.last">
+                      <strong :class="'tone-' + lastTone(row)"
+                        ><i class="ops-dot" />{{
+                          attemptLabels[row.last.result] || row.last.result
+                        }}
+                        <small :title="stamp(row.last.at)">{{ ago(row.last.at) }}</small></strong
+                      >
+                      <code v-if="row.last.code" class="ops-code">{{ row.last.code }}</code>
+                    </template>
+                    <strong v-else class="tone-none">尚无记录</strong>
+                  </li>
+                </ol>
+              </div>
+            </article>
+          </template>
+
+          <template v-else-if="group === 'hotlists'">
+            <div v-if="!data.hotlists.length" class="ops-empty">概览未显示热榜，当前不刷新。</div>
+            <article
+              v-for="site in data.hotlists"
+              :key="site.website_id"
+              class="ops-row"
+              :class="{ open: rowOpen('h' + site.website_id, hotlistIssue(site)) }"
             >
+              <div class="ops-row-head">
+                <span class="icon-tile ops-row-icon orange"><Icon name="spark" :size="17" /></span>
+                <div class="ops-row-name">
+                  <strong>{{ site.name }}</strong>
+                  <span class="ops-state" :class="'tone-' + hotlistState(site).tone"
+                    ><i class="ops-dot" />{{ hotlistState(site).text }}</span
+                  >
+                </div>
+                <button
+                  class="ops-toggle"
+                  :aria-expanded="rowOpen('h' + site.website_id, hotlistIssue(site))"
+                  :aria-label="site.name + ' 热榜：' + hotlistState(site).text"
+                  @click="toggleRow('h' + site.website_id)"
+                >
+                  <span :class="'tone-' + hotlistState(site).tone"
+                    ><i class="ops-dot" />{{ hotlistState(site).text }}</span
+                  >
+                  <Icon name="down" :size="14" />
+                </button>
+              </div>
+              <div class="ops-row-body">
+                <p v-if="hotlistUniform(site)" class="ops-idle">
+                  {{ site.lists.map((item) => item.period_label).join('、') }} ·
+                  {{ site.lists[0]!.label }}
+                </p>
+                <ol
+                  v-else
+                  class="ops-steps ops-facts ops-lists"
+                  :style="{ '--lists': Math.min(site.lists.length, 4) }"
+                >
+                  <li
+                    v-for="item in site.lists"
+                    :key="item.period"
+                    class="ops-step"
+                    :class="{ blocked: item.tone === 'fail', quiet: item.tone === 'none' }"
+                  >
+                    <span class="ops-step-label">{{ item.period_label }}</span>
+                    <strong :class="'tone-' + item.tone"
+                      ><i class="ops-dot" />{{ item.label }}</strong
+                    >
+                    <code v-if="codeNode(item) && item.detail" class="ops-code">{{
+                      item.detail
+                    }}</code>
+                    <small v-if="item.at" :title="stamp(item.at)">获取于 {{ ago(item.at) }}</small>
+                    <small v-else-if="!codeNode(item) && nodeDetail(item)">{{
+                      nodeDetail(item)
+                    }}</small>
+                  </li>
+                </ol>
+              </div>
+            </article>
+          </template>
+
+          <template v-else>
+            <ol class="ops-steps ops-facts ops-services">
               <li
-                v-for="item in site.lists"
-                :key="item.period"
+                v-for="row in data.services"
+                :key="row.id"
                 class="ops-step"
-                :class="{ blocked: item.tone === 'fail', quiet: item.tone === 'none' }"
+                :class="{ blocked: serviceState(row).tone === 'fail' }"
               >
-                <span class="ops-step-label">{{ item.period_label }}</span>
-                <strong :class="'tone-' + item.tone"><i class="ops-dot" />{{ item.label }}</strong>
-                <code v-if="codeNode(item) && item.detail" class="ops-code">{{ item.detail }}</code>
-                <small v-if="item.at" :title="stamp(item.at)">获取于 {{ ago(item.at) }}</small>
-                <small v-else-if="!codeNode(item) && nodeDetail(item)">{{
-                  nodeDetail(item)
+                <span class="ops-step-label">{{ row.name }}</span>
+                <strong :class="'tone-' + serviceState(row).tone"
+                  ><i class="ops-dot" />{{ serviceState(row).text }}</strong
+                >
+                <small v-if="serviceDetail(row)" :title="stamp(row.last_loop_at)">{{
+                  serviceDetail(row)
                 }}</small>
               </li>
             </ol>
-          </div>
-        </article>
-      </section>
-
-      <section class="panel" aria-labelledby="ops-services">
-        <div class="ops-card-head">
-          <h2 id="ops-services">后台服务</h2>
+          </template>
         </div>
-        <ol class="ops-steps ops-facts ops-services">
-          <li
-            v-for="row in data.services"
-            :key="row.id"
-            class="ops-step"
-            :class="{ blocked: serviceState(row).tone === 'fail' }"
-          >
-            <span class="ops-step-label">{{ row.name }}</span>
-            <strong :class="'tone-' + serviceState(row).tone"
-              ><i class="ops-dot" />{{ serviceState(row).text }}</strong
-            >
-            <small v-if="serviceDetail(row)" :title="stamp(row.last_loop_at)">{{
-              serviceDetail(row)
-            }}</small>
-          </li>
-        </ol>
       </section>
 
       <section class="panel" aria-labelledby="ops-history">
@@ -759,13 +803,13 @@ await untilShown(() => status.ready() && history.ready())
 
 /* Overview */
 .ops-overview {
-  padding: 20px 22px;
+  overflow: hidden;
 }
 .ops-overview-head {
   display: flex;
   align-items: center;
   gap: 14px;
-  margin-bottom: 18px;
+  padding: 18px 22px;
 }
 .ops-health {
   display: grid;
@@ -806,20 +850,77 @@ await untilShown(() => status.ready() && history.ready())
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
-.ops-tiles {
+
+/* Group tabs: the summary tiles double as the switch for the detail panel. */
+.ops-tabs {
+  display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding: 18px 22px;
 }
-.ops-tile-value {
+.ops-tab {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: #f8f9fb;
+  text-align: left;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.ops-tab:hover {
+  border-color: #e3e6ea;
+}
+.ops-tab[aria-selected='true'] {
+  border-color: #ecc9b5;
+  background: #fffaf7;
+  box-shadow: 0 1px 2px rgb(183 94 50 / 8%);
+}
+.ops-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.ops-tab-label {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 10px;
+  color: #808b98;
+  font-size: 12px;
+}
+.ops-tab-label .about-tile-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+.ops-tab strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+.ops-tab strong > .ops-dot {
+  margin: 0 7px 2px 0;
+  vertical-align: middle;
+}
+.ops-tab small {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.ops-panel {
+  border-top: 1px solid var(--border);
 }
 .ops-alert-note {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 8px;
-  margin: 14px 0 0;
+  margin: 0 22px 18px;
   padding: 10px 14px;
   border-radius: 10px;
   background: #fdf7ec;
@@ -839,8 +940,11 @@ await untilShown(() => status.ready() && history.ready())
   padding: 16px 22px 16px 19px;
   border-left: 3px solid transparent;
 }
-.ops-problem + .ops-problem {
+.ops-problem {
   border-top: 1px solid var(--border);
+}
+.ops-problems + .ops-alert-note {
+  margin-top: 16px;
 }
 .ops-problem.is-action {
   border-left-color: #d98a98;
@@ -850,9 +954,6 @@ await untilShown(() => status.ready() && history.ready())
 }
 .ops-problem.is-verifying {
   border-left-color: #c3c9d1;
-}
-.ops-problems {
-  overflow: hidden;
 }
 .ops-problem-copy {
   flex: 1 1 420px;
@@ -1157,12 +1258,13 @@ await untilShown(() => status.ready() && history.ready())
   background: #ecf6f0;
 }
 @media (prefers-reduced-motion: reduce) {
-  .ops-history-row {
+  .ops-history-row,
+  .ops-tab {
     transition: none;
   }
 }
 @media (max-width: 1100px) {
-  .ops-tiles {
+  .ops-tabs {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .ops-row {
@@ -1177,7 +1279,8 @@ await untilShown(() => status.ready() && history.ready())
 }
 /* Phones fold healthy rows; the whole row head becomes the toggle. */
 @media (max-width: 760px) {
-  .ops-overview,
+  .ops-overview-head,
+  .ops-tabs,
   .ops-card-head,
   .ops-row,
   .ops-empty,
@@ -1193,15 +1296,18 @@ await untilShown(() => status.ready() && history.ready())
     width: 100%;
     justify-content: center;
   }
-  .ops-tiles {
+  .ops-tabs {
     gap: 8px;
   }
-  .ops-tiles > div {
-    gap: 8px;
-    padding: 12px 14px;
+  .ops-tab {
+    gap: 6px;
+    padding: 12px;
   }
-  .ops-tiles dd {
+  .ops-tab strong {
     font-size: 14px;
+  }
+  .ops-alert-note {
+    margin: 0 16px 16px;
   }
   .ops-alert-note .text-link {
     margin-left: 0;
