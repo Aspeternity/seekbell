@@ -200,7 +200,7 @@ const serviceDetail = (row: ServiceRow) =>
   row.state !== 'running'
     ? ''
     : row.last_loop_at
-      ? '最近一轮 ' + ago(row.last_loop_at)
+      ? '最近一轮 ' + ago(Math.min(row.last_loop_at, now()))
       : '尚未完成一轮'
 
 const alertsOff = computed(
@@ -274,7 +274,9 @@ const tiles = computed<Tile[]>(() => {
         ? { tone: 'none', value: '未显示' }
         : listIssues
           ? { tone: 'warn', value: listIssues + ' 个榜单异常' }
-          : { tone: 'ok', value: '正常' }),
+          : lists.some((item) => item.tone === 'ok')
+            ? { tone: 'ok', value: '正常' }
+            : { tone: lists[0]!.tone, value: lists[0]!.label }),
       note: !lists.length
         ? '概览未显示热榜，不刷新'
         : value.hotlists.length + ' 个网站 · ' + lists.length + ' 个榜单',
@@ -290,12 +292,19 @@ const tiles = computed<Tile[]>(() => {
     },
   ] as Tile[]
 })
+// Nothing failing is not the same as working: with no enabled site or target, say so.
 const headline = computed(() => {
-  const count = data.value?.problems.length ?? 0
-  if (count) return { tone: 'fail', icon: 'alert', text: count + ' 个问题待处理' }
+  const value = data.value
+  const count = value?.problems.length ?? 0
+  const calm = '当前没有需要处理的问题'
+  if (count) return { tone: 'fail', icon: 'alert', text: count + ' 个问题待处理', note: '' }
   if (tiles.value.some((tile) => severe(tile.tone)))
-    return { tone: 'warn', icon: 'alert', text: '有需要留意的状态' }
-  return { tone: 'ok', icon: 'check', text: '运行正常' }
+    return { tone: 'warn', icon: 'alert', text: '有需要留意的状态', note: calm }
+  if (value && !value.sources.some((row) => row.enabled))
+    return { tone: 'none', icon: 'activity', text: '未在监控', note: '没有启用的监控网站' }
+  if (value && !value.targets.some(targetActive))
+    return { tone: 'none', icon: 'activity', text: '收不到通知', note: '没有可用的通知目标' }
+  return { tone: 'ok', icon: 'check', text: '运行正常', note: calm }
 })
 
 const statusLabels: Record<ProblemRow['status'], string> = {
@@ -345,7 +354,7 @@ await untilShown(() => status.ready() && history.ready())
           <div class="ops-overview-copy">
             <h2 id="ops-headline">{{ headline.text }}</h2>
             <p>
-              <template v-if="!data.problems.length">当前没有需要处理的问题 · </template>观测于
+              <template v-if="headline.note">{{ headline.note }} · </template>观测于
               {{ clock(data.checked_at) }}
             </p>
           </div>
@@ -417,7 +426,6 @@ await untilShown(() => status.ready() && history.ready())
       <section class="panel" aria-labelledby="ops-sources">
         <div class="ops-card-head">
           <h2 id="ops-sources">采集</h2>
-          <span class="ops-card-note">按网站 · 调度 → 抓取 → 解析 → 最近一轮</span>
         </div>
         <div v-if="!data.sources.length" class="ops-empty">
           <span>还没有添加监控网站。</span>
@@ -454,8 +462,13 @@ await untilShown(() => status.ready() && history.ready())
             </button>
           </div>
           <div class="ops-row-body">
-            <p v-if="sourceIdle(row)" class="ops-idle" :class="'tone-' + row.schedule.tone">
-              {{ row.enabled ? row.schedule.label + '，暂不采集' : '已暂停，不采集' }}
+            <p v-if="sourceIdle(row)" class="ops-idle">
+              <span :class="'tone-' + row.schedule.tone">{{
+                row.enabled ? row.schedule.label + '，暂不采集' : '已暂停，不采集'
+              }}</span>
+              <span v-if="row.last_success_at" :title="stamp(row.last_success_at)"
+                >最近成功 {{ ago(row.last_success_at) }}</span
+              >
             </p>
             <ol v-else class="ops-steps">
               <li
@@ -474,7 +487,7 @@ await untilShown(() => status.ready() && history.ready())
                 <small v-else-if="nodeDetail(step.node)">{{ nodeDetail(step.node) }}</small>
               </li>
             </ol>
-            <p class="ops-row-times">
+            <p v-if="!sourceIdle(row)" class="ops-row-times">
               <span :title="stamp(row.last_success_at)"
                 >最近成功 {{ ago(row.last_success_at) }}</span
               >
@@ -492,7 +505,6 @@ await untilShown(() => status.ready() && history.ready())
       <section class="panel" aria-labelledby="ops-targets">
         <div class="ops-card-head">
           <h2 id="ops-targets">通知</h2>
-          <span class="ops-card-note">按目标 · 名称进入通知记录</span>
         </div>
         <div v-if="!data.targets.length" class="ops-empty">
           <span>还没有通知目标。</span>
@@ -570,7 +582,6 @@ await untilShown(() => status.ready() && history.ready())
       <section class="panel" aria-labelledby="ops-hotlists">
         <div class="ops-card-head">
           <h2 id="ops-hotlists">热榜</h2>
-          <span class="ops-card-note">概览显示热榜且有人查看时刷新</span>
         </div>
         <div v-if="!data.hotlists.length" class="ops-empty">概览未显示热榜，当前不刷新。</div>
         <article
@@ -600,7 +611,10 @@ await untilShown(() => status.ready() && history.ready())
             </button>
           </div>
           <div class="ops-row-body">
-            <ol class="ops-steps ops-facts ops-lists">
+            <ol
+              class="ops-steps ops-facts ops-lists"
+              :style="{ '--lists': Math.min(site.lists.length, 4) }"
+            >
               <li
                 v-for="item in site.lists"
                 :key="item.period"
@@ -742,10 +756,6 @@ await untilShown(() => status.ready() && history.ready())
   font-size: 15px;
   font-weight: 600;
 }
-.ops-card-note {
-  color: var(--muted);
-  font-size: 12px;
-}
 
 /* Overview */
 .ops-overview {
@@ -768,6 +778,10 @@ await untilShown(() => status.ready() && history.ready())
 .ops-health.is-ok {
   color: #2f6f4f;
   background: #ecf6f0;
+}
+.ops-health.is-none {
+  color: #6f7885;
+  background: #f2f4f6;
 }
 .ops-health.is-warn {
   color: #8a5a0b;
@@ -1025,10 +1039,12 @@ await untilShown(() => status.ready() && history.ready())
   font-variant-numeric: tabular-nums;
 }
 .ops-idle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
   margin: 0;
-  padding: 9px 12px;
-  border-radius: 10px;
-  background: #fbfbfc;
+  color: var(--muted);
+  font-size: 12px;
 }
 .ops-dot {
   flex: none;
@@ -1055,7 +1071,7 @@ await untilShown(() => status.ready() && history.ready())
 
 /* Hotlists and services */
 .ops-lists {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--lists, 4), minmax(0, 1fr));
   gap: 22px;
 }
 .ops-services {
