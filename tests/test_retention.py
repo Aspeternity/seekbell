@@ -622,8 +622,9 @@ def test_new_content_brings_the_limit_forward_within_a_tick(tmp_path):
             await asyncio.sleep(0.3)
             assert len(post_keys(engine)) == 5
             cleaner.content_added()
+            # A full last batch keeps the flag for one more pass, which then finds nothing.
             for _ in range(100):
-                if len(post_keys(engine)) == 2:
+                if len(post_keys(engine)) == 2 and not cleaner.content_arrived:
                     break
                 await asyncio.sleep(0.02)
             assert post_keys(engine) == ["92003", "92004"]
