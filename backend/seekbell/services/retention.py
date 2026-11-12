@@ -133,6 +133,12 @@ def reclaim(engine):
             cursor.close()
 
 
+# A backlog (a tightened limit, a shortened period) is worked off batch after batch
+# without waiting a full tick; the short pause lets collection and delivery take the
+# write lock between batches.
+BACKLOG_PAUSE = 0.05
+
+
 class HistoryRetention:
     def __init__(
         self, engine, *, clock=time.time, tick=1, batch_size=100, interval=3600, disk=None
@@ -339,16 +345,17 @@ class HistoryRetention:
                 counts["system_events"] = remove(session, SystemEvent, SystemEvent.id.in_(keys))
             full |= len(keys) == self.batch_size
 
-            policy.next_run_at = at + (self.tick if full else self.interval)
+            policy.next_run_at = at if full else at + self.interval
         if not full:
             reclaim(self.engine)
         return {"status": "cleaned", "counts": counts, "more": full}
 
     async def run(self, stop: asyncio.Event):
         while not stop.is_set():
-            await database_call(self.run_once)
+            result = await database_call(self.run_once)
             if self.disk is not None:
                 await database_call(self.disk.run_once)
             self.last_loop_at = self.clock()
+            pause = BACKLOG_PAUSE if result.get("more") else self.tick
             with suppress(TimeoutError):
-                await asyncio.wait_for(stop.wait(), timeout=self.tick)
+                await asyncio.wait_for(stop.wait(), timeout=pause)

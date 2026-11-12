@@ -35,7 +35,7 @@ from seekbell.services.history import History
 from seekbell.services.ingestion import Ingestion
 from seekbell.services.maintenance import retention_preview
 from seekbell.services.retention import HistoryRetention
-from sqlalchemy import event, inspect, select, text
+from sqlalchemy import event, func, inspect, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -496,3 +496,52 @@ def test_content_limit_migration_keeps_days_and_defaults_to_no_limit(tmp_path):
             connection.execute(text("UPDATE retention_policy SET max_posts=0"))
     finally:
         engine.dispose()
+
+
+def test_a_backlog_is_worked_off_without_waiting_a_tick_per_batch(tmp_path):
+    import asyncio
+
+    from seekbell.services.authentication import initialize
+
+    engine = create_database_engine(Settings(data_dir=tmp_path))
+    migrate(engine)
+    initialize(engine, "admin", "synthetic-password-1")
+    now = time.time()
+    with write_session(engine) as session:
+        for i in range(30):
+            key = str(91000 + i)
+            session.add(SeenPost(website_id="nodeseek", external_post_id=key, first_seen_at=now))
+            session.flush()
+            session.add(
+                Post(
+                    website_id="nodeseek",
+                    external_post_id=key,
+                    first_seen_at=now + i,
+                    title="合成内容",
+                    url="https://www.nodeseek.com/post-" + key + "-1",
+                )
+            )
+        policy = session.get(RetentionPolicy, 1)
+        policy.max_posts, policy.next_run_at = 1, 0
+
+    async def drain():
+        stop = asyncio.Event()
+        # One batch per hour-long tick would never finish here; a backlog does not wait.
+        task = asyncio.create_task(HistoryRetention(engine, batch_size=1, tick=3600).run(stop))
+        try:
+            for _ in range(250):
+                with Session(engine) as session:
+                    # Worked off, after which the next run waits for the ordinary interval.
+                    if (
+                        session.scalar(select(func.count()).select_from(Post)) == 1
+                        and session.get(RetentionPolicy, 1).next_run_at > now + 3000
+                    ):
+                        return True
+                await asyncio.sleep(0.02)
+            return False
+        finally:
+            stop.set()
+            await task
+
+    assert asyncio.run(drain())
+    engine.dispose()
