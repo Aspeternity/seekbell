@@ -150,6 +150,10 @@ class Runtime:
 
     def _runtime_transition(self, name, fault):
         with write_session(self.engine) as session:
+            # Startup's recovery must not land after a crash's fault: once an actor has
+            # failed (status is set before its fault is written) only faults are recorded.
+            if not fault and self.status != "running":
+                return
             if session.get(Administrator, 1) is not None:
                 observe(
                     session,

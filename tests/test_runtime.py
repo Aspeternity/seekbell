@@ -384,3 +384,51 @@ def test_a_container_stop_fits_dockers_default_ten_seconds():
         f"timeout_graceful_shutdown={requests:g},"
         in (root / "backend/seekbell/__main__.py").read_text()
     )
+
+
+def test_a_crash_during_startup_is_not_overwritten_by_its_startup_recovery(tmp_path):
+    from seekbell.db.models import SystemEvent, SystemState
+
+    settings = Settings(data_dir=tmp_path)
+    with TestClient(create_app(settings)) as client:
+        authenticate(client)
+    scenario = SyntheticScenario()
+
+    def crashing(engine, notifiers):
+        runtime = scenario.factory(engine, notifiers)
+        crash, loops = asyncio.Event(), []
+
+        async def fail(stop):
+            loops.append(asyncio.get_running_loop())
+            await crash.wait()
+            raise RuntimeError("synthetic startup crash")
+
+        runtime.worker.run = fail
+        original = runtime._runtime_transition
+
+        def transition(name, fault):
+            if name == "delivery" and not fault:
+                # The crash and its fault land while startup is about to record recovery.
+                loops[0].call_soon_threadsafe(crash.set)
+                until(lambda: fault_written(engine))
+            return original(name, fault)
+
+        runtime._runtime_transition = transition
+        return runtime
+
+    def fault_written(engine):
+        with Session(engine) as session:
+            state = session.get(SystemState, "runtime:delivery")
+            return state is not None and state.fault
+
+    app = create_app(settings, runtime_factory=crashing)
+    with TestClient(app):
+        engine = app.state.engine
+        until(lambda: fault_written(engine))
+        time.sleep(0.2)
+        assert fault_written(engine)
+        with Session(engine) as session:
+            phases = session.scalars(
+                select(SystemEvent.phase).where(SystemEvent.component == "runtime:delivery")
+            ).all()
+        assert phases == ["fault"]
