@@ -4,7 +4,7 @@
 
 ## 开局
 
-正式环境为SeekBell-Dev的`/home/dev/projects/seekbell`，先运行`python3 scripts/dev_status.py`。main `4977480`（PR #38），已发布版本0.9.0（镜像digest `sha256:206852a9…c02080`），见[v0.9.0记录](history/2026-11-12-v0.9.0发布.md)。当前在本地分支`after-0.9.0`（基于main，仅本次发布记录与文档状态更新，未推送）。
+正式环境为SeekBell-Dev的`/home/dev/projects/seekbell`，先运行`python3 scripts/dev_status.py`。main `4977480`（PR #38），已发布版本0.9.0（镜像digest `sha256:206852a9…c02080`），见[v0.9.0记录](history/2026-11-12-v0.9.0发布.md)。0.9.1发布进行中：分支`after-0.9.0`版本号已改为0.9.1并开PR，等待自动合并与发布（见“进行中”）。
 
 ## 计划位置
 
@@ -12,20 +12,21 @@ M0–M4完成；v0.8.0运行中心、v0.9.0（设置六类、备份重构与自�
 
 ## 进行中
 
-无进行中的改动。本地已提交未推送：热榜展开后切换网站/周期不再自动收起（`CommunityHotlist.vue`，test:hotlist 50项通过）；内容上限清理满批时不再等1秒、数据页保存后跟随刷新“现有数据”；新内容入库即叫醒清理器执行内容上限（`services/{retention,collection,runtime}.py`、`pages/RetentionSettings.vue`；pytest retention/collection/runtime/operations等相关165项与test:retention通过）。环境SeekBell-Dev。0.9.0的界面（运行中心三卡、内容记录、告警页、数据页、备份页、换页不闪）用户未逐项复审即授权发版，后续反馈按新改动处理。
+0.9.1发版（用户11-12授权）：版本PR合并后自动发布，内容为：热榜展开后切换网站/周期不再自动收起（`CommunityHotlist.vue`，test:hotlist 50项通过）；内容上限清理满批时不再等1秒、数据页保存后跟随刷新“现有数据”；新内容入库即叫醒清理器执行内容上限（`services/{retention,collection,runtime}.py`、`pages/RetentionSettings.vue`；pytest retention/collection/runtime/operations等相关165项与test:retention通过）。环境SeekBell-Dev。0.9.0的界面（运行中心三卡、内容记录、告警页、数据页、备份页、换页不闪）用户未逐项复审即授权发版，后续反馈按新改动处理。
 
 未提交：`assets/brand/`图标（待审）。
 
 ## 下一步
 
-1. 用户实机升级0.9.0时：先完整备份（0.8.x备份是回退唯一依据），升级后检查自动备份已开启、告警延迟保持原值。部署和真实发送需用户另行授权或亲自执行。
-2. WebDAV远程副本（暂缓）：先出简短方案请用户确认细则（上传是否加密、配置位置与字段、NAS保留份数、上传哪些类型、失败故障、从NAS恢复、测试连接），CI用模拟WebDAV服务。
-3. 备份第三期升级前备份；程序日志待议；图标采用。
-4. 本地累积期间CI不运行：大改动后可在本机跑相关容器检查（`docker build -t seekbell:candidate .`后`python3 scripts/check_{container,backup_container,release_container,proxy_container}.py seekbell:candidate --revision $(git rev-parse HEAD)`），避免发版时才暴露脚本未同步。
+1. 等待0.9.1发布运行完成，成功后把发布记录（镜像digest、Release）写入history并更新本文件开局。
+2. 用户实机升级时：0.8.x先完整备份（回退唯一依据），升级后检查自动备份已开启、告警延迟保持原值；0.9.0→0.9.1无迁移可直接切换。部署和真实发送需用户另行授权或亲自执行。
+3. WebDAV远程副本（暂缓）：先出简短方案请用户确认细则（上传是否加密、配置位置与字段、NAS保留份数、上传哪些类型、失败故障、从NAS恢复、测试连接），CI用模拟WebDAV服务。
+4. 备份第三期升级前备份；程序日志待议；图标采用。
+5. 本地累积期间CI不运行：大改动后可在本机跑相关容器检查（`docker build -t seekbell:candidate .`后`python3 scripts/check_{container,backup_container,release_container,proxy_container}.py seekbell:candidate --revision $(git rev-parse HEAD)`），避免发版时才暴露脚本未同步。
 
 ## 授权
 
-0.9.0的推送、PR、发版授权（11-11）已用完。此后改动先本地累积，不推送、不开PR、不发版、不部署、不真实发送，也不主动提议；发版时机由用户提出。实例只读命令的既有授权为用户本人执行。
+0.9.1的推送、PR、自动合并与发版已获用户授权（11-12），仅限本次发布。此后改动先本地累积，不推送、不开PR、不发版、不部署、不真实发送，也不主动提议；发版时机由用户提出。实例只读命令的既有授权为用户本人执行。
 
 ## 按需读取
 
