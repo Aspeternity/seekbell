@@ -109,7 +109,7 @@ async def exercise(directory):
         assert len(polls) == 2
 
         def create_system_events():
-            update_settings(engine, True, [target], 1)
+            update_settings(engine, True, [target], 1, delay_seconds=0)
             with write_session(engine) as session:
                 observe(
                     session,

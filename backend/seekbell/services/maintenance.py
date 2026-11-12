@@ -1,66 +1,23 @@
-"""Read-only maintenance views and bounded non-secret backup receipts."""
+"""Read-only maintenance views."""
 
 import shutil
 import time
-import uuid
-from importlib.metadata import version
 
-from sqlalchemy import delete, exists, func, or_, select
+from sqlalchemy import exists, func, or_, select, tuple_
 
 from seekbell.db.models import (
-    BackupRecord,
+    AlertDelivery,
     DeliveryAttempt,
     ManualDelivery,
     Outbox,
     Post,
+    RuleHit,
     SourceRun,
+    SystemEvent,
     TargetTestAttempt,
 )
-from seekbell.db.transactions import write_session
 from seekbell.services.history import read_session
-from seekbell.services.retention import TERMINAL
-
-
-def record_backup(engine, kind, result, *, archive_bytes=None, manifest=None):
-    from seekbell.backup import expected_revision
-
-    manifest = manifest or {}
-    with write_session(engine) as session:
-        session.add(
-            BackupRecord(
-                id=str(uuid.uuid4()),
-                kind=kind,
-                result=result,
-                at=time.time(),
-                archive_bytes=archive_bytes,
-                application_version=manifest.get("application_version", version("seekbell")),
-                database_revision=manifest.get("database_revision", expected_revision()),
-            )
-        )
-        session.flush()
-        keep = select(BackupRecord.id).order_by(BackupRecord.at.desc(), BackupRecord.id).limit(50)
-        session.execute(delete(BackupRecord).where(BackupRecord.id.not_in(keep)))
-
-
-def backup_records(engine):
-    with read_session(engine) as session:
-        return [
-            {
-                name: getattr(row, name)
-                for name in (
-                    "id",
-                    "kind",
-                    "result",
-                    "at",
-                    "archive_bytes",
-                    "application_version",
-                    "database_revision",
-                )
-            }
-            for row in session.scalars(
-                select(BackupRecord).order_by(BackupRecord.at.desc(), BackupRecord.id).limit(50)
-            )
-        ]
+from seekbell.services.retention import TERMINAL, excess_posts
 
 
 def regular_size(path):
@@ -72,25 +29,25 @@ def regular_size(path):
 
 
 def storage_view(settings):
+    from seekbell.services.backups import usage as backup_usage
+
     root = settings.data_dir.resolve()
     usage = shutil.disk_usage(root)
-    candidate = root / "web-restore"
+    kept = backup_usage(settings)
     return {
-        "database_bytes": regular_size(settings.database_path),
-        "wal_bytes": regular_size(root / "seekbell.sqlite3-wal"),
-        "restore_bytes": sum(
-            regular_size(candidate / name)
-            for name in ("seekbell.sqlite3", "seekbell.sqlite3-wal", "credentials.key")
-        )
-        if not candidate.is_symlink()
-        else 0,
+        # The write-ahead log is part of the live database.
+        "database_bytes": regular_size(settings.database_path)
+        + regular_size(root / "seekbell.sqlite3-wal"),
+        "backup_bytes": kept["bytes"],
+        "backup_count": kept["count"],
         "filesystem_total_bytes": usage.total,
         "filesystem_free_bytes": usage.free,
         "checked_at": time.time(),
     }
 
 
-def retention_preview(engine, days, *, at=None):
+def retention_preview(engine, days, max_posts=None, *, at=None):
+    """Estimate what the cleaner would remove under a draft policy; reads only."""
     at = time.time() if at is None else at
     cutoff = at - days * 86400
     recent_attempt = exists(
@@ -121,26 +78,60 @@ def retention_preview(engine, days, *, at=None):
             Outbox.id.not_in(eligible_deliveries),
         )
     )
+    expired = Post.first_seen_at < cutoff
+    if max_posts is not None:
+        excess = excess_posts(max_posts)
+        expired = or_(
+            expired,
+            tuple_(Post.website_id, Post.external_post_id).in_(
+                select(excess.c.website_id, excess.c.external_post_id)
+            ),
+        )
+    retained_alert = exists(
+        select(AlertDelivery.id).where(
+            AlertDelivery.event_id == SystemEvent.id,
+            or_(
+                AlertDelivery.result == "pending",
+                AlertDelivery.finished_at.is_(None),
+                AlertDelivery.finished_at >= cutoff,
+            ),
+        )
+    )
     with read_session(engine) as session:
 
         def count(model, *conditions):
             return session.scalar(select(func.count()).select_from(model).where(*conditions))
 
-        old_posts = count(Post, Post.first_seen_at < cutoff)
-        posts = count(Post, Post.first_seen_at < cutoff, ~retained_delivery)
-        counts = {
-            "posts": posts,
+        posts = count(Post, expired, ~retained_delivery)
+        records = {
             "deliveries": session.scalar(
                 select(func.count()).select_from(eligible_deliveries.subquery())
             ),
             "tests": count(TargetTestAttempt, TargetTestAttempt.finished_at < cutoff),
             "manual": count(ManualDelivery, ManualDelivery.finished_at < cutoff),
             "source_runs": count(SourceRun, SourceRun.at < cutoff),
+            "system_events": count(SystemEvent, SystemEvent.at < cutoff, ~retained_alert),
         }
         return {
             "days": days,
-            "cutoff": cutoff,
+            "max_posts": max_posts,
             "checked_at": at,
-            "counts": counts,
-            "protected_posts": old_posts - posts,
+            "posts": posts,
+            "records": sum(records.values()),
+            "counts": {"posts": posts, **records},
+        }
+
+
+def data_overview(engine):
+    """What history is kept right now: the counts a retention change visibly affects."""
+    with read_session(engine) as session:
+
+        def count(statement):
+            return session.scalar(select(func.count()).select_from(statement.subquery()))
+
+        return {
+            "posts": count(select(Post.website_id)),
+            "matched_posts": count(select(RuleHit.website_id, RuleHit.external_post_id).distinct()),
+            "deliveries": count(select(Outbox.id)),
+            "earliest_at": session.scalar(select(func.min(Post.first_seen_at))),
         }

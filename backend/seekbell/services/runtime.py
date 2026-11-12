@@ -14,9 +14,11 @@ from seekbell.services.alerts import AlertWorker, observe
 from seekbell.services.collection import SourceRunner
 from seekbell.services.crash_records import describe
 from seekbell.services.delivery import DeliveryWorker
+from seekbell.services.disk import DiskWatch
 from seekbell.services.request_budget import WebsiteRequestBudget
 from seekbell.services.retention import HistoryRetention
 from seekbell.services.source_probe import ProbeConflict, check
+from seekbell.services.stalls import StallWatch
 from seekbell.sites.registry import BUILTIN_ADAPTERS
 
 logger = logging.getLogger(__name__)
@@ -34,6 +36,7 @@ class Runtime:
         shutdown_grace=5,
         collector_timeout=15,
         request_budget=None,
+        stall_check=15,
     ):
         self.client = public_client(
             transport=http_transport,
@@ -58,8 +61,10 @@ class Runtime:
         }
         self.source = self.sources["nodeseek"]
         self.worker = DeliveryWorker(engine, notifiers, managed=True, tick=tick)
-        self.retention = HistoryRetention(engine, tick=tick)
+        self.retention = HistoryRetention(engine, tick=tick, disk=DiskWatch(engine))
         self.alerts = AlertWorker(engine, notifiers, tick=tick)
+        self.stalls = StallWatch(engine, self.observation, interval=stall_check)
+        self.watch = None
         self.engine = engine
         self.alert_stop = asyncio.Event()
         self.reports = set()
@@ -196,6 +201,8 @@ class Runtime:
         }
         self.status = "running"
         self.started_at = time.time()
+        # Not an actor: it watches them, and keeps running beside the alert worker.
+        self.watch = asyncio.create_task(self.stalls.run(self.alert_stop), name="seekbell-stalls")
         await asyncio.sleep(0)
         if self.active:
             for name in self.tasks:
@@ -221,6 +228,8 @@ class Runtime:
         self.alert_stop.set()
         try:
             tasks = {*self.tasks.values(), *self.probes, *self.reports}
+            if self.watch is not None:
+                tasks.add(self.watch)
             if tasks:
                 _, pending = await asyncio.wait(
                     tasks,

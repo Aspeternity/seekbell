@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
-const props = defineProps<{ error: string; retryLabel?: string }>()
+// `retryable` is false for errors that reading again cannot fix, such as failed validation.
+const props = withDefaults(
+  defineProps<{ error: string; retryLabel?: string; retryable?: boolean }>(),
+  { retryable: true },
+)
 const emit = defineEmits<{ retry: [] }>()
 const root = ref<HTMLElement>()
 watch(
@@ -21,7 +25,7 @@ watch(
 <template>
   <div v-if="error" ref="root" class="form-errors settings-error" role="alert" tabindex="-1">
     <p>{{ error }}</p>
-    <button class="button" type="button" @click="emit('retry')">
+    <button v-if="retryable" class="button" type="button" @click="emit('retry')">
       {{ retryLabel || '重新加载' }}
     </button>
   </div>

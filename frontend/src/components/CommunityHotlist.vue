@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import AppSelect from './AppSelect.vue'
 import Icon from './Icon.vue'
 import ReadRegion from './ReadRegion.vue'
+import { untilShown } from '../viewReady'
 import { request, formatTime } from '../store'
 import { useRemote } from '../history'
 import { cachedRead, readCacheRevision, readSessionRevision, rememberRead } from '../readCache'
@@ -180,6 +181,12 @@ onBeforeUnmount(() => {
   stop()
   document.removeEventListener('visibilitychange', visibility)
 })
+await untilShown(
+  () =>
+    catalog.error.value ||
+    (catalog.data.value &&
+      (!catalog.data.value.sources.length || !firstRead.value || failure.value)),
+)
 </script>
 <template>
   <section class="panel hotlist-panel" aria-label="社区热榜" data-overview-module="hotlist">

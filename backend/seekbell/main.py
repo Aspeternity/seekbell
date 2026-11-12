@@ -24,6 +24,7 @@ from seekbell.api.management import router as management_router
 from seekbell.api.overview import router as overview_router
 from seekbell.api.sending import install_errors
 from seekbell.api.sending import router as sending_router
+from seekbell.api.settings import router as settings_router
 from seekbell.api.system import router
 from seekbell.config import Settings
 from seekbell.db.models import (
@@ -33,10 +34,17 @@ from seekbell.db.models import (
     Outbox,
     TargetTestAttempt,
 )
-from seekbell.db.runtime import create_database_engine, instance_lock, migrate
+from seekbell.db.runtime import (
+    create_database_engine,
+    enable_space_reclaim,
+    instance_lock,
+    migrate,
+)
 from seekbell.notifiers.credentials import CredentialError, CredentialVault
 from seekbell.notifiers.registry import NotifierRegistry
 from seekbell.services.authentication import Confirmations, LoginLimiter
+from seekbell.services.backup_schedule import BackupScheduler
+from seekbell.services.backups import remove_leftovers
 from seekbell.services.crash_records import CrashRecords
 from seekbell.services.hotlists import HotlistService
 from seekbell.services.manual_sending import ConfiguredTargetTesting, ManualSending
@@ -111,6 +119,8 @@ def create_app(
             stack.callback(engine.dispose)
             # Migration/credential validation must complete before actors can start.
             await run_in_threadpool(migrate, engine)
+            # Before any actor writes: a one-time rewrite so cleanups can shrink the file.
+            await run_in_threadpool(enable_space_reclaim, engine)
             app.state.engine = engine
             key_path = settings.data_dir.resolve() / "credentials.key"
             with Session(engine) as session:
@@ -143,10 +153,15 @@ def create_app(
             stack.push_async_callback(app.state.hotlists.aclose)
             app.state.target_testing = ConfiguredTargetTesting(engine, registry.notifiers)
             app.state.manual_sending = ManualSending(engine, registry.notifiers)
+            app.state.alert_notifiers = registry.notifiers
             app.state.sending_gate = asyncio.Semaphore(2)
             app.state.runtime = runtime
             stack.push_async_callback(runtime.aclose)
             await runtime.start()
+            # Outside Runtime: a failing backup must never stop collection or delivery.
+            scheduler = BackupScheduler(engine, settings, app.state.backup_gate)
+            stack.push_async_callback(scheduler.aclose)
+            scheduler.start()
         except BaseException:
             await stack.aclose()
             raise
@@ -161,12 +176,17 @@ def create_app(
     async def lifespan(app: FastAPI):
         with instance_lock(settings.data_dir.resolve()):
             app.state.backup_gate = asyncio.Lock()
+            app.state.backup_stages, app.state.backup_tickets = {}, {}
+            # Earlier restore directories and interrupted temporary files are removed.
+            await run_in_threadpool(remove_leftovers, settings.data_dir.resolve())
             await open_workspace(app)
             restore_signals = answer_long_polls_on_stop(app)
             try:
                 yield
             finally:
                 restore_signals()
+                for stage in app.state.backup_stages.values():
+                    stage.discard()
                 await close_workspace(app)
 
     app = FastAPI(title="SeekBell", lifespan=lifespan, docs_url=None, redoc_url=None)
@@ -218,6 +238,10 @@ def create_app(
         response = await call_next(request)
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
+        elif request.url.path == "/" or request.url.path.endswith(".html"):
+            # The page names the hashed assets of its build, so browsers revalidate it
+            # (a 304 when unchanged) and an upgrade shows the new interface at once.
+            response.headers["Cache-Control"] = "no-cache"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "same-origin"
         response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
@@ -233,6 +257,7 @@ def create_app(
     app.include_router(router)
     app.include_router(auth_router)
     app.include_router(management_router)
+    app.include_router(settings_router)
     app.include_router(hotlists_router)
     app.include_router(backups_router)
     app.include_router(backup_setup_router)

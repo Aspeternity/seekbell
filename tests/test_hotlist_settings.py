@@ -49,8 +49,14 @@ def test_hotlist_upgrade_is_atomic_and_preserves_every_old_column(tmp_path):
                     "VALUES ('nodeseek',1),('linuxdo',2)"
                 )
             )
+        # 0022 drops the unread last-cleanup columns; every other old column survives.
+        dropped = {("retention_policy", "last_run_at"), ("retention_policy", "last_counts")}
         columns = {
-            table: [column["name"] for column in inspect(engine).get_columns(table)]
+            table: [
+                column["name"]
+                for column in inspect(engine).get_columns(table)
+                if (table, column["name"]) not in dropped
+            ]
             for table in inspect(engine).get_table_names()
             if table != "alembic_version"
         }
@@ -82,7 +88,7 @@ def test_hotlist_upgrade_is_atomic_and_preserves_every_old_column(tmp_path):
         assert original_rows() == before
         migrate(engine)
         migrate(engine)
-        assert schema_revision(engine) == "0018_settings_maintenance"
+        assert schema_revision(engine) == "0023_alert_reminders"
         assert original_rows() == before
         with Session(engine) as session:
             assert session.get(WebsiteInstallation, "nodeseek").hotlist_settings == {}

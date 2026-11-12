@@ -167,6 +167,39 @@ RUNTIME_GUIDES["loop_stalled"] = Guide(
     ACTION,
     RESTART,
 )
+RUNTIME_GUIDES["disk_space_low"] = Guide(
+    "storage",
+    "磁盘可用空间不足 500 MiB",
+    ("历史数据、备份或同一磁盘上的其他文件占满了空间",),
+    (
+        "在系统设置的“数据”页查看占用，到“备份”页删除不再需要的备份",
+        "缩短历史保留天数，或清理、扩容所在磁盘",
+        "可用空间回到 600 MiB 以上后自动恢复",
+    ),
+    ACTION,
+    None,
+)
+
+RUNTIME_GUIDES["backup_failed"] = Guide(
+    "storage",
+    "自动备份失败",
+    ("磁盘可用空间不足", "备份目录不可写", "数据库或凭据密钥校验失败"),
+    (
+        "到系统设置的“备份”页查看失败原因",
+        "释放磁盘空间或删除旧备份后，点“立即备份”确认可以备份",
+        "之后每小时自动重试，成功后自动恢复",
+    ),
+    ACTION,
+    None,
+)
+RUNTIME_GUIDES["backup_overdue"] = Guide(
+    "storage",
+    "超过两个备份周期没有成功备份",
+    ("容器长时间停机", "自动备份一直未能运行"),
+    ("到系统设置的“备份”页点“立即备份”", "完成一次备份后自动恢复"),
+    ACTION,
+    None,
+)
 
 UNKNOWN = Guide(
     "unknown",

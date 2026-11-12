@@ -113,7 +113,7 @@ export interface ProblemDetail {
   guide: Guide
   recent: { at: number; tone: Tone; label: string; text: string }[]
   alerts: {
-    phase: 'fault' | 'recovery'
+    phase: 'fault' | 'reminder' | 'recovery'
     target_name: string
     kind: string | null
     result: string
@@ -144,6 +144,7 @@ export const stageLabels: Record<string, string> = {
   send: '发送',
   config: '配置',
   service: '后台',
+  storage: '存储',
   unknown: '未知阶段',
 }
 export const attemptLabels: Record<string, string> = {
@@ -178,6 +179,17 @@ export function elapsed(seconds: number) {
   const hours = Math.floor(minutes / 60)
   if (hours < 24) return hours + ' 小时' + (minutes % 60 ? ' ' + (minutes % 60) + ' 分钟' : '')
   return Math.floor(hours / 24) + ' 天' + (hours % 24 ? ' ' + (hours % 24) + ' 小时' : '')
+}
+
+/** "3 分钟前" / "20 秒后" against the snapshot time; a day or more falls back to the date. */
+export function relative(at: number | null | undefined, now: number) {
+  if (!at) return '—'
+  const diff = at - now
+  if (Math.abs(diff) < 60) return diff > 0 ? '1 分钟内' : '刚刚'
+  if (Math.abs(diff) >= 86400) return stamp(at)
+  const minutes = Math.round(Math.abs(diff) / 60)
+  const text = minutes < 60 ? minutes + ' 分钟' : Math.floor(minutes / 60) + ' 小时'
+  return text + (diff > 0 ? '后' : '前')
 }
 
 export function problemReason(problem: { stage: string; summary: string; code: string | null }) {

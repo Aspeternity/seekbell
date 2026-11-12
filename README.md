@@ -149,7 +149,7 @@ uv run --frozen python -m seekbell.backup --help
 uv run --frozen python -m seekbell.services.backup_demo
 ~~~
 
-实际备份使用create --output、恢复使用restore --archive/--destination，口令在交互终端输入；禁止覆盖原目录。含原凭据密钥的整库备份加密，恢复只需备份口令，可沿用备份中的管理员或设置新管理员，并撤销旧会话，保留队列/去重。使用前按[备份恢复说明](docs/BACKUP_RESTORE.md)停止服务、准备私有目录并选匹配镜像；Compose与禁外网演练命令均在该文档。普通演示备份不能恢复生产数据。
+实际备份使用create --output、恢复使用restore --archive/--destination（在交互终端设置恢复后的管理员）；禁止覆盖原目录。备份是含原凭据密钥的标准tar.gz，不加密、不含管理员和登录会话，请像保管密码一样保管；恢复保留队列/去重。使用前按[备份恢复说明](docs/BACKUP_RESTORE.md)停止服务、准备私有目录并选匹配镜像；Compose与禁外网演练命令均在该文档。普通演示备份不能恢复生产数据。
 
 ## 开发与交接
 
@@ -161,7 +161,7 @@ uv run --frozen python -m seekbell.services.backup_demo
 
 ### 概览模块与社区热榜验证
 
-概览模块显隐/顺序在系统设置→界面与概览保存；首接NodeSeek第三方热榜，生产无需额外服务。热榜不参与规则或通知，隐藏后不再专用刷新。
+概览模块显隐/顺序在系统设置→通用保存；首接NodeSeek第三方热榜，生产无需额外服务。热榜不参与规则或通知，隐藏后不再专用刷新。
 
     uv run --frozen pytest -q tests/test_hotlists.py tests/test_release.py tests/test_backup.py
     pnpm --dir frontend build
@@ -198,10 +198,10 @@ pnpm --dir frontend test:linuxdo
 
 ### 系统设置与维护验证
 
-系统设置按通用、界面与概览、系统告警、历史与存储、备份与恢复、账户与安全、关于分组。通用与概览各自保存，修改失败保留草稿；数据占用及清理预览只读。备份下载与恢复验证有独立表单，操作记录区分已生成、已验证和副本未启用；账户页可退出其他会话；诊断页查看服务状态并可复制脱敏诊断摘要，关于页显示版本、运行环境、存储概况和项目链接。
+系统设置分通用、告警、数据、备份、账户、关于六类。通用设置与概览布局各自保存，修改失败保留草稿；告警可设通知延迟并发送测试告警；数据页显示现有数据并设置保留天数和内容上限（命中的内容不计入，默认不限），清理后数据库文件自动变小；备份页在服务器上立即备份、下载、检查后恢复（恢复前自动备份当前数据，可从列表回退）并删除旧备份；账户页分别修改用户名和密码，并管理登录会话；登录页可选保持登录30天。磁盘可用空间低于500 MiB时在运行中心提示并发系统告警。
 
 ```bash
-uv run --frozen pytest tests/test_settings_maintenance.py tests/test_web_backups.py -q
+uv run --frozen pytest tests/test_settings_maintenance.py tests/test_settings_reorganization.py tests/test_web_backups.py -q
 pnpm --dir frontend build
 pnpm --dir frontend test:system
 pnpm --dir frontend test:retention
@@ -211,4 +211,4 @@ pnpm --dir frontend test:hotlist
 pnpm --dir frontend test:live
 ```
 
-本轮数据库迁移为0018_settings_maintenance，新增工作空间版本保护与备份操作元数据。升级前完整备份；回退应使用0017对应镜像/原卷或匹配备份，不能让旧镜像读取新schema。定时加密备份仍属于独立后续阶段。
+当前数据库迁移为0023_alert_reminders，新增告警“仍未恢复提醒”（0022新增内容上限，0021新增自动备份计划，0020删除备份操作记录表，0019新增告警延迟与会话起始时间两列）；新版首次启动会把数据库一次性改为自动增量回收（需约等于数据库大小的可用空间，不足时下次启动再试）。升级前完整备份；回退应使用0018对应镜像/原卷或匹配备份，不能让旧镜像读取新schema。

@@ -99,6 +99,9 @@ test('content filters preserve geometry, task notes are inset and post details a
   await page.screenshot({ path: info.outputPath('content-task-note.png'), fullPage: true })
   await selectChoice(page.getByLabel('关联任务', { exact: true }), '')
   await expect(page.locator('.content-row')).toHaveCount(20)
+  // The cached list shows at once and refreshes behind it; let that refresh finish so its
+  // own indicator cannot appear once the clock is paused below.
+  await expect(page.locator('.metric-strip')).not.toHaveAttribute('aria-busy', 'true')
   const detail = gate()
   let detailStarted = false
   await page.route(/\/api\/manage\/history\/posts\/[^/?]+$/, async (route) => {
@@ -111,9 +114,13 @@ test('content filters preserve geometry, task notes are inset and post details a
   await page.locator('.content-title').first().click()
   await expect.poll(() => detailStarted).toBe(true)
   await expect(page.getByText('正在读取服务端记录…', { exact: true })).toHaveCount(0)
-  await page.clock.runFor(199)
+  // The list stays in place for at most 400ms; the detail shown after that wait has its
+  // indicator at once, never an empty page first.
+  await page.clock.runFor(399)
   await expect(page.locator('.remote-feedback')).toHaveCount(0)
+  await expect(page.locator('.content-row')).toHaveCount(20)
   await page.clock.runFor(1)
+  await expect(page.locator('.content-row')).toHaveCount(0)
   await expect(page.locator('.remote-feedback')).toContainText('加载中…')
   detail.release()
   await expect(page.getByRole('heading', { name: '命中依据' })).toBeVisible()

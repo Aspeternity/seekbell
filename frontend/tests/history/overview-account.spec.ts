@@ -62,16 +62,20 @@ test('real overview and administrator forms preserve records and rotate sessions
   await page.locator('.activity-row').first().click()
   await expect(page.getByRole('heading', { name: '命中依据' })).toBeVisible()
   await page.goto('/#/settings/account')
-  await expect(page.getByLabel('管理员用户名')).toHaveValue(credentials.username)
-  await page.getByLabel('新密码 留空保留原密码').fill('Synthetic-Updated-2026')
-  await page.getByLabel('确认新密码', { exact: true }).fill('Synthetic-Different-2026')
-  await page.getByLabel('当前密码', { exact: true }).fill(credentials.password)
-  await page.getByRole('button', { name: '更新管理员资料', exact: true }).click()
+  // The username and the password are separate forms, each with its own current password.
+  const rename = page.getByRole('form', { name: '修改用户名', exact: true })
+  const secret = page.getByRole('form', { name: '修改密码', exact: true })
+  const current = secret.getByLabel('当前密码', { exact: true })
+  await expect(rename.getByLabel('管理员用户名')).toHaveValue(credentials.username)
+  await secret.getByLabel('新密码', { exact: true }).fill('Synthetic-Updated-2026')
+  await secret.getByLabel('确认新密码', { exact: true }).fill('Synthetic-Different-2026')
+  await current.fill(credentials.password)
+  await secret.getByRole('button', { name: '更新密码', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('两次输入的新密码不一致')
   await page.goto('/#/operations/content')
   await expect(page.getByRole('dialog')).toContainText('尚未保存')
   await page.getByRole('button', { name: '继续编辑', exact: true }).click()
-  await expect(page.getByLabel('当前密码', { exact: true })).toHaveValue(credentials.password)
+  await expect(current).toHaveValue(credentials.password)
   // Exercise the full change once; mobile checks the same form, layout and guard.
   if (info.project.name === 'desktop') {
     const other = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:8012' })
@@ -82,27 +86,41 @@ test('real overview and administrator forms preserve records and rotate sessions
         headers: { 'X-CSRF-Token': preauth.csrf },
       })
       expect(login.ok()).toBe(true)
-      await page.getByLabel('管理员用户名').fill('updated_admin')
-      await page.getByLabel('确认新密码', { exact: true }).fill('Synthetic-Updated-2026')
-      await page.getByLabel('当前密码', { exact: true }).fill('Synthetic-Incorrect-2026')
-      await page.getByRole('button', { name: '更新管理员资料', exact: true }).click()
+      await secret.getByLabel('确认新密码', { exact: true }).fill('Synthetic-Updated-2026')
+      await current.fill('Synthetic-Incorrect-2026')
+      await secret.getByRole('button', { name: '更新密码', exact: true }).click()
       await expect(page.getByRole('alert')).toContainText('当前密码不正确')
-      await expect(page.getByLabel('管理员用户名')).toHaveValue('updated_admin')
-      await page.getByLabel('当前密码', { exact: true }).fill(credentials.password)
-      await page.getByRole('button', { name: '更新管理员资料', exact: true }).click()
-      await expect(page.getByRole('status').filter({ hasText: '管理员资料已保存' })).toBeVisible()
-      await expect(page.getByLabel('当前密码', { exact: true })).toHaveValue('')
-      await expect(page.getByLabel('新密码 留空保留原密码')).toHaveValue('')
+      await expect(secret.getByLabel('新密码', { exact: true })).toHaveValue(
+        'Synthetic-Updated-2026',
+      )
+      await current.fill(credentials.password)
+      await secret.getByRole('button', { name: '更新密码', exact: true }).click()
+      await expect(page.getByRole('status').filter({ hasText: '密码已更新' })).toBeVisible()
+      await expect(current).toHaveValue('')
+      await expect(secret.getByLabel('新密码', { exact: true })).toHaveValue('')
       expect((await other.get('/api/manage/workspace')).status()).toBe(401)
-      // Restore through a second mutation before reload: requires the fresh CSRF.
-      await page.getByLabel('管理员用户名').fill(credentials.username)
-      await page.getByLabel('当前密码', { exact: true }).fill('Synthetic-Updated-2026')
-      await page.getByLabel('新密码 留空保留原密码').fill(credentials.password)
-      await page.getByLabel('确认新密码', { exact: true }).fill(credentials.password)
-      await page.getByRole('button', { name: '更新管理员资料', exact: true }).click()
-      await expect(page.getByRole('status').filter({ hasText: '管理员资料已保存' })).toBeVisible()
+      // A second mutation before reload requires the fresh CSRF and the new password.
+      await rename.getByLabel('管理员用户名').fill('updated_admin')
+      await rename.getByLabel('当前密码', { exact: true }).fill('Synthetic-Updated-2026')
+      await rename.getByRole('button', { name: '更新用户名', exact: true }).click()
+      await expect(page.getByRole('status').filter({ hasText: '用户名已更新' })).toBeVisible()
+      await expect(page.locator('.profile')).toContainText('updated_admin')
+      // Put the fixture account back in one request, as the endpoint still allows.
+      const fresh = await (await page.request.get('/api/auth/status')).json()
+      expect(
+        (
+          await page.request.put('/api/auth/administrator', {
+            headers: { 'X-CSRF-Token': fresh.csrf },
+            data: {
+              username: credentials.username,
+              current_password: 'Synthetic-Updated-2026',
+              new_password: credentials.password,
+            },
+          })
+        ).ok(),
+      ).toBe(true)
       await page.reload()
-      await expect(page.getByLabel('管理员用户名')).toHaveValue(credentials.username)
+      await expect(rename.getByLabel('管理员用户名')).toHaveValue(credentials.username)
       expect((await (await page.request.get('/api/manage/history/posts')).json()).total).toBe(27)
       await page.screenshot({ path: info.outputPath('administrator.png'), fullPage: true })
       await page

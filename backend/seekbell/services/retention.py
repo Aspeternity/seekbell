@@ -31,14 +31,11 @@ class PolicyConflict(ValueError):
     pass
 
 
+MAX_POSTS = 1_000_000
+
+
 def policy_view(policy):
-    return {
-        "days": policy.days,
-        "revision": policy.revision,
-        "last_run_at": policy.last_run_at,
-        "next_run_at": policy.next_run_at,
-        "last_counts": policy.last_counts,
-    }
+    return {"days": policy.days, "max_posts": policy.max_posts, "revision": policy.revision}
 
 
 def get_policy(engine):
@@ -46,15 +43,17 @@ def get_policy(engine):
         return policy_view(session.get(RetentionPolicy, 1))
 
 
-def update_policy(engine, days, revision):
+def update_policy(engine, days, max_posts, revision):
     if type(days) is not int or not 1 <= days <= 365:
         raise ValueError("Invalid history retention")
+    if max_posts is not None and (type(max_posts) is not int or not 1 <= max_posts <= MAX_POSTS):
+        raise ValueError("Invalid content limit")
     with write_session(engine) as session:
         policy = session.get(RetentionPolicy, 1)
         if policy.revision != revision:
             raise PolicyConflict("保留策略已在其他页面改变，请重新读取后保存。")
-        if policy.days != days:
-            policy.days = days
+        if (policy.days, policy.max_posts) != (days, max_posts):
+            policy.days, policy.max_posts = days, max_posts
             policy.revision += 1
             policy.next_run_at = 0
         return policy_view(policy)
@@ -84,12 +83,66 @@ def remove(session, model, *conditions):
     ).rowcount
 
 
+def excess_posts(max_posts):
+    """Unmatched content beyond the newest ``max_posts``; matched content is never counted."""
+    return (
+        select(Post.website_id, Post.external_post_id, Post.first_seen_at)
+        .where(
+            ~exists(
+                select(RuleHit.id).where(
+                    RuleHit.website_id == Post.website_id,
+                    RuleHit.external_post_id == Post.external_post_id,
+                )
+            )
+        )
+        .order_by(Post.first_seen_at.desc(), Post.website_id.desc(), Post.external_post_id.desc())
+        .offset(max_posts)
+        .subquery()
+    )
+
+
+def remove_posts(session, posts, counts):
+    """A readable post goes together with its decisions."""
+    if not posts:
+        return
+    counts["evaluations"] += remove(
+        session,
+        TaskEvaluation,
+        tuple_(TaskEvaluation.website_id, TaskEvaluation.external_post_id).in_(posts),
+    )
+    counts["hits"] += remove(
+        session, RuleHit, tuple_(RuleHit.website_id, RuleHit.external_post_id).in_(posts)
+    )
+    counts["posts"] += remove(
+        session, Post, tuple_(Post.website_id, Post.external_post_id).in_(posts)
+    )
+
+
+def reclaim(engine):
+    """Return the pages freed by a finished cleanup to the filesystem (incremental mode)."""
+    with engine.connect() as connection:
+        # Usually nothing is free: stay read-only and leave the write lock to others.
+        if not connection.exec_driver_sql("PRAGMA freelist_count").scalar():
+            return
+    with write_session(engine) as session:
+        # Each step frees one page: drain the raw cursor (SQLAlchemy would close it early).
+        cursor = session.connection().connection.cursor()
+        try:
+            cursor.execute("PRAGMA incremental_vacuum").fetchall()
+        finally:
+            cursor.close()
+
+
 class HistoryRetention:
-    def __init__(self, engine, *, clock=time.time, tick=1, batch_size=100, interval=3600):
+    def __init__(
+        self, engine, *, clock=time.time, tick=1, batch_size=100, interval=3600, disk=None
+    ):
         if not 1 <= batch_size <= 100 or interval <= 0 or tick <= 0:
             raise ValueError("Invalid cleanup limits")
         self.engine, self.clock, self.tick = engine, clock, tick
         self.batch_size, self.interval = batch_size, interval
+        # Storage upkeep shares this actor: an optional watch on free disk space.
+        self.disk = disk
         self.last_loop_at = None
 
     def run_once(self, *, at=None):
@@ -172,21 +225,29 @@ class HistoryRetention:
                 .order_by(Post.first_seen_at, Post.website_id, Post.external_post_id)
                 .limit(self.batch_size)
             ).all()
-            if posts:
-                counts["evaluations"] += remove(
-                    session,
-                    TaskEvaluation,
-                    tuple_(TaskEvaluation.website_id, TaskEvaluation.external_post_id).in_(posts),
-                )
-                counts["hits"] += remove(
-                    session,
-                    RuleHit,
-                    tuple_(RuleHit.website_id, RuleHit.external_post_id).in_(posts),
-                )
-                counts["posts"] = remove(
-                    session, Post, tuple_(Post.website_id, Post.external_post_id).in_(posts)
-                )
+            remove_posts(session, posts, counts)
             full |= len(posts) == self.batch_size
+
+            # The content limit: oldest unmatched content beyond the newest N goes first.
+            if policy.max_posts is not None:
+                excess = excess_posts(policy.max_posts)
+                posts = session.execute(
+                    select(excess.c.website_id, excess.c.external_post_id)
+                    .where(
+                        ~exists(
+                            select(Outbox.id).where(
+                                Outbox.website_id == excess.c.website_id,
+                                Outbox.external_post_id == excess.c.external_post_id,
+                            )
+                        )
+                    )
+                    .order_by(
+                        excess.c.first_seen_at, excess.c.website_id, excess.c.external_post_id
+                    )
+                    .limit(self.batch_size)
+                ).all()
+                remove_posts(session, posts, counts)
+                full |= len(posts) == self.batch_size
 
             # Also handle ordinary decisions whose readable post was pruned by
             # an earlier version/maintenance operation.
@@ -278,13 +339,16 @@ class HistoryRetention:
                 counts["system_events"] = remove(session, SystemEvent, SystemEvent.id.in_(keys))
             full |= len(keys) == self.batch_size
 
-            policy.last_run_at, policy.last_counts = at, counts
             policy.next_run_at = at + (self.tick if full else self.interval)
-            return {"status": "cleaned", "counts": counts, "more": full}
+        if not full:
+            reclaim(self.engine)
+        return {"status": "cleaned", "counts": counts, "more": full}
 
     async def run(self, stop: asyncio.Event):
         while not stop.is_set():
             await database_call(self.run_once)
+            if self.disk is not None:
+                await database_call(self.disk.run_once)
             self.last_loop_at = self.clock()
             with suppress(TimeoutError):
                 await asyncio.wait_for(stop.wait(), timeout=self.tick)

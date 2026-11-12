@@ -7,6 +7,7 @@ import Toggle from '../components/Toggle.vue'
 import { shouldOpenTaskRow } from '../taskRow'
 import { state, request, formatTime, taskWebsiteLabel, setTaskEnabled } from '../store'
 import { useRemote } from '../history'
+import { untilShown } from '../viewReady'
 import type { OverviewData } from '../overview'
 import ReadRegion from '../components/ReadRegion.vue'
 import CollectionStatus from '../components/CollectionStatus.vue'
@@ -82,6 +83,7 @@ async function toggle(id: string) {
     await setTaskEnabled(task, !task.enabled)
   }
 }
+await untilShown(remote.ready)
 </script>
 <template>
   <section class="page-heading">
@@ -431,7 +433,7 @@ async function toggle(id: string) {
               <p>从信息流中，找到与你有关的内容</p>
             </div>
             <button class="text-link" @click="emit('navigate', '/operations/content')">
-              查看内容与命中
+              查看内容记录
             </button>
           </div>
           <component

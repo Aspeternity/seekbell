@@ -12,6 +12,7 @@ import Pagination from '../components/Pagination.vue'
 import DateFilter from '../components/DateFilter.vue'
 import { dateRangeParams, type HistoryDateRange } from '../dateRange'
 import ReadRegion from '../components/ReadRegion.vue'
+import { untilShown } from '../viewReady'
 import { shouldOpenContentRow } from '../contentRow'
 const props = defineProps<{ selectedId?: string }>()
 const emit = defineEmits<{ navigate: [path: string] }>()
@@ -148,6 +149,86 @@ const emptyMatchMessage = computed(() => {
       return '暂无可展示的命中依据，请刷新后重试。'
   }
 })
+// The four stages a post goes through, read from what was saved at the time.
+const flow = computed(() => {
+  const record = detail.data.value
+  const sent = deliveries.data.value
+  if (!record) return []
+  const judged: Record<string, string> = {
+    match: '命中 ' + record.hits.length + ' 个任务',
+    no_match: '没有任务命中',
+    insufficient_data: '信息不足，无法判定',
+    not_evaluated: '未执行规则匹配',
+    unrecorded: '旧版本未记录结果',
+  }
+  const total = sent?.total ?? 0
+  const items = sent && total <= sent.page_size ? sent.items : null
+  const count = (...states: string[]) =>
+    items?.filter((item) => states.includes(item.status)).length ?? 0
+  const delivered = count('sent'),
+    failed = count('failed'),
+    waiting = count('pending', 'retry', 'leased')
+  return [
+    {
+      key: 'collect',
+      icon: 'rss',
+      label: '采集',
+      tone: 'ok',
+      value: time(record.first_seen_at),
+      note: '来源发布 ' + (record.published_at === null ? '未记录' : time(record.published_at)),
+    },
+    {
+      key: 'judge',
+      icon: 'filter',
+      label: '判定',
+      tone: record.baseline ? 'none' : resultClass(record.status),
+      value: record.baseline ? '基线帖子' : postLabels[record.status],
+      note: record.baseline ? '首次采集时登记，不匹配' : judged[record.status],
+    },
+    {
+      key: 'queue',
+      icon: 'layers',
+      label: '入队',
+      tone: total ? 'yes' : 'neutral',
+      value: !sent ? '—' : total ? total + ' 个目标' : '未入队',
+      note: total
+        ? '每个目标一条投递'
+        : record.baseline
+          ? '基线帖子不发送'
+          : record.status === 'match'
+            ? '没有投递记录'
+            : '未命中，不发送',
+    },
+    {
+      key: 'send',
+      icon: 'send',
+      label: '发送',
+      tone: !total
+        ? 'neutral'
+        : !items
+          ? 'neutral'
+          : failed
+            ? 'no'
+            : waiting
+              ? 'unknown'
+              : delivered === total
+                ? 'yes'
+                : 'neutral',
+      value: !total
+        ? '—'
+        : !items
+          ? '见投递记录'
+          : failed
+            ? '失败 ' + failed
+            : waiting
+              ? '等待发送 ' + waiting
+              : delivered === total
+                ? '全部成功'
+                : '成功 ' + delivered,
+      note: items ? '成功 ' + delivered + ' / ' + total : total ? '共 ' + total + ' 条' : '',
+    },
+  ]
+})
 const time = (at: number | null) =>
   at === null ? '未记录' : formatTime(new Date(at * 1000).toISOString())
 function openPost(id: string) {
@@ -165,6 +246,7 @@ function clear() {
   dateRange.value = null
   website.value = ''
 }
+await untilShown(() => options.ready() && listing.ready() && detail.ready() && deliveries.ready())
 </script>
 <template>
   <template v-if="selectedId">
@@ -184,17 +266,33 @@ function clear() {
           <div>
             <p class="eyebrow">A SIGNAL WORTH KEEPING</p>
             <h1 tabindex="-1" class="article-heading">{{ detail.data.value.title }}</h1>
-            <p class="subtitle">
-              {{ websiteName(detail.data.value.website_id) }} ·
-              {{ detail.data.value.author || detail.data.value.author_display_name || '作者缺失' }}
-              · {{ detail.data.value.category_label || detail.data.value.category || '版块缺失' }} ·
-              首次发现
-              {{ time(detail.data.value.first_seen_at) }}
+            <p class="subtitle post-subtitle">
+              <span class="result-pill" :class="resultClass(detail.data.value.status)">{{
+                postLabels[detail.data.value.status]
+              }}</span>
+              <span>{{ websiteName(detail.data.value.website_id) }}</span>
+              <span
+                ><Icon name="user" :size="13" />{{
+                  detail.data.value.author || detail.data.value.author_display_name || '作者缺失'
+                }}</span
+              >
+              <span>{{
+                detail.data.value.category_label || detail.data.value.category || '版块缺失'
+              }}</span>
             </p>
           </div>
-          <span class="result-pill" :class="resultClass(detail.data.value.status)">{{
-            postLabels[detail.data.value.status]
-          }}</span>
+        </section>
+        <section class="panel post-flow-panel" aria-label="处理过程">
+          <ol class="post-flow">
+            <li v-for="step in flow" :key="step.key" :class="'is-' + step.tone">
+              <span class="post-flow-label"
+                ><span class="about-tile-icon"><Icon :name="step.icon" :size="15" /></span
+                >{{ step.label }}</span
+              >
+              <strong>{{ step.value }}</strong>
+              <small v-if="step.note">{{ step.note }}</small>
+            </li>
+          </ol>
         </section>
         <div class="detail-layout">
           <div class="side-stack">
@@ -209,11 +307,7 @@ function clear() {
               </p>
               <div class="info-note">
                 <Icon name="help" :size="18" />
-                <p>
-                  RSS 摘要不等同全文。来源发布时间：{{
-                    time(detail.data.value.published_at)
-                  }}。保存首次读取时的内容，原帖后续编辑不会改写此快照。可通过下方入口查看原帖。
-                </p>
+                <p>RSS 摘要不等同全文。这里保存首次读取时的内容，原帖之后的编辑不会改写它。</p>
               </div>
               <a
                 v-if="detail.data.value.original_url"
@@ -225,7 +319,7 @@ function clear() {
               >
               <p v-else class="small-note">没有可核验的原帖链接。</p>
             </section>
-            <section class="panel">
+            <section class="panel delivery-panel">
               <div class="panel-heading">
                 <h2>投递记录</h2>
                 <span v-if="deliveries.data.value" class="count-badge">{{
@@ -269,6 +363,7 @@ function clear() {
                     此帖子没有投递记录。
                   </p>
                   <Pagination
+                    v-if="deliveries.data.value.total > deliveries.data.value.page_size"
                     :page="deliveryPage"
                     :total="deliveries.data.value.total"
                     :page-size="deliveries.data.value.page_size"
@@ -446,25 +541,23 @@ function clear() {
               }
             "
           >
-            <div class="content-row-top">
-              <span class="result-pill" :class="resultClass(post.status)">{{
-                postLabels[post.status]
-              }}</span
-              ><time
-                class="muted"
-                :datetime="new Date((post.published_at ?? post.first_seen_at) * 1000).toISOString()"
-                :title="
-                  '首次发现：' +
-                  time(post.first_seen_at) +
-                  (post.published_at === null ? '；来源未提供发布时间' : '')
-                "
-                >{{ post.published_at === null ? '发现' : '发布' }}
-                {{ time(post.published_at ?? post.first_seen_at) }}</time
-              >
-            </div>
+            <span class="result-pill" :class="resultClass(post.status)">{{
+              postLabels[post.status]
+            }}</span>
             <button class="content-title" @click="openPost(post.id)">
-              {{ post.title }}<Icon name="arrow" :size="17" />
+              {{ post.title }}
             </button>
+            <time
+              class="muted"
+              :datetime="new Date((post.published_at ?? post.first_seen_at) * 1000).toISOString()"
+              :title="
+                '首次发现：' +
+                time(post.first_seen_at) +
+                (post.published_at === null ? '；来源未提供发布时间' : '')
+              "
+              >{{ post.published_at === null ? '发现' : '发布' }}
+              {{ time(post.published_at ?? post.first_seen_at) }}</time
+            >
             <p class="content-excerpt">
               {{ post.summary === null ? '来源未提供摘要' : post.summary || '摘要为空' }}
             </p>
@@ -475,10 +568,21 @@ function clear() {
                 }}</span
               ><span>{{ post.category_label || post.category || '版块缺失' }}</span>
               <span
-                v-for="hit in post.hits"
+                v-for="hit in post.hits.slice(0, 2)"
                 :key="hit.task_id + ':' + hit.version"
                 class="plain-chip"
                 >{{ hit.name }} · v{{ hit.version }}{{ hit.deleted ? ' · 已删除' : '' }}</span
+              >
+              <span
+                v-if="post.hits.length > 2"
+                class="plain-chip"
+                :title="
+                  post.hits
+                    .slice(2)
+                    .map((hit) => hit.name + ' · v' + hit.version)
+                    .join('、')
+                "
+                >+{{ post.hits.length - 2 }}</span
               >
             </div>
           </article>
@@ -503,23 +607,256 @@ function clear() {
 </template>
 
 <style scoped>
+/* Two lines per post: result · title · time, then summary · author/section/tasks. */
 .content-row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 14px;
+  row-gap: 3px;
+  padding: 13px 22px;
   cursor: pointer;
+  transition: background 0.15s;
+}
+.content-row > .result-pill {
+  grid-area: 1 / 1;
+  justify-content: center;
+}
+.content-title {
+  grid-area: 1 / 2;
+  display: block;
+  width: auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 1.6;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.content-row > time {
+  grid-area: 1 / 3;
+  justify-self: end;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.content-excerpt {
+  grid-area: 2 / 2;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  -webkit-line-clamp: 1;
+}
+.content-row-meta {
+  grid-area: 2 / 3;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 10px;
+  min-width: 0;
+  max-width: 380px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.content-row-meta > .plain-chip {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .content-row:hover,
 .content-row:focus-within {
   background: #fafbfc;
 }
-.original-post-link {
-  margin-top: 16px;
+@media (min-width: 761px) and (max-width: 1600px) {
+  /* Search has its own line here, so the filters share the next one evenly. */
+  .content-filter-toolbar > .app-select,
+  .content-filter-toolbar > .history-date-filter {
+    flex-grow: 1;
+    max-width: none;
+  }
 }
 .content-filter-note {
   margin: 0;
   padding: 12px 22px;
+  border-bottom: 1px solid var(--border);
+}
+.metric-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 16px;
+  padding: 18px 0;
+}
+.metric-strip > div {
+  min-width: 0;
+}
+.metric-strip > div:last-child {
+  border-right: 0;
+}
+.post-subtitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.post-subtitle > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.post-subtitle > span + span + span::before {
+  content: '·';
+  margin-right: 6px;
+  color: #b4bbc4;
+}
+.post-flow-panel {
+  margin-bottom: 20px;
+  padding: 16px;
+}
+.post-flow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 26px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.post-flow li {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f8f9fb;
+}
+.post-flow li + li::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -17px;
+  width: 7px;
+  height: 7px;
+  border-top: 1.5px solid #c3c9d1;
+  border-right: 1.5px solid #c3c9d1;
+  transform: translateY(-50%) rotate(45deg);
+}
+.post-flow-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #808b98;
+  font-size: 12px;
+}
+.post-flow-label .about-tile-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+}
+.post-flow strong {
+  font-size: 14px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.post-flow small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.post-flow .is-yes strong {
+  color: #2f6f4f;
+}
+.post-flow .is-no strong {
+  color: #a8324a;
+}
+.post-flow .is-unknown strong {
+  color: #8a5a0b;
+}
+.post-flow .is-neutral strong,
+.post-flow .is-none strong {
+  color: #6f7885;
+}
+.original-post-link {
+  margin-top: 16px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .content-row {
+    transition: none;
+  }
+}
+@media (max-width: 1100px) {
+  .post-flow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .post-flow li + li::before {
+    display: none;
+  }
 }
 @media (max-width: 760px) {
   .content-filter-note {
     padding: 12px 16px;
+  }
+  /* Phone: result + title (two lines at most), summary, then meta with the time. */
+  .content-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: start;
+    column-gap: 10px;
+    row-gap: 4px;
+    padding: 14px 16px;
+  }
+  .content-row > .result-pill {
+    min-width: 40px;
+    margin-top: 1px;
+  }
+  .content-title {
+    grid-area: 1 / 2 / 2 / 4;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .content-excerpt {
+    grid-area: 2 / 1 / 3 / 4;
+  }
+  .content-row-meta {
+    grid-area: 3 / 1 / 4 / 3;
+    justify-content: flex-start;
+    max-width: none;
+  }
+  .content-row > time {
+    grid-area: 3 / 3;
+    align-self: center;
+  }
+  .metric-strip {
+    padding: 14px 0;
+  }
+  .metric-strip > div {
+    padding: 0 14px;
+  }
+  /* Phone reads top to bottom: snapshot, why it matched, then where it was sent. */
+  .detail-layout > .side-stack {
+    display: contents;
+  }
+  .reading-panel {
+    order: 0;
+  }
+  .support-panel {
+    order: 1;
+  }
+  .delivery-panel {
+    order: 2;
+  }
+  .delivery-panel .compact-record {
+    flex-wrap: nowrap;
+  }
+  .delivery-panel .compact-record > div {
+    min-width: 0;
+  }
+  .delivery-panel .compact-record > .result-pill {
+    flex: none;
+    margin-left: auto;
   }
 }
 </style>

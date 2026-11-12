@@ -1,20 +1,18 @@
 """Settings preserve drafts through conflicts and maintenance never mutates business data."""
 
-import json
-
 import pytest
 from fastapi.testclient import TestClient
 from seekbell.config import Settings
 from seekbell.db.runtime import create_database_engine, migrate, schema_revision
 from seekbell.main import create_app
 from seekbell.services.backup_demo import table_data
-from seekbell.services.maintenance import backup_records, record_backup, retention_preview
+from seekbell.services.maintenance import retention_preview
 from seekbell.services.retention import HistoryRetention
 from sqlalchemy import text
 
 from tests.history_helpers import seed_history
 from tests.runtime_helpers import PassiveRuntime
-from tests.test_management import authenticate
+from tests.test_management import authenticate, save_general
 
 
 @pytest.fixture
@@ -40,13 +38,8 @@ def test_general_save_is_atomic_and_conflicts_with_both_editors(web):
     assert result.json()["display_revision"] == original["display_revision"] + 1
     assert client.put("/api/manage/preferences", json=changed).status_code == 409
     assert client.get("/api/manage/preferences").json() == result.json()
-    display = client.get("/api/manage/display").json()
-    assert (
-        client.put(
-            "/api/manage/display", json={"timezone": "UTC", "revision": display["revision"]}
-        ).status_code
-        == 200
-    )
+    # Another editor changes only the timezone.
+    assert save_general(client, timezone="UTC").status_code == 200
     stale = {key: result.json()[key] for key in changed}
     stale.update(name="Must not save")
     assert client.put("/api/manage/preferences", json=stale).status_code == 409
@@ -56,12 +49,8 @@ def test_general_save_is_atomic_and_conflicts_with_both_editors(web):
     invalid.update(timezone="Invalid/Zone", name="Must not save")
     assert client.put("/api/manage/preferences", json=invalid).status_code == 422
     assert client.get("/api/manage/preferences").json() == latest
-    assert (
-        client.put(
-            "/api/manage/workspace", json={"name": "Legacy change", "description": ""}
-        ).status_code
-        == 200
-    )
+    # Another editor changes only the name.
+    assert save_general(client, name="Other change").status_code == 200
     assert (
         client.put("/api/manage/preferences", json={**invalid, "timezone": "UTC"}).status_code
         == 409
@@ -92,8 +81,8 @@ def test_preview_matches_cleaner_and_preserves_all_ledgers(web):
     preview = retention_preview(app.state.engine, 30, at=at)
     assert table_data(settings.database_path) == before
     assert preview["counts"]["deliveries"] == 3
-    assert preview["counts"]["posts"] == 6
-    assert preview["protected_posts"] > 0
+    assert preview["posts"] == preview["counts"]["posts"] == 6
+    assert preview["records"] == sum(preview["counts"].values()) - 6
     result = HistoryRetention(app.state.engine).run_once(at=at)
     for name in preview["counts"]:
         assert preview["counts"][name] == result["counts"][name]
@@ -102,16 +91,15 @@ def test_preview_matches_cleaner_and_preserves_all_ledgers(web):
         assert after[name] == before[name]
 
 
-def test_storage_and_diagnostics_are_readonly_and_exclude_credentials(web):
+def test_retention_preview_and_overview_are_readonly(web):
     client, _, settings = web
     before = table_data(settings.database_path)
-    storage = client.get("/api/manage/storage")
-    assert storage.status_code == 200
-    assert storage.json()["database_bytes"] > 0
-    assert storage.json()["filesystem_free_bytes"] > 0
     assert client.get("/api/manage/retention/preview?days=0").status_code == 422
     assert client.get("/api/manage/retention/preview?days=1.5").status_code == 422
+    assert client.get("/api/manage/retention/preview?days=30&max_posts=0").status_code == 422
     assert client.get("/api/manage/retention/preview?days=30").status_code == 200
+    assert client.get("/api/manage/retention/preview?days=30&max_posts=100").status_code == 200
+    assert client.get("/api/manage/retention").json()["overview"]["posts"] == 0
     assert table_data(settings.database_path) == before
 
 
@@ -147,26 +135,6 @@ def test_about_reports_system_facts_without_paths_or_writes(web):
     assert client.get("/api/manage/about").status_code == 401
 
 
-def test_backup_receipts_are_bounded_and_nonsecret(web):
-    _, app, _ = web
-    for index in range(55):
-        record_backup(app.state.engine, "export", "generated", archive_bytes=index)
-    rows = backup_records(app.state.engine)
-    assert len(rows) == 50
-    assert rows[0]["archive_bytes"] == 54
-    assert rows[-1]["archive_bytes"] == 5
-    assert set(rows[0]) == {
-        "id",
-        "kind",
-        "result",
-        "at",
-        "archive_bytes",
-        "application_version",
-        "database_revision",
-    }
-    assert "password" not in json.dumps(rows)
-
-
 def test_upgrade_preserves_preferences_and_uses_expected_head(tmp_path):
     settings = Settings(data_dir=tmp_path)
     engine = create_database_engine(settings)
@@ -179,12 +147,15 @@ def test_upgrade_preserves_preferences_and_uses_expected_head(tmp_path):
             )
         )
     migrate(engine)
-    assert schema_revision(engine) == "0018_settings_maintenance"
+    assert schema_revision(engine) == "0023_alert_reminders"
     with engine.connect() as connection:
         assert connection.execute(
             text(
                 "SELECT name, description, timezone, workspace_revision FROM workspace_preferences"
             )
         ).one() == ("Existing", "Keep", "Asia/Tokyo", 1)
-        assert connection.execute(text("SELECT COUNT(*) FROM backup_records")).scalar_one() == 0
+        # Backup operation records were dropped in 0020; the library is the history.
+        assert not connection.execute(
+            text("SELECT name FROM sqlite_master WHERE name='backup_records'")
+        ).first()
     engine.dispose()

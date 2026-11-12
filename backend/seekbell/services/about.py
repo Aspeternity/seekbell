@@ -40,7 +40,7 @@ def about_view(app_state) -> dict:
             "container": in_container(),
         },
         "storage": {
-            "database_bytes": storage["database_bytes"] + storage["wal_bytes"],
+            "database_bytes": storage["database_bytes"],
             "filesystem_free_bytes": storage["filesystem_free_bytes"],
             "filesystem_total_bytes": storage["filesystem_total_bytes"],
         },

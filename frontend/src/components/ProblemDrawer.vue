@@ -73,6 +73,11 @@ const verifyPath = computed(() => {
   return ''
 })
 const verifyKind = computed(() => record.value?.verify?.kind ?? guide.value?.verify ?? null)
+const alertPhases: Record<string, string> = {
+  fault: '故障通知',
+  reminder: '仍未恢复提醒',
+  recovery: '恢复通知',
+}
 const alertLabels: Record<string, string> = {
   ...resultLabels,
   pending: '等待发送',
@@ -198,9 +203,7 @@ onBeforeUnmount(() => document.body.classList.remove('website-panel-open'))
               :key="row.phase + row.target_name + row.finished_at"
               class="problem-log"
             >
-              <span
-                >{{ row.phase === 'fault' ? '故障通知' : '恢复通知' }} · {{ row.target_name }}</span
-              >
+              <span>{{ alertPhases[row.phase] || row.phase }} · {{ row.target_name }}</span>
               <strong>{{ alertLabels[row.result] || row.result }}</strong>
               <span>{{
                 [stamp(row.finished_at), row.error_code].filter(Boolean).join(' · ')

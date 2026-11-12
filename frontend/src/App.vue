@@ -12,6 +12,7 @@ import Targets from './pages/Targets.vue'
 import Settings from './pages/Settings.vue'
 import { emptyTask } from './model'
 import { recordTabs } from './recordQueries'
+import { settingsTabs } from './settings'
 import type { Task } from './model'
 import {
   state,
@@ -29,12 +30,13 @@ function normalize(hash: string) {
   try {
     const p = decodeURIComponent(hash.replace(/^#/, '')) || '/'
     if (p === '/settings/display') return '/settings/preferences?section=timezone'
+    if (p === '/settings/overview' || p.startsWith('/settings/overview?'))
+      return '/settings/preferences?section=overview-modules'
+    if (p === '/settings/retention') return '/settings/data?section=retention'
     if (p === '/settings/diagnostics' || p === '/operations') return '/operations/status'
     if (p === '/content' || p.startsWith('/content/')) return '/operations' + p
     const record = p.match(/^\/notifications\/(deliveries|manual|tests)(\/.*)?$/)
     if (record) return '/operations/' + record[1] + (record[2] || '')
-    if (p.startsWith('/settings/preferences?') && p.includes('section=overview-modules'))
-      return '/settings/overview?section=overview-modules'
     return p === '/notifications'
       ? '/notifications/targets'
       : p === '/settings'
@@ -101,10 +103,7 @@ const validPage = computed(
     ].includes(page.value) &&
     (page.value !== 'task' || !!editing.value) &&
     (page.value !== 'target' || !!targetEditing.value) &&
-    (page.value !== 'settings' ||
-      ['preferences', 'overview', 'account', 'backup', 'about', 'retention', 'alerts'].includes(
-        parts.value[1] || '',
-      )) &&
+    (page.value !== 'settings' || settingsTabs.some((tab) => tab.value === parts.value[1])) &&
     (page.value !== 'notifications' || parts.value[1] === 'targets') &&
     (page.value !== 'operations' ||
       ['status', 'content', ...recordTabs].includes(parts.value[1] || '')),
@@ -138,10 +137,27 @@ function applyRoute(next: string, push = true) {
   saveError.value = ''
   dirty.value = false
   mobileMenu.value = false
-  if (!internalTab) {
-    window.scrollTo(0, 0)
-    nextTick(() => document.querySelector<HTMLElement>('h1')?.focus())
-  }
+  arriving = !internalTab
+  // Signing in again mounts a fresh workspace, which shows nothing until its first page.
+  if (authPage.value) shownPage.value = undefined
+  nextTick(() => switching || arrived())
+}
+// A different page component stays offscreen until its first data is ready (viewReady.ts).
+// What belongs to the page on screen (its footer, scroll position and focused heading)
+// follows only once it is shown.
+const shownPage = ref<string>()
+let arriving = false,
+  switching = false
+function pagePending() {
+  switching = true
+}
+function arrived() {
+  switching = false
+  shownPage.value = page.value
+  if (!arriving) return
+  arriving = false
+  window.scrollTo(0, 0)
+  document.querySelector<HTMLElement>('h1')?.focus()
 }
 function navigate(next: string) {
   next = normalize(next)
@@ -265,7 +281,7 @@ function focusMain() {
 function showInfo() {
   infoTitle.value = '使用说明'
   infoBody.value =
-    '先添加监控网站和通知目标，再创建监控任务。系统设置可管理工作空间、概览布局、告警、历史保留、备份和账户安全。关闭浏览器不影响后台监控。备份可在系统设置中直接恢复，新安装也能在初始化页从备份恢复；运行状态见“诊断”，版本、系统信息和帮助链接见“关于”。'
+    '先添加监控网站和通知目标，再创建监控任务。系统设置分为通用（工作空间、时区、概览布局）、告警、数据（历史保留、存储、备份与恢复）、账户和关于。关闭浏览器不影响后台监控。备份可在“数据”中直接恢复，新安装也能在初始化页从备份恢复；运行状态和问题历史见“运行中心”。'
   infoDialog.value?.showModal()
 }
 </script>
@@ -378,63 +394,65 @@ function showInfo() {
         </div>
       </header>
       <main id="main-content" tabindex="-1">
-        <Overview v-if="page === 'overview'" @navigate="navigate" />
-        <Operations
-          v-else-if="page === 'operations' && validPage"
-          :section="parts[1]!"
-          :record-id="parts[2]"
-          :initial-target="recordTarget"
-          @navigate="navigate"
-        />
-        <Targets v-else-if="page === 'notifications' && validPage" @navigate="navigate" />
-        <TaskList v-else-if="page === 'tasks'" @navigate="navigate" />
-        <section v-else-if="page === 'task' && !state.websites.length" class="panel empty-state">
-          <Icon name="globe" :size="36" />
-          <h1 tabindex="-1">先添加一个监控网站</h1>
-          <p>每个任务关联一个已添加的网站，添加后即可设置监控规则。</p>
-          <button class="button primary" @click="navigate('/websites')">前往添加网站</button>
-        </section>
-        <TaskEditor
-          v-else-if="page === 'task' && editing"
-          :key="path"
-          :task="editing"
-          :saving="saving"
-          :save-error="saveError"
-          :return-label="taskReturn === '/tasks' ? '返回任务列表' : '返回概览'"
-          @dirty="(value: boolean) => (dirty = value)"
-          @save="save"
-          @navigate="navigate"
-          @cancel="navigate(taskReturn)"
-        />
-        <Websites
-          v-else-if="page === 'websites'"
-          :open-id="parts[1]"
-          @navigate="navigate"
-          @dirty="(value: boolean) => (dirty = value)"
-        />
-        <TargetEditor
-          v-else-if="page === 'target' && targetEditing"
-          :key="path"
-          :target="targetEditing"
-          @dirty="(value: boolean) => (dirty = value)"
-          @navigate="navigate"
-        />
-        <Settings
-          v-else-if="page === 'settings' && validPage"
-          :tab="parts[1]"
-          @dirty="(value: boolean) => (dirty = value)"
-          @navigate="navigate"
-        />
-        <section v-else class="panel not-found">
-          <span class="not-found-number">404</span>
-          <h1 tabindex="-1">这条线索暂时不在这里</h1>
-          <p>页面可能不存在，或记录已被删除。</p>
-          <button class="button primary" @click="navigate('/')">
-            返回概览<Icon name="arrow" :size="16" />
-          </button>
-        </section>
+        <Suspense @pending="pagePending" @resolve="arrived">
+          <Overview v-if="page === 'overview'" @navigate="navigate" />
+          <Operations
+            v-else-if="page === 'operations' && validPage"
+            :section="parts[1]!"
+            :record-id="parts[2]"
+            :initial-target="recordTarget"
+            @navigate="navigate"
+          />
+          <Targets v-else-if="page === 'notifications' && validPage" @navigate="navigate" />
+          <TaskList v-else-if="page === 'tasks'" @navigate="navigate" />
+          <section v-else-if="page === 'task' && !state.websites.length" class="panel empty-state">
+            <Icon name="globe" :size="36" />
+            <h1 tabindex="-1">先添加一个监控网站</h1>
+            <p>每个任务关联一个已添加的网站，添加后即可设置监控规则。</p>
+            <button class="button primary" @click="navigate('/websites')">前往添加网站</button>
+          </section>
+          <TaskEditor
+            v-else-if="page === 'task' && editing"
+            :key="path"
+            :task="editing"
+            :saving="saving"
+            :save-error="saveError"
+            :return-label="taskReturn === '/tasks' ? '返回任务列表' : '返回概览'"
+            @dirty="(value: boolean) => (dirty = value)"
+            @save="save"
+            @navigate="navigate"
+            @cancel="navigate(taskReturn)"
+          />
+          <Websites
+            v-else-if="page === 'websites'"
+            :open-id="parts[1]"
+            @navigate="navigate"
+            @dirty="(value: boolean) => (dirty = value)"
+          />
+          <TargetEditor
+            v-else-if="page === 'target' && targetEditing"
+            :key="path"
+            :target="targetEditing"
+            @dirty="(value: boolean) => (dirty = value)"
+            @navigate="navigate"
+          />
+          <Settings
+            v-else-if="page === 'settings' && validPage"
+            :tab="parts[1]"
+            @dirty="(value: boolean) => (dirty = value)"
+            @navigate="navigate"
+          />
+          <section v-else class="panel not-found">
+            <span class="not-found-number">404</span>
+            <h1 tabindex="-1">这条线索暂时不在这里</h1>
+            <p>页面可能不存在，或记录已被删除。</p>
+            <button class="button primary" @click="navigate('/')">
+              返回概览<Icon name="arrow" :size="16" />
+            </button>
+          </section>
+        </Suspense>
         <footer
-          v-if="page !== 'overview' && page !== 'task' && page !== 'target'"
+          v-if="shownPage && !['overview', 'task', 'target'].includes(shownPage)"
           class="page-footer"
         >
           <span><Icon name="bell" :size="14" />SeekBell · 留意你关心的</span

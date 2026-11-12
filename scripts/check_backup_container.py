@@ -1,4 +1,4 @@
-"""Rehearse Compose and encrypted restore with disposable volumes and NO external network."""
+"""Rehearse Compose, backups and restore with disposable volumes and NO external network."""
 
 import argparse
 import json
@@ -15,85 +15,91 @@ from pathlib import Path
 from seekbell.backup import create_backup
 from seekbell.config import Settings
 try:
-    create_backup(Settings(), Path('/backup/running.sbbackup'),
-                  password='Synthetic-Container-Backup')
+    create_backup(Settings(), Path('/backup/running.tar.gz'))
 except RuntimeError:
-    assert not Path('/backup/running.sbbackup').exists()
+    assert not Path('/backup/running.tar.gz').exists()
 else:
     raise AssertionError('Running service must own its data directory')
 """
 
 RESTORE_PROBE = """
-import json, sqlite3
+import json, tarfile
 from pathlib import Path
 from seekbell.backup import create_backup, restore_backup
 from seekbell.config import Settings
+from seekbell.services.authentication import password_hash
 from seekbell.services.backup_demo import table_data
 settings = Settings()
 before = table_data(settings.database_path)
-archive, destination = Path('/backup/rehearsal.sbbackup'), Path('/restore/restored')
-password = 'Synthetic-Container-Backup'
-create_backup(settings, archive, password=password)
-restore_backup(settings, archive, destination, password=password)
+archive, destination = Path('/backup/rehearsal.tar.gz'), Path('/restore/restored')
+create_backup(settings, archive)
+with tarfile.open(archive) as tar:
+    assert tar.getnames() == ['manifest.json', 'seekbell.sqlite3', 'credentials.key']
+administrator = ('container_admin', password_hash('Synthetic-Container-2026'))
+restore_backup(settings, archive, destination, administrator=administrator)
 after = table_data(destination / 'seekbell.sqlite3')
 assert after.pop('login_sessions') == []
+assert [row[1] for row in after.pop('administrators')] == ['container_admin']
 assert table_data(settings.database_path) == before
 before.pop('login_sessions')
+before.pop('administrators')
+# The restored schedule keeps its settings (columns up to revision) but counts anew.
+schedule_before, schedule_after = before.pop('backup_schedule'), after.pop('backup_schedule')
+assert [row[:7] for row in schedule_after] == [row[:7] for row in schedule_before]
 assert before == after
 assert archive.stat().st_mode & 0o777 == 0o600
 print(json.dumps({'all_tables_preserved': True, 'source_unchanged': True,
-                  'sessions_revoked': True}))
+                  'standard_tar_gz': True, 'sessions_revoked': True}))
 """
 
 
 WEB_PROBE = r"""
-import http.cookiejar, json, urllib.request, urllib.error
+import http.cookiejar, json, urllib.request
 from pathlib import Path
-from seekbell.backup import MAGIC
 from seekbell.services.backup_demo import table_data
 jar = http.cookiejar.CookieJar()
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
-base = 'http://127.0.0.1:8000/api/'
+base = 'http://127.0.0.1:8000'
 csrf = ''
 def request(path, data=None, content_type='application/json'):
     headers = {'Content-Type': content_type, 'X-CSRF-Token': csrf}
-    return opener.open(urllib.request.Request(base + path, data=data, headers=headers), timeout=60)
+    url = base + (path if path.startswith('/') else '/api/' + path)
+    return opener.open(urllib.request.Request(url, data=data, headers=headers), timeout=60)
 csrf = json.load(request('auth/status'))['csrf']
 credentials = {'username': 'container_admin', 'password': 'Synthetic-Container-2026'}
 csrf = json.load(request('auth/login', json.dumps(credentials).encode()))['csrf']
-before = table_data(Path('/data/seekbell.sqlite3'))
-values = {'current_password': credentials['password'], 'password': 'Synthetic-Container-Web-Backup'}
-with request('manage/backups/download', json.dumps(values).encode()) as response:
+def business(path):
+    # Configuration only: the live runtime keeps writing runs and events meanwhile.
+    rows = table_data(path)
+    return {name: rows[name] for name in (
+        'websites', 'website_installations', 'notification_targets', 'tasks', 'task_versions',
+        'workspace_preferences', 'retention_policy', 'alert_settings', 'overview_preferences',
+        'administrators')}
+before = business(Path('/data/seekbell.sqlite3'))
+name = json.load(request('manage/backups', b''))['id']
+stored = Path('/data/backups') / name
+assert stored.stat().st_mode & 0o777 == 0o600
+url = json.load(request('manage/backups/' + name + '/ticket', b''))['url']
+with request(url) as response:
     assert response.headers['Cache-Control'] == 'no-store'
     archive = response.read()
-assert archive.startswith(MAGIC) and b'SQLite format' not in archive
-body = json.dumps(values).encode() + b'\n' + archive
-result = json.load(request('manage/backups/restore', body, 'application/octet-stream'))
-assert result == {'candidate_available': True, 'activated': False}
-active = table_data(Path('/data/seekbell.sqlite3'))
-# Backup operation receipts are the only intended metadata write.
-active.pop('backup_records', None)
-business_before = {name: rows for name, rows in before.items() if name != 'backup_records'}
-assert active == business_before
-restored = table_data(Path('/data/web-restore/seekbell.sqlite3'))
-assert restored.pop('login_sessions') == []
-before.pop('login_sessions')
-assert restored == before
-original_key = Path('/data/credentials.key').read_bytes()
-assert original_key == Path('/data/web-restore/credentials.key').read_bytes()
-assert Path('/data/web-restore').stat().st_mode & 0o777 == 0o700
+assert archive == stored.read_bytes() and archive[:2] == b'\x1f\x8b'
+found = json.load(request('manage/backups/' + name + '/inspect', b''))
+assert found['backup']['summary'] == found['current']
+body = json.dumps({'current_password': credentials['password'], 'pause': False}).encode()
+result = json.load(request('manage/backups/inspect/' + found['stage'] + '/restore', body))
+assert result['restored'] and result['username'] == 'container_admin'
+csrf = result['csrf']
+assert business(Path('/data/seekbell.sqlite3')) == before
+kinds = [row['kind'] for row in json.load(request('manage/backups'))['backups']]
+assert kinds == ['pre-restore', 'manual']
 assert json.load(request('auth/status'))['authenticated']
 assert json.load(request('manage/runtime'))['active']
-try:
-    request('manage/backups/restore', body, 'application/octet-stream')
-except urllib.error.HTTPError as error:
-    assert error.code == 409
-else:
-    raise AssertionError('Existing candidate must never be overwritten')
 assert not list(Path('/data').glob('.seekbell-*'))
-print(json.dumps({'encrypted_download': True, 'isolated_restore': True,
-                  'source_business_data_unchanged': True, 'runtime_running': True,
-                  'copy_sessions_revoked': True, 'overwrite_refused': True}))
+assert not list(Path('/data').glob('before-restore-*'))
+print(json.dumps({'library_backup': True, 'streamed_download': True, 'inspection': True,
+                  'in_place_restore': True, 'pre_restore_backup': True,
+                  'source_business_data_unchanged': True, 'runtime_running': True}))
 """
 
 

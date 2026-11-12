@@ -20,6 +20,9 @@ from seekbell.db.models import (
     Website,
     WebsiteInstallation,
 )
+from seekbell.services.alerts import object_active
+from seekbell.services.backup_schedule import COMPONENT as BACKUP_COMPONENT
+from seekbell.services.disk import COMPONENT as DISK_COMPONENT
 from seekbell.services.fault_guide import (
     ACTION,
     AUTO,
@@ -33,10 +36,11 @@ from seekbell.services.hotlist_settings import configuration
 from seekbell.services.overview_preferences import hotlist_catalog
 from seekbell.services.request_budget import request_state
 from seekbell.services.source_probe import next_source_attempt, probe_backoff
+from seekbell.services.stalls import PREFIX as STALL_PREFIX
+from seekbell.services.stalls import stalled
 from seekbell.sites.hotlists import HOTLIST_SOURCES
 
 VERIFYING = "verifying"
-LOOP_STALL_SECONDS = 120
 GAP_WINDOW_SECONDS = 7 * 86400
 SHORT_PROBLEM_SECONDS = 60
 PROBLEM_KINDS = ("source", "delivery", "runtime")
@@ -85,7 +89,7 @@ def _schedule_node(session, website_id, source, state, enabled, active, at):
     probed = probe_backoff(session.get(SourceProbe, source.id))
     if probed > at:
         return node("limited", "wait", "测试后退避", "解除于", probed)
-    return node("scheduled", "ok", "正常", "已启用")
+    return node("scheduled", "ok", "正常")
 
 
 def _parse_detail(run):
@@ -254,7 +258,7 @@ def _hotlist_node(period_id, memory, fetched, interval, viewing, source, at):
             return node("failed", "fail", "刷新失败，暂无数据", code)
         return node("stale", "warn", "刷新失败，旧数据仍可看", code, fetched)
     if not viewing:
-        return node("idle", "none", "未在预热", None, fetched)
+        return node("idle", "none", "无人查看，暂停刷新", None, fetched)
     if fetched is None:
         return node("no_record", "none", "尚无快照")
     if period_id in source.staggered and at >= fetched + interval:
@@ -314,32 +318,12 @@ def _services(observed, at):
             row["state"] = "failed"
         elif not actor["alive"]:
             row.update(state="stopped_with", stopped_with=SERVICES.get(failed))
-        elif _stalled(actor, observed, at):
+        elif stalled(actor, observed["started_at"], at):
             row["state"] = "stalled"
         else:
             row["state"] = "running"
         rows.append(row)
     return rows
-
-
-def _stalled(actor, observed, at):
-    last = actor["last_loop_at"] or observed["started_at"]
-    return actor["alive"] and last is not None and at - last > LOOP_STALL_SECONDS
-
-
-def _object_active(session, kind, key):
-    if kind == "source":
-        source = session.get(Source, key)
-        if source is None:
-            return False
-        website = session.get(Website, source.website_id)
-        return bool(
-            source.enabled and website.enabled and session.get(WebsiteInstallation, website.id)
-        )
-    if kind == "delivery":
-        target = session.get(NotificationTarget, key)
-        return bool(target and target.deleted_at is None and target.enabled)
-    return True
 
 
 def _source_handling(session, key, guide, at):
@@ -408,6 +392,13 @@ def _fault_event_id(session, component, generation):
     )
 
 
+def _open_fault_id(session, component):
+    state = session.get(SystemState, component)
+    if state is None or not state.fault:
+        return None
+    return _fault_event_id(session, component, state.generation)
+
+
 def _runtime_problems(session, observed, at):
     if observed["status"] == "failed":
         code = observed["code"]
@@ -439,7 +430,8 @@ def _runtime_problems(session, observed, at):
         {
             "key": "stall:" + name,
             "kind": "stall",
-            "event_id": None,
+            # Set once the stall watch has recorded it (within its check interval).
+            "event_id": _open_fault_id(session, STALL_PREFIX + name),
             "label": SERVICES.get(name, name) + "服务",
             "code": "loop_stalled",
             "stage": guide.stage,
@@ -452,17 +444,52 @@ def _runtime_problems(session, observed, at):
             "guide": guide_view(guide),
         }
         for name, actor in observed["actors"].items()
-        if _stalled(actor, observed, at)
+        if stalled(actor, observed["started_at"], at)
     ]
 
 
+# Storage faults raised outside the background actors, with how each one clears.
+STORAGE_HINTS = {
+    DISK_COMPONENT: "释放磁盘空间后自动恢复",
+    BACKUP_COMPONENT: "下次备份成功后自动恢复",
+}
+
+
+def _storage_problems(session):
+    problems = []
+    for component, hint in STORAGE_HINTS.items():
+        state = session.get(SystemState, component)
+        if state is None or not state.fault:
+            continue
+        guide = runtime_guide(state.code)
+        problems.append(
+            {
+                "key": state.component,
+                "kind": "runtime",
+                "event_id": _fault_event_id(session, state.component, state.generation),
+                "label": state.label,
+                "code": state.code,
+                "stage": guide.stage,
+                "summary": guide.summary,
+                "since": state.updated_at,
+                "status": ACTION,
+                "hint": hint,
+                "next_attempt_at": None,
+                "failures": None,
+                "guide": guide_view(guide),
+            }
+        )
+    return problems
+
+
 def _problems(session, observed, at):
-    problems = _runtime_problems(session, observed, at)
+    # Storage faults are reported even when the background has stopped: they may be the cause.
+    problems = _runtime_problems(session, observed, at) + _storage_problems(session)
     # A stopped background is the single root cause; older faults cannot retry meanwhile.
     if observed["active"]:
         for state in session.scalars(select(SystemState).where(SystemState.fault.is_(True))):
             kind, _, key = state.component.partition(":")
-            if kind not in ("source", "delivery") or not _object_active(session, kind, key):
+            if kind not in ("source", "delivery") or not object_active(session, kind, key):
                 continue
             guide = guide_for(kind, state.code)
             problems.append(
@@ -516,7 +543,7 @@ def _problem_state(session, fault, recovery, kind, key):
     state = session.get(SystemState, fault.component)
     if state is None or not state.fault or state.generation != fault.generation:
         return "recovered"
-    return "ongoing" if _object_active(session, kind, key) else "paused"
+    return "ongoing" if object_active(session, kind, key) else "paused"
 
 
 def _recovery_of(fault_alias):
@@ -714,8 +741,15 @@ def problem_detail(engine, key, crashes, *, at):
             "failures": failures,
             "guide": guide_view(guide),
             "recent": _recent(session, kind, object_key, end),
+            # Fault, any reminders and the recovery of this one problem.
             "alerts": _alert_rows(
-                session, [event for event in (fault, recovery) if event is not None]
+                session,
+                session.scalars(
+                    select(SystemEvent).where(
+                        SystemEvent.component == fault.component,
+                        SystemEvent.generation == fault.generation,
+                    )
+                ).all(),
             ),
             "verify": _verification(session, kind, object_key, guide),
             "crash": _crash_near(crashes, object_key, fault.at) if kind == "runtime" else None,

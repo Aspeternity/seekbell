@@ -245,13 +245,32 @@ test('operations center explains problems, stays calm when healthy and keeps old
   await expect(cards.nth(1)).toContainText('连续失败 5 次')
   await expect(cards.nth(2)).toContainText('等待验证')
 
+  await expect(page.getByRole('heading', { name: '3 个问题待处理' })).toBeVisible()
+  // The group tiles summarise every link and switch one detail panel, opening on a failure.
+  const groups = page.getByRole('tablist', { name: '运行链路' }).getByRole('tab')
+  await expect(groups).toHaveCount(4)
+  await expect(groups.nth(0)).toHaveAttribute('aria-selected', 'true')
+  await expect(groups.nth(0)).toContainText('1 个网站异常')
+  await expect(groups.nth(1)).toContainText('1 个目标异常')
+  await expect(groups.nth(3)).toContainText('1 个异常')
   const nodeseek = page.locator('.ops-row', { hasText: 'NodeSeek' })
-  await expect(nodeseek.locator('.ops-node.blocked')).toHaveCount(1)
-  await expect(nodeseek.locator('.ops-node.blocked')).toContainText('timeout')
-  await expect(page.locator('.ops-row', { hasText: '合成 暂停目标' })).toContainText('已暂停')
-  await expect(page.getByText('随采集停止', { exact: true })).toBeVisible()
-  await expect(page.getByText('每日：刷新失败，旧数据仍可看 · http_429')).toBeVisible()
+  await expect(nodeseek.locator('.ops-step.blocked')).toHaveCount(1)
+  await expect(nodeseek.locator('.ops-step.blocked')).toContainText('timeout')
   await page.screenshot({ path: info.outputPath('operations-status.png'), fullPage: true })
+  await groups.nth(0).focus()
+  await page.keyboard.press('ArrowRight')
+  await expect(groups.nth(1)).toBeFocused()
+  await expect(groups.nth(1)).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('.ops-row', { hasText: '合成 暂停目标' })).toContainText('已暂停')
+  await expect(page.locator('.ops-row', { hasText: 'NodeSeek' })).toHaveCount(0)
+  await groups.nth(2).click()
+  const hotlist = page.locator('.ops-row', { hasText: 'LINUX DO' })
+  await expect(hotlist.locator('.ops-state')).toHaveText('每日刷新失败，旧数据仍可看')
+  await expect(hotlist.locator('.ops-step', { hasText: '每日' })).toContainText('http_429')
+  await groups.nth(3).click()
+  await expect(page.getByText('随采集停止', { exact: true })).toBeVisible()
+  await page.screenshot({ path: info.outputPath('operations-services.png'), fullPage: true })
+  await groups.nth(0).click()
 
   await cards.nth(1).getByRole('button', { name: '查看详情' }).click()
   const drawer = page.getByRole('dialog', { name: /问题详情/ })
@@ -286,12 +305,14 @@ test('operations center explains problems, stays calm when healthy and keeps old
   // Healthy: one calm line, a warning about disabled alerts, and collapsed phone rows.
   show(clear)
   await page.getByRole('button', { name: '刷新', exact: true }).click()
-  await expect(page.getByText('当前没有需要处理的问题', { exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '有需要留意的状态' })).toBeVisible()
+  await expect(page.locator('.ops-overview')).toContainText('当前没有需要处理的问题')
   await expect(page.getByText(/系统告警未启用或没有可用目标/)).toBeVisible()
   await expect(page.locator('.ops-problem')).toHaveCount(0)
   await page.setViewportSize({ width: 390, height: 844 })
   await expect(page.locator('.ops-head').first()).toBeHidden()
-  const healthy = page.locator('.ops-row', { hasText: 'LINUX DO' })
+  await expect(groups.nth(0)).toHaveAttribute('aria-selected', 'true')
+  const healthy = page.locator('.ops-row', { hasText: 'LINUX DO' }).filter({ hasText: '调度' })
   await expect(healthy.locator('.ops-row-body')).toBeHidden()
   await healthy.locator('.ops-toggle').click()
   await expect(healthy.locator('.ops-row-body')).toBeVisible()
@@ -303,7 +324,7 @@ test('operations center explains problems, stays calm when healthy and keeps old
   // Old addresses land in the operations center, and tabs keep their place.
   const tabs = page.getByRole('navigation', { name: '运行中心分类', exact: true })
   for (const [from, to, label] of [
-    ['/content', '/operations/content', '内容与命中'],
+    ['/content', '/operations/content', '内容记录'],
     ['/notifications/manual', '/operations/manual', '通知记录'],
     ['/settings/diagnostics', '/operations/status', '运行状态'],
   ] as const) {

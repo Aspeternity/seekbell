@@ -65,7 +65,7 @@ test('about and diagnostics stay independent, retry safely and perform no config
   if (info.project.name === 'desktop') {
     await page.getByRole('button', { name: '使用说明', exact: true }).click()
     await expect(page.getByRole('dialog')).toContainText('关闭浏览器不影响后台监控')
-    await expect(page.getByRole('dialog')).toContainText('备份可在系统设置中直接恢复')
+    await expect(page.getByRole('dialog')).toContainText('备份可在“数据”中直接恢复')
     await page.getByRole('button', { name: '知道了', exact: true }).click()
   }
 
@@ -102,13 +102,12 @@ test('about and diagnostics stay independent, retry safely and perform no config
   expect(writes).toEqual([])
 
   await page.goto('/#/settings/backup')
-  await expect(page.getByRole('button', { name: '生成并下载加密备份' })).toBeVisible()
-  await page.getByRole('button', { name: '恢复备份', exact: true }).click()
   await expect(
-    page
-      .getByRole('form', { name: '从文件恢复', exact: true })
-      .getByRole('button', { name: '恢复备份', exact: true }),
-  ).toBeDisabled()
+    page.locator('.backup-heading-actions').getByRole('button', { name: '立即备份', exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.locator('#backup-list .backup-heading-actions').getByRole('button', { name: '导入' }),
+  ).toBeVisible()
   await page.goto('/#/settings/unknown')
   await expect(page.getByRole('heading', { name: '这条线索暂时不在这里' })).toBeVisible()
   await page.goto('/#/settings/about')

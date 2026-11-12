@@ -37,3 +37,7 @@ class Settings(BaseSettings):
     @property
     def database_path(self) -> Path:
         return self.data_dir.resolve() / "seekbell.sqlite3"
+
+    @property
+    def backup_dir(self) -> Path:
+        return self.data_dir.resolve() / "backups"

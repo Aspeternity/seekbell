@@ -1,199 +1,261 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { confirmAction, request, state } from '../store'
+import { computed, onBeforeUnmount, ref } from 'vue'
+import { channelMeta, confirmAction, request, state } from '../store'
+import { useSettingsForm } from '../settings'
+import Icon from '../components/Icon.vue'
 import FormFeedback from '../components/FormFeedback.vue'
 import ReadRegion from '../components/ReadRegion.vue'
+import { untilShown } from '../viewReady'
+import SettingsSaveBar from '../components/SettingsSaveBar.vue'
 import Toggle from '../components/Toggle.vue'
 interface Settings {
   enabled: boolean
   target_ids: string[]
+  delay_seconds: number
+  remind_seconds: number
   revision: number
 }
+type Draft = Pick<Settings, 'enabled' | 'target_ids' | 'delay_seconds' | 'remind_seconds'>
+interface TestResult {
+  target_id: string
+  target_name: string
+  result: string
+  error_code: string | null
+  summary: string | null
+}
+const emit = defineEmits<{ dirty: [value: boolean] }>()
+// The delay is edited in whole minutes; 0 announces a fault at once.
+const MAX_DELAY_MINUTES = 1440
+const reminders = [
+  { value: 0, label: '不再提醒' },
+  { value: 21600, label: '每 6 小时' },
+  { value: 86400, label: '每 24 小时' },
+]
+const form = useSettingsForm<Settings, Draft>({
+  name: '告警设置',
+  read: () => request<Settings>('manage/alerts'),
+  write: (draft, saved) =>
+    request<Settings>('manage/alerts', 'PUT', { ...draft, revision: saved.revision }),
+  draftOf: ({ enabled, target_ids, delay_seconds, remind_seconds }) => ({
+    enabled,
+    target_ids: [...target_ids],
+    delay_seconds,
+    remind_seconds,
+  }),
+  validate: (draft) => {
+    const minutes = draft.delay_seconds / 60
+    if (!Number.isInteger(minutes) || minutes < 0 || minutes > MAX_DELAY_MINUTES)
+      return '通知延迟应为 0–' + MAX_DELAY_MINUTES + ' 之间的整数分钟。'
+    return draft.enabled && !draft.target_ids.length ? '启用告警需至少选择一个通知目标。' : ''
+  },
+  // Turning alerts off cancels what is still waiting to be sent, which cannot be undone.
+  confirmSave: (draft, saved) =>
+    saved.enabled && !draft.enabled
+      ? {
+          body: '停止新告警，并取消尚未开始的告警发送。已在发送途中的消息无法撤回。',
+          label: '关闭告警',
+        }
+      : undefined,
+  dirty: (value) => emit('dirty', value),
+})
+const { saved, draft, busy, error, reloadable, done, dirty } = form
+const delayMinutes = computed({
+  get: () => draft.value.delay_seconds / 60,
+  // An empty or partial entry stays invalid until validation reports it.
+  set: (value: number | string) => {
+    draft.value.delay_seconds = value === '' ? NaN : Number(value) * 60
+  },
+})
+const ready = computed(() =>
+  state.targets.filter((target) => draft.value.target_ids.includes(target.id) && target.enabled),
+)
+const receivers = computed(() => ready.value.length)
+// A target that fails raises an alert of its own, which it then cannot deliver either.
+const oneChannel = computed(() => {
+  const channels = new Set(ready.value.map((target) => target.channel))
+  const others = state.targets.some((target) => target.enabled && !channels.has(target.channel))
+  return channels.size === 1 && others ? ready.value[0].type : ''
+})
+const meta = (channel: string) =>
+  channelMeta[channel as keyof typeof channelMeta] || { icon: 'send', color: 'blue' }
+const testing = ref(false),
+  testError = ref(''),
+  results = ref<TestResult[]>()
 let active = true
 onBeforeUnmount(() => {
   active = false
 })
-const emit = defineEmits<{ dirty: [value: boolean] }>()
-const settings = ref<Settings | null>(null),
-  enabled = ref(false),
-  targets = ref<string[]>([])
-const error = ref(''),
-  busy = ref(false),
-  saved = ref(false)
-const baseline = computed(() =>
-  JSON.stringify([settings.value?.enabled, settings.value?.target_ids]),
-)
-const dirty = computed(
-  () => !!settings.value && JSON.stringify([enabled.value, targets.value]) !== baseline.value,
-)
-watch(
-  dirty,
-  (value) => {
-    emit('dirty', value)
-    if (value) saved.value = false
-  },
-  { immediate: true },
-)
-const receivers = computed(
-  () =>
-    state.targets.filter(
-      (target) => targets.value.includes(target.id) && target.enabled && target.configured,
-    ).length,
-)
-function discard() {
-  if (!settings.value || busy.value) return
+const outcomes: Record<string, string> = {
+  success: '已送达',
+  cancelled: '目标已暂停，未发送',
+  unknown: '结果未知，请到接收端确认',
+  transient_error: '暂时失败',
+  permanent_error: '被拒绝',
+}
+function outcome(row: TestResult) {
+  const text = outcomes[row.result] || row.result
+  if (row.result === 'cancelled' || row.result === 'success') return text
+  const reason = row.summary || row.error_code
+  return reason ? text + '：' + reason : text
+}
+function test() {
+  if (testing.value || !receivers.value) return
+  const target_ids = [...draft.value.target_ids]
   confirmAction(
-    '放弃本页修改？',
-    '将恢复本次读取的告警设置。',
-    () => {
-      enabled.value = settings.value!.enabled
-      targets.value = [...settings.value!.target_ids]
-      error.value = ''
-    },
-    '放弃修改',
-  )
-}
-async function load() {
-  if (busy.value) return
-  busy.value = true
-  error.value = ''
-  saved.value = false
-  try {
-    const result = await request<Settings>('manage/alerts')
-    if (!active) return
-    settings.value = result
-    enabled.value = settings.value.enabled
-    targets.value = [...settings.value.target_ids]
-    state.settings.alertTargets = [...targets.value]
-    state.settings.recoveryAlerts = enabled.value
-  } catch (e) {
-    error.value = (e as Error).message
-  } finally {
-    busy.value = false
-  }
-}
-function reload() {
-  if (dirty.value)
-    confirmAction('重新读取告警设置？', '尚未保存的告警修改将丢失。', load, '放弃修改并读取')
-  else load()
-}
-function save() {
-  if (busy.value || !settings.value || !dirty.value) return
-  error.value = ''
-  if (enabled.value && !targets.value.length) {
-    error.value = '启用告警需至少选择一个通知目标。'
-    return
-  }
-  const values = {
-    enabled: enabled.value,
-    target_ids: [...targets.value],
-    revision: settings.value.revision,
-  }
-  confirmAction(
-    '保存系统告警设置？',
-    values.enabled
-      ? '后台会向所选目标发送之后的故障与恢复通知。不会补发过去事件；每个事件、每个目标只尝试一次，失败或未知请查看记录。'
-      : '停止新告警，并取消尚未开始的告警投递。在途消息可能已发出，无法撤回。',
+    '发送测试告警？',
+    '将向所选的 ' +
+      receivers.value +
+      ' 个可接收目标各真实发送一条标明为测试的消息，不写入问题历史。',
     async () => {
-      if (busy.value) return
-      busy.value = true
-      error.value = ''
-      saved.value = false
+      testing.value = true
+      testError.value = ''
+      results.value = undefined
       try {
-        const result = await request<Settings>('manage/alerts', 'PUT', values)
-        if (!active) return
-        settings.value = result
-        enabled.value = settings.value.enabled
-        targets.value = [...settings.value.target_ids]
-        state.settings.alertTargets = [...targets.value]
-        state.settings.recoveryAlerts = enabled.value
-        saved.value = true
+        const value = await request<{ items: TestResult[] }>('manage/alerts/test', 'POST', {
+          target_ids,
+        })
+        if (active) results.value = value.items
       } catch (e) {
-        error.value = (e as Error).message
+        if (active) testError.value = (e as Error).message
       } finally {
-        busy.value = false
+        testing.value = false
       }
     },
-    '确认保存告警',
+    '发送测试',
   )
 }
-onMounted(load)
+await untilShown(form.load())
 </script>
 <template>
-  <section class="panel settings-card">
-    <div class="panel-heading">
-      <div>
-        <h2>系统故障与恢复告警</h2>
-        <p>采集、通知渠道或后台服务出错及恢复时通知你</p>
-      </div>
-    </div>
-    <FormFeedback :error="error" @retry="reload" />
-    <ReadRegion
-      :loading="busy && !settings"
-      error=""
-      :has-data="!!settings"
-      :min-height="380"
-      @retry="reload"
-    >
-      <form v-if="settings" class="form-content form-stack" @submit.prevent="save">
-        <section class="settings-section" aria-labelledby="alert-switch-title">
-          <div class="settings-section-heading">
-            <h3 id="alert-switch-title">告警开关</h3>
-          </div>
-          <div class="form-stack">
-            <div class="setting-row">
-              <div><strong>故障与恢复通知</strong><small>每次状态变化只通知一次</small></div>
-              <Toggle v-model="enabled" label="启用故障与恢复告警" :disabled="busy" />
-            </div>
-          </div>
-        </section>
-        <section class="settings-section" aria-labelledby="alert-targets-title">
-          <div class="settings-section-heading">
-            <h3 id="alert-targets-title">接收目标</h3>
-          </div>
-          <div class="form-stack">
-            <fieldset class="plain-fieldset alert-target-list">
-              <legend class="field-label">告警通知目标</legend>
-              <p v-if="!state.targets.length">请先在通知目标中添加已配置目标。</p>
-              <label v-for="target in state.targets" :key="target.id" class="check-label">
-                <input v-model="targets" type="checkbox" :value="target.id" :disabled="busy" />
-                {{ target.name }} · {{ target.type
-                }}{{ target.enabled ? '' : '（已暂停，不发送）' }}
-              </label>
-            </fieldset>
-            <p class="small-note" role="status">
-              已选择 {{ targets.length }} 个目标 · 当前可接收 {{ receivers }} 个
-            </p>
-            <p v-if="enabled && !receivers" class="warning-note">
-              当前没有可接收告警的目标，已暂停的目标不会发送。
-            </p>
-            <a v-if="!state.targets.length" class="text-link" href="#/notifications/targets"
-              >管理通知目标</a
-            >
-            <details class="settings-details">
-              <summary>发送规则与 Webhook 格式</summary>
-              <p class="small-note">
-                每个事件、每个目标只尝试一次；结果未知可能已经送达，不自动重发；暂停目标恢复后不补发积压告警。Webhook
-                系统告警使用 schema_version 2、type 为 system_alert，请选择可接收此格式的目标。
-              </p>
-            </details>
-            <a class="text-link" href="#/operations/status">查看告警记录</a>
-          </div>
-        </section>
-        <div class="inline-form-footer settings-savebar">
-          <span role="status">{{
-            saved ? '系统告警设置已保存' : dirty ? '有未保存的修改' : '没有未保存的修改'
-          }}</span>
-          <div class="inline-actions">
-            <button class="button" type="button" :disabled="busy || !dirty" @click="discard">
-              放弃修改
-            </button>
-            <button class="button primary" :disabled="busy || !dirty">
-              {{ busy ? '保存中…' : '保存告警设置' }}
-            </button>
-          </div>
+  <div class="settings-stack">
+    <section class="panel settings-card" aria-labelledby="alert-settings-title">
+      <div class="panel-heading alert-settings-heading">
+        <div>
+          <h2 id="alert-settings-title">系统告警</h2>
+          <p>采集、通知渠道、后台服务、磁盘空间或自动备份出问题及恢复时通知你</p>
         </div>
-      </form>
-    </ReadRegion>
-  </section>
+        <Toggle v-if="saved" v-model="draft.enabled" label="启用故障与恢复告警" :disabled="busy" />
+      </div>
+      <FormFeedback :error="error" :retryable="reloadable" @retry="form.reload" />
+      <ReadRegion :loading="busy && !saved" error="" :has-data="!!saved" :min-height="380">
+        <form v-if="saved" class="form-content form-stack" @submit.prevent="form.save">
+          <section class="settings-section" aria-labelledby="alert-receive-title">
+            <div class="settings-section-heading">
+              <h3 id="alert-receive-title">接收目标</h3>
+            </div>
+            <div class="form-stack">
+              <p v-if="!state.targets.length" class="alert-no-targets">
+                还没有通知目标。<a class="text-link" href="#/notifications/targets">去添加</a>
+              </p>
+              <fieldset v-else class="plain-fieldset" :disabled="busy">
+                <legend class="sr-only">接收目标</legend>
+                <div class="alert-targets">
+                  <label
+                    v-for="target in state.targets"
+                    :key="target.id"
+                    class="alert-target"
+                    :class="{
+                      selected: draft.target_ids.includes(target.id),
+                      paused: !target.enabled,
+                    }"
+                  >
+                    <span class="target-icon" :class="meta(target.channel).color"
+                      ><Icon :name="meta(target.channel).icon" :size="15"
+                    /></span>
+                    <span class="alert-target-text">
+                      <strong>{{ target.name }}</strong>
+                      <small
+                        >{{ target.type
+                        }}<span v-if="!target.enabled" class="alert-target-paused"
+                          >已暂停，不发送</span
+                        ></small
+                      >
+                    </span>
+                    <input v-model="draft.target_ids" type="checkbox" :value="target.id" />
+                  </label>
+                </div>
+              </fieldset>
+              <div v-if="state.targets.length" class="alert-target-foot">
+                <p class="small-note" role="status">
+                  已选择 {{ draft.target_ids.length }} 个 · 可接收 {{ receivers }} 个
+                </p>
+                <button
+                  class="button"
+                  type="button"
+                  title="按当前勾选发送，无需先保存"
+                  :disabled="busy || testing || !receivers"
+                  @click="test"
+                >
+                  <Icon name="send" :size="14" />{{ testing ? '正在发送…' : '发送测试告警' }}
+                </button>
+              </div>
+              <p v-if="draft.enabled && draft.target_ids.length && !receivers" class="warning-note">
+                所选目标都已暂停，告警不会发出。
+              </p>
+              <p v-else-if="oneChannel" class="warning-note alert-channel-hint">
+                所选目标都走
+                {{ oneChannel }}，这个渠道本身出故障时告警也发不出去，建议再选一个其他渠道的目标。
+              </p>
+              <p v-if="testError" class="warning-note" role="alert">{{ testError }}</p>
+              <ul v-if="results" class="alert-test-results" aria-label="测试结果">
+                <li v-for="row in results" :key="row.target_id" :class="row.result">
+                  <Icon :name="row.result === 'success' ? 'check' : 'alert'" :size="14" />
+                  <strong>{{ row.target_name }}</strong>
+                  <span>{{ outcome(row) }}</span>
+                </li>
+              </ul>
+            </div>
+          </section>
+          <section class="settings-section" aria-labelledby="alert-rules-title">
+            <div class="settings-section-heading">
+              <h3 id="alert-rules-title">通知规则</h3>
+            </div>
+            <div class="form-stack">
+              <div class="alert-rule-fields">
+                <div class="alert-rule">
+                  <label class="field-label" for="alert-delay">故障持续多久后通知</label>
+                  <div class="unit-input alert-delay">
+                    <input
+                      id="alert-delay"
+                      v-model.number="delayMinutes"
+                      type="number"
+                      class="text-input"
+                      min="0"
+                      :max="MAX_DELAY_MINUTES"
+                      step="1"
+                      required
+                      :disabled="busy"
+                    /><span>分钟</span>
+                  </div>
+                  <p class="small-note">填 0 立即通知；这段时间内自行恢复的故障不通知。</p>
+                </div>
+                <fieldset class="plain-fieldset alert-rule" :disabled="busy">
+                  <legend class="field-label">故障一直未恢复时</legend>
+                  <div class="alert-choices">
+                    <label
+                      v-for="item in reminders"
+                      :key="item.value"
+                      :class="{ active: draft.remind_seconds === item.value }"
+                    >
+                      <input v-model="draft.remind_seconds" type="radio" :value="item.value" />
+                      {{ item.label }}
+                    </label>
+                  </div>
+                  <p class="small-note">提醒和恢复通知只发给收到过这次故障通知的目标。</p>
+                </fieldset>
+              </div>
+            </div>
+          </section>
+          <SettingsSaveBar
+            :dirty="dirty"
+            :busy="busy"
+            :done="done"
+            label="保存告警设置"
+            done-text="系统告警设置已保存"
+            @discard="form.discard"
+          />
+        </form>
+      </ReadRegion>
+    </section>
+  </div>
 </template>

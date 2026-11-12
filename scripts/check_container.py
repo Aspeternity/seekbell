@@ -114,9 +114,12 @@ assert request("manage/history/options")["websites"][0]["id"] == "nodeseek"
 # Packaged management operations remain local and preserve current configuration.
 policy = request("manage/retention")
 if policy["days"] != 45:
-    policy = request("manage/retention", {"days": 45, "revision": policy["revision"]}, method="PUT")
+    policy = request(
+        "manage/retention",
+        {"days": 45, "max_posts": None, "revision": policy["revision"]},
+        method="PUT",
+    )
 assert policy["days"] == 45
-assert request("manage/workspace")["settings"]["retention"] == 45
 display = request("manage/display")
 if display["timezone"] != "America/Los_Angeles":
     display = request(

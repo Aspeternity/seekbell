@@ -1,4 +1,4 @@
-"""Rehearse real encrypted backups across two installed cryptography versions offline."""
+"""Rehearse real backups and sealed credentials across two cryptography versions offline."""
 
 import argparse
 import json
@@ -19,24 +19,19 @@ def stage(mode: str, root: Path, destination: Path | None) -> dict:
     from seekbell.backup import create_backup, restore_backup, validate_credentials
     from seekbell.config import Settings
     from seekbell.db.runtime import create_database_engine
-    from seekbell.services.authentication import login, session_info
-    from seekbell.services.backup_demo import (
-        ADMIN_PASSWORD,
-        PASSWORD,
-        prepare,
-        table_data,
-    )
+    from seekbell.services.authentication import login, password_hash, session_info
+    from seekbell.services.backup_demo import ADMIN_PASSWORD, prepare, table_data
 
     socket.socket.connect = no_network
     socket.socket.connect_ex = no_network
     socket.create_connection = no_network
     settings = Settings(data_dir=root / "source", build_revision="synthetic-crypto-compatibility")
-    archive = root / "synthetic.sbbackup"
+    archive = root / "synthetic.tar.gz"
     if mode == "create":
         root.mkdir(mode=0o700)
         token, _ = prepare(settings)
         before = table_data(settings.database_path)
-        create_backup(settings, archive, password=PASSWORD)
+        create_backup(settings, archive)
         assert table_data(settings.database_path) == before
         identity = root / "synthetic-session.json"
         identity.write_text(json.dumps({"token": token}))
@@ -50,12 +45,14 @@ def stage(mode: str, root: Path, destination: Path | None) -> dict:
         settings,
         archive,
         destination,
-        password=PASSWORD,
+        administrator=("backup_admin", password_hash(ADMIN_PASSWORD)),
     )
     assert table_data(settings.database_path) == before
     after = table_data(destination / "seekbell.sqlite3")
     assert after.pop("login_sessions") == []
+    assert [row[1] for row in after.pop("administrators")] == ["backup_admin"]
     before.pop("login_sessions")
+    before.pop("administrators")
     assert before == after
     assert (destination / "credentials.key").read_bytes() == source_key
     validate_credentials(destination)

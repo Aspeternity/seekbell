@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue'
+import { shownAfterHold } from '../viewReady'
 const props = withDefaults(
   defineProps<{
     loading: boolean
@@ -14,12 +15,16 @@ const props = withDefaults(
 const emit = defineEmits<{ retry: [] }>()
 const visible = ref(false)
 let timer: ReturnType<typeof setTimeout> | undefined
+// A page that appeared only after waiting out its hold shows its first indicator at once.
+let held = shownAfterHold()
 watch(
   () => props.loading,
   (loading) => {
     clearTimeout(timer)
-    visible.value = loading && !props.delay
-    if (loading && props.delay) timer = setTimeout(() => (visible.value = true), props.delay)
+    const delay = held ? 0 : props.delay
+    held = false
+    visible.value = loading && !delay
+    if (loading && delay) timer = setTimeout(() => (visible.value = true), delay)
   },
   { immediate: true },
 )

@@ -56,8 +56,17 @@ def test_static_assets_and_unknown_api(tmp_path):
     (settings.static_dir / "index.html").write_text("<h1>SeekBell</h1>")
     (settings.static_dir / "app.js").write_text("console.log('asset')")
     with TestClient(create_app(settings)) as client:
-        assert "SeekBell" in client.get("/").text
-        assert client.get("/app.js").status_code == 200
+        page = client.get("/")
+        assert "SeekBell" in page.text
+        # The page is revalidated on every load; hashed assets keep normal caching.
+        assert page.headers["cache-control"] == "no-cache"
+        assert client.get("/index.html").headers["cache-control"] == "no-cache"
+        unchanged = client.get("/", headers={"If-None-Match": page.headers["etag"]})
+        assert unchanged.status_code == 304
+        assert unchanged.headers["cache-control"] == "no-cache"
+        asset = client.get("/app.js")
+        assert asset.status_code == 200
+        assert "cache-control" not in asset.headers
         assert client.get("/api/nonexistent").status_code == 404
         assert client.get("/missing.js").status_code == 404
         assert client.get("/seekbell.sqlite3").status_code == 404

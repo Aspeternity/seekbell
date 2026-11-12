@@ -83,7 +83,7 @@ def main():
                 migration = directory / "0010_release_fixture.py"
                 migration.write_text(
                     "from alembic import op\nrevision='0010_release_fixture'\n"
-                    "down_revision='0018_settings_maintenance'\n"
+                    "down_revision='0023_alert_reminders'\n"
                     'def upgrade():\n    op.execute("UPDATE workspace_preferences '
                     "SET name='Synthetic migration'\")\n"
                     + ("    raise RuntimeError('Synthetic migration failure')\n" if fails else "")
@@ -160,13 +160,6 @@ def main():
             assert not release.current(project)["running"] and fingerprint() == before
             run_tool(startup, "rollback", "--accept-data-loss")
             docker("stop", release.current(project)["container"])
-            # The existing Web candidate is copied out of the original volume before activation.
-            restored = directory / "restored.json"
-            before = fingerprint()
-            run_tool(restored, "prepare", "--project", project, "--image", args.image, "--restored")
-            assert run_tool(restored, "activate")["phase"] == "active"
-            assert fingerprint() == before
-            assert run_tool(restored, "rollback", "--accept-data-loss")["phase"] == "rolled_back"
             print(
                 json.dumps(
                     {
@@ -177,7 +170,6 @@ def main():
                         "synthetic_future_migration_switch": True,
                         "explicit_rollback_to_original_pair": True,
                         "startup_failure_stopped_without_automatic_rollback": True,
-                        "web_candidate_switch": True,
                         "original_volume_retained": True,
                     },
                     indent=2,

@@ -14,6 +14,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -310,6 +311,7 @@ class LoginSession(Base):
     token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     csrf: Mapped[str] = mapped_column(String(80))
     expires_at: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[float | None] = mapped_column(Float)
 
 
 class WebsiteInstallation(Base):
@@ -383,13 +385,42 @@ class RetentionPolicy(Base):
     __table_args__ = (
         CheckConstraint("id = 1", name="ck_retention_singleton"),
         CheckConstraint("days BETWEEN 1 AND 365", name="ck_retention_days"),
+        CheckConstraint(
+            "max_posts IS NULL OR max_posts BETWEEN 1 AND 1000000", name="ck_retention_max_posts"
+        ),
     )
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     days: Mapped[int] = mapped_column(Integer, default=30)
+    # Unmatched content kept at most; matched content follows the days only. None: no limit.
+    max_posts: Mapped[int | None] = mapped_column(Integer)
     revision: Mapped[int] = mapped_column(Integer, default=1)
     next_run_at: Mapped[float] = mapped_column(Float, default=0)
-    last_run_at: Mapped[float | None] = mapped_column(Float)
-    last_counts: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class BackupSchedule(Base):
+    """Automatic backups; run state is reset whenever a backup is restored."""
+
+    __tablename__ = "backup_schedule"
+    __table_args__ = (
+        CheckConstraint("id = 1", name="ck_backup_schedule_singleton"),
+        CheckConstraint("frequency IN ('daily','weekly')", name="ck_backup_frequency"),
+        CheckConstraint("weekday BETWEEN 0 AND 6", name="ck_backup_weekday"),
+        CheckConstraint("minute BETWEEN 0 AND 1439", name="ck_backup_minute"),
+        CheckConstraint("keep BETWEEN 1 AND 60", name="ck_backup_keep"),
+    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    frequency: Mapped[str] = mapped_column(String(8), default="daily")
+    # Monday is 0; only used weekly. Minutes after local midnight in the display timezone.
+    weekday: Mapped[int] = mapped_column(Integer, default=0)
+    minute: Mapped[int] = mapped_column(Integer, default=180)
+    keep: Mapped[int] = mapped_column(Integer, default=7)
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    # When the schedule last started counting: the first run is the next slot after it.
+    since: Mapped[float] = mapped_column(Float)
+    next_run_at: Mapped[float | None] = mapped_column(Float)
+    last_attempt_at: Mapped[float | None] = mapped_column(Float)
+    last_error: Mapped[str | None] = mapped_column(String(200))
 
 
 class AlertSettings(Base):
@@ -399,6 +430,8 @@ class AlertSettings(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     target_ids: Mapped[list] = mapped_column(JSON, default=list)
     revision: Mapped[int] = mapped_column(Integer, default=1)
+    delay_seconds: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    remind_seconds: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
 class SystemState(Base):
@@ -416,8 +449,16 @@ class SystemState(Base):
 class SystemEvent(Base):
     __tablename__ = "system_events"
     __table_args__ = (
-        UniqueConstraint("component", "generation", "phase", name="uq_system_transition"),
-        CheckConstraint("phase IN ('fault','recovery')", name="ck_system_phase"),
+        # One fault and one recovery per generation; reminders repeat while the fault lasts.
+        Index(
+            "uq_system_transition",
+            "component",
+            "generation",
+            "phase",
+            unique=True,
+            sqlite_where=text("phase != 'reminder'"),
+        ),
+        CheckConstraint("phase IN ('fault','recovery','reminder')", name="ck_system_phase"),
         Index("ix_system_events_at", "at", "id"),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -481,14 +522,3 @@ class HotlistSnapshot(Base):
     fetched_at: Mapped[float] = mapped_column(Float)
     source_updated_at: Mapped[float | None] = mapped_column(Float)
     items: Mapped[list] = mapped_column(JSON)
-
-
-class BackupRecord(Base):
-    __tablename__ = "backup_records"
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    kind: Mapped[str] = mapped_column(String(16))
-    result: Mapped[str] = mapped_column(String(16))
-    at: Mapped[float] = mapped_column(Float, index=True)
-    archive_bytes: Mapped[int | None] = mapped_column(Integer)
-    application_version: Mapped[str] = mapped_column(String(80))
-    database_revision: Mapped[str] = mapped_column(String(80))

@@ -20,9 +20,6 @@ const empty = (): WorkspaceState => ({
     workspaceName: '个人工作空间',
     workspaceDescription: 'Administrator',
     timezone: 'Asia/Shanghai',
-    retention: 30,
-    alertTargets: [],
-    recoveryAlerts: false,
     overviewModules: defaultOverviewModules(),
   },
 })
@@ -90,7 +87,11 @@ export async function sendRequest(
       Object.assign(state, empty())
       window.dispatchEvent(new Event('seekbell-session-expired'))
     }
-    throw new Error(typeof data.detail === 'string' ? data.detail : '操作失败，请检查配置后重试。')
+    // The status lets a form tell a version conflict from an ordinary failure.
+    throw Object.assign(
+      new Error(typeof data.detail === 'string' ? data.detail : '操作失败，请检查配置后重试。'),
+      { status: response.status },
+    )
   }
   const readOnlyTrial =
     path === 'manage/rules/evaluate' ||
@@ -117,7 +118,12 @@ export async function initialize() {
   applyAuth(await request('auth/status'))
   if (signedIn.value) await refresh()
 }
-export async function authenticate(setup: boolean, username: string, password: string) {
+export async function authenticate(
+  setup: boolean,
+  username: string,
+  password: string,
+  remember = false,
+) {
   applyAuth(await request('auth/status'))
   if (signedIn.value) {
     await refresh()
@@ -126,28 +132,47 @@ export async function authenticate(setup: boolean, username: string, password: s
   const info = await request(setup ? 'auth/setup' : 'auth/login', 'POST', {
     username,
     password,
-    ...(setup ? { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' } : {}),
+    ...(setup
+      ? { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' }
+      : { remember }),
   })
   applyAuth(info)
   await refresh()
 }
-// Restoring replaces the whole workspace, so every old session and cached read is gone afterwards.
-export async function restoreBackup(
-  path: 'manage/backups/apply' | 'auth/setup/restore',
-  metadata: Record<string, unknown>,
-  file: File,
-) {
-  const body = new Blob([JSON.stringify(metadata) + String.fromCharCode(10), file], {
-    type: 'application/octet-stream',
+/** Upload a backup for inspection; XHR because fetch cannot report upload progress. */
+export function uploadBackup<T>(path: string, file: File, progress: (share: number) => void) {
+  return new Promise<T>((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', '/api/' + path)
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream')
+    xhr.setRequestHeader('X-CSRF-Token', csrf)
+    xhr.responseType = 'json'
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) progress(event.loaded / event.total)
+    }
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) return resolve(xhr.response as T)
+      const detail = (xhr.response as { detail?: unknown } | null)?.detail
+      reject(
+        Object.assign(new Error(typeof detail === 'string' ? detail : '上传失败，请稍后重试。'), {
+          status: xhr.status,
+        }),
+      )
+    }
+    xhr.onerror = () => reject(new Error('上传中断，请检查网络后重试。'))
+    xhr.send(file)
   })
-  const result = await sendRequest(path, 'POST', body).then((response) => response.json())
+}
+// Restoring replaces the whole workspace, so every old session and cached read is gone afterwards.
+export async function restoreBackup(path: string, body: Record<string, unknown>) {
+  const result = await request(path, 'POST', body)
   clearReadCache()
   clearNotificationCounts()
   Object.assign(state, empty())
   // The response carries a fresh session for the administrator kept or chosen by the restore.
   applyAuth(result)
   await refresh()
-  return result as { restored: boolean; paused: boolean; previous: string }
+  return result as { restored: boolean; paused: boolean }
 }
 export async function saveAdministrator(
   username: string,
@@ -378,13 +403,6 @@ function matchResult(data: any) {
       ...(data.warnings?.includes('all_new_posts') ? ['未设置筛选条件，匹配全部帖子。'] : []),
     ] as string[],
   }
-}
-export async function savePreferences(settings: WorkspaceState['settings']) {
-  await request('manage/workspace', 'PUT', {
-    name: settings.workspaceName,
-    description: settings.workspaceDescription,
-  })
-  await refresh()
 }
 export async function evaluateTask(task: Task, sample: Sample) {
   const { websiteId, ...fields } = sample

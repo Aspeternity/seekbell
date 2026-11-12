@@ -1,3 +1,5 @@
+import logging
+import shutil
 import sqlite3
 from contextlib import contextmanager
 from importlib.resources import files
@@ -8,8 +10,12 @@ from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from sqlalchemy import URL, Engine, create_engine, event, text
+from sqlalchemy.exc import DBAPIError
 
 from seekbell.config import Settings
+
+logger = logging.getLogger(__name__)
+INCREMENTAL = 2
 
 
 def migration_config() -> Config:
@@ -51,6 +57,35 @@ def migrate(engine: Engine, revision: str = "head") -> None:
         except BaseException:
             connection.rollback()
             raise
+
+
+def enable_space_reclaim(engine: Engine) -> bool:
+    """Switch once to incremental auto-vacuum so cleanups can shrink the file.
+
+    The switch rewrites the database (VACUUM) and so needs about its size again in free
+    space; without it, or on any failure, the next start simply tries again.
+    """
+    path = Path(engine.url.database)
+    with engine.connect() as connection:
+        if connection.exec_driver_sql("PRAGMA auto_vacuum").scalar() == INCREMENTAL:
+            return True
+    size = sum(
+        candidate.stat().st_size
+        for candidate in (path, path.with_name(path.name + "-wal"))
+        if candidate.exists()
+    )
+    if shutil.disk_usage(path.parent).free < 2 * size:
+        logger.warning("SeekBell postponed database space reclaim: not enough free space")
+        return False
+    try:
+        with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
+            connection.exec_driver_sql("PRAGMA auto_vacuum=INCREMENTAL")
+            connection.exec_driver_sql("VACUUM")
+            return connection.exec_driver_sql("PRAGMA auto_vacuum").scalar() == INCREMENTAL
+    except (DBAPIError, OSError):
+        # Typically a full disk or a lock; the database itself is left as it was.
+        logger.warning("SeekBell postponed database space reclaim: the rewrite failed")
+        return False
 
 
 def schema_revision(engine: Engine) -> str | None:

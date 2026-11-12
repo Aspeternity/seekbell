@@ -227,10 +227,10 @@ def run(image_id, mounts, *command, root=False):
 def source_path(state):
     relative = str(PurePosixPath(state["previous"]["data_dir"]).relative_to("/data"))
     source = "/source" + ("/" + relative if relative != "." else "")
-    return source + ("/web-restore" if state["restored"] else "")
+    return source
 
 
-def prepare(path, project, target, *, restored=False):
+def prepare(path, project, target):
     if path.exists():
         raise ReleaseError("状态文件已存在，请使用新的状态路径。")
     previous = current(project)
@@ -250,7 +250,6 @@ def prepare(path, project, target, *, restored=False):
         "phase": "preparing",
         "previous": previous,
         "next": {**previous, "volume": volume, "image": target, "data_dir": "/data/release"},
-        "restored": restored,
     }
     save(path, state, new=True)
     try:
@@ -406,7 +405,6 @@ def main():
     create = actions.add_parser("prepare")
     create.add_argument("--project", required=True)
     create.add_argument("--image", required=True)
-    create.add_argument("--restored", action="store_true", help="复制旧卷中的web-restore候选")
     actions.add_parser("status")
     actions.add_parser("activate")
     revert = actions.add_parser("rollback")
@@ -425,7 +423,7 @@ def main():
                 if state["project"] != project:
                     raise ReleaseError("维护项目状态发生变化。")
             if args.action == "prepare":
-                state = prepare(path, project, args.image, restored=args.restored)
+                state = prepare(path, project, args.image)
             elif args.action in ("activate", "rollback"):
                 state = switch(
                     path,

@@ -57,11 +57,10 @@ test('production pages preserve the approved UI while using real persisted data'
   await page.goto('/#/settings/preferences')
   await expect(page.locator('.settings-categories button')).toHaveText([
     '通用',
-    '概览',
-    '系统告警',
-    '历史与存储',
-    '备份与恢复',
-    '账户与安全',
+    '告警',
+    '数据',
+    '备份',
+    '账户',
     '关于',
   ])
   await expect(page.getByLabel('显示时区', { exact: true })).toBeEnabled()
@@ -103,15 +102,13 @@ test('production pages preserve the approved UI while using real persisted data'
   await expect(system).toContainText('LINUX DO')
   await page.screenshot({ path: info.outputPath('approved-about.png'), fullPage: true })
   await page.goto('/#/settings/backup')
-  await expect(page.getByRole('form', { name: '导出备份', exact: true })).toBeVisible()
-  await page.getByRole('button', { name: '恢复备份', exact: true }).first().click()
-  await expect(page.getByRole('form', { name: '从文件恢复', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '备份状态', exact: true })).toBeVisible()
   await expect(
-    page
-      .getByRole('form', { name: '从文件恢复', exact: true })
-      .getByLabel('备份口令', { exact: true }),
-  ).toBeVisible()
-  await expect(page.getByRole('heading', { name: '备份与恢复记录', exact: true })).toBeVisible()
+    page.locator('.backup-heading-actions').getByRole('button', { name: '立即备份', exact: true }),
+  ).toBeEnabled()
+  await expect(
+    page.locator('#backup-list .backup-heading-actions').getByRole('button', { name: '导入' }),
+  ).toBeEnabled()
   await page.screenshot({ path: info.outputPath('approved-backup.png'), fullPage: true })
   for (const path of [
     '/',
@@ -120,11 +117,10 @@ test('production pages preserve the approved UI while using real persisted data'
     '/notifications/targets',
     '/operations/deliveries',
     '/settings/preferences',
-    '/settings/overview',
     '/settings/alerts',
-    '/settings/retention',
-    '/settings/account',
+    '/settings/data',
     '/settings/backup',
+    '/settings/account',
     '/operations/status',
     '/settings/about',
   ]) {

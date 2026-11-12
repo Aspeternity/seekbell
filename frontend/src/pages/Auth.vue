@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import Icon from '../components/Icon.vue'
 import { account, authenticate, notify } from '../store'
-import BackupRestoreForm from '../components/BackupRestoreForm.vue'
+import BackupRestoreWizard from '../components/BackupRestoreWizard.vue'
 const props = defineProps<{
   setup: boolean
 }>()
@@ -13,6 +13,7 @@ const username = ref(props.setup ? '' : account.username),
   password = ref(''),
   confirmation = ref(''),
   visible = ref(false),
+  remember = ref(false),
   error = ref(''),
   busy = ref(false),
   restoring = ref(false)
@@ -43,7 +44,7 @@ async function submit() {
   }
   busy.value = true
   try {
-    await authenticate(props.setup, username.value, password.value)
+    await authenticate(props.setup, username.value, password.value, remember.value)
     password.value = ''
     confirmation.value = ''
     emit('navigate', '/')
@@ -90,8 +91,8 @@ async function submit() {
             前往登录<Icon name="arrow" :size="17" /></button></template
         ><template v-else-if="setup && restoring"
           ><h1 tabindex="-1">从备份恢复</h1>
-          <p class="auth-subtitle">上传之前下载的加密备份，恢复任务、网站、通知目标和历史。</p>
-          <BackupRestoreForm setup @done="restored" />
+          <p class="auth-subtitle">上传之前下载的备份，恢复任务、网站、通知目标和历史。</p>
+          <BackupRestoreWizard setup @done="restored" />
           <button class="text-link auth-mode-link" type="button" @click="restoring = false">
             改为创建新管理员
           </button></template
@@ -127,6 +128,7 @@ async function submit() {
                 /><button
                   class="icon-button"
                   type="button"
+                  tabindex="-1"
                   :aria-label="visible ? '隐藏密码' : '显示密码'"
                   @click="visible = !visible"
                 >
@@ -144,6 +146,10 @@ async function submit() {
             <p v-if="setup" class="small-note">
               至少 8 个字符。无需初始化令牌，仅允许创建一位管理员。
             </p>
+            <label v-else class="check-label auth-remember"
+              ><input v-model="remember" type="checkbox" />保持登录 30 天
+              <span class="optional">仅在自己的设备上勾选</span></label
+            >
             <button class="button primary auth-submit" type="submit" :disabled="busy">
               {{ busy ? '正在处理…' : setup ? '创建管理员并进入' : '登录工作空间'
               }}<Icon name="arrow" :size="17" />

@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 const placeholderVisible = ref(false)
 let placeholderTimer: ReturnType<typeof setTimeout> | undefined
 import Feedback from './Feedback.vue'
+import { shownAfterHold } from '../viewReady'
 const props = withDefaults(
   defineProps<{
     loading: boolean
@@ -15,12 +16,16 @@ const props = withDefaults(
   }>(),
   { stale: false, minHeight: 220, showFeedback: true },
 )
+// A page that appeared only after waiting out its hold shows its first placeholder at once.
+let held = shownAfterHold()
 watch(
   () => !props.hasData && props.loading,
   (waiting) => {
     clearTimeout(placeholderTimer)
-    placeholderVisible.value = false
-    if (waiting) placeholderTimer = setTimeout(() => (placeholderVisible.value = true), 200)
+    placeholderVisible.value = waiting && held
+    if (waiting && !held)
+      placeholderTimer = setTimeout(() => (placeholderVisible.value = true), 200)
+    held = false
   },
   { immediate: true },
 )

@@ -27,9 +27,6 @@ export interface WorkspaceState {
     workspaceName: string
     workspaceDescription: string
     timezone: string
-    retention: number
-    alertTargets: string[]
-    recoveryAlerts: boolean
     overviewModules: OverviewModule[]
   }
 }

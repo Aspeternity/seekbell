@@ -1,21 +1,22 @@
-"""Authenticated Web snapshots and isolated restore candidates; never switch live data."""
+"""The backup library, imports, ticketed downloads and inspect-then-restore of live data."""
 
 import asyncio
-import fcntl
+import hashlib
 import hmac
-import json
 import os
+import secrets
 import shutil
 import sqlite3
 import tempfile
 import time
-from contextlib import asynccontextmanager, suppress
-from datetime import UTC, datetime
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from starlette.requests import ClientDisconnect
@@ -24,6 +25,7 @@ from seekbell import backup
 from seekbell.api.auth import COOKIE, preauth, rate_limit, require_admin, session_response
 from seekbell.db.models import Administrator
 from seekbell.db.transactions import database_call, write_session
+from seekbell.services import backup_schedule, backups
 from seekbell.services.authentication import (
     initialized,
     new_session,
@@ -31,29 +33,24 @@ from seekbell.services.authentication import (
     session_info,
     verify_password,
 )
-from seekbell.services.maintenance import backup_records, record_backup
 
 router = APIRouter(prefix="/api/manage/backups", dependencies=[Depends(require_admin)])
 # A fresh installation may restore a backup instead of creating its first administrator.
 setup_router = APIRouter(prefix="/api/auth/setup", dependencies=[Depends(preauth)])
-MAX_METADATA = 8192
-MAX_ARCHIVE = backup.HEADER_SIZE + backup.MAX_PAYLOAD + 16
-CANDIDATE = "web-restore"
 DATA_FILES = ("seekbell.sqlite3", "seekbell.sqlite3-wal", "seekbell.sqlite3-shm", "credentials.key")
 QUIESCE_SECONDS = 15
+UPLOAD_SECONDS = 300
+STAGE_SECONDS = 30 * 60
+TICKET_SECONDS = 60
 
 
-class DiscardValues(BaseModel):
+class Confirm(BaseModel):
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
     # Omitted while the session's last password entry is recent (CONFIRM_SECONDS).
     current_password: str | None = Field(default=None, min_length=1, max_length=128, repr=False)
 
 
-class CreateValues(DiscardValues):
-    password: str = Field(min_length=12, max_length=1024, repr=False)
-
-
-class ApplyValues(CreateValues):
+class RestoreValues(Confirm):
     pause: bool = True
 
 
@@ -61,14 +58,50 @@ class SetupRestoreValues(BaseModel):
     """A fresh installation restores under a newly chosen administrator."""
 
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
-    password: str = Field(min_length=12, max_length=1024, repr=False)
+    stage: str = Field(min_length=1, max_length=64)
     username: str = Field(pattern=r"^[A-Za-z0-9_-]{3,32}$")
     admin_password: str = Field(min_length=8, max_length=128, repr=False)
     pause: bool = True
 
 
-def candidate(request):
-    return request.app.state.settings.data_dir.resolve() / CANDIDATE
+@dataclass
+class Stage:
+    """An inspected archive waiting for confirmation: a library entry, or a first-run upload."""
+
+    archive: Path
+    expires: float
+    setup: bool
+    temporary: tempfile.TemporaryDirectory | None = None
+
+    def discard(self):
+        if self.temporary is not None:
+            self.temporary.cleanup()
+
+
+def stages(app):
+    """Expired stages are dropped whenever stages are touched."""
+    table = app.state.backup_stages
+    now = time.monotonic()
+    for key in [key for key, stage in table.items() if stage.expires < now]:
+        table.pop(key).discard()
+    return table
+
+
+def put_stage(app, stage):
+    # One administrator, one restore in preparation: a new inspection replaces older ones.
+    table = stages(app)
+    for key in list(table):
+        table.pop(key).discard()
+    key = secrets.token_urlsafe(24)
+    table[key] = stage
+    return key
+
+
+def take_stage(app, key, *, setup):
+    stage = stages(app).get(key)
+    if stage is None or stage.setup != setup:
+        raise HTTPException(404, "检查结果已过期，请重新选择备份。")
+    return stage
 
 
 def reauthenticate(request, password=None):
@@ -80,9 +113,8 @@ def reauthenticate(request, password=None):
             info["csrf"].encode(), request.headers.get("x-csrf-token", "").encode()
         ):
             raise HTTPException(401, "会话已过期，请重新登录。")
-        if request.app.state.confirmations.remaining(token, info["expires_at"]) <= 0:
+        if request.app.state.confirmations.remaining(token, info["started_at"]) <= 0:
             raise HTTPException(403, "请输入当前管理员密码。")
-        request.state.backup_authenticated = True
         return
     with Session(engine) as session:
         admin = session.get(Administrator, 1)
@@ -103,7 +135,6 @@ def reauthenticate(request, password=None):
         ):
             raise HTTPException(401, "会话已过期，请重新登录。")
     request.app.state.confirmations.mark(token)
-    request.state.backup_authenticated = True
 
 
 def current_administrator(engine):
@@ -112,213 +143,234 @@ def current_administrator(engine):
         return admin.username, admin.password_hash
 
 
-def record_failure(request):
-    if getattr(request.state, "backup_authenticated", False):
-        # Keep the fixed original failure response if receipt storage also fails.
-        with suppress(SQLAlchemyError):
-            kind = {"restore": "restore", "apply": "restore", "candidate": "discard"}
-            record_backup(
-                request.app.state.engine,
-                kind.get(request.url.path.rsplit("/", 1)[-1], "export"),
-                "failed",
-            )
-
-
 @asynccontextmanager
 async def operation(request):
     gate = request.app.state.backup_gate
     if gate.locked():
         raise HTTPException(409, "已有备份或恢复操作，请等待完成后重试。")
     await gate.acquire()
-    lease = {"transferred": False}
     try:
-        yield lease
+        yield
     except ClientDisconnect:
         raise HTTPException(400, "备份上传已中断，请重新选择文件重试。") from None
     except backup.BackupError as error:
-        await database_call(record_failure, request)
         raise HTTPException(422, str(error)) from None
     except (OSError, RuntimeError, ValueError, KeyError, sqlite3.Error, SQLAlchemyError):
-        await database_call(record_failure, request)
         raise HTTPException(
             422, "操作失败，请检查备份、版本、磁盘空间和权限。原数据未被覆盖。"
         ) from None
     finally:
-        if not lease["transferred"]:
-            gate.release()
+        gate.release()
 
 
-class Download(FileResponse):
-    def __init__(self, path, temporary, gate):
-        super().__init__(
-            path,
-            media_type="application/octet-stream",
-            filename="seekbell-" + datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + ".sbbackup",
-            headers={"Cache-Control": "no-store"},
-        )
-        self.temporary, self.gate = temporary, gate
-
-    async def __call__(self, scope, receive, send):
-        try:
-            await super().__call__(scope, receive, send)
-        finally:
-            try:
-                self.temporary.cleanup()
-            finally:
-                self.gate.release()
-
-
-@router.get("")
-def status(request: Request):
-    token = request.cookies.get(COOKIE, "")
-    info = session_info(request.app.state.engine, token)
+def library_status(settings, engine):
+    rows = backups.entries(settings)
+    disk = shutil.disk_usage(backups.directory(settings))
     return {
-        # Seconds the current password may still be omitted; 0 means it must be entered.
-        "confirm_seconds": int(
-            request.app.state.confirmations.remaining(token, info["expires_at"]) if info else 0
-        ),
-        "candidate_available": os.path.lexists(candidate(request)),
-        "max_archive_bytes": MAX_ARCHIVE,
-        "records": backup_records(request.app.state.engine),
+        "directory": str(settings.backup_dir),
+        "free_bytes": disk.free,
+        "total_bytes": disk.total,
+        "health": backup_schedule.health(engine, rows),
+        "schedule": backup_schedule.get_schedule(engine),
+        "backups": rows,
     }
 
 
-@router.post("/download", dependencies=[Depends(rate_limit)])
-async def download(values: CreateValues, request: Request):
-    temporary = None
-    async with operation(request) as lease:
-        await database_call(reauthenticate, request, values.current_password)
-        try:
-            temporary = tempfile.TemporaryDirectory(
-                prefix=".seekbell-web-", dir=request.app.state.settings.data_dir.resolve()
-            )
-            path = Path(temporary.name) / "download.sbbackup"
-            manifest = await database_call(
-                backup.snapshot_backup, request.app.state.settings, path, password=values.password
-            )
-            await database_call(
-                record_backup,
-                request.app.state.engine,
-                "export",
-                "generated",
-                archive_bytes=path.stat().st_size,
-                manifest=manifest,
-            )
-            # Keep the single-operation slot until the response has finished or disconnected.
-            response = Download(path, temporary, request.app.state.backup_gate)
-            lease["transferred"] = True
-        except BaseException:
-            if temporary is not None:
-                temporary.cleanup()
-            raise
-    return response
+@router.get("")
+async def status(request: Request):
+    token = request.cookies.get(COOKIE, "")
+    info = await database_call(session_info, request.app.state.engine, token)
+    return {
+        # Seconds the current password may still be omitted; 0 means it must be entered.
+        "confirm_seconds": int(
+            request.app.state.confirmations.remaining(token, info["started_at"]) if info else 0
+        ),
+        "max_upload_bytes": backup.MAX_ARCHIVE,
+        **await database_call(library_status, request.app.state.settings, request.app.state.engine),
+    }
 
 
-async def read_upload(request, archive, model=None, check=None):
-    """One bounded UTF-8 JSON line, then raw encrypted archive bytes (no multipart)."""
-    model = model or CreateValues
+class ScheduleValues(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool
+    frequency: Literal["daily", "weekly"]
+    weekday: int = Field(ge=0, le=6)
+    minute: int = Field(ge=0, le=1439)
+    keep: int = Field(ge=1, le=60)
+    revision: int = Field(ge=1)
+
+
+@router.get("/schedule")
+async def schedule(request: Request):
+    return await database_call(backup_schedule.get_schedule, request.app.state.engine)
+
+
+@router.put("/schedule")
+async def save_schedule(values: ScheduleValues, request: Request):
+    try:
+        return await database_call(
+            backup_schedule.update_schedule,
+            request.app.state.engine,
+            values.model_dump(exclude={"revision"}),
+            values.revision,
+        )
+    except backup_schedule.ScheduleConflict as error:
+        raise HTTPException(409, str(error)) from None
+
+
+class NameValues(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    # Bounded here; the library trims it and enforces MAX_LABEL characters.
+    name: str = Field(default="", max_length=200)
+
+
+@router.post("", dependencies=[Depends(rate_limit)])
+async def create(request: Request, values: NameValues | None = None):
+    """Back up now into the library; nothing leaves the server until it is downloaded."""
+    async with operation(request):
+        name, _ = await database_call(
+            backups.create, request.app.state.settings, "manual", label=values and values.name
+        )
+    return {"id": name}
+
+
+def existing(request, name):
+    path = backups.path_for(request.app.state.settings, name)
+    if path is None:
+        raise HTTPException(404, "这份备份不存在或已删除。")
+    return path
+
+
+@router.delete("/{name}", dependencies=[Depends(rate_limit)])
+async def remove(name: str, request: Request):
+    # Signed-in session plus CSRF is enough: the user chose no password for delete (2026-11-10).
+    async with operation(request):
+        existing(request, name)
+        await database_call(backups.remove, request.app.state.settings, name)
+    return {"deleted": name}
+
+
+@router.patch("/{name}")
+async def rename(name: str, values: NameValues, request: Request):
+    async with operation(request):
+        existing(request, name)
+        label = await database_call(
+            backups.set_label, request.app.state.settings, name, values.name
+        )
+    return {"id": name, "name": label}
+
+
+def session_key(request):
+    return hashlib.sha256(request.cookies.get(COOKIE, "").encode()).hexdigest()
+
+
+@router.post("/{name}/ticket", dependencies=[Depends(rate_limit)])
+async def ticket(name: str, request: Request):
+    """A one-time, short-lived permission for this session to stream one archive."""
+    existing(request, name)
+    tickets = request.app.state.backup_tickets
+    now = time.monotonic()
+    for key in [key for key, value in tickets.items() if value[2] < now]:
+        tickets.pop(key)
+    key = secrets.token_urlsafe(24)
+    tickets[key] = (session_key(request), name, now + TICKET_SECONDS)
+    return {"url": "/api/manage/backups/" + name + "/file?ticket=" + key}
+
+
+@router.get("/{name}/file")
+async def file(name: str, ticket: str, request: Request):
+    entry = request.app.state.backup_tickets.pop(ticket, None)
+    if (
+        entry is None
+        or entry[2] < time.monotonic()
+        or entry[1] != name
+        or not hmac.compare_digest(entry[0], session_key(request))
+    ):
+        raise HTTPException(403, "下载链接已失效，请重新点击下载。")
+    # Streamed from disk: the browser saves it directly and shows its own progress.
+    return FileResponse(
+        existing(request, name),
+        media_type="application/gzip",
+        filename=name,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+async def receive_upload(request, archive):
+    """The raw archive as the request body; the size is counted, not trusted."""
     if request.headers.get("content-type", "").split(";")[0] != "application/octet-stream":
-        raise HTTPException(415, "请上传 SeekBell 加密备份。")
+        raise HTTPException(415, "请上传 SeekBell 备份文件。")
     length = request.headers.get("content-length")
-    if length and (not length.isdecimal() or int(length) > MAX_ARCHIVE + MAX_METADATA + 1):
+    if length and (not length.isdecimal() or int(length) > backup.MAX_ARCHIVE):
         raise HTTPException(413, "备份超过支持上限。")
-    metadata, values, size = bytearray(), None, 0
-    with backup.private_file(archive) as output:
-        async for chunk in request.stream():
-            if values is None:
-                prefix, separator, remainder = chunk.partition(b"\n")
-                metadata.extend(prefix)
-                if len(metadata) > MAX_METADATA:
-                    raise HTTPException(413, "备份验证信息过长。")
-                if not separator:
-                    continue
-                try:
-                    values = model.model_validate(json.loads(metadata))
-                except (ValueError, ValidationError):
-                    raise HTTPException(422, "备份验证字段无效。") from None
-                if check:
-                    await check(values)
-                else:
-                    await database_call(reauthenticate, request, values.current_password)
-                chunk = remainder
-            size += len(chunk)
-            if size > MAX_ARCHIVE:
-                raise HTTPException(413, "备份超过支持上限。")
-            if chunk:
-                await database_call(output.write, chunk)
-    if values is None or not size:
+    size = 0
+    try:
+        async with asyncio.timeout(UPLOAD_SECONDS):
+            with backup.private_file(archive) as output:
+                async for chunk in request.stream():
+                    size += len(chunk)
+                    if size > backup.MAX_ARCHIVE:
+                        raise HTTPException(413, "备份超过支持上限。")
+                    if chunk:
+                        await database_call(output.write, chunk)
+    except TimeoutError:
+        raise HTTPException(408, "上传超时，请重新选择文件重试。") from None
+    if not size:
         raise HTTPException(422, "备份上传不完整。")
-    return values
 
 
-@router.post("/restore", dependencies=[Depends(rate_limit)])
-async def restore(request: Request):
+def live_summary(settings):
+    return backup.summary(settings.database_path)
+
+
+async def inspection(request, stage, key):
+    settings = request.app.state.settings
+    found = await database_call(backup.inspect_backup, stage.archive, settings.data_dir.resolve())
+    return {
+        "stage": key,
+        "backup": {
+            name: found[name]
+            for name in ("kind", "created_at", "application_version", "summary", "upgrade")
+        },
+        "current": None if stage.setup else await database_call(live_summary, settings),
+    }
+
+
+@router.post("/import", dependencies=[Depends(rate_limit)])
+async def import_file(request: Request):
+    """Keep an uploaded archive in the library after checking it; it is restored from its row."""
+    settings = request.app.state.settings
+    length = request.headers.get("content-length", "")
     async with operation(request):
-        if os.path.lexists(candidate(request)):
-            raise HTTPException(409, "已有独立恢复副本，请先按维护说明处理；不能覆盖。")
-        with tempfile.TemporaryDirectory(
-            prefix=".seekbell-web-", dir=request.app.state.settings.data_dir.resolve()
-        ) as temp:
-            archive = Path(temp) / "upload.sbbackup"
-            try:
-                async with asyncio.timeout(300):
-                    values = await read_upload(request, archive)
-            except TimeoutError:
-                raise HTTPException(408, "上传超时，请重新选择文件重试。") from None
-            manifest = await database_call(
-                backup.restore_backup,
-                request.app.state.settings,
-                archive,
-                candidate(request),
-                password=values.password,
-                administrator=await database_call(current_administrator, request.app.state.engine),
-            )
-            await database_call(
-                record_backup,
-                request.app.state.engine,
-                "restore",
-                "verified",
-                archive_bytes=archive.stat().st_size,
-                manifest=manifest,
-            )
-        return {"candidate_available": True, "activated": False}
+        if length.isdecimal():
+            await database_call(backups.ensure_room, settings, int(length))
+        with await database_call(backups.staging, settings) as temporary:
+            archive = Path(temporary) / "upload.tar.gz"
+            await receive_upload(request, archive)
+            name, added = await database_call(backups.import_archive, settings, archive)
+    return {"id": name, "duplicate": not added}
 
 
-def remove_candidate(path):
-    """Delete only the fixed candidate: never follow a link, refuse one an instance holds."""
-    if path.is_symlink() or not path.is_dir():
-        path.unlink()
-        return
-    lock = path / ".instance.lock"
-    if lock.is_file() and not lock.is_symlink():
-        with lock.open("rb") as handle:
-            try:
-                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
-                raise backup.BackupError("恢复副本正在被其他实例使用，不能删除。") from None
-            fcntl.flock(handle, fcntl.LOCK_UN)
-    # Move aside first so a failed removal never leaves a half-deleted candidate in place.
-    discarded = Path(tempfile.mkdtemp(prefix=".seekbell-discard-", dir=path.parent)) / "copy"
-    os.rename(path, discarded)
-    shutil.rmtree(discarded.parent)
-
-
-@router.delete("/candidate", dependencies=[Depends(rate_limit)])
-async def discard(values: DiscardValues, request: Request):
+@router.post("/{name}/inspect")
+async def inspect_entry(name: str, request: Request):
     async with operation(request):
-        await database_call(reauthenticate, request, values.current_password)
-        path = candidate(request)
-        if not os.path.lexists(path):
-            raise HTTPException(404, "没有可删除的恢复副本。")
-        await database_call(remove_candidate, path)
-        await database_call(record_backup, request.app.state.engine, "discard", "deleted")
-    return {"candidate_available": False}
+        stage = Stage(existing(request, name), time.monotonic() + STAGE_SECONDS, False)
+        result = await inspection(request, stage, "")
+        result["stage"] = put_stage(request.app, stage)
+        return result
+
+
+@router.delete("/inspect/{key}")
+async def cancel(key: str, request: Request):
+    stage = stages(request.app).pop(key, None)
+    if stage is not None:
+        stage.discard()
+    return {"cancelled": stage is not None}
 
 
 def swap_in(data_dir, restored):
-    """Keep the replaced workspace beside the data, then move the verified copy in."""
-    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    previous = Path(tempfile.mkdtemp(prefix="before-restore-" + stamp + "-", dir=data_dir))
+    """Move the live files aside, then move the verified copy in."""
+    previous = Path(tempfile.mkdtemp(prefix=".seekbell-previous-", dir=data_dir))
     moved, placed = [], []
     try:
         for name in DATA_FILES:
@@ -372,22 +424,26 @@ def sign_in(engine):
         return new_session(session, at=time.time())
 
 
-async def apply_restore(request, response, values, archive, administrator):
-    """Replace the live workspace, keeping `administrator` and signing the caller in."""
+async def apply_restore(request, response, key, stage, values, administrator):
+    """Replace the live workspace, keeping `administrator` and signing the caller in.
+
+    Outside first-run setup the current data is first saved as a pre-restore backup,
+    so the restore can be undone from the library."""
     app = request.app
     settings = app.state.settings
     data_dir = settings.data_dir.resolve()
     with tempfile.TemporaryDirectory(prefix=".seekbell-web-", dir=data_dir) as temp:
         staged = Path(temp) / "restored"
-        manifest = await database_call(
+        await database_call(
             backup.restore_backup,
             settings,
-            archive,
+            stage.archive,
             staged,
-            password=values.password,
             administrator=administrator,
             pause=values.pause,
         )
+        if not stage.setup:
+            await database_call(backups.create, settings, "pre-restore")
         await quiesce(app)
         try:
             await app.state.close_workspace(app)
@@ -404,37 +460,24 @@ async def apply_restore(request, response, values, archive, administrator):
                 raise backup.BackupError("恢复的数据无法启动，已回到原数据。") from None
         finally:
             app.state.restoring = False
-    await database_call(
-        record_backup,
-        app.state.engine,
-        "restore",
-        "restored",
-        archive_bytes=archive.stat().st_size,
-        manifest=manifest,
-    )
+    await database_call(shutil.rmtree, previous, True)
+    stages(app).pop(key, None)
+    stage.discard()
     tokens = await database_call(sign_in, app.state.engine)
     return {
         "restored": True,
         "paused": values.pause,
-        "previous": previous.name,
         **session_response(request, response, administrator[0], tokens),
     }
 
 
-@router.post("/apply", dependencies=[Depends(rate_limit)])
-async def apply(request: Request, response: Response):
+@router.post("/inspect/{key}/restore", dependencies=[Depends(rate_limit)])
+async def restore(key: str, values: RestoreValues, request: Request, response: Response):
     async with operation(request):
-        with tempfile.TemporaryDirectory(
-            prefix=".seekbell-web-", dir=request.app.state.settings.data_dir.resolve()
-        ) as temp:
-            archive = Path(temp) / "upload.sbbackup"
-            try:
-                async with asyncio.timeout(300):
-                    values = await read_upload(request, archive, ApplyValues)
-            except TimeoutError:
-                raise HTTPException(408, "上传超时，请重新选择文件重试。") from None
-            administrator = await database_call(current_administrator, request.app.state.engine)
-            return await apply_restore(request, response, values, archive, administrator)
+        stage = take_stage(request.app, key, setup=False)
+        await database_call(reauthenticate, request, values.current_password)
+        administrator = await database_call(current_administrator, request.app.state.engine)
+        return await apply_restore(request, response, key, stage, values, administrator)
 
 
 async def require_uninitialized(request):
@@ -442,25 +485,33 @@ async def require_uninitialized(request):
         raise HTTPException(409, "管理员已创建，请登录后在系统设置中恢复。")
 
 
-@setup_router.post("/restore")
-async def setup_restore(request: Request, response: Response):
+@setup_router.post("/inspect", dependencies=[Depends(rate_limit)])
+async def setup_inspect(request: Request):
+    """A fresh installation checks an uploaded archive; nothing changes until confirmed."""
     await require_uninitialized(request)
     async with operation(request):
-        with tempfile.TemporaryDirectory(
-            prefix=".seekbell-web-", dir=request.app.state.settings.data_dir.resolve()
-        ) as temp:
-            archive = Path(temp) / "upload.sbbackup"
+        temporary = tempfile.TemporaryDirectory(
+            prefix=".seekbell-stage-", dir=request.app.state.settings.data_dir.resolve()
+        )
+        try:
+            archive = Path(temporary.name) / "upload.tar.gz"
+            await receive_upload(request, archive)
+            stage = Stage(archive, time.monotonic() + STAGE_SECONDS, True, temporary)
+            result = await inspection(request, stage, "")
+        except BaseException:
+            temporary.cleanup()
+            raise
+        result["stage"] = put_stage(request.app, stage)
+        return result
 
-            async def check(values):
-                await require_uninitialized(request)
 
-            try:
-                async with asyncio.timeout(300):
-                    values = await read_upload(request, archive, SetupRestoreValues, check)
-            except TimeoutError:
-                raise HTTPException(408, "上传超时，请重新选择文件重试。") from None
-            await require_uninitialized(request)
-            # Hash outside the event loop like setup; never stored in plain text.
-            encoded = await database_call(password_hash, values.admin_password)
-            administrator = (values.username, encoded)
-            return await apply_restore(request, response, values, archive, administrator)
+@setup_router.post("/restore", dependencies=[Depends(rate_limit)])
+async def setup_restore(values: SetupRestoreValues, request: Request, response: Response):
+    await require_uninitialized(request)
+    async with operation(request):
+        stage = take_stage(request.app, values.stage, setup=True)
+        await require_uninitialized(request)
+        # Hash outside the event loop like setup; never stored in plain text.
+        encoded = await database_call(password_hash, values.admin_password)
+        administrator = (values.username, encoded)
+        return await apply_restore(request, response, values.stage, stage, values, administrator)

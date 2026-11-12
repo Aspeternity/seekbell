@@ -16,7 +16,7 @@ activate重新检查Docker daemon与Compose配置、原实例是否被启动/替
 
 ## 实际命令
 
-在已确认的SeekBell-Dev正式目录操作。下面seekbell-test仅为示例项目名，必须替换成实际项目；**不能拿旧不兼容卷或当前验收实例做演练**。先核对目标固定提交镜像已构建/加载（不自动拉取）、源/目标磁盘余量、现有项目和加密备份。维护需要原卷体积之外约4倍数据库暂存空间（DB与WAL分别上限2GiB），另预留新候选及后续增长；升级副本含明文数据库/原钥，须存可信本机盘。普通加密备份仍按BACKUP_RESTORE保留并另存口令。
+在已确认的SeekBell-Dev正式目录操作。下面seekbell-test仅为示例项目名，必须替换成实际项目；**不能拿旧不兼容卷或当前验收实例做演练**。先核对目标固定提交镜像已构建/加载（不自动拉取）、源/目标磁盘余量、现有项目和备份。维护需要原卷体积之外约4倍数据库暂存空间（DB与WAL分别上限2GiB），另预留新候选及后续增长；升级副本含明文数据库/原钥，须存可信本机盘。普通备份仍按BACKUP_RESTORE保留，另存一份到服务器以外。
 
 ~~~bash
 python3 scripts/manage_release.py --help
@@ -32,13 +32,6 @@ python3 scripts/manage_release.py --state "$SEEKBELL_RELEASE_STATE" status
 # 这一步将启用新实例的原启停配置/队列；有真实目标会实际发送。
 python3 scripts/manage_release.py --state "$SEEKBELL_RELEASE_STATE" activate
 python3 scripts/manage_release.py --state "$SEEKBELL_RELEASE_STATE" status
-~~~
-
-若是启用网页已上传验证的web-restore副本，使用**新状态路径**，prepare加--restored。先停当前原服务；工具会将固定web-restore复制到另一个新卷，再迁移/验证/切换，不直接在原卷子目录中启动。副本中的旧会话已撤销，切换后使用备份当时管理员登录。用于回退的原卷保留的是切换前工作空间。
-
-~~~bash
-python3 scripts/manage_release.py --state "$SEEKBELL_RELEASE_STATE" prepare \
-  --project seekbell-test --image "$SEEKBELL_IMAGE" --restored
 ~~~
 
 需要回退时，先查看status，再明确接受丢弃新数据：

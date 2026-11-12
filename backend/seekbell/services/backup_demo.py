@@ -10,7 +10,7 @@ from tempfile import TemporaryDirectory
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from seekbell.backup import create_backup, restore_backup
+from seekbell.backup import create_backup, restore_backup, unpack
 from seekbell.collectors.rss import parse_rss
 from seekbell.config import Settings
 from seekbell.db.models import (
@@ -29,14 +29,13 @@ from seekbell.domain.delivery import SendResult
 from seekbell.domain.rules import Rule
 from seekbell.notifiers.credentials import CredentialVault
 from seekbell.services.alerts import observe, update_settings
-from seekbell.services.authentication import initialize, login, session_info
+from seekbell.services.authentication import initialize, login, password_hash, session_info
 from seekbell.services.configuration import Configuration
 from seekbell.services.delivery import DeliveryWorker
 from seekbell.services.demo import SyntheticStream
 from seekbell.services.ingestion import Ingestion
 from seekbell.sites.nodeseek import NodeSeekAdapter
 
-PASSWORD = "Synthetic-Backup-Password"
 ADMIN_PASSWORD = "Synthetic-Administrator-2026"
 
 
@@ -83,7 +82,7 @@ def prepare(settings):
     claim = worker.claim(at=20)
     worker.finish(claim, SendResult(status="success"), at=21)
     ingestion.ingest("nodeseek-rss", batch(9001, 9002, 9003), at=30)
-    update_settings(engine, True, [target], 1)
+    update_settings(engine, True, [target], 1, delay_seconds=0)
     with write_session(engine) as session:
         observe(
             session,
@@ -102,18 +101,28 @@ def exercise(root):
     settings = Settings(data_dir=root / "source", build_revision="synthetic-backup-demo")
     token, target = prepare(settings)
     before = table_data(settings.database_path)
-    archive, restored = root / "rehearsal.sbbackup", root / "restored"
-    create_backup(settings, archive, password=PASSWORD)
+    archive, restored = root / "rehearsal.tar.gz", root / "restored"
+    create_backup(settings, archive)
+    # The archive itself carries no administrator or session.
+    (root / "unpacked").mkdir(mode=0o700)
+    unpack(archive, root / "unpacked")
+    packed = table_data(root / "unpacked" / "seekbell.sqlite3")
+    assert packed["administrators"] == [] and packed["login_sessions"] == []
     restore_backup(
         settings,
         archive,
         restored,
-        password=PASSWORD,
+        administrator=("backup_admin", password_hash(ADMIN_PASSWORD)),
     )
     assert table_data(settings.database_path) == before
     after = table_data(restored / "seekbell.sqlite3")
     assert after.pop("login_sessions") == []
+    assert [row[1] for row in after.pop("administrators")] == ["backup_admin"]
     before.pop("login_sessions")
+    before.pop("administrators")
+    # The restored schedule keeps its settings (columns up to revision) but counts anew.
+    schedule_before, schedule_after = before.pop("backup_schedule"), after.pop("backup_schedule")
+    assert [row[:7] for row in schedule_after] == [row[:7] for row in schedule_before]
     assert after == before
     engine = create_database_engine(Settings(data_dir=restored))
     try:
