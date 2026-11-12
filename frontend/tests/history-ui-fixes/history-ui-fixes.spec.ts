@@ -99,6 +99,9 @@ test('content filters preserve geometry, task notes are inset and post details a
   await page.screenshot({ path: info.outputPath('content-task-note.png'), fullPage: true })
   await selectChoice(page.getByLabel('关联任务', { exact: true }), '')
   await expect(page.locator('.content-row')).toHaveCount(20)
+  // The cached list shows at once and refreshes behind it; let that refresh finish so its
+  // own indicator cannot appear once the clock is paused below.
+  await expect(page.locator('.metric-strip')).not.toHaveAttribute('aria-busy', 'true')
   const detail = gate()
   let detailStarted = false
   await page.route(/\/api\/manage\/history\/posts\/[^/?]+$/, async (route) => {

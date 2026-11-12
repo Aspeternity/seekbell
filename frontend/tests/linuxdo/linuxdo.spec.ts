@@ -188,6 +188,9 @@ test('real multi-site hotlist capabilities selections times and original links p
           .website_id,
     )
     .toBe('linuxdo')
+  // The server can report the saved choice before this page has its response; reloading
+  // then would cut that response off, so let the page's own writes finish first.
+  await expect.poll(() => writes.get(page)!.size).toBe(0)
   await page.reload()
   await expect(page.locator('.hotlist-row').first()).toContainText('LinuxDOdaily')
   await page.screenshot({ path: info.outputPath('linuxdo-hotlist.png'), fullPage: true })
