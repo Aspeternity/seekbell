@@ -545,3 +545,95 @@ def test_a_backlog_is_worked_off_without_waiting_a_tick_per_batch(tmp_path):
 
     assert asyncio.run(drain())
     engine.dispose()
+
+
+def limited_workspace(tmp_path, posts):
+    engine = create_database_engine(Settings(data_dir=tmp_path))
+    migrate(engine)
+    initialize_admin(engine)
+    now = time.time()
+    with write_session(engine) as session:
+        for i in range(posts):
+            key = str(92000 + i)
+            session.add(SeenPost(website_id="nodeseek", external_post_id=key, first_seen_at=now))
+            session.flush()
+            session.add(
+                Post(
+                    website_id="nodeseek",
+                    external_post_id=key,
+                    first_seen_at=now + i,
+                    title="合成内容",
+                    url="https://www.nodeseek.com/post-" + key + "-1",
+                )
+            )
+        policy = session.get(RetentionPolicy, 1)
+        # Between full runs: only new content brings the limit forward.
+        policy.max_posts, policy.next_run_at = 2, now + 3600
+    return engine
+
+
+def initialize_admin(engine):
+    from seekbell.services.authentication import initialize
+
+    initialize(engine, "admin", "synthetic-password-1")
+
+
+def post_keys(engine):
+    with Session(engine) as session:
+        return list(session.scalars(select(Post.external_post_id).order_by(Post.first_seen_at)))
+
+
+def test_the_limit_alone_is_trimmed_and_an_unexceeded_limit_stays_read_only(tmp_path):
+    engine = limited_workspace(tmp_path, 5)
+    cleaner = HistoryRetention(engine, batch_size=2)
+    # The full run is not due, so only the limit pass applies; oldest go first.
+    assert cleaner.run_once()["status"] == "backoff"
+    first = cleaner.trim_once()
+    assert first["counts"]["posts"] == 2 and first["more"]
+    second = cleaner.trim_once()
+    assert second["counts"]["posts"] == 1 and not second["more"]
+    assert post_keys(engine) == ["92003", "92004"]
+    statements = []
+
+    def record(connection, cursor, statement, *args):
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        assert cleaner.trim_once() == {"status": "within_limit"}
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
+    # Within the limit no write lock is taken.
+    assert statements and not any("BEGIN IMMEDIATE" in sql for sql in statements)
+    engine.dispose()
+
+
+def test_new_content_brings_the_limit_forward_within_a_tick(tmp_path):
+    import asyncio
+
+    engine = limited_workspace(tmp_path, 5)
+
+    async def exercise():
+        stop = asyncio.Event()
+        cleaner = HistoryRetention(engine, batch_size=1, tick=0.05)
+        task = asyncio.create_task(cleaner.run(stop))
+        try:
+            # Without new content nothing happens before the hourly run.
+            await asyncio.sleep(0.3)
+            assert len(post_keys(engine)) == 5
+            cleaner.content_added()
+            for _ in range(100):
+                if len(post_keys(engine)) == 2:
+                    break
+                await asyncio.sleep(0.02)
+            assert post_keys(engine) == ["92003", "92004"]
+            assert not cleaner.content_arrived
+        finally:
+            stop.set()
+            await task
+
+    asyncio.run(exercise())
+    with Session(engine) as session:
+        # The hourly schedule is untouched.
+        assert session.get(RetentionPolicy, 1).next_run_at > time.time() + 3000
+    engine.dispose()

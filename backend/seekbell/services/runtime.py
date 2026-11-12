@@ -46,6 +46,7 @@ class Runtime:
             ),
         )
         self.request_budget = request_budget or WebsiteRequestBudget(engine)
+        self.retention = HistoryRetention(engine, tick=tick, disk=DiskWatch(engine))
         self.sources = {
             website_id: SourceRunner(
                 engine,
@@ -56,12 +57,12 @@ class Runtime:
                 managed=True,
                 tick=tick,
                 fetch_timeout=collector_timeout,
+                on_new_content=self.retention.content_added,
             )
             for website_id, adapter in BUILTIN_ADAPTERS.items()
         }
         self.source = self.sources["nodeseek"]
         self.worker = DeliveryWorker(engine, notifiers, managed=True, tick=tick)
-        self.retention = HistoryRetention(engine, tick=tick, disk=DiskWatch(engine))
         self.alerts = AlertWorker(engine, notifiers, tick=tick)
         self.stalls = StallWatch(engine, self.observation, interval=stall_check)
         self.watch = None

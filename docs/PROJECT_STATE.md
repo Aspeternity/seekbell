@@ -12,7 +12,7 @@ M0–M4完成；v0.8.0运行中心、v0.9.0（设置六类、备份重构与自�
 
 ## 进行中
 
-无进行中的改动。本地已提交未推送：热榜展开后切换网站/周期不再自动收起（`CommunityHotlist.vue`，test:hotlist 50项通过）；内容上限清理满批时不再等1秒、数据页保存后跟随刷新“现有数据”（`services/retention.py`、`pages/RetentionSettings.vue`，pytest test_retention/test_settings_maintenance 20项与test:retention通过）。环境SeekBell-Dev。0.9.0的界面（运行中心三卡、内容记录、告警页、数据页、备份页、换页不闪）用户未逐项复审即授权发版，后续反馈按新改动处理。
+无进行中的改动。本地已提交未推送：热榜展开后切换网站/周期不再自动收起（`CommunityHotlist.vue`，test:hotlist 50项通过）；内容上限清理满批时不再等1秒、数据页保存后跟随刷新“现有数据”；新内容入库即叫醒清理器执行内容上限（`services/{retention,collection,runtime}.py`、`pages/RetentionSettings.vue`；pytest retention/collection/runtime/operations等相关165项与test:retention通过）。环境SeekBell-Dev。0.9.0的界面（运行中心三卡、内容记录、告警页、数据页、备份页、换页不闪）用户未逐项复审即授权发版，后续反馈按新改动处理。
 
 未提交：`assets/brand/`图标（待审）。
 
