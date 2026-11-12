@@ -165,14 +165,12 @@ function selectSite(value: string) {
   const current = source.value!
   period.value =
     current.periods.find((row) => row.id === periods.value[value])?.id || current.default_period
-  expanded.value = false
   saveCurrent()
 }
 function selectPeriod(value: string) {
   if (value === period.value) return
   period.value = value
   periods.value = { ...periods.value, [site.value]: value }
-  expanded.value = false
   saveCurrent()
 }
 onBeforeUnmount(() => {

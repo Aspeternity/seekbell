@@ -46,6 +46,7 @@ class Runtime:
             ),
         )
         self.request_budget = request_budget or WebsiteRequestBudget(engine)
+        self.retention = HistoryRetention(engine, tick=tick, disk=DiskWatch(engine))
         self.sources = {
             website_id: SourceRunner(
                 engine,
@@ -56,12 +57,12 @@ class Runtime:
                 managed=True,
                 tick=tick,
                 fetch_timeout=collector_timeout,
+                on_new_content=self.retention.content_added,
             )
             for website_id, adapter in BUILTIN_ADAPTERS.items()
         }
         self.source = self.sources["nodeseek"]
         self.worker = DeliveryWorker(engine, notifiers, managed=True, tick=tick)
-        self.retention = HistoryRetention(engine, tick=tick, disk=DiskWatch(engine))
         self.alerts = AlertWorker(engine, notifiers, tick=tick)
         self.stalls = StallWatch(engine, self.observation, interval=stall_check)
         self.watch = None
@@ -149,6 +150,10 @@ class Runtime:
 
     def _runtime_transition(self, name, fault):
         with write_session(self.engine) as session:
+            # Startup's recovery must not land after a crash's fault: once an actor has
+            # failed (status is set before its fault is written) only faults are recorded.
+            if not fault and self.status != "running":
+                return
             if session.get(Administrator, 1) is not None:
                 observe(
                     session,

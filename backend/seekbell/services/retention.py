@@ -101,6 +101,24 @@ def excess_posts(max_posts):
     )
 
 
+def excess_batch(max_posts, limit):
+    """The oldest excess content that can go now: none of it still has a delivery."""
+    excess = excess_posts(max_posts)
+    return (
+        select(excess.c.website_id, excess.c.external_post_id)
+        .where(
+            ~exists(
+                select(Outbox.id).where(
+                    Outbox.website_id == excess.c.website_id,
+                    Outbox.external_post_id == excess.c.external_post_id,
+                )
+            )
+        )
+        .order_by(excess.c.first_seen_at, excess.c.website_id, excess.c.external_post_id)
+        .limit(limit)
+    )
+
+
 def remove_posts(session, posts, counts):
     """A readable post goes together with its decisions."""
     if not posts:
@@ -133,6 +151,12 @@ def reclaim(engine):
             cursor.close()
 
 
+# A backlog (a tightened limit, a shortened period) is worked off batch after batch
+# without waiting a full tick; the short pause lets collection and delivery take the
+# write lock between batches.
+BACKLOG_PAUSE = 0.05
+
+
 class HistoryRetention:
     def __init__(
         self, engine, *, clock=time.time, tick=1, batch_size=100, interval=3600, disk=None
@@ -144,6 +168,32 @@ class HistoryRetention:
         # Storage upkeep shares this actor: an optional watch on free disk space.
         self.disk = disk
         self.last_loop_at = None
+        # Set by collection when new content was stored: the content limit is then
+        # enforced within a tick instead of at the next hourly run.
+        self.content_arrived = False
+
+    def content_added(self):
+        self.content_arrived = True
+
+    def trim_once(self):
+        """Only the content limit, between full runs."""
+        with Session(self.engine) as session:
+            if session.get(Administrator, 1) is None:
+                return {"status": "uninitialized"}
+            limit = session.get(RetentionPolicy, 1).max_posts
+            # Nothing beyond the limit is the usual case: stay read-only.
+            if limit is None or not session.execute(excess_batch(limit, 1)).first():
+                return {"status": "within_limit"}
+        counts = {"posts": 0, "evaluations": 0, "hits": 0}
+        with write_session(self.engine) as session:
+            limit = session.get(RetentionPolicy, 1).max_posts
+            if limit is not None:
+                posts = session.execute(excess_batch(limit, self.batch_size)).all()
+                remove_posts(session, posts, counts)
+        full = counts["posts"] == self.batch_size
+        if not full:
+            reclaim(self.engine)
+        return {"status": "trimmed", "counts": counts, "more": full}
 
     def run_once(self, *, at=None):
         at = self.clock() if at is None else at
@@ -230,22 +280,7 @@ class HistoryRetention:
 
             # The content limit: oldest unmatched content beyond the newest N goes first.
             if policy.max_posts is not None:
-                excess = excess_posts(policy.max_posts)
-                posts = session.execute(
-                    select(excess.c.website_id, excess.c.external_post_id)
-                    .where(
-                        ~exists(
-                            select(Outbox.id).where(
-                                Outbox.website_id == excess.c.website_id,
-                                Outbox.external_post_id == excess.c.external_post_id,
-                            )
-                        )
-                    )
-                    .order_by(
-                        excess.c.first_seen_at, excess.c.website_id, excess.c.external_post_id
-                    )
-                    .limit(self.batch_size)
-                ).all()
+                posts = session.execute(excess_batch(policy.max_posts, self.batch_size)).all()
                 remove_posts(session, posts, counts)
                 full |= len(posts) == self.batch_size
 
@@ -339,16 +374,24 @@ class HistoryRetention:
                 counts["system_events"] = remove(session, SystemEvent, SystemEvent.id.in_(keys))
             full |= len(keys) == self.batch_size
 
-            policy.next_run_at = at + (self.tick if full else self.interval)
+            policy.next_run_at = at if full else at + self.interval
         if not full:
             reclaim(self.engine)
         return {"status": "cleaned", "counts": counts, "more": full}
 
     async def run(self, stop: asyncio.Event):
         while not stop.is_set():
-            await database_call(self.run_once)
+            # Content stored after this point sets the flag again for the next wake.
+            arrived, self.content_arrived = self.content_arrived, False
+            result = await database_call(self.run_once)
+            # A full run already applied the limit; otherwise only the limit is checked.
+            if arrived and result.get("status") == "backoff":
+                result = await database_call(self.trim_once)
+                if result.get("more"):
+                    self.content_arrived = True
             if self.disk is not None:
                 await database_call(self.disk.run_once)
             self.last_loop_at = self.clock()
+            pause = BACKLOG_PAUSE if result.get("more") else self.tick
             with suppress(TimeoutError):
-                await asyncio.wait_for(stop.wait(), timeout=self.tick)
+                await asyncio.wait_for(stop.wait(), timeout=pause)

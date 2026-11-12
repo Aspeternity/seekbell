@@ -45,6 +45,7 @@ class SourceRunner:
         managed: bool = False,
         tick: float = 1,
         fetch_timeout: float = 15,
+        on_new_content: Callable[[], None] | None = None,
     ):
         self.engine = engine
         self.collector = collector
@@ -55,6 +56,8 @@ class SourceRunner:
         self._lock = asyncio.Lock()
         self.managed, self.tick, self.fetch_timeout = managed, tick, fetch_timeout
         self.last_loop_at: float | None = None
+        # Told after a round stored new content (the cleanup's content limit listens).
+        self.on_new_content = on_new_content
 
     def _snapshot(self) -> dict:
         with Session(self.engine) as session:
@@ -136,6 +139,8 @@ class SourceRunner:
             report = await database_call(
                 self.ingestion.ingest, self.source_id, batch, at=self.clock()
             )
+            if report.new_posts and self.on_new_content is not None:
+                self.on_new_content()
             return PollOutcome(report.status, report=report)
 
     async def run(self, stop: asyncio.Event) -> None:

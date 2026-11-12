@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { request } from '../store'
 import { ago, stamp, useSettingsForm } from '../settings'
 import Icon from '../components/Icon.vue'
@@ -86,6 +86,36 @@ const { saved, draft, busy, error, reloadable, done, dirty } = form
 const doneText = computed(() =>
   cleaning.value ? '保留策略已保存，超出部分正在后台清理' : '保留策略已保存',
 )
+// The cleanup a shrinking save starts takes a few seconds in the background: follow
+// the counts until two reads agree, so the figures do not stay at their pre-save value.
+const FOLLOW_MS = 2000,
+  FOLLOW_READS = 30
+let following = 0
+async function followCleanup() {
+  const run = ++following
+  let last = ''
+  for (let i = 0; i < FOLLOW_READS; i++) {
+    await new Promise((resolve) => setTimeout(resolve, FOLLOW_MS))
+    if (run !== following || !saved.value) return
+    let value: Policy
+    try {
+      value = await request<Policy>('manage/retention')
+    } catch {
+      return
+    }
+    // A newer save or read owns the figures now.
+    if (run !== following || !saved.value || value.revision !== saved.value.revision) return
+    saved.value = { ...saved.value, overview: value.overview }
+    const current = JSON.stringify(value.overview)
+    if (current === last) return
+    last = current
+  }
+}
+watch(done, (value) => {
+  if (value && cleaning.value) void followCleanup()
+  else following++
+})
+onBeforeUnmount(() => following++)
 await untilShown(form.load())
 </script>
 <template>

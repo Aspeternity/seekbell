@@ -97,6 +97,11 @@ test('retention confirms changes, handles stale revisions and cleans with the br
   await page.getByRole('button', { name: '保存保留策略', exact: true }).click()
   await page.getByRole('button', { name: '确认保存', exact: true }).click()
   await expect(page.getByRole('status').filter({ hasText: '保留策略已保存' })).toBeVisible()
+  // The figures follow the background cleanup without leaving the page.
+  await expect(page.getByLabel('现有数据', { exact: true })).toContainText(
+    new RegExp('内容\\s*' + (before.total - expired.length) + ' 条'),
+    { timeout: 10000 },
+  )
   expect(errors).toEqual([])
   await page.context().close()
   // No browser requests for a full cleanup wake interval.

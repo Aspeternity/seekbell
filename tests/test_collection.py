@@ -122,3 +122,32 @@ def test_all_invalid_feed_cannot_establish_baseline_and_url_changes_do_not_fetch
             assert len(calls) == 1
 
     asyncio.run(exercise())
+
+
+def test_a_round_that_stores_new_content_tells_the_cleanup(core):
+    now, wakes = [0], []
+    feeds = [[9001], [9001], [9001, 9002]]
+
+    async def exercise():
+        def handler(request):
+            return httpx.Response(
+                200,
+                headers={"content-type": "application/xml"},
+                stream=Chunks(rss([{"id": key} for key in feeds.pop(0)])),
+            )
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            runner = SourceRunner(
+                core.engine,
+                RssCollector(client),
+                clock=lambda: now[0],
+                jitter=lambda: 0,
+                on_new_content=lambda: wakes.append(now[0]),
+            )
+            # The baseline stores content too; a repeated feed stores nothing.
+            for at in (0, 100, 200):
+                now[0] = at
+                assert (await runner.run_once()).status != "backoff"
+
+    asyncio.run(exercise())
+    assert wakes == [0, 200]
