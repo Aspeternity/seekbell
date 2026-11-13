@@ -6,7 +6,7 @@ import time
 
 import httpx
 
-from seekbell.collectors.http import public_client
+from seekbell.collectors.http import SOURCE_TOTAL_TIMEOUT, public_client
 from seekbell.collectors.rss import RssCollector
 from seekbell.db.models import Administrator
 from seekbell.db.transactions import database_call, write_session
@@ -34,7 +34,7 @@ class Runtime:
         tick=1,
         # With uvicorn's 3 s for open requests, a stop fits Docker's default 10 s.
         shutdown_grace=5,
-        collector_timeout=15,
+        collector_timeout=SOURCE_TOTAL_TIMEOUT,
         request_budget=None,
         stall_check=15,
     ):

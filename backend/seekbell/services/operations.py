@@ -20,7 +20,7 @@ from seekbell.db.models import (
     Website,
     WebsiteInstallation,
 )
-from seekbell.services.alerts import object_active
+from seekbell.services.alerts import next_round_seconds, object_active
 from seekbell.services.backup_schedule import COMPONENT as BACKUP_COMPONENT
 from seekbell.services.disk import COMPONENT as DISK_COMPONENT
 from seekbell.services.fault_guide import (
@@ -565,9 +565,8 @@ def problem_history(engine, *, at, kind="", days=7, show_short=False, page=1, pa
         or_(*(fault.component.startswith(item + ":", autoescape=True) for item in kinds)),
     ]
     if not show_short:
-        conditions.append(
-            or_(recovery.id.is_(None), recovery.at - fault.at >= SHORT_PROBLEM_SECONDS)
-        )
+        short = func.max(SHORT_PROBLEM_SECONDS, next_round_seconds(fault.component))
+        conditions.append(or_(recovery.id.is_(None), recovery.at - fault.at >= short))
     with read_session(engine) as session:
         total = session.scalar(
             select(func.count()).select_from(fault).outerjoin(recovery, joined).where(*conditions)

@@ -7,7 +7,8 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
-from seekbell.db.models import AlertDelivery, LoginSession, SystemEvent
+from seekbell.db.models import AlertDelivery, LoginSession, Source, SystemEvent
+from seekbell.db.transactions import write_session
 from seekbell.notifiers.rendering import render, telegram_message, webhook_payload
 from seekbell.services import authentication as auth
 from seekbell.services.alerts import RECOVERED_EARLY, AlertWorker, get_settings, update_settings
@@ -94,6 +95,34 @@ def test_fault_outlasting_the_delay_is_sent_then_its_recovery(configured):  # no
     worker = AlertWorker(engine, {"webhook": probe}, clock=lambda: 200)
     assert asyncio.run(worker.run_once()) and asyncio.run(worker.run_once())
     assert [message["alert"]["phase"] for _, message in probe.calls] == ["fault", "recovery"]
+
+
+def test_source_fault_also_waits_for_its_next_round(configured):  # noqa: F811
+    # A once-a-minute source retries no sooner than a minute later, so with a one-minute
+    # delay every passing failure would otherwise announce itself and its recovery.
+    server, _, _ = configured
+    engine = server.state.engine
+    with write_session(engine) as session:
+        session.get(Source, "nodeseek-rss").interval_seconds = 60
+    delay(engine, 60)
+    probe = Probe()
+    fault(engine, at=100)
+    assert not asyncio.run(AlertWorker(engine, {"webhook": probe}, clock=lambda: 219).run_once())
+    recover(engine, at=162)
+    assert deliveries(engine) == [("fault", "cancelled", RECOVERED_EARLY)]
+
+    fault(engine, at=1000)
+    assert not asyncio.run(AlertWorker(engine, {"webhook": probe}, clock=lambda: 1119).run_once())
+    assert asyncio.run(AlertWorker(engine, {"webhook": probe}, clock=lambda: 1120).run_once())
+    recover(engine, at=1130)
+    assert asyncio.run(AlertWorker(engine, {"webhook": probe}, clock=lambda: 1130).run_once())
+    assert [message["alert"]["phase"] for _, message in probe.calls] == ["fault", "recovery"]
+    # A longer chosen delay still governs; immediate alerts stay immediate.
+    delay(engine, 600)
+    fault(engine, at=2000)
+    assert not asyncio.run(AlertWorker(engine, {"webhook": probe}, clock=lambda: 2599).run_once())
+    delay(engine, 0)
+    assert asyncio.run(AlertWorker(engine, {"webhook": probe}, clock=lambda: 2000).run_once())
 
 
 def test_raising_the_delay_after_a_sent_fault_still_announces_recovery(configured):  # noqa: F811

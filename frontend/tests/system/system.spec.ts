@@ -178,7 +178,7 @@ test('confirmed independent alerts record a single fault and recovery even when 
   expect(captured.items.slice(0, 2).map((event: any) => event.phase)).toEqual(['recovery', 'fault'])
   // Alert results live in the problem details; settings stay on the alerts tab.
   await page.goto('/#/operations/status')
-  await page.getByLabel('显示 1 分钟内自动恢复的问题', { exact: true }).check()
+  await page.getByLabel('显示自动恢复的短暂问题', { exact: true }).check()
   const newest = page.locator('.ops-history-row').first()
   await expect(newest).toContainText('已恢复')
   await newest.click()

@@ -227,7 +227,9 @@ await untilShown(form.load())
                       :disabled="busy"
                     /><span>分钟</span>
                   </div>
-                  <p class="small-note">填 0 立即通知；这段时间内自行恢复的故障不通知。</p>
+                  <p class="small-note">
+                    填 0 立即通知；这段时间内自行恢复的故障不通知，采集故障还会等到下一轮采集。
+                  </p>
                 </div>
                 <fieldset class="plain-fieldset alert-rule" :disabled="busy">
                   <legend class="field-label">故障一直未恢复时</legend>

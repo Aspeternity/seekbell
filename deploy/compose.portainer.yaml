@@ -1,9 +1,9 @@
-# SeekBell 0.9.1; schema 0023. Back up the data before upgrading.
+# SeekBell 0.9.2; schema 0023. Back up the data before upgrading.
 # Portainer: update the existing stack to keep its data. Reverse proxy and optional
 # hardening: docs/PROXY_DEPLOYMENT.md, docs/IMAGE_RELEASE.md.
 services:
   seekbell:
-    image: ghcr.io/aspeternity/seekbell:0.9.1
+    image: ghcr.io/aspeternity/seekbell:0.9.2
     container_name: seekbell
     restart: unless-stopped
     ports:

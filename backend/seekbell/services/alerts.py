@@ -5,7 +5,7 @@ import re
 import time
 from contextlib import suppress
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, literal, or_, select
 from sqlalchemy.orm import Session
 
 from seekbell.db.models import (
@@ -34,6 +34,28 @@ REMIND_CHECK_SECONDS = 60
 RECOVERED_EARLY = "recovered_within_delay"
 # Events that tell a target a fault exists; a recovery goes to whoever heard one of them.
 ANNOUNCING = ("fault", "reminder")
+# A source is retried no sooner than its interval, so a single failed round lasts at least
+# an interval; one cleared by the next round ends within this margin past it. Two failed
+# rounds always last at least two intervals.
+NEXT_ROUND_MARGIN = 60
+
+
+def next_round_seconds(component):
+    """SQL: how long a source fault may last and still have cleared on its next round.
+
+    Zero for other components. The alert delay and the operations center's short-problem
+    filter both wait at least this long, so a passing one-round failure is neither listed
+    nor announced.
+    """
+    interval = (
+        select(Source.interval_seconds)
+        .where(
+            component.startswith("source:"),
+            Source.id == func.substr(component, len("source:") + 1),
+        )
+        .scalar_subquery()
+    )
+    return func.coalesce(interval + NEXT_ROUND_MARGIN, 0)
 
 
 class AlertConflict(ValueError):
@@ -184,7 +206,7 @@ def _withdraw_brief_fault(session, state, settings, at):
             SystemEvent.phase == "fault",
         )
     )
-    if fault is None or at - fault.at >= settings.delay_seconds:
+    if fault is None or at - fault.at >= _fault_wait(session, state.component, settings):
         return
     for delivery in session.scalars(
         select(AlertDelivery).where(
@@ -194,6 +216,12 @@ def _withdraw_brief_fault(session, state, settings, at):
         delivery.result, delivery.error_code = "cancelled", RECOVERED_EARLY
         delivery.finished_at = at
     session.flush()
+
+
+def _fault_wait(session, component, settings):
+    return session.scalar(
+        select(func.max(settings.delay_seconds, next_round_seconds(literal(component))))
+    )
 
 
 def settings_view(settings):
@@ -434,13 +462,10 @@ class AlertWorker:
             # create an unbounded loop/transaction.
             due = [AlertDelivery.result == "pending"]
             if settings.delay_seconds:
-                # A fault waits out the delay; `observe` withdraws it if it clears first.
-                due.append(
-                    or_(
-                        SystemEvent.phase != "fault",
-                        SystemEvent.at <= self.clock() - settings.delay_seconds,
-                    )
-                )
+                # A fault waits out the delay, and a source fault its next round as well;
+                # `observe` withdraws it if it clears first.
+                wait = func.max(settings.delay_seconds, next_round_seconds(SystemEvent.component))
+                due.append(or_(SystemEvent.phase != "fault", SystemEvent.at + wait <= self.clock()))
             item = session.scalar(
                 select(AlertDelivery)
                 .join(SystemEvent)

@@ -12,7 +12,13 @@ from contextlib import asynccontextmanager, suppress
 import httpx
 from sqlalchemy.orm import Session
 
-from seekbell.collectors.http import public_client, public_response, source_failure
+from seekbell.collectors.http import (
+    SOURCE_TIMEOUT,
+    SOURCE_TOTAL_TIMEOUT,
+    public_client,
+    public_response,
+    source_failure,
+)
 from seekbell.db.models import (
     HotlistSnapshot,
     Source,
@@ -55,7 +61,7 @@ class HotlistService:
         self.collection_active = collection_active or (lambda: False)
         self.client = public_client(
             transport=transport,
-            timeout=httpx.Timeout(8, connect=3),
+            timeout=SOURCE_TIMEOUT,
             limits=httpx.Limits(max_connections=3),
             headers={
                 "Accept-Encoding": "identity",
@@ -191,7 +197,7 @@ class HotlistService:
         retry_after = None
         code = "source_unavailable"
         try:
-            async with asyncio.timeout(10):
+            async with asyncio.timeout(SOURCE_TOTAL_TIMEOUT):
                 raw = await self._fetch(source, period)
                 snapshot = await asyncio.to_thread(source.parse, raw, self.clock())
             old = self.cache.get(key)

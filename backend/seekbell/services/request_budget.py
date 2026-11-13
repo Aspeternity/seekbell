@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 import httpx
 from sqlalchemy.orm import Session
 
+from seekbell.collectors.http import timeout_code
 from seekbell.db.models import WebsiteRequestState
 from seekbell.db.transactions import database_call, write_session
 from seekbell.domain.errors import SourceDeferred, SourceFailure
@@ -18,6 +19,7 @@ SITE_FAILURES = (
     "access_challenge",
     "http_403",
     "http_429",
+    "connect_timeout",
     "timeout",
     "transport_error",
     "http_500",
@@ -116,7 +118,7 @@ class WebsiteRequestBudget:
             except (SourceFailure, httpx.HTTPError, TimeoutError) as error:
                 if not isinstance(error, SourceFailure):
                     error = SourceFailure(
-                        "timeout"
+                        timeout_code(error)
                         if isinstance(error, (TimeoutError, httpx.TimeoutException))
                         else "transport_error"
                     )
