@@ -38,7 +38,17 @@ def _parse(summary: str) -> Guide:
 
 
 SOURCE_GUIDES = {
-    "timeout": Guide("fetch", "连接超时", UNREACHABLE, CHECK_NETWORK, AUTO, RSS_TEST),
+    # The connection never completed (no request reached the forum) versus a request that
+    # went out and got no answer in time; older records only had "timeout".
+    "connect_timeout": Guide(
+        "fetch",
+        "连接超时",
+        ("本机到论坛的网络线路不稳定", "本机 DNS 或出口网络有问题"),
+        CHECK_NETWORK,
+        AUTO,
+        RSS_TEST,
+    ),
+    "timeout": Guide("fetch", "请求超时", UNREACHABLE, CHECK_NETWORK, AUTO, RSS_TEST),
     "transport_error": Guide("fetch", "网络连接失败", UNREACHABLE, CHECK_NETWORK, AUTO, RSS_TEST),
     "response_too_large": Guide(
         "fetch",

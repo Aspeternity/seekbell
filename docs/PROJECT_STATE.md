@@ -1,6 +1,6 @@
 # 当前状态
 
-更新：2026-11-12（Asia/Shanghai）。
+更新：2026-11-12晚（Asia/Shanghai）。
 
 ## 开局
 
@@ -12,20 +12,21 @@ M0–M4完成；v0.8.0运行中心、v0.9.0（设置六类、备份重构与自�
 
 ## 进行中
 
-无进行中的改动。0.9.0/0.9.1界面用户未逐项复审，后续反馈按新改动处理。
+0.9.2发布中（11-13用户授权推送、PR、发版）：本地分支`after-0.9.1`合为PR，内容为采集稳定性优化与告警“下一轮”口径（DECISIONS 11-12条、SPEC 6.2末段与告警段、ARCHITECTURE“2026-11-12采集稳定性”、CHANGELOG 0.9.2）。本机证据（SeekBell-Dev工作区，基于9555469）：后端全量1052通过、ruff/prettier通过；`pnpm build`后`test:operations`8项、system告警与告警设置用例通过。未做真实网络验证。0.9.0/0.9.1界面用户未逐项复审。
 
 未提交：`assets/brand/`图标（待审）。
 
 ## 下一步
 
-1. 用户实机升级时：0.8.x先完整备份（回退唯一依据），升级后检查自动备份已开启、告警延迟保持原值；0.9.0→0.9.1无迁移可直接切换。部署和真实发送需用户另行授权或亲自执行。
-2. WebDAV远程副本（暂缓）：先出简短方案请用户确认细则（上传是否加密、配置位置与字段、NAS保留份数、上传哪些类型、失败故障、从NAS恢复、测试连接），CI用模拟WebDAV服务。
-3. 备份第三期升级前备份；程序日志待议；图标采用。
-4. 本地累积期间CI不运行：大改动后可在本机跑相关容器检查（`docker build -t seekbell:candidate .`后`python3 scripts/check_{container,backup_container,release_container,proxy_container}.py seekbell:candidate --revision $(git rev-parse HEAD)`）；本机全量后端可用`uv run --frozen pytest -q -n auto`（约22秒）提前暴露时序问题。
+1. 等PR合并后自动发布完成，写docs/history/2026-11-13-v0.9.2发布.md（PR、main SHA、digest、Release链接），更新本文件开局与计划位置。
+2. 用户实机升级后观察问题历史中connect_timeout与timeout的比例，判断线路还是论坛响应；0.9.x之间无迁移可直接切换。0.8.x先完整备份（回退唯一依据）。部署和真实发送需用户另行授权或亲自执行。
+3. WebDAV远程副本（暂缓）：先出简短方案请用户确认细则（上传是否加密、配置位置与字段、NAS保留份数、上传哪些类型、失败故障、从NAS恢复、测试连接），CI用模拟WebDAV服务。
+4. 备份第三期升级前备份；程序日志待议；图标采用。
+5. 本地累积期间CI不运行：大改动后可在本机跑相关容器检查（`docker build -t seekbell:candidate .`后`python3 scripts/check_{container,backup_container,release_container,proxy_container}.py seekbell:candidate --revision $(git rev-parse HEAD)`）；本机全量后端可用`uv run --frozen pytest -q -n auto`（约22秒）提前暴露时序问题。
 
 ## 授权
 
-0.9.1的推送、PR、发版授权（11-12）已用完。此后改动先本地累积，不推送、不开PR、不发版、不部署、不真实发送，也不主动提议；发版时机由用户提出。实例只读命令的既有授权为用户本人执行。
+0.9.2的推送、PR、发版授权（11-13，本次改动）用完即止。此后改动先本地累积，不推送、不开PR、不发版、不部署、不真实发送，也不主动提议；发版时机由用户提出。实例只读命令的既有授权为用户本人执行。
 
 ## 按需读取
 

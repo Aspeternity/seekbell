@@ -11,7 +11,12 @@ import httpx
 from defusedxml import ElementTree
 from defusedxml.common import DefusedXmlException
 
-from seekbell.collectors.http import public_response, source_failure
+from seekbell.collectors.http import (
+    SOURCE_TIMEOUT,
+    public_response,
+    source_failure,
+    timeout_code,
+)
 from seekbell.domain.errors import SourceFailure
 from seekbell.domain.posts import Diagnostic, ParsedFeed, SourceEntry
 
@@ -143,7 +148,7 @@ class RssCollector:
                 async with public_response(
                     self.client,
                     url,
-                    timeout=httpx.Timeout(10.0, connect=5.0),
+                    timeout=SOURCE_TIMEOUT,
                     headers={
                         "Accept": "application/rss+xml, application/xml, text/xml",
                         "Accept-Encoding": "identity",
@@ -175,7 +180,7 @@ class RssCollector:
                             raise SourceFailure("response_too_large")
                         parts.append(chunk)
                 return await asyncio.to_thread(parse_rss, b"".join(parts), max_bytes=self.max_bytes)
-            except httpx.TimeoutException:
-                raise SourceFailure("timeout") from None
+            except httpx.TimeoutException as error:
+                raise SourceFailure(timeout_code(error)) from None
             except httpx.HTTPError:
                 raise SourceFailure("transport_error") from None

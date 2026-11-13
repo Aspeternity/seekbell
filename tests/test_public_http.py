@@ -2,8 +2,9 @@ import asyncio
 
 import httpx
 import pytest
-from seekbell.collectors.http import public_response
+from seekbell.collectors.http import LINUXDO_KEEPALIVE, SOURCE_TIMEOUT, public_response
 from seekbell.collectors.rss import RssCollector
+from seekbell.domain.errors import SourceFailure
 from seekbell.services.hotlists import HotlistService
 from seekbell.services.runtime import Runtime
 from seekbell.sites.linuxdo import LINUXDO_RSS_URL
@@ -60,6 +61,10 @@ def test_public_clients_route_only_linuxdo_to_http2_and_close_all_pools(core, mo
             assert all(r.url.scheme == "https" and r.url.host == "linux.do" for r in h2.calls)
             assert all("cookie" not in r.headers for pool in pools for r in pool.calls)
             assert all(pool.options["trust_env"] is False for pool in pools)
+            # Only Linux DO keeps its connection past a one-minute interval.
+            assert h2.options["limits"].keepalive_expiry == LINUXDO_KEEPALIVE
+            assert h2.options["limits"].max_connections == h1.options["limits"].max_connections
+            assert h1.options["limits"].keepalive_expiry == 5
         finally:
             await service.aclose()
         assert service.client.is_closed
@@ -175,3 +180,64 @@ def test_ordinary_429_without_challenge_marker_remains_rate_limited(owner):
                 await service.aclose()
 
     asyncio.run(run())
+
+
+def flaky_handler(failures, calls):
+    """Raise the queued connection-phase errors first, then serve a feed."""
+
+    async def handler(request):
+        calls.append(request)
+        if failures:
+            raise failures.pop(0)("synthetic", request=request)
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "application/rss+xml"},
+            stream=Chunks(linuxdo_rss(9001)),
+        )
+
+    return handler
+
+
+@pytest.mark.parametrize("error", [httpx.ConnectTimeout, httpx.ConnectError])
+def test_one_failed_connection_is_retried_at_once(monkeypatch, error):
+    monkeypatch.setattr("seekbell.collectors.http.CONNECT_RETRY_GAP", 0)
+    calls = []
+
+    async def run():
+        transport = httpx.MockTransport(flaky_handler([error], calls))
+        async with httpx.AsyncClient(transport=transport) as client:
+            return await RssCollector(client).fetch(LINUXDO_RSS_URL)
+
+    assert len(asyncio.run(run()).entries) == 1
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize(
+    ("errors", "code", "attempts"),
+    [
+        ([httpx.ConnectTimeout, httpx.ConnectTimeout], "connect_timeout", 2),
+        ([httpx.ConnectError, httpx.ConnectError], "transport_error", 2),
+        # The request went out: a second try would be one more request to the origin.
+        ([httpx.ReadTimeout], "timeout", 1),
+        ([httpx.ReadError], "transport_error", 1),
+    ],
+)
+def test_failed_reads_keep_connection_and_response_timeouts_apart(
+    monkeypatch, errors, code, attempts
+):
+    monkeypatch.setattr("seekbell.collectors.http.CONNECT_RETRY_GAP", 0)
+    calls = []
+
+    async def run():
+        transport = httpx.MockTransport(flaky_handler(list(errors), calls))
+        async with httpx.AsyncClient(transport=transport) as client:
+            with pytest.raises(SourceFailure) as caught:
+                await RssCollector(client).fetch(LINUXDO_RSS_URL)
+        return caught.value.code
+
+    assert asyncio.run(run()) == code
+    assert len(calls) == attempts
+
+
+def test_source_reads_bound_connection_apart_from_response():
+    assert SOURCE_TIMEOUT.connect == 8 and SOURCE_TIMEOUT.read == 15

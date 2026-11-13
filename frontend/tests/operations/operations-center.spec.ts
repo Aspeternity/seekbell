@@ -288,7 +288,7 @@ test('operations center explains problems, stays calm when healthy and keeps old
 
   expect(reads.problems[0]!.searchParams.get('show_short')).toBe('false')
   const before = reads.problems.length
-  await page.getByLabel('显示 1 分钟内自动恢复的问题').check()
+  await page.getByLabel('显示自动恢复的短暂问题').check()
   await expect.poll(() => reads.problems.length).toBe(before + 1)
   expect(reads.problems.at(-1)!.searchParams.get('show_short')).toBe('true')
   await expect(page.locator('.ops-history-row').first()).toContainText('请求受限（429）')

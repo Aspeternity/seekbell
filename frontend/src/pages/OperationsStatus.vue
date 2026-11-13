@@ -704,8 +704,8 @@ await untilShown(() => status.ready() && history.ready())
         <div class="ops-card-head ops-history-head">
           <h2 id="ops-history">问题历史</h2>
           <div class="ops-filters">
-            <label class="ops-check"
-              ><input v-model="showShort" type="checkbox" />显示 1 分钟内自动恢复的问题</label
+            <label class="ops-check" title="采集问题在下一轮采集即恢复，其他问题在 1 分钟内恢复"
+              ><input v-model="showShort" type="checkbox" />显示自动恢复的短暂问题</label
             >
             <AppSelect v-model="kind" aria-label="问题类型" :options="kindOptions" />
             <AppSelect v-model="days" aria-label="时间范围" :options="dayOptions" />

@@ -321,6 +321,8 @@ collectors/http.public_client供Runtime与HotlistService创建客户端，通过
 
 collectors/http.public_response构造匿名请求、显式移除Cookie且不跟随跳转，关闭响应；RSS与热榜共用。固定端点/TLS/无环境代理/1MiB/总超时保持。HotlistSource声明JSON或RSS格式和每站支持项，Linux DO不使用帖子时间冒充榜单更新时间。持久快照读取校验时间/条数/字段并重新生成规范链接；按网站/周期配置的新鲜期、24小时展示上限、按键共享更新和客户端取消隔离沿用。无消费者常驻轮询，持久化失败不能伪称网络成功。
 
+2026-11-12采集稳定性：collectors/http定义SOURCE_TIMEOUT（连接8秒/读写15秒），RssCollector与HotlistService共用；SOURCE_TOTAL_TIMEOUT=两次连接＋2秒间隔＋一次读取＋2秒解析余量（35秒），作为SourceRunner.fetch_timeout默认和热榜外层限时。public_response的_send只对httpx.ConnectTimeout/ConnectError在2秒后重发一次（请求未离开本机，仍在同一次预算占用内）；ReadTimeout/ReadError等不重试。timeout_code把ConnectTimeout记为connect_timeout，其余超时为timeout；connect_timeout列入SITE_FAILURES，退避与timeout相同，热榜仍不计入共享退避。Linux DO mount沿用调用方连接数上限、keepalive_expiry=150秒（LINUXDO_KEEPALIVE），默认池仍5秒。alerts.next_round_seconds(component)以关联子查询取source:组件的Source.interval_seconds＋NEXT_ROUND_MARGIN 60（其他组件0），供两处共用：operations.problem_history短暂阈值max(60, 它)；告警延迟大于0时AlertWorker._claim与_withdraw_brief_fault按max(delay, 它)等待/撤回采集故障，延迟0不变。验证：uv run --frozen pytest tests/test_public_http.py tests/test_operations_status.py tests/test_settings_reorganization.py -q；pnpm --dir frontend test:operations。
+
 验证命令：uv run --frozen pytest tests/test_public_http.py tests/test_linuxdo.py tests/test_linuxdo_runtime.py tests/test_hotlists.py tests/test_runtime.py -q；pnpm --dir frontend test:linuxdo（独立8030合成库）。所有浏览器环境注入合成两站热榜，不访问真实论坛或发送真实消息。正式来源可访问性与用户验收另行记录。
 
 ## 多站验收修正（2026-10-24）

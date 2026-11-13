@@ -15,6 +15,7 @@ from seekbell.db.models import (
     NotificationTarget,
     Outbox,
     SeenPost,
+    Source,
     SystemEvent,
     TargetTestAttempt,
     Website,
@@ -134,7 +135,7 @@ def test_source_failure_marks_fetch_and_clears_on_success(site):
     data = view(site)
     problem = only(data["problems"])
     assert problem["status"] == "auto_retry" and problem["stage"] == "fetch"
-    assert problem["summary"] == "连接超时" and problem["failures"] == 1
+    assert problem["summary"] == "请求超时" and problem["failures"] == 1
     assert problem["next_attempt_at"] > AT - 30
     row = only(data["sources"])
     assert row["schedule"]["label"] == "正常" and row["fetch"]["tone"] == "fail"
@@ -368,6 +369,33 @@ def test_problem_history_pairs_recovery_and_hides_short_problems(core):
     assert second["total"] == 2 and [row["code"] for row in second["items"]] == ["http_429"]
 
 
+def test_source_problem_cleared_by_the_next_round_is_short(core):
+    # One failed round lasts at least the interval, so the one-minute cut alone would
+    # list every passing failure of a once-a-minute source.
+    with write_session(core.engine) as session:
+        session.get(Source, "nodeseek-rss").interval_seconds = 60
+    for start, length, code in (
+        (5000, 61, "connect_timeout"),  # next round succeeded
+        (4000, 119, "timeout"),  # next round succeeded after a slow read
+        (3000, 121, "timeout"),  # two failed rounds
+        (2000, 300, "access_challenge"),  # one round, then a shared five-minute backoff
+    ):
+        fault(core, SOURCE, code, at=AT - start)
+        recover(core, SOURCE, at=AT - start + length)
+    fault(core, "runtime:delivery", "delivery_stopped", at=AT - 1000)
+    recover(core, "runtime:delivery", at=AT - 1000 + 61)
+
+    rows = problem_history(core.engine, at=AT)["items"]
+    assert [row["code"] for row in rows] == ["delivery_stopped", "access_challenge", "timeout"]
+    assert problem_history(core.engine, at=AT, show_short=True)["total"] == 5
+
+    with write_session(core.engine) as session:
+        session.get(Source, "nodeseek-rss").interval_seconds = 3600
+    assert [row["code"] for row in problem_history(core.engine, at=AT)["items"]] == [
+        "delivery_stopped"
+    ]
+
+
 def test_problem_history_respects_window_and_ignores_orphan_recovery(core):
     fault(core, SOURCE, "timeout", at=AT - 8 * 86400)
     recover(core, SOURCE, at=AT - 10)
@@ -400,7 +428,7 @@ def test_problem_detail_counts_failures_and_shows_both_alert_phases(site):
 
     data = problem_detail(site.engine, key, [], at=AT)
     assert data["status"] == "recovered" and data["failures"] == 2
-    assert data["ended_at"] == AT - 100 and data["guide"]["summary"] == "连接超时"
+    assert data["ended_at"] == AT - 100 and data["guide"]["summary"] == "请求超时"
     assert data["verify"] == {"kind": "rss_test", "website_id": "nodeseek"}
     assert [row["phase"] for row in data["alerts"]] == ["fault", "recovery"]
     assert [row["label"] for row in data["recent"]] == ["成功", "失败", "失败"]
